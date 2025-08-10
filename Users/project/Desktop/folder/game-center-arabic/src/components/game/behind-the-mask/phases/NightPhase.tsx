@@ -173,19 +173,13 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         }
         
         setIsSubmitting(true);
-        try {
-            const result = await submitNightAction(game.id, finalAction);
-            if (result.success) {
-                toast({ title: "تم تسجيل قرارك بنجاح." });
-            } else {
-                toast({ title: "خطأ", description: result.error, variant: "destructive" });
-                // If submission fails, allow user to re-select
-                setIsSubmitting(false); 
-            }
-        } catch (e) {
-            console.error(e)
-            toast({ title: "خطأ", description: "فشل إرسال القرار.", variant: "destructive" });
-            setIsSubmitting(false);
+        const result = await submitNightAction(game.id, finalAction);
+        if (result.success) {
+            toast({ title: "تم تسجيل قرارك بنجاح." });
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+            // If submission fails, allow user to re-select
+            setIsSubmitting(false); 
         }
     };
     
@@ -436,3 +430,4 @@ export function NightPhase({ game, self }: NightPhaseProps) {
         </div>
     );
 }
+    

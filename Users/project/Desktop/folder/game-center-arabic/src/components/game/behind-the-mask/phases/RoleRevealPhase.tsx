@@ -124,3 +124,4 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
         </div>
     );
 }
+    

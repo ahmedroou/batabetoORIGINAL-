@@ -144,8 +144,8 @@ export function DayPhase({ game, self }: DayPhaseProps) {
         setIsSubmitting(true);
         setSelectedVote(targetId); // Optimistic UI update
         const result = await submitVote(game.id, self.id, targetId);
-        if (result.error) {
-            toast({ title: "خطأ في التصويت", description: result.error, variant: 'destructive' });
+        if (!result) {
+            toast({ title: "خطأ في التصويت", variant: 'destructive' });
             setSelectedVote(game.mafiaState?.votes?.[self.id] || null); // Revert optimistic update
         }
         setIsSubmitting(false);
@@ -343,3 +343,4 @@ export function DayPhase({ game, self }: DayPhaseProps) {
         </>
     );
 }
+    

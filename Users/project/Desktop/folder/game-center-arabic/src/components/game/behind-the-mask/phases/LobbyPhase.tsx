@@ -15,7 +15,7 @@ import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
-import { startGame as startBehindTheMaskGame, updateMafiaSettings } from '@/lib/actions/behind-the-mask';
+import { startGame, updateMafiaSettings } from '@/lib/actions/behind-the-mask';
 import { cn } from '@/lib/utils';
 
 
@@ -66,7 +66,7 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
         if (!isHost) return;
         setIsSubmitting(true);
         try {
-            await startBehindTheMaskGame(game.id, self.id);
+            await startGame(game.id, self.id);
         } catch(e: any) {
             toast({title: "خطأ", description: e.message, variant: "destructive"});
         } finally {
@@ -190,7 +190,7 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
             <AlertDialogFooter>
                 <AlertDialogCancel>إلغاء</AlertDialogCancel>
                 <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={buttonVariants({ variant: "destructive" })}>
-                {isSubmitting ? "جاري الطرد..." : "نعم، قم بطرده"}
+                {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
                 </AlertDialogAction>
             </AlertDialogFooter>
             </AlertDialogContent>
@@ -198,3 +198,4 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
         </>
     );
 }
+    
