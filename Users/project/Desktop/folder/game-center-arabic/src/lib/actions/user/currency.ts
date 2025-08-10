@@ -169,7 +169,7 @@ export async function exchangeCoinsForLoyalty(userId: string, coinsToExchange: n
         const userData = userDoc.data() as UserProfile;
 
         if ((userData.coins || 0) < coinsToExchange) {
-            throw new Error("ليس لديك ما يكفي من الكوينز.");
+            throw new Error(`ليس لديك ما يكفي من الكوينز.`);
         }
 
         transaction.update(userRef, {
