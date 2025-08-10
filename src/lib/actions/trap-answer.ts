@@ -22,6 +22,8 @@ import {
   writeBatch,
   arrayUnion,
   updateDoc,
+  limit,
+  type Transaction
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, EmojiReactionType, GameState } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
@@ -86,7 +88,8 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
             if (!gameDoc.exists()) return;
             const game = gameDoc.data() as Game;
             
-            if (!Array.isArray(game.players)) return; // Defensive check
+            // Defensive check to ensure game.players is an array before using array methods
+            if (!Array.isArray(game.players)) return;
 
             const playerIndex = game.players.findIndex(p => p.id === playerId);
             if (playerIndex === -1) return;
@@ -103,7 +106,6 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
             transaction.update(gameRef, updateData);
         });
     } catch(e: any) {
-        // Log the error with more context for debugging
         console.error(`Could not update player presence:`, {
             gameId,
             playerId,
@@ -352,13 +354,14 @@ export async function calculateTrapAnswerScores(
             const chosenGroup = answerGroups.find(g => safeCompareStrings(g.text, chosenAnswer!) > 0.85);
 
             if (chosenGroup) {
+                // Apply penalty for self-vote
                 if (chosenGroup.authors.includes(guesserId)) {
                     roundScores[guesserId].points -= 1;
                     roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
                 }
 
+                // Award points to all authors of the trick answer for every player they tricked.
                 chosenGroup.authors.forEach(authorId => {
-                    // Prevent self-voter from getting points for tricking others with the same vote
                     if (authorId !== guesserId) {
                         const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
                         roundScores[authorId].points += 1;
@@ -369,6 +372,7 @@ export async function calculateTrapAnswerScores(
                     }
                 });
 
+                // Track who the guesser was tricked by
                 if (!chosenGroup.authors.includes(guesserId)) {
                     if (!newTrickStats.trickedBy[guesserId]) newTrickStats.trickedBy[guesserId] = [];
                     newTrickStats.trickedBy[guesserId].push(...chosenGroup.authors);
