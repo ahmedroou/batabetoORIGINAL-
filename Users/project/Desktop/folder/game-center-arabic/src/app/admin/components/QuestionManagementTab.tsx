@@ -18,13 +18,13 @@ import {
   deleteQuestions,
   countQuestions,
   deleteSimilarQuestions,
-  getTrapAnswerCategories,
   addTrapAnswerCategory,
   editTrapAnswerCategory,
   deleteTrapAnswerCategory,
   uploadWordWarWordsFromJson,
   deleteDuplicateWords,
   uploadPrisonQuestionsFromJson,
+  getPublicTrapAnswerCategories,
 } from '@/lib/actions/admin';
 import { Game } from '@/types';
 import { getDrawAndGuessCategories, addDrawAndGuessCategory, editDrawAndGuessCategory, deleteDrawAndGuessCategory, uploadDrawAndGuessPromptsFromJson } from '@/lib/actions/draw-and-guess-admin';
@@ -72,7 +72,7 @@ export default function QuestionManagementTab() {
     const fetchCategories = async (gameType: 'trap-answer' | 'draw-and-guess') => {
         let categoriesResult;
         if (gameType === 'trap-answer') {
-            categoriesResult = await getTrapAnswerCategories();
+            categoriesResult = await getPublicTrapAnswerCategories();
             if (categoriesResult.success && categoriesResult.categories) {
                 setTrapAnswerCategories(categoriesResult.categories.sort((a,b) => a.localeCompare(b)));
             }
