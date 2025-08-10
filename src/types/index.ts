@@ -415,8 +415,8 @@ export interface TrapQuestion {
     question: string;
     answer: string;
     category: string;
-    dummyAnswers?: string[]; // Make dummyAnswers optional
-    randomKey?: number;
+    dummyAnswers?: string[];
+    randomKey?: number; // Add this field for efficient random fetching
 }
 
 export interface PrisonQuestion {

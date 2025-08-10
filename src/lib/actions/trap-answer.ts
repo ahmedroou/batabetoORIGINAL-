@@ -117,15 +117,24 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
         }
         
         const questionsCol = collection(db, "trap_answer_questions");
-        const q = query(questionsCol, where("category", "==", category));
-        const querySnapshot = await getDocs(q);
+        const randomKey = Math.random();
         
+        // Query for a random document. This is a common Firestore pattern.
+        const q1 = query(questionsCol, where("category", "==", category), where("randomKey", ">=", randomKey), limit(1));
+        let querySnapshot = await getDocs(q1);
+
+        if (querySnapshot.empty) {
+            // If no doc found, wrap around and query from the start
+            const q2 = query(questionsCol, where("category", "==", category), where("randomKey", "<", randomKey), limit(1));
+            querySnapshot = await getDocs(q2);
+        }
+
         if (querySnapshot.empty) {
             throw new Error(`لا توجد أسئلة في قسم "${category}".`);
         }
-
-        const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
-        const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+        
+        const questionDoc = querySnapshot.docs[0];
+        const randomQuestion = { id: questionDoc.id, ...questionDoc.data() as Omit<TrapQuestion, 'id'> };
 
         const answerTime = game.trapAnswerState?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
         const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
@@ -206,11 +215,13 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 }
 
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
-    const gameRef = doc(db, 'games', gameId);
     let gameDataForLeagueUpdate: Game | null = null;
 
     try {
         await runTransaction(db, async (transaction) => {
+            const gameRef = doc(db, 'games', gameId);
+            if (!gameRef) throw new Error("Game reference is invalid.");
+            
             const gameDoc = await transaction.get(gameRef);
             if (!gameDoc.exists()) throw new Error("Game not found.");
             let game = gameDoc.data() as Game;
@@ -260,6 +271,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + CATEGORY_SELECTION_TIME_S * 1000),
                     'trapAnswerState.reactions': {},
                     'trapAnswerState.shuffledAnswers': [],
+                    'trapAnswerState.awayPlayerIds': [], // Reset away status for the new round
                 });
             }
         });
@@ -274,7 +286,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
 
 // --- Scoring and Game Logic ---
 
-export async function calculateTrapAnswerScores(
+function calculateTrapAnswerScores(
     activePlayers: Player[],
     question: TrapQuestion,
     playerAnswers: Record<string, string | null>,
@@ -366,7 +378,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
             return; 
         }
         
-        // Nullify the timer immediately to prevent re-entry.
         transaction.update(gameRef, {'trapAnswerState.timerEndsAt': null});
 
         if (game.gameState === 'category-selection') {
@@ -377,9 +388,40 @@ export async function handleTimeout(gameId: string, hostId: string) {
             if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
             const randomCategory = categories[Math.floor(Math.random() * categories.length)];
             
-            // This needs to be a separate call since it modifies state and the original
-            // function does its own transaction.
-            await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
+            // This needs to be self-contained now, so we can't just call the other action directly.
+            // We replicate the logic here.
+             const questionsCol = collection(db, "trap_answer_questions");
+            const randomKey = Math.random();
+            const q1 = query(questionsCol, where("category", "==", randomCategory), where("randomKey", ">=", randomKey), limit(1));
+            let querySnapshot = await getDocs(q1);
+
+            if (querySnapshot.empty) {
+                const q2 = query(questionsCol, where("category", "==", randomCategory), where("randomKey", "<", randomKey), limit(1));
+                querySnapshot = await getDocs(q2);
+            }
+
+            if (querySnapshot.empty) {
+                throw new Error(`لا توجد أسئلة في قسم "${randomCategory}".`);
+            }
+            
+            const questionDoc = querySnapshot.docs[0];
+            const randomQuestion = { id: questionDoc.id, ...questionDoc.data() as Omit<TrapQuestion, 'id'> };
+
+            const answerTime = game.trapAnswerState?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
+            const newTimerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
+
+            transaction.update(gameRef, {
+                gameState: 'answer-submission',
+                'trapAnswerState.currentQuestion': randomQuestion,
+                'trapAnswerState.playerAnswers': {},
+                'trapAnswerState.playerGuesses': {},
+                'trapAnswerState.lastRoundResults': {},
+                'trapAnswerState.selectedCategory': randomCategory,
+                'trapAnswerState.timerEndsAt': newTimerEndsAt,
+                'trapAnswerState.shuffledAnswers': [],
+                'trapAnswerState.awayPlayerIds': [],
+            });
+
 
         } else if (game.gameState === 'answer-submission') {
             await _advanceToGuessing(transaction, gameRef, game, true);
@@ -404,10 +446,7 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
 
 async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
     const playerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}) };
-    const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
-
-    // During timeout, mark any missing players (who are not marked as away) as having submitted null.
-    // Players marked as away are ignored for this check.
+    
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
@@ -425,7 +464,6 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
     const validPlayerAnswers = Object.values(playerAnswers).filter((ans): ans is string => ans !== null && ans.trim() !== '');
     let allPossibleAnswers = [question.answer, ...validPlayerAnswers];
     
-    // Add a dummy answer if available and needed.
     if (Array.isArray(question.dummyAnswers) && question.dummyAnswers.length > 0) {
         allPossibleAnswers.push(question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)]);
     }
@@ -438,19 +476,18 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
         'trapAnswerState.playerAnswers': playerAnswers,
         'trapAnswerState.timerEndsAt': timerEndsAt,
         'trapAnswerState.shuffledAnswers': shuffledAnswers,
-        'trapAnswerState.awayPlayerIds': [], // Reset away status for the new phase
+        'trapAnswerState.awayPlayerIds': [], 
     });
 }
 
 async function _advanceToResults(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
     const playerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}) };
-    const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
     
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
             if (!playerGuesses.hasOwnProperty(player.id)) {
-                playerGuesses[player.id] = '__TIMEOUT__';
+                 playerGuesses[player.id] = '__TIMEOUT__';
             }
         }
     }
@@ -460,7 +497,7 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
     }
 
     const activePlayers = game.players.filter(p => p.status === 'alive');
-    const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = await calculateTrapAnswerScores(
+    const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = calculateTrapAnswerScores(
         activePlayers,
         game.trapAnswerState.currentQuestion,
         game.trapAnswerState.playerAnswers,
@@ -492,14 +529,19 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
         'trapAnswerState.lastRoundResults': roundResults,
         'trapAnswerState.timerEndsAt': null,
         'trapAnswerState.trickStats': mergedTrickStats,
-        'trapAnswerState.awayPlayerIds': [], // Reset away status
+        'trapAnswerState.awayPlayerIds': [],
     });
 }
 
 export async function setAwayStatus(gameId: string, playerId: string, isAway: boolean): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
-    const update = {
+    const updateData = {
         'trapAnswerState.awayPlayerIds': isAway ? arrayUnion(playerId) : arrayRemove(playerId)
     };
-    await updateDoc(gameRef, update);
+    try {
+        await updateDoc(gameRef, updateData);
+    } catch (error) {
+        console.error(`Failed to update away status for player ${playerId} in game ${gameId}:`, error);
+        // Don't throw error to the client, just log it.
+    }
 }

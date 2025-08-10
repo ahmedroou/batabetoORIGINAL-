@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -121,6 +122,7 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
                     question: q.question.trim(),
                     answer: q.answer.trim(),
                     category: category.trim(),
+                    randomKey: Math.random(), // Add random key for efficient fetching
                     // Only add dummyAnswers if they exist and are valid
                     ...(hasDummyAnswers && { dummyAnswers: q.dummyAnswers!.map(da => da.trim()) }),
                 };
