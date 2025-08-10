@@ -117,6 +117,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
             'trapAnswerState.currentQuestion': randomQuestion,
             'trapAnswerState.playerAnswers': {},
             'trapAnswerState.playerGuesses': {},
+            'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.timerEndsAt': timerEndsAt,
         });
     });
