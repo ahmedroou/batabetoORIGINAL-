@@ -345,7 +345,31 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                     sortedRanksForDisplay.map((rank, index) => {
                         const playersInRank = playersByRank[rank.name] || [];
                         const Icon = rank.icon || Star;
-                        const isTopRank = index === 0;
+                        
+                        const cardStyle = 
+                            index === 0 ? "bg-top-rank-card" :
+                            index === 1 ? "bg-second-rank-card" :
+                            index === 2 ? "bg-third-rank-card" :
+                            "bg-common-card";
+
+                        const titleStyle = 
+                            index === 0 ? "text-yellow-900" :
+                            index === 1 ? "text-slate-900" :
+                            index === 2 ? "text-orange-100" :
+                            "text-purple-300";
+
+                        const iconStyle =
+                            index === 0 ? "text-yellow-800" :
+                            index === 1 ? "text-slate-800" :
+                            index === 2 ? "text-orange-200" :
+                            "text-amber-400";
+                            
+                        const borderStyle =
+                            index === 0 ? "border-yellow-400/50" : 
+                            index === 1 ? "border-slate-400/50" :
+                            index === 2 ? "border-amber-500/50" :
+                            "border-purple-500/30";
+
 
                         return (
                             <motion.div 
@@ -354,13 +378,13 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.1 + index * 0.1 }}
                             >
-                                <Card className={cn(isTopRank ? 'bg-top-rank-card' : 'bg-common-card')}>
-                                    <CardHeader className={cn("border-b-2", isTopRank ? "border-yellow-400/50" : "border-purple-500/30")}>
+                                <Card className={cn(cardStyle)}>
+                                    <CardHeader className={cn("border-b-2", borderStyle)}>
                                         <CardTitle className={cn(
                                             "flex items-center gap-4 text-2xl",
-                                            isTopRank ? "text-yellow-900" : "text-purple-300"
+                                            titleStyle
                                         )}>
-                                            <Icon className={cn("w-8 h-8", isTopRank ? "text-yellow-800" : "text-amber-400")} />
+                                            <Icon className={cn("w-8 h-8", iconStyle)} />
                                             <span>طبقة: {rank.name}</span>
                                         </CardTitle>
                                     </CardHeader>
@@ -401,5 +425,3 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         </>
     );
 }
-
-    
