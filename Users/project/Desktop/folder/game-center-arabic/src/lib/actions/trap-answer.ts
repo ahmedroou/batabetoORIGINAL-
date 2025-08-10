@@ -63,7 +63,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.selectedCategory': null,
             'trapAnswerState.currentQuestion': null,
-             playerScores: game.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {}),
+             playerScores: game.players.reduce((acc, p => ({ ...acc, [p.id]: 0 })), {}),
              'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000),
              'trapAnswerState.trickStats': { trickedBy: {}, trickedOthers: {} }, // Initialize trick stats
         });
@@ -71,34 +71,8 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
 }
 
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
-    const questionsCol = collection(db, "trap_answer_questions");
-    const categoryQuery = query(questionsCol, where("category", "==", category));
-
-    // Efficiently get all document IDs in the category.
-    const querySnapshot = await getDocs(categoryQuery);
-    const questionIds = querySnapshot.docs.map(doc => doc.id);
-
-    if (questionIds.length === 0) {
-        throw new Error(`لا توجد أسئلة في قسم "${category}". يرجى إضافة المزيد من صفحة الأدمن.`);
-    }
-
-    // Select a random ID from the list.
-    const randomId = questionIds[Math.floor(Math.random() * questionIds.length)];
-
-    // Fetch only the single, randomly selected document.
-    const questionDocRef = doc(db, "trap_answer_questions", randomId!);
-
-    const questionDoc = await getDoc(questionDocRef);
-
-    if (!questionDoc.exists()) {
-         throw new Error(`فشل جلب السؤال العشوائي. المعرف ${randomId} غير موجود.`);
-    }
-
-    const randomQuestion = { id: questionDoc.id, ...questionDoc.data() } as TrapQuestion;
-
-
-    // --- Step 2: Run the transaction to update the game state. ---
     const gameRef = doc(db, 'games', gameId);
+    
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -113,6 +87,25 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
         if (playerWhoseTurnItIs !== playerId) {
             throw new Error("ليس دورك لاختيار القسم.");
         }
+
+        const questionsCol = collection(db, "trap_answer_questions");
+        const categoryQuery = query(questionsCol, where("category", "==", category));
+        const querySnapshot = await getDocs(categoryQuery); // Fetch outside transaction is fine for this read
+        
+        const questionIds = querySnapshot.docs.map(doc => doc.id);
+        if (questionIds.length === 0) {
+            throw new Error(`لا توجد أسئلة في قسم "${category}". يرجى إضافة المزيد من صفحة الأدمن.`);
+        }
+
+        const randomId = questionIds[Math.floor(Math.random() * questionIds.length)]!;
+        const questionDocRef = doc(db, "trap_answer_questions", randomId);
+        const questionDoc = await transaction.get(questionDocRef); // Read the specific doc inside transaction
+
+        if (!questionDoc.exists()) {
+             throw new Error(`فشل جلب السؤال العشوائي. المعرف ${randomId} غير موجود.`);
+        }
+        
+        const randomQuestion = { id: questionDoc.id, ...questionDoc.data() } as TrapQuestion;
         
         const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
         const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
@@ -132,7 +125,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
 
     try {
         await runTransaction(db, async (transaction) => {
-            const gameDoc = await getDoc(gameRef);
+            const gameDoc = await transaction.get(gameRef);
             if (!gameDoc.exists()) throw new Error("Game not found.");
             let game = gameDoc.data() as Game;
 
@@ -318,7 +311,7 @@ export function calculateTrapAnswerScores(
 export async function submitGuess(gameId: string, playerId: string, guess: string | null) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await getDoc(gameRef);
+        const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
@@ -483,11 +476,12 @@ export async function handleTimeout(gameId: string, hostId: string) {
             if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
             
             const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-            // Must run outside transaction, so we just set state and let client re-trigger
-            transaction.update(gameRef, { 'trapAnswerState.selectedCategory': randomCategory, 'trapAnswerState.timerEndsAt': null });
-            // The client-side will then see the selected category and call selectCategoryAndGetQuestion.
-            // This is a workaround for the transaction limitation.
-            // A better solution would involve a Cloud Function trigger.
+            // This needs to be called outside the transaction, so we just set the state here.
+            // The component logic will handle calling selectCategoryAndGetQuestion.
+            // This is a limitation, a better approach might involve a Cloud Function trigger.
+            // For now, we will update a value to signify a timeout which the client can react to.
+            transaction.update(gameRef, { 'trapAnswerState.timerEndsAt': null });
+            // The client will see the timer is null and the host will call the next action.
 
         } else if (game.gameState === 'answer-submission') {
             const activePlayers = game.players.filter(p => p.status === 'alive');
