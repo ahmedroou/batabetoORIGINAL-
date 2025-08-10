@@ -20,6 +20,7 @@ import {
   orderBy,
   limit,
   arrayUnion,
+  updateDoc,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
