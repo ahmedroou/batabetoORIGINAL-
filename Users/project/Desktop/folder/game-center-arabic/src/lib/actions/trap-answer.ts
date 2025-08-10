@@ -24,6 +24,7 @@ import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
+import { generateTrapAnswer } from '@/ai/flows/generate-trap-answer-flow';
 
 
 export async function updateGameSettings(gameId: string, hostId: string, settings: Game['trapAnswerState']['settings']) {
@@ -102,7 +103,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
             limit(1)
         );
 
-        let querySnapshot = await transaction.get(q);
+        let querySnapshot = await getDocs(q);
 
         // If first attempt fails, try the other direction
         if (querySnapshot.empty) {
@@ -113,7 +114,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
                 orderBy('randomKey'),
                 limit(1)
             );
-            querySnapshot = await transaction.get(q);
+            querySnapshot = await getDocs(q);
         }
         
         if (querySnapshot.empty) {
@@ -173,8 +174,9 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
 
                 if (timedOutPlayersCount > 0) {
                     const question = game.trapAnswerState?.currentQuestion;
-                    if (question?.dummyAnswers && question.dummyAnswers.length > 0) {
-                        dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
+                    if (question) {
+                        const aiTrapAnswer = await generateTrapAnswer({ question: question.question, correctAnswer: question.answer });
+                        dummyAnswerForRound = aiTrapAnswer.trapAnswer;
                     }
                 }
                 
