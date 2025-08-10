@@ -117,7 +117,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
             'trapAnswerState.selectedCategory': category,
             'trapAnswerState.currentQuestion': randomQuestion,
             'trapAnswerState.playerAnswers': {},
-            'trapAnswerState.playerGuesses': {}, // <-- THE CRITICAL FIX
+            'trapAnswerState.playerGuesses': {},
             'trapAnswerState.lastRoundResults': {},
             'trapAnswerState.timerEndsAt': timerEndsAt,
         });
