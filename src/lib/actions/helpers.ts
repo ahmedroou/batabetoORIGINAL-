@@ -40,8 +40,14 @@ export function withAdminAuth<T extends any[], R>(
     const adminRef = doc(db, 'users', adminId);
     const adminDoc = await getDoc(adminRef);
 
-    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
-      throw new Error("Unauthorized: You do not have permission to perform this action.");
+    if (!adminDoc.exists()) {
+        throw new Error("Unauthorized: Admin user profile not found in database.");
+    }
+    
+    const adminData = adminDoc.data();
+
+    if (adminData.isAdmin !== true) {
+      throw new Error("Unauthorized: You do not have permission to perform this action. Ensure your user profile in Firestore has the 'isAdmin' field set to true.");
     }
     
     // If authorized, execute the original action.
