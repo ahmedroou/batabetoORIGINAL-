@@ -25,14 +25,14 @@ import {
     addDoc,
     serverTimestamp,
 } from 'firebase/firestore';
-import { isFirebaseError, withAdminAuth } from './helpers';
+import { isFirebaseError, withAdminAuth, safeCompareStrings } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
-import { safeCompareStrings } from './helpers';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
 import { searchUsers, getRanks, getUsersByRank, getTopUsers, getTopPunisher } from './user/queries';
+
 
 export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
   if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
@@ -73,41 +73,7 @@ export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds:
 });
 
 
-export const uploadQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; category: string }[]) => {
-    if (!questions || !Array.isArray(questions) || questions.length === 0) {
-        return { error: 'ملف JSON غير صالح أو فارغ.' };
-    }
-
-    try {
-        const batch = writeBatch(db);
-        const questionsCol = collection(db, 'questions');
-        let validQuestionsCount = 0;
-
-        questions.forEach(question => {
-            if (question && typeof question.text === 'string' && question.text.trim() !== '' && typeof question.category === 'string' && question.category.trim() !== '') {
-                const docRef = doc(questionsCol);
-                batch.set(docRef, { 
-                    text: question.text.trim(),
-                    category: question.category.trim()
-                });
-                validQuestionsCount++;
-            }
-        });
-
-        if (validQuestionsCount === 0) {
-            return { error: 'لم يتم العثور على أسئلة صالحة في الملف.' };
-        }
-
-        await batch.commit();
-        return { success: true, count: validQuestionsCount };
-    } catch (error) {
-        console.error("Error uploading questions:", error);
-        return { error: 'حدث خطأ أثناء رفع الأسئلة.' };
-    }
-});
-
-
-export const uploadSnakesAndScissorsQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { text: string; options: string[]; correctAnswer: string; }[], category: string) => {
+export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: string, questions: { question: string, answer: string, dummyAnswers?: string[] }[], category: string) => {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return { error: 'ملف JSON غير صالح أو فارغ.' };
     }
@@ -117,36 +83,44 @@ export const uploadSnakesAndScissorsQuestionsFromJson = withAdminAuth(async (adm
 
     try {
         const batch = writeBatch(db);
-        const questionsCol = collection(db, 'snakes_and_scissors_questions');
+        const questionsCol = collection(db, 'trap_answer_questions');
         let validQuestionsCount = 0;
 
         questions.forEach(q => {
+            const hasDummyAnswers = q.dummyAnswers && Array.isArray(q.dummyAnswers) && q.dummyAnswers.length >= 2 && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '');
+            
             if (
-                q && typeof q.text === 'string' && q.text.trim() !== '' &&
-                Array.isArray(q.options) && q.options.length === 4 && q.options.every(o => typeof o === 'string' && o.trim() !== '') &&
-                typeof q.correctAnswer === 'string' && q.correctAnswer.trim() !== '' &&
-                q.options.includes(q.correctAnswer)
+                q && typeof q.question === 'string' && q.question.trim() !== '' && 
+                typeof q.answer === 'string' && q.answer.trim() !== ''
             ) {
                 const docRef = doc(questionsCol);
-                batch.set(docRef, {
-                    text: q.text.trim(),
-                    options: q.options.map(o => o.trim()),
-                    correctAnswer: q.correctAnswer.trim(),
+                const questionData: Partial<TrapQuestion> = {
+                    question: q.question.trim(),
+                    answer: q.answer.trim(),
                     category: category.trim(),
-                });
+                    randomKey: Math.random() // Add the random key for efficient querying
+                };
+                
+                if (hasDummyAnswers) {
+                    questionData.dummyAnswers = q.dummyAnswers.map(da => da.trim());
+                } else {
+                    questionData.dummyAnswers = []; // Ensure the field exists even if empty
+                }
+
+                batch.set(docRef, questionData);
                 validQuestionsCount++;
             }
         });
 
         if (validQuestionsCount === 0) {
-            return { error: 'لم يتم العثور على أسئلة صالحة في الملف. تأكد من أن كل سؤال له 4 خيارات وأن الجواب الصحيح واحد منهم.' };
+            return { error: 'لم يتم العثور على أسئلة صالحة في الملف. تأكد من أن كل سؤال يحتوي على `question` و `answer` على الأقل.' };
         }
 
         await batch.commit();
         return { success: true, count: validQuestionsCount };
     } catch (error) {
-        console.error("Error uploading Snakes and Scissors questions:", error);
-        return { error: 'حدث خطأ أثناء رفع أسئلة السلم والمقص.' };
+        console.error("Error uploading trap answer questions:", error);
+        return { error: 'حدث خطأ أثناء رفع أسئلة الجواب المفخخ.' };
     }
 });
 
@@ -215,17 +189,17 @@ export const uploadWordWarWordsFromJson = withAdminAuth(async (adminId: string, 
     }
 });
 
-export const countQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean, duplicates?: 'word_war_duplicates' }) => {
-    if (!criteria.category && !criteria.all && !criteria.duplicates) {
+export const countQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war' , category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) => {
+    if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
-    
-    let collectionName = '';
+
+    let collectionName: string;
     switch(criteria.game) {
+        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
-        case 'snakes_and_scissors': collectionName = 'snakes_and_scissors_questions'; break;
-        default: return { error: 'نوع لعبة غير صالح.' };
+        default: return { error: "نوع لعبة غير مدعوم." };
     }
 
 
@@ -236,13 +210,35 @@ export const countQuestions = withAdminAuth(async (adminId: string, criteria: { 
         if (criteria.all) {
             const querySnapshot = await getDocs(itemsCol);
             count = querySnapshot.size;
+        } else if (criteria.category && criteria.duplicates && typeof criteria.duplicates === 'object' && criteria.game === 'trap-answer') {
+            const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
+            count = duplicateCount;
         } else if (criteria.duplicates === 'word_war_duplicates' && criteria.game === 'word_war') {
             const { count: duplicateCount } = await findDuplicateWords();
             count = duplicateCount;
-        } else if (criteria.category) { 
+        } else if (criteria.category && !criteria.duplicates && criteria.game === 'trap-answer') {
             const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             count = querySnapshot.size;
+        } else if (criteria.searchTerm) {
+            const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
+            const searchTerm = criteria.searchTerm.trim();
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
+            querySnapshot.forEach(doc => {
+                const text = doc.data()[textFieldName] as string;
+                if (text && text.includes(searchTerm)) {
+                    count++;
+                }
+            });
+        } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
+            const searchTerm = criteria.answerSearchTerm.trim();
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
+            querySnapshot.forEach(doc => {
+                const text = doc.data()['answer'] as string;
+                if (text && text.includes(searchTerm)) {
+                    count++;
+                }
+            });
         }
         
         return { success: true, count };
@@ -252,17 +248,17 @@ export const countQuestions = withAdminAuth(async (adminId: string, criteria: { 
     }
 });
 
-export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'prison' | 'word_war' | 'snakes_and_scissors', category?: string; all?: boolean }) => {
-    if (!criteria.category && !criteria.all) {
+export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) => {
+    if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
 
-     let collectionName = '';
+     let collectionName: string;
     switch(criteria.game) {
+        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
-        case 'snakes_and_scissors': collectionName = 'snakes_and_scissors_questions'; break;
-        default: return { error: 'نوع لعبة غير صالح.' };
+        default: return { error: "نوع لعبة غير مدعوم." };
     }
 
     try {
@@ -277,7 +273,7 @@ export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: {
                 batch.delete(doc.ref);
                 count++;
             });
-        } else if (criteria.category && (criteria.game === 'snakes_and_scissors')) {
+        } else if (criteria.category && criteria.game === 'trap-answer') {
             const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
@@ -287,6 +283,33 @@ export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: {
                 batch.delete(doc.ref);
                 count++;
             });
+        } else if (criteria.searchTerm) {
+            const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
+            const searchTerm = criteria.searchTerm.trim();
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
+            querySnapshot.forEach(doc => {
+                const text = doc.data()[textFieldName] as string;
+                if (text && text.includes(searchTerm)) {
+                    batch.delete(doc.ref);
+                    count++;
+                }
+            });
+            if (count === 0) {
+                return { success: true, count: 0, message: 'لم يتم العثور على عناصر تحتوي على هذا النص.' };
+            }
+        } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
+            const searchTerm = criteria.answerSearchTerm.trim();
+            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
+            querySnapshot.forEach(doc => {
+                const text = doc.data()['answer'] as string;
+                if (text && text.includes(searchTerm)) {
+                    batch.delete(doc.ref);
+                    count++;
+                }
+            });
+            if (count === 0) {
+                return { success: true, count: 0, message: 'لم يتم العثور على أسئلة تحتوي على هذا الجواب.' };
+            }
         }
 
         await batch.commit();
@@ -297,11 +320,102 @@ export const deleteQuestions = withAdminAuth(async (adminId: string, criteria: {
     }
 });
 
+async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
+    if (!category) {
+        throw new Error("يجب تحديد قسم للبحث عن التكرارات.");
+    }
+    const collectionName = 'trap_answer_questions';
+    const textFieldName = 'question';
+
+    const q = query(collection(db, collectionName), where("category", "==", category));
+    const querySnapshot = await getDocs(q);
+
+    const questions = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        text: doc.data()[textFieldName] as string,
+        docRef: doc.ref
+    }));
+
+    if (questions.length < 2) {
+        return { groups: [], count: 0 }; // Need at least two questions to find duplicates
+    }
+
+    const groups: string[][] = [];
+    const processedIds = new Set<string>(); // Keep track of IDs already processed to avoid redundant comparisons
+    let deletedCount = 0;
+
+    for (let i = 0; i < questions.length; i++) {
+        if (processedIds.has(questions[i].id)) {
+            continue; // Skip if already part of a group
+        }
+
+        const currentGroup = [questions[i].id];
+        processedIds.add(questions[i].id);
+
+        const mainString = questions[i].text;
+        
+        for (let j = i + 1; j < questions.length; j++) {
+            if (processedIds.has(questions[j].id)) {
+                continue;
+            }
+
+            const similarity = safeCompareStrings(mainString, questions[j].text);
+            if (similarity >= similarityThreshold) {
+                currentGroup.push(questions[j].id);
+                processedIds.add(questions[j].id);
+            }
+        }
+
+        if (currentGroup.length > 1) {
+            groups.push(currentGroup);
+            currentGroup.sort();
+            deletedCount += currentGroup.length - 1;
+        }
+    }
+    return { groups, count: deletedCount };
+}
+
+
+export const deleteSimilarQuestions = withAdminAuth(async (adminId: string, game: 'trap-answer', similarityThreshold: number, category?: string) => {
+    try {
+        const { groups, count: deletedCount } = await findSimilarQuestions(game, similarityThreshold, category);
+
+        if (groups.length === 0) {
+            return { success: true, count: 0, message: 'لم يتم العثور على أسئلة مكررة.' };
+        }
+
+        const batch = writeBatch(db);
+        
+        groups.forEach(group => {
+            group.sort();
+            group.pop();
+
+            group.forEach(idToDelete => {
+                const docRef = doc(db, 'trap_answer_questions', idToDelete);
+                batch.delete(docRef);
+            });
+        });
+
+        if (deletedCount > 0) {
+            await batch.commit();
+        }
+        
+        return { success: true, count: deletedCount };
+
+    } catch (error) {
+        console.error("Error deleting similar questions:", error);
+        if (isFirebaseError(error)) {
+            return { error: `فشل حذف الأسئلة المكررة: ${error.message}` };
+        }
+        return { error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
+    }
+});
+
 async function findDuplicateWords() {
     const wordsCol = collection(db, 'word_war_words');
     const querySnapshot = await getDocs(wordsCol);
 
-    const wordsMap = new Map<string, string[]>();
+    const wordsMap = new Map<string, string[]>(); // Map from word text to array of document IDs
     
     querySnapshot.forEach(doc => {
         const text = (doc.data().text as string)?.trim();
@@ -319,7 +433,7 @@ async function findDuplicateWords() {
     wordsMap.forEach((ids) => {
         if (ids.length > 1) {
             groups.push(ids);
-            deletedCount += ids.length - 1;
+            deletedCount += ids.length - 1; // All but one will be deleted
         }
     });
 
@@ -338,8 +452,8 @@ export const deleteDuplicateWords = withAdminAuth(async (adminId: string): Promi
         const batch = writeBatch(db);
         
         groups.forEach(groupOfIds => {
-            groupOfIds.sort();
-            groupOfIds.shift();
+            groupOfIds.sort(); // Sort to have a consistent "oldest" one to keep
+            groupOfIds.shift(); // Keep the first one (oldest ID), remove it from deletion list
 
             groupOfIds.forEach(idToDelete => {
                 const docRef = doc(db, 'word_war_words', idToDelete);
@@ -355,6 +469,9 @@ export const deleteDuplicateWords = withAdminAuth(async (adminId: string): Promi
 
     } catch (error) {
         console.error("Error deleting duplicate words:", error);
+        if (isFirebaseError(error)) {
+            return { error: `فشل حذف الكلمات المكررة: ${error.message}` };
+        }
         return { error: 'حدث خطأ غير متوقع أثناء حذف الكلمات المكررة.' };
     }
 });
@@ -399,14 +516,15 @@ export const adminUpdateUser = withAdminAuth(async (adminId: string, userId: str
     }
 });
 
+
 export async function getTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { success: true, categories: docSnap.data().list || [] };
+        if (docSnap.exists() && docSnap.data().list?.length > 0) {
+            return { success: true, categories: docSnap.data().list };
         }
-        // If it doesn't exist, create it with default values (should ideally be done once)
+        // If it doesn't exist or is empty, create it with default values
         await setDoc(docRef, { list: DEFAULT_TRAP_ANSWER_CATEGORIES });
         return { success: true, categories: DEFAULT_TRAP_ANSWER_CATEGORIES };
     } catch (error) {
@@ -415,6 +533,109 @@ export async function getTrapAnswerCategories(): Promise<{success: boolean, cate
     }
 }
 
+export const addTrapAnswerCategory = withAdminAuth(async (adminId: string, category: string): Promise<{success: boolean, error?: string}> => {
+    if (!category || typeof category !== 'string' || category.trim() === '') {
+        return { error: 'اسم القسم غير صالح.' };
+    }
+    try {
+        const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
+        await updateDoc(settingsRef, {
+            list: arrayUnion(category.trim())
+        });
+        return { success: true };
+    } catch (error) {
+        if (isFirebaseError(error) && error.code === 'not-found') {
+            await setDoc(doc(db, 'game_settings', 'trap_answer_categories'), {
+                list: [category.trim()]
+            });
+            return { success: true };
+        }
+        console.error("Error adding trap answer category:", error);
+        return { success: false, error: 'Failed to add category.' };
+    }
+});
+
+export const editTrapAnswerCategory = withAdminAuth(async (adminId: string, oldCategory: string, newCategory: string): Promise<{ success: boolean; error?: string }> => {
+    if (!oldCategory || !newCategory || oldCategory.trim() === '' || newCategory.trim() === '') {
+        return { error: 'الاسم القديم والجديد مطلوبان.' };
+    }
+    if (oldCategory.trim() === newCategory.trim()) {
+        return { error: 'الاسم الجديد للقسم يجب أن يختلف عن الاسم القديم.' };
+    }
+
+    const batch = writeBatch(db);
+    const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
+    
+    try {
+        const settingsSnap = await getDoc(settingsRef);
+        if (!settingsSnap.exists()) {
+            throw new Error("مستند إعدادات الأقسام غير موجود.");
+        }
+        
+        const categories: string[] = settingsSnap.data().list || [];
+        if (!categories.includes(oldCategory)) {
+            return { error: 'القسم القديم غير موجود.' };
+        }
+        if (categories.includes(newCategory.trim())) {
+            return { error: 'الاسم الجديد للقسم موجود بالفعل.' };
+        }
+
+        const updatedCategories = categories.map(c => c === oldCategory ? newCategory.trim() : c);
+        batch.update(settingsRef, { list: updatedCategories });
+        
+        const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", oldCategory));
+        const questionsSnapshot = await getDocs(questionsQuery);
+
+        questionsSnapshot.forEach(doc => {
+            batch.update(doc.ref, { category: newCategory.trim() });
+        });
+        
+        await batch.commit();
+        return { success: true };
+
+    } catch (error) {
+        console.error("Error editing category:", error);
+        return { success: false, error: 'فشل تعديل القسم.' };
+    }
+});
+
+export const deleteTrapAnswerCategory = withAdminAuth(async (adminId: string, categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> => {
+    if (!categoryToDelete || categoryToDelete.trim() === '') {
+        return { error: 'يجب تحديد قسم للحذف.' };
+    }
+    
+    const batch = writeBatch(db);
+    const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
+
+    try {
+        const settingsSnap = await getDoc(settingsRef);
+        if (!settingsSnap.exists()) throw new Error("مستند إعدادات الأقسام غير موجود.");
+        
+        const categories: string[] = settingsSnap.data().list || [];
+        if (categories.length <= 1) {
+            return { error: "لا يمكن حذف آخر قسم متبقٍ." };
+        }
+        if (!categories.includes(categoryToDelete)) {
+            return { error: "القسم المحدد للحذف غير موجود." };
+        }
+        
+        batch.update(settingsRef, { list: arrayRemove(categoryToDelete) });
+
+        const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", categoryToDelete));
+        const questionsSnapshot = await getDocs(questionsQuery);
+
+        questionsSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        await batch.commit();
+        return { success: true, count: questionsSnapshot.size };
+
+    } catch (error) {
+        console.error("Error deleting category:", error);
+        return { success: false, error: 'فشل حذف القسم والأسئلة المرتبطة به.' };
+    }
+});
 
 export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> => {
     try {
@@ -427,7 +648,7 @@ export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: Ava
     }
 });
 
-export const getAvatarPrices = withAdminAuth(async (adminId: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
+export const getAvatarPrices = withAdminAuth(async (adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
     try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -452,7 +673,7 @@ export const setPunishmentAvatarPrices = withAdminAuth(async (adminId: string, p
     }
 });
 
-export const getPunishmentAvatarPrices = withAdminAuth(async (adminId: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
+export const getPunishmentAvatarPrices = withAdminAuth(async (adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
     try {
         const docRef = doc(db, 'game_settings', 'punishment_avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -664,3 +885,4 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, getTopUsers, getTopPunisher };
+
