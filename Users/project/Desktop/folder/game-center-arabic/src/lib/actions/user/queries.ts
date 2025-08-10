@@ -157,7 +157,7 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
 
 
 // Internal function to update win counts and check for new Game Kings
-export async function updateUserWinCount(gameType: any, userId: string, transaction: WriteBatch) {
+export async function updateUserWinCount(gameType: any, userId: string, batch: WriteBatch) {
     
     // This function should NOT handle team games, as that logic is in `distributeEndOfGameAwards`
     const teamGameTypes = ['word_war', 'king-of-genius', 'behind-the-mask'];
@@ -170,7 +170,7 @@ export async function updateUserWinCount(gameType: any, userId: string, transact
     // so we cannot `get` docs. We must perform updates blindly. This is acceptable
     // as we are only using increments.
     
-    transaction.update(userRef, {
+    batch.update(userRef, {
       [`winCounts.${gameType}`]: increment(1)
     });
 }
