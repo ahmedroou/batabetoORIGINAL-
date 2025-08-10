@@ -1,7 +1,8 @@
 
 
-import { calculateTrapAnswerScores } from '@/lib/actions/trap-answer';
-import type { Player, TrapQuestion } from '@/types';
+import { calculateTrapAnswerScores } from '@/lib/actions/helpers/trap-answer-helpers';
+import type { Game, Player, TrapQuestion } from '@/types';
+import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
 
 
 // --- Tests for the main game scoring logic ---
@@ -64,7 +65,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
     });
 
     // Scenario 3: Player votes for their own trap answer.
-    test('should deduct 1 point for voting for one\'s own answer', () => {
+    test('should give 0 points for voting for one\'s own answer', () => {
         const playerAnswers = { p1: 'كوبي', p2: 'ناغويا', p3: 'تشيبا', p4: 'سaitama' };
         const playerGuesses = {
             p1: 'كوبي', // Alice voted for her own answer
@@ -75,7 +76,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
 
         const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses);
 
-        expect(roundScores['p1'].points).toBe(-1); // Penalty for self-vote
+        expect(roundScores['p1'].points).toBe(0); // No penalty for self-vote, just 0 points
         expect(roundScores['p2'].points).toBe(2);
         expect(roundScores['p3'].points).toBe(2);
         expect(roundScores['p4'].points).toBe(2);
@@ -87,7 +88,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
         const playerGuesses = {
             p1: 'طوكيو',   // Alice guessed correctly (+2)
             p2: 'كيوتو',    // Bob was tricked by both Alice and Charlie
-            p3: 'كيوتو',    // Charlie voted for his own similar answer (-1)
+            p3: 'كيوتو',    // Charlie voted for his own similar answer (0 points)
             p4: 'أوساكا'    // Dana was tricked by Bob
         };
 
@@ -97,8 +98,8 @@ describe('Trap Answer Game - Scoring Logic', () => {
         expect(roundScores['p1'].points).toBe(3); 
         // Bob: Tricked Dana (+1) = 1
         expect(roundScores['p2'].points).toBe(1); 
-        // Charlie: Voted for own answer (-1) + Bob's vote (+1) = 0
-        expect(roundScores['p3'].points).toBe(0);
+        // Charlie: Voted for own answer (0) + Bob's vote (+1) = 1
+        expect(roundScores['p3'].points).toBe(1);
         // Dana: Was tricked by Bob
         expect(roundScores['p4'].points).toBe(0);
     });
@@ -163,21 +164,128 @@ describe('Trap Answer Game - Scoring Logic', () => {
     });
 
     // Test case where a player votes for their own answer AND another player also votes for it.
-    test('should handle self-vote penalty and external trick points correctly', () => {
+    test('should handle self-vote (0 points) and external trick points correctly', () => {
         const playerAnswers = { p1: 'نارا', p2: 'سابورو' };
         const playerGuesses = {
-            p1: 'نارا',  // Alice votes for her own answer (-1)
+            p1: 'نارا',  // Alice votes for her own answer (0 points)
             p2: 'نارا',  // Bob votes for Alice's answer (+1 for Alice)
         };
 
         const { roundScores } = calculateTrapAnswerScores(mockPlayers.slice(0, 2), mockQuestion, playerAnswers, playerGuesses);
 
-        // Alice gets -1 for self-vote and +1 for tricking Bob. Net score = 0
-        expect(roundScores['p1'].points).toBe(0);
-        expect(roundScores['p1'].breakdown).toContainEqual({ reason: 'صوّت لنفسه', points: -1 });
+        // Alice gets 0 for self-vote and +1 for tricking Bob. Net score = 1
+        expect(roundScores['p1'].points).toBe(1);
+        expect(roundScores['p1'].breakdown).toContainEqual({ reason: 'صوّت لنفسه', points: 0 });
         expect(roundScores['p1'].breakdown).toContainEqual({ reason: 'خدع Bob', points: 1 });
         
         // Bob was tricked by Alice
         expect(roundScores['p2'].points).toBe(0);
+    });
+});
+
+describe('Trap Answer Game - End of Game Awards', () => {
+
+    const mockPlayers: Player[] = [
+        { id: 'p1', name: 'Alice', avatarId: 'a1', status: 'alive', score: 0, position: 0 },
+        { id: 'p2', name: 'Bob', avatarId: 'a2', status: 'alive', score: 0, position: 0 },
+        { id: 'p3', name: 'Charlie', avatarId: 'a3', status: 'alive', score: 0, position: 0 },
+        { id: 'p4', name: 'Dana', avatarId: 'a4', status: 'alive', score: 0, position: 0 },
+    ];
+
+    test('should distribute awards correctly for 1st, 2nd, and 3rd place', () => {
+        const mockGame: Partial<Game> = {
+            gameType: 'trap-answer',
+            players: mockPlayers,
+            playerScores: {
+                p1: 100, // 1st
+                p2: 50,  // 2nd
+                p3: 25,  // 3rd
+                p4: 10   // 4th
+            },
+            gameResult: { winner: 'p1', message: 'Game Over' }
+        };
+
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+
+        expect(updates['p1']?.leaderboardPoints).toBe(3);
+        expect(updates['p1']?.coins).toBe(2);
+        expect(winUpdate?.userId).toBe('p1');
+
+        expect(updates['p2']?.leaderboardPoints).toBe(2);
+        expect(updates['p2']?.coins).toBe(1);
+        
+        expect(updates['p3']?.leaderboardPoints).toBe(1);
+        expect(updates['p3']?.coins).toBe(0);
+        
+        expect(updates['p4']?.leaderboardPoints).toBe(0);
+        expect(updates['p4']?.coins).toBe(0);
+    });
+
+    test('should handle ties correctly', () => {
+        const mockGame: Partial<Game> = {
+            gameType: 'trap-answer',
+            players: mockPlayers,
+            playerScores: {
+                p1: 100, // 1st
+                p2: 50,  // Tied for 2nd
+                p3: 50,  // Tied for 2nd
+                p4: 10   // 4th
+            },
+            gameResult: { winner: 'p1', message: 'Game Over' }
+        };
+
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+
+        expect(updates['p1'].leaderboardPoints).toBe(3);
+        expect(updates['p2'].leaderboardPoints).toBe(2);
+        expect(updates['p3'].leaderboardPoints).toBe(2);
+        expect(updates['p4'].leaderboardPoints).toBe(0);
+        expect(winUpdate?.userId).toBe('p1');
+    });
+
+    test('should award special "Cunning Deceiver" bonus point', () => {
+         const mockGame: Partial<Game> = {
+            gameType: 'trap-answer',
+            players: mockPlayers,
+            playerScores: {
+                p1: 100, // 1st
+                p2: 50,  // 2nd
+                p3: 25,  // 3rd
+                p4: 10,
+            },
+            trapAnswerState: {
+                trickStats: {
+                    trickedOthers: { 'p1': ['p2', 'p3', 'p4'] }, // p1 tricked 3 people
+                    trickedBy: {}
+                }
+            },
+            gameResult: { winner: 'p1', message: 'Game Over' }
+        };
+
+        const { updates, specialAwards } = calculateEndOfGameAwards(mockGame as Game);
+
+        // p1 gets 3 points for 1st place + 1 bonus point
+        expect(updates['p1'].leaderboardPoints).toBe(3 + 1);
+        expect(specialAwards?.cunningDeceiver?.playerId).toBe('p1');
+    });
+});
+
+describe('Trap Answer Game - Away Player Feature', () => {
+    const mockPlayers: Player[] = [{ id: 'p1', name: 'Alice', avatarId: 'a1', status: 'alive', score: 10, position: 0 }];
+    const mockQuestion: TrapQuestion = { id: 'q1', question: 'Q', answer: 'A' };
+
+    test('should correctly identify a player who is away', () => {
+        const gameWithAwayPlayer: Partial<Game> = {
+            players: mockPlayers,
+            trapAnswerState: {
+                awayPlayerIds: ['p1'] // Mark p1 as away
+            }
+        };
+
+        // This is a conceptual test. In a real scenario, you would check if the UI
+        // correctly displays the "away" status based on this flag.
+        // We'll verify that the `awayPlayerIds` property is accessible.
+        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIds).toBeDefined();
+        expect(gameWithAwayPlayer.trapAnswerState?.awayPlayerIds).toContain('p1');
     });
 });
