@@ -67,6 +67,7 @@ export const NewsArticleInputSchema = z.object({
   active_challenges: z.array(z.any()).describe("A list of currently active challenges or tournaments."),
   date: z.string().describe("Today's date in a readable format (e.g., 'Sunday, July 28, 2024')."),
   directive: z.string().optional().describe("An optional directive from the admin on what to focus on in the article."),
+  recent_games: z.array(z.any()).describe("A list of the last 10 finished games to find interesting results."),
 });
 export type NewsArticleInput = z.infer<typeof NewsArticleInputSchema>;
 
@@ -372,7 +373,6 @@ export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submi
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
-export type SnakesAndScissorsGameState = "lobby" | "rolling" | "answering" | "moving" | "final_results";
 
 export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState;
 

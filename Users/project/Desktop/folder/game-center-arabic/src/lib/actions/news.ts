@@ -22,9 +22,9 @@ import {
     limit,
     runTransaction,
 } from 'firebase/firestore';
-import type { Article, AudienceGroup, UserProfile, SocialEvent, Challenge } from '@/types';
+import type { Article, AudienceGroup, UserProfile, SocialEvent, Challenge, Game } from '@/types';
 import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
-import { getAllUsers, getTopUsers, getTopPunisher } from './user/queries';
+import { getAllUsers, getTopPunisher, getTopUsers } from './user/queries';
 import { getChallenges } from './challenges';
 
 
@@ -262,12 +262,29 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     const userRef = doc(db, 'users', userId);
     try {
         batch.update(groupRef, { members: arrayRemove(userId) });
-        batch.update(userRef, { audienceGroups: arrayRemove(userId) });
+        batch.update(userRef, { audienceGroups: arrayRemove(groupId) });
         await batch.commit();
         return { success: true };
     } catch (error) {
         console.error("Error removing player from group:", error);
         return { success: false, error: 'فشل إزالة اللاعب.' };
+    }
+}
+
+async function getRecentFinishedGames(count: number): Promise<Game[]> {
+    try {
+        const gamesCol = collection(db, 'games');
+        const q = query(
+            gamesCol,
+            where('gameState', '==', 'final_results'),
+            orderBy('createdAt', 'desc'),
+            limit(count)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => doc.data() as Game);
+    } catch (error) {
+        console.error("Error fetching recent games:", error);
+        return [];
     }
 }
 
@@ -278,6 +295,7 @@ async function getJournalistSourceMaterial(): Promise<{
     punished_players: UserProfile[];
     top_punisher: UserProfile | null;
     active_challenges: Challenge[];
+    recent_games: Game[];
 }> {
     const oneDayAgo = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
     const eventsQuery = query(collection(db, 'social_events'), where('timestamp', '>=', oneDayAgo), orderBy('timestamp', 'desc'));
@@ -285,19 +303,20 @@ async function getJournalistSourceMaterial(): Promise<{
     const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const articlesQuery = query(collection(db, 'articles'), where('createdAt', '>=', sevenDaysAgo), orderBy('createdAt', 'desc'));
 
-    const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges] = await Promise.all([
+    const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges, recent_games] = await Promise.all([
         getDocs(eventsQuery),
         getDocs(articlesQuery),
         getTopUsers('leaderboardPoints', 5),
         getAllUsers('punished'),
         getTopPunisher(),
         getChallenges(),
+        getRecentFinishedGames(10),
     ]);
 
     const events = eventsSnapshot.docs.map(doc => ({ ...doc.data(), timestamp: doc.data().timestamp.toDate() } as SocialEvent));
     const previous_articles = articlesSnapshot.docs.map(doc => ({ ...doc.data(), createdAt: doc.data().createdAt.toDate() } as Article));
 
-    return { events, previous_articles, leaderboard, punished_players, top_punisher, active_challenges };
+    return { events, previous_articles, leaderboard, punished_players, top_punisher, active_challenges, recent_games };
 }
 
 

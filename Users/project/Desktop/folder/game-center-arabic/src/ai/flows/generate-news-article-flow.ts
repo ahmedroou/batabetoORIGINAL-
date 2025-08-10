@@ -33,9 +33,18 @@ const analyzerPrompt = ai.definePrompt({
   input: { schema: NewsArticleInputSchema },
   output: { schema: EventSummarySchema },
   model: 'googleai/gemini-1.5-flash-latest',
-  prompt: `You are a news analyst for a social deduction and strategy game. Your job is to identify the most dramatic, important, and interesting events from a raw list of daily occurrences. Focus on betrayals, major victories, significant punishments, ongoing rivalries, and surprising outcomes.
+  prompt: `You are a news analyst for a social deduction and strategy game. Your job is to identify the most dramatic, important, and interesting events from a raw list of daily occurrences. Focus on betrayals, major victories, significant punishments, ongoing rivalries, surprising outcomes, and recent game results.
 
 Today's Date: {{{date}}}
+---
+**Recent Game Results (Last 10 Games):**
+{{#if recent_games}}
+{{#each recent_games}}
+- Game Type: {{gameType}}, Winner: {{gameResult.winner}}, Players: {{#each players}}{{name}}{{#unless @last}}, {{/unless}}{{/each}}
+{{/each}}
+{{else}}
+- No new game results.
+{{/if}}
 ---
 **Recent Social Events (Last 24 Hours):**
 {{#if events}}
@@ -81,7 +90,7 @@ Today's Date: {{{date}}}
 {{/each}}
 {{/if}}
 ---
-Based on ALL of this information, provide a summary. Select only the key events that would make for a juicy news story. Connect new events to older stories if possible. Ignore minor events unless they contribute to a larger narrative (e.g., a top player losing a duel).
+Based on ALL of this information, provide a summary. Select only the key events that would make for a juicy news story. Analyze the game results for interesting patterns (e.g., win streaks, upsets, rivalry matches). Connect new events to older stories if possible. Ignore minor events unless they contribute to a larger narrative.
 `,
 });
 
