@@ -26,13 +26,13 @@ import {
     serverTimestamp,
 } from 'firebase/firestore';
 import { isFirebaseError, withAdminAuth } from './helpers';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, SnakesAndScissorsQuestion, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { safeCompareStrings } from './helpers';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
-import { searchUsers, getRanks, getUsersByRank } from './user/queries';
+import { searchUsers, getRanks, getUsersByRank, getTopUsers, getTopPunisher } from './user/queries';
 
 export const adminSendMail = withAdminAuth(async (adminId: string, recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> => {
   if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
@@ -671,7 +671,7 @@ export const setAvatarPrices = withAdminAuth(async (adminId: string, prices: Ava
     }
 });
 
-export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+export const getAvatarPrices = withAdminAuth(async (adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
     try {
         const docRef = doc(db, 'game_settings', 'avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -683,7 +683,7 @@ export async function getAvatarPrices(): Promise<{success: boolean, prices?: Ava
         console.error("Error getting avatar prices:", error);
         return { success: false, error: 'Failed to fetch avatar prices.' };
     }
-}
+});
 
 export const setPunishmentAvatarPrices = withAdminAuth(async (adminId: string, prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> => {
     try {
@@ -696,7 +696,7 @@ export const setPunishmentAvatarPrices = withAdminAuth(async (adminId: string, p
     }
 });
 
-export async function getPunishmentAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+export const getPunishmentAvatarPrices = withAdminAuth(async (adminId?: string): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> => {
     try {
         const docRef = doc(db, 'game_settings', 'punishment_avatar_prices');
         const docSnap = await getDoc(docRef);
@@ -708,7 +708,7 @@ export async function getPunishmentAvatarPrices(): Promise<{success: boolean, pr
         console.error("Error getting punishment avatar prices:", error);
         return { success: false, error: 'Failed to fetch punishment avatar prices.' };
     }
-}
+});
 
 
 export const setDefaultAvatar = withAdminAuth(async (adminId: string, avatarId: string): Promise<{ success: boolean; error?: string }> => {
@@ -743,7 +743,7 @@ export const setDefaultAvatar = withAdminAuth(async (adminId: string, avatarId: 
     }
 });
 
-export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
+export const getDefaultAvatar = withAdminAuth(async (adminId?: string): Promise<{ success: boolean; avatarId?: string; error?: string }> => {
     try {
         const docRef = doc(db, 'game_settings', 'default_avatar');
         const docSnap = await getDoc(docRef);
@@ -755,7 +755,18 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
         console.error("Error getting default avatar:", error);
         return { success: false, error: 'Failed to fetch default avatar.' };
     }
-}
+});
+
+export const setSocialRanks = withAdminAuth(async (adminId: string, ranks: SocialRank[]): Promise<{success: boolean, error?: string}> => {
+    try {
+        const settingsRef = doc(db, 'game_settings', 'social_ranks');
+        await setDoc(settingsRef, { list: ranks });
+        return { success: true };
+    } catch (error) {
+        console.error("Error setting social ranks:", error);
+        return { success: false, error: 'فشل حفظ الألقاب الاجتماعية.' };
+    }
+});
 
 export const addPermissionToRank = withAdminAuth(async (adminId: string, rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> => {
     const settingsRef = doc(db, 'game_settings', 'social_ranks');
@@ -858,17 +869,44 @@ export const recalculateGameKings = withAdminAuth(async (adminId: string) => {
     }
 });
 
-export const getTopUsers = withAdminAuth(async (adminId: string, field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> => {
+export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): Promise<{ success: boolean; count: number; error?: string }> => {
+    const usersRef = collection(db, 'users');
     try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, orderBy(field, 'desc'), limit(count));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-    } catch (error) {
-        console.error(`Error getting top users by ${field}:`, error);
-        return [];
+        const snapshot = await getDocs(usersRef);
+        if (snapshot.empty) {
+            return { success: true, count: 0 };
+        }
+        
+        const batch = writeBatch(db);
+        let updatedCount = 0;
+
+        snapshot.forEach(userDoc => {
+            const userData = userDoc.data() as UserProfile;
+            const now = new Date();
+
+            const hasHumiliation = userData.humiliation?.until && (userData.humiliation.until as any)?.toDate() > now;
+            const hasAvatarPunishment = userData.originalAvatarToRevert?.until && (userData.originalAvatarToRevert.until as any)?.toDate() > now;
+            const hasDecree = (userData.decrees || []).some(d => d.until && (d.until as any)?.toDate() > now);
+
+            const isCurrentlyPunished = !!(hasHumiliation || hasAvatarPunishment || hasDecree);
+
+            if (userData.isPunished !== isCurrentlyPunished) {
+                 batch.update(userDoc.ref, { isPunished: isCurrentlyPunished });
+                 updatedCount++;
+            }
+        });
+
+        await batch.commit();
+
+        return { success: true, count: snapshot.size };
+
+    } catch (error: any) {
+        console.error("Error backfilling punishment status:", error);
+        return { success: false, count: 0, error: "Failed to update user punishment statuses." };
     }
 });
 
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank };
+
+    
