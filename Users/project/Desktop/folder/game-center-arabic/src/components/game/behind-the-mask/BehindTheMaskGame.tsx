@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { LobbyPhase } from './phases/LobbyPhase';
 import { RoleRevealPhase } from './phases/RoleRevealPhase';
 import { NightPhase } from './phases/NightPhase';
-import { DayPhase } from './phases/DayPhase';
+import { DayPhase } from './phases/DayPhaseAlt';
 import { ResultsPhase } from './phases/ResultsPhase';
 import { ExecutionAnimationOverlay } from './ExecutionAnimationOverlay';
 import { useState, useEffect } from 'react';
@@ -50,31 +50,30 @@ export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
              );
         }
 
-        switch (game.gameState) {
-            case 'lobby':
-                return <LobbyPhase game={game} self={self} />;
+        if (game.gameState === 'lobby') {
+            return <LobbyPhase game={game} self={self} />;
+        }
+
+        // Fallback to mafiaState phase for backward compatibility or complex states
+        switch (game.mafiaState?.phase) {
+            case 'role_reveal':
+                return <RoleRevealPhase game={game} self={self} />;
+            case 'night':
+                return <NightPhase game={game} self={self} />;
+            case 'day':
+                return <DayPhase game={game} self={self} />;
+            case 'final_results':
+                return <ResultsPhase game={game} self={self} />;
+            case 'execution': // While animation is not showing, show waiting screen
+                return (
+                    <Card className="text-center p-8 bg-gray-900/80 text-white border-slate-700">
+                        <CardContent>
+                            <h2 className="text-2xl font-bold animate-pulse">في انتظار بدء الليلة التالية...</h2>
+                        </CardContent>
+                    </Card>
+                );
             default:
-                // Fallback to mafiaState phase for backward compatibility or complex states
-                switch (game.mafiaState?.phase) {
-                    case 'role_reveal':
-                        return <RoleRevealPhase game={game} self={self} />;
-                    case 'night':
-                        return <NightPhase game={game} self={self} />;
-                    case 'day':
-                        return <DayPhase game={game} self={self} />;
-                    case 'final_results':
-                        return <ResultsPhase game={game} self={self} />;
-                    case 'execution': // While animation is not showing, show waiting screen
-                        return (
-                            <Card className="text-center p-8 bg-gray-900/80 text-white border-slate-700">
-                                <CardContent>
-                                    <h2 className="text-2xl font-bold animate-pulse">في انتظار بدء الليلة التالية...</h2>
-                                </CardContent>
-                            </Card>
-                        );
-                    default:
-                        return <div>حالة غير معروفة: {game.mafiaState?.phase}</div>;
-                }
+                return <div>حالة غير معروفة: {game.mafiaState?.phase || game.gameState}</div>;
         }
     };
 
@@ -95,5 +94,3 @@ export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
         </div>
     );
 }
-
-    
