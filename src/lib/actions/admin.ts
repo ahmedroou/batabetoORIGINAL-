@@ -125,7 +125,7 @@ export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: s
                 typeof q.answer === 'string' && q.answer.trim() !== ''
             ) {
                 const docRef = doc(questionsCol);
-                const dummyAnswers = (Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string'))
+                 const dummyAnswers = (Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string'))
                     ? q.dummyAnswers.map(da => da.trim())
                     : [];
 
@@ -908,12 +908,3 @@ export const backfillPunishmentStatus = withAdminAuth(async (adminId: string): P
 
 export { searchUsers, giveReward, applyPunishment, getRanks, getUsersByRank, getTopUsers, getTopPunisher };
 
-
-
-
-
-
-
-
-
-    
