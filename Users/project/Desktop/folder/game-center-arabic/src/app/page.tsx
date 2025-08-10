@@ -181,12 +181,13 @@ export default function Home() {
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            limit(50) // Fetch the last 50 lobbies to avoid performance issues
+            orderBy('expiresAt', 'desc'),
+            limit(50)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const now = Timestamp.now();
-            // Filter client-side to avoid needing a composite index
+            // Client-side filter to ensure we only show non-expired lobbies
             const lobbies = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as Game))
                 .filter(lobby => lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis());
@@ -195,16 +196,11 @@ export default function Home() {
             setIsLoadingLobbies(false);
         }, (error: any) => {
             console.error("Error fetching active lobbies:", error);
-            toast({
-                title: "خطأ في الشبكة",
-                description: "لا يمكن تحميل الغرف النشطة. قد تحتاج إلى إنشاء فهرس في Firestore.",
-                variant: "destructive"
-            });
             setIsLoadingLobbies(false);
         });
 
         return () => unsubscribe();
-    }, [toast]);
+    }, []);
 
     const handleCreate = async (gameType: Game['gameType']) => {
         if (!user || !userProfile?.avatarId) {
@@ -887,3 +883,5 @@ export default function Home() {
     );
 }
 
+
+    

@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview This file contains the internal "pure" logic for the Behind the Mask game.
  * These functions are separated to allow for easier testing without mocking database transactions.

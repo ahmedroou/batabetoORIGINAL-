@@ -18,7 +18,6 @@ import { KingOfGeniusGame } from "@/components/game/king-of-genius/KingOfGeniusG
 import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { WordWarGame } from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
-import { DrawAndGuessGame } from '@/components/game/draw-and-guess/DrawAndGuessGame';
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
@@ -39,7 +38,7 @@ import {
     setPlayerReady, 
 } from '@/lib/actions/room';
 import { startTrapAnswerGame } from '@/lib/actions/trap-answer';
-import { startWordWarGame, updateWordWarSettings } from '@/lib/actions/word-war';
+import { startWordWarGame, updateGameSettings as updateWordWarSettings } from '@/lib/actions/word-war';
 import { updateMafiaSettings, startGame as startBehindTheMaskGame } from '@/lib/actions/behind-the-mask';
 
 
@@ -234,8 +233,6 @@ export default function GameClient() {
         return <KingOfGeniusGame game={game} player={player} self={self} isHost={game.hostId === self.id} />;
       case 'behind-the-mask':
         return <BehindTheMaskGame game={game} self={self} />;
-      case 'draw-and-guess':
-        return <DrawAndGuessGame game={game} self={self} />;
       case 'prison':
         return <PrisonGame game={game} self={self} />;
       default:
@@ -267,3 +264,5 @@ export default function GameClient() {
     </>
   );
 }
+
+    

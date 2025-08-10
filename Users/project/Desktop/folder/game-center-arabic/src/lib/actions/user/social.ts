@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -522,64 +523,57 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         if (!actorDoc.exists()) throw new Error("المستخدم غير موجود.");
         
         let actorData = actorDoc.data() as UserProfile;
-        const batch = writeBatch(db);
+        let updateData: any = {};
         let message = "";
-        let paidSomething = false;
-
-        const humiliation = actorData.humiliation?.until ? (actorData.humiliation.until as any).toDate() : null;
-        const avatarRevert = actorData.originalAvatarToRevert?.until ? (actorData.originalAvatarToRevert.until as any).toDate() : null;
-        const decrees = (actorData.decrees || []).filter(d => d.until && (d.until as any).toDate() > new Date());
-        let totalTax = 0;
         
-        const updates: any = {};
+        const humiliation = actorData.humiliation?.until ? new Date((actorData.humiliation.until as any).toDate()) : null;
+        const avatarRevert = actorData.originalAvatarToRevert?.until ? new Date((actorData.originalAvatarToRevert.until as any).toDate()) : null;
 
-        const punishmentsToPay = [];
-        
-        if(humiliation && actorData.humiliation!.taxToLift > 0) {
-            punishmentsToPay.push({type: 'humiliation', tax: actorData.humiliation!.taxToLift, punisherId: actorData.humiliation!.by});
-        }
-        if(avatarRevert && actorData.originalAvatarToRevert!.taxToLift > 0) {
-            punishmentsToPay.push({type: 'avatar', tax: actorData.originalAvatarToRevert!.taxToLift, punisherId: actorData.originalAvatarToRevert!.by});
-        }
-        decrees.forEach(d => {
-            if(d.taxToLift > 0) {
-                punishmentsToPay.push({type: 'decree', tax: d.taxToLift, punisherId: d.issuedBy, id: d.id });
+        if (humiliation && humiliation > new Date()) {
+            const punishment = actorData.humiliation!;
+             if ((actorData.coins || 0) < punishment.taxToLift) {
+                throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
             }
-        });
+            const punisherRef = doc(db, "users", punishment.by);
+            transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
+            updateData.coins = increment(-punishment.taxToLift);
+            updateData.humiliation = deleteField();
+            message = `تم دفع ضريبة الإذلال (${punishment.taxToLift} كوينز).`;
+        } else if (avatarRevert && avatarRevert > new Date()) {
+            const punishment = actorData.originalAvatarToRevert!;
+            if ((actorData.coins || 0) < punishment.taxToLift) {
+                throw new Error("لا تملك ما يكفي من الكوينز لدفع الضريبة.");
+            }
+            const punisherRef = doc(db, "users", punishment.by);
+            transaction.update(punisherRef, { coins: increment(punishment.taxToLift) });
+            updateData.coins = increment(-punishment.taxToLift);
+            updateData.avatarId = punishment.id;
+            updateData.originalAvatarToRevert = deleteField();
+            message = `تم دفع ضريبة تغيير الشخصية (${punishment.taxToLift} كوينز).`;
+        } else {
+            throw new Error("ليس عليك أي عقوبات يمكنك دفعها حاليًا.");
+        }
         
-        totalTax = punishmentsToPay.reduce((sum, p) => sum + p.tax, 0);
-
-        if ((actorData.coins || 0) < totalTax) {
-            throw new Error(`ليس لديك ما يكفي من الكوينز لدفع جميع الضرائب (${totalTax}).`);
-        }
-        if(totalTax === 0) {
-            throw new Error("ليس عليك أي ضرائب يمكن دفعها حاليًا.");
-        }
+        // Check if any other punishments are still active
+        const remainingDecrees = (actorData.decrees || []).filter(d => d.until && new Date((d.until as any).toDate()) > new Date());
         
-        updates.coins = increment(-totalTax);
+        // If the punishment being paid was the LAST active punishment, set isPunished to false.
+        const isHumiliationPunishmentCleared = !!updateData.humiliation;
+        const isAvatarPunishmentCleared = !!updateData.originalAvatarToRevert;
 
-        for(const p of punishmentsToPay) {
-            const punisherRef = doc(db, "users", p.punisherId);
-            transaction.update(punisherRef, { coins: increment(p.tax) });
-            message += `تم دفع ضريبة (${p.tax} كوينز). `;
+        let otherPunishmentsActive = remainingDecrees.length > 0;
+        if (isHumiliationPunishmentCleared) { // We are clearing humiliation
+             otherPunishmentsActive = otherPunishmentsActive || (avatarRevert !== null && avatarRevert > new Date());
         }
-        
-        if(punishmentsToPay.some(p => p.type === 'humiliation')) updates.humiliation = deleteField();
-        if(punishmentsToPay.some(p => p.type === 'avatar')) {
-             updates.avatarId = actorData.originalAvatarToRevert?.id;
-             updates.originalAvatarToRevert = deleteField();
-        }
-        if(punishmentsToPay.some(p => p.type === 'decree')) {
-             updates.decrees = (actorData.decrees || []).filter(d => d.taxToLift <= 0 || new Date((d.until as any).toDate()) <= new Date());
+        if (isAvatarPunishmentCleared) { // We are clearing avatar
+             otherPunishmentsActive = otherPunishmentsActive || (humiliation !== null && humiliation > new Date());
         }
 
-        // Check if any punishments remain
-        const remainingDecrees = (updates.decrees || actorData.decrees || []).filter(d => d.until && new Date((d.until as any).toDate()) > new Date());
-        if(!updates.humiliation && !updates.originalAvatarToRevert && remainingDecrees.length === 0){
-            updates.isPunished = false;
+        if (!otherPunishmentsActive) {
+            updateData.isPunished = false;
         }
 
-        transaction.update(actorRef, updates);
+        transaction.update(actorRef, updateData);
 
         return { success: true, message: message.trim() };
 
