@@ -132,7 +132,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
 
     try {
         await runTransaction(db, async (transaction) => {
-            const gameDoc = await transaction.get(gameRef);
+            const gameDoc = await getDoc(gameRef);
             if (!gameDoc.exists()) throw new Error("Game not found.");
             let game = gameDoc.data() as Game;
 
