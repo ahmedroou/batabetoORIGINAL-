@@ -79,7 +79,6 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
     const gameRef = doc(db, 'games', gameId);
 
-    // Step 1: Fetch questions outside the transaction.
     const questionsCol = collection(db, "trap_answer_questions");
     const q = query(questionsCol, where("category", "==", category));
     const querySnapshot = await getDocs(q);
@@ -88,11 +87,9 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
         throw new Error(`لا توجد أسئلة في قسم "${category}". يرجى إضافة المزيد من صفحة الأدمن.`);
     }
 
-    // Step 2: Select a random question from the results in the code.
     const questions = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<TrapQuestion, 'id'> }));
     const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
     
-    // Step 3: Run the transaction to update the game state.
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -111,7 +108,6 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
         const answerTime = game.trapAnswerState?.settings?.answerTime || 60;
         const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
 
-        // Reset all round-specific data
         transaction.update(gameRef, {
             gameState: 'answer-submission',
             'trapAnswerState.selectedCategory': category,
@@ -176,7 +172,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
 
                 const updateData: any = {
                     gameState: 'guessing',
-                    'trapAnswerState.playerAnswers': newPlayerAnswers, // Make sure to write the last answer
+                    'trapAnswerState.playerAnswers': newPlayerAnswers,
                     'trapAnswerState.timerEndsAt': timerEndsAt,
                     'trapAnswerState.shuffledAnswers': shuffledAnswers,
                 };
@@ -201,7 +197,6 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
              return { error: `فشل إرسال الجواب: ${error.message} (Code: ${error.code})` };
         }
         const typedError = error as Error;
-        // Check for our custom error message
         if (typedError.message.includes("لا يمكنك إدخال إجابة مطابقة")) {
             return { error: typedError.message };
         }
@@ -244,15 +239,7 @@ export async function setPlayerPresence(gameId: string, playerId: string, presen
     }
 }
 
-/**
- * A pure function to calculate scores for a round of Trap Answer.
- * This function is separated for testability and clarity.
- * @param activePlayers All players currently in the game.
- * @param question The current question object.
- * @param playerAnswers A map of player IDs to their submitted trap answers.
- * @param playerGuesses A map of player IDs to their chosen guess.
- * @returns An object containing the score breakdown for the round.
- */
+
 export function calculateTrapAnswerScores(
     activePlayers: Player[],
     question: TrapQuestion,
@@ -262,7 +249,6 @@ export function calculateTrapAnswerScores(
     const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: { points: 0, breakdown: [] } }), {});
     const newTrickStats: Game['trapAnswerState']['trickStats'] = { trickedBy: {}, trickedOthers: {} };
     const timedOutGuesserIds: string[] = [];
-
 
     const answerGroups: { text: string; authors: string[] }[] = [];
     Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
@@ -291,20 +277,23 @@ export function calculateTrapAnswerScores(
             if (chosenGroup?.authors.includes(guesserId)) {
                 roundScores[guesserId].points -= 1;
                 roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
-            } else if (chosenGroup) {
-                // The guesser was tricked
-                if (!newTrickStats.trickedBy[guesserId]) newTrickStats.trickedBy[guesserId] = [];
-                newTrickStats.trickedBy[guesserId].push(...chosenGroup.authors);
-                
+            }
+            if (chosenGroup) { // Handles being tricked, EVEN IF self-voting
                 chosenGroup.authors.forEach(authorId => {
+                    if (authorId === guesserId) return; // Don't give points for tricking oneself.
+                    
                     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
                     roundScores[authorId].points += 1;
                     roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
                     
-                    // The author tricked the guesser
                     if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
                     newTrickStats.trickedOthers[authorId].push(guesserId);
                 });
+
+                if (!chosenGroup.authors.includes(guesserId)) {
+                    if (!newTrickStats.trickedBy[guesserId]) newTrickStats.trickedBy[guesserId] = [];
+                    newTrickStats.trickedBy[guesserId].push(...chosenGroup.authors);
+                }
             }
         }
     });
@@ -338,14 +327,14 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
         if (game.gameState !== 'guessing') return;
         if (game.trapAnswerState?.playerGuesses?.[playerId]) return;
 
-        // If guess is null (from a timeout), set it to a special value.
         const finalGuess = guess === null ? '__TIMEOUT__' : guess;
-
 
         const newPlayerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}), [playerId]: finalGuess };
         
         const activePlayers = game.players.filter(p => p.status === 'alive');
-        if (Object.keys(newPlayerGuesses).length >= activePlayers.length) {
+        const hasEveryoneGuessed = activePlayers.every(p => newPlayerGuesses.hasOwnProperty(p.id));
+        
+        if (hasEveryoneGuessed) {
             const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = calculateTrapAnswerScores(
                 activePlayers,
                 game.trapAnswerState!.currentQuestion!,
@@ -406,7 +395,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             if (game.hostId !== hostId) throw new Error("Only the host can start the next round.");
 
             const currentRound = game.round || 0;
-            const totalRounds = game.trapAnswerState?.settings?.rounds || 10;
+            const totalRounds = game.trapAnswerState?.settings.rounds || 10;
             
             if (currentRound >= totalRounds) {
                 const finalAwardsResult = calculateEndOfGameAwards(game);
@@ -448,20 +437,18 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                 'trapAnswerState.currentQuestion': null,
                 'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + 30 * 1000),
                 'trapAnswerState.dummyAnswerForRound': deleteField(),
-                'trapAnswerState.reactions': {}, // Reset reactions for the new round
-                'trapAnswerState.shuffledAnswers': [], // Reset shuffled answers
-                'trapAnswerState.awayPlayerIds': [], // Reset away players for the new round
+                'trapAnswerState.reactions': {},
+                'trapAnswerState.shuffledAnswers': [],
+                'trapAnswerState.awayPlayerIds': [],
             });
         });
 
-        // Perform league update outside of the main transaction
         if (gameDataForLeagueUpdate) {
             await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
         }
 
     } catch (error) {
         console.error("Error in nextTrapAnswerRound:", error);
-        // Handle error appropriately
     }
 }
 
@@ -472,7 +459,6 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) return;
         
-        // Directly update the reaction for the player
         transaction.update(gameRef, {
             [`trapAnswerState.reactions.${playerId}`]: {
                 emoji: emoji,
@@ -528,4 +514,3 @@ export async function handleTimeout(gameId: string, hostId: string) {
       console.error("Error in handleTimeout:", error);
   }
 }
-
