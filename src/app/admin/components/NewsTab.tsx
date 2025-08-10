@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown, Bot, RotateCcw } from 'lucide-react';
+import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown, Bot, RotateCcw, BrainCircuit } from 'lucide-react';
 import { createArticle, getArticlesForAdmin, updateArticle, deleteArticle, getAudienceGroups, createAudienceGroup, addPlayerToAudienceGroup, deleteAudienceGroup, removePlayerFromAudienceGroup, runAiJournalist, deleteOldArticles } from '@/lib/actions/news';
 import type { Article, AudienceGroup, UserProfile } from '@/types';
 import { format } from 'date-fns';
@@ -352,13 +352,14 @@ export default function NewsTab() {
                         <CardContent className="space-y-4">
                              <div>
                                 <h4 className="font-bold">توليد مقال اليوم</h4>
-                                <p className="text-xs text-muted-foreground mb-2">سيقوم الذكاء الاصطناعي بتحليل أحداث آخر 24 ساعة ومقالات الأسبوع الماضي لكتابة مقال جديد.</p>
+                                <p className="text-xs text-muted-foreground mb-2">سيقوم الذكاء الاصطناعي بتحليل أحداث آخر 24 ساعة ومقالات الأسبوع الماضي والبطولات واللاعبين المعاقبين ونتائج آخر 10 مباريات لكتابة مقال جديد.</p>
                                 <div className="space-y-2">
                                     <Label htmlFor="ai-directive">توجيه (اختياري)</Label>
                                     <Input id="ai-directive" value={aiDirective} onChange={e => setAiDirective(e.target.value)} placeholder="مثال: ركز على الصراع بين اللاعب س واللاعب ص" />
                                 </div>
                                 <Button className="w-full mt-2" onClick={handleRunAiJournalist} disabled={isGeneratingArticle}>
-                                    {isGeneratingArticle ? <Loader2 className="animate-spin" /> : 'توليد ونشر مقال اليوم'}
+                                    {isGeneratingArticle ? <Loader2 className="animate-spin" /> : <BrainCircuit className='ml-2'/>}
+                                    توليد ونشر مقال اليوم
                                 </Button>
                              </div>
                              <div className="pt-4 border-t">
@@ -475,3 +476,5 @@ export default function NewsTab() {
         </Tabs>
     );
 }
+
+    

@@ -65,6 +65,7 @@ export const NewsArticleInputSchema = z.object({
   punished_players: z.array(z.any()).describe("A list of players currently under any punishment."),
   top_punisher: z.any().nullable().describe("The player who has issued the most punishments."),
   active_challenges: z.array(z.any()).describe("A list of currently active challenges or tournaments."),
+  recent_games: z.array(z.any()).optional().describe("A list of the last 10 finished games."),
   date: z.string().describe("Today's date in a readable format (e.g., 'Sunday, July 28, 2024')."),
   directive: z.string().optional().describe("An optional directive from the admin on what to focus on in the article."),
 });
@@ -680,3 +681,5 @@ export interface PrivateChat {
     participants: string[];
     messages: PrivateChatMessage[];
 }
+
+    

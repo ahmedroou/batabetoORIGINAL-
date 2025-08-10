@@ -74,6 +74,13 @@ Today's Date: {{{date}}}
 - {{name}} ({{leaderboardPoints}} points)
 {{/each}}
 ---
+**Recent Game Results (Last 10 Games):**
+{{#if recent_games}}
+{{#each recent_games}}
+- Game '{{gameType}}' finished. Winner: {{gameResult.winner}}.
+{{/each}}
+{{/if}}
+---
 **Previously Published Articles (Last 7 Days):**
 {{#if previous_articles}}
 {{#each previous_articles}}
@@ -144,3 +151,5 @@ const newsGeneratorFlow = ai.defineFlow(
     };
   }
 );
+
+    
