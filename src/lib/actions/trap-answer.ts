@@ -528,3 +528,4 @@ export async function handleTimeout(gameId: string, hostId: string) {
       console.error("Error in handleTimeout:", error);
   }
 }
+
