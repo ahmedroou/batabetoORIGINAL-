@@ -152,11 +152,10 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
                 const timedOutPlayersCount = Object.values(newPlayerAnswers).filter(ans => ans === null).length;
                 let dummyAnswerForRound: string | undefined = undefined;
 
-                if (timedOutPlayersCount > 0) {
-                    const question = game.trapAnswerState?.currentQuestion;
-                    if (question?.dummyAnswers && question.dummyAnswers.length > 0) {
-                        dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
-                    }
+                const question = game.trapAnswerState?.currentQuestion;
+                // Only try to get a dummy answer if there's a timed-out player AND the question has dummy answers
+                if (timedOutPlayersCount > 0 && question?.dummyAnswers && question.dummyAnswers.length > 0) {
+                    dummyAnswerForRound = question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)];
                 }
                 
                 const allPossibleAnswers = [game.trapAnswerState.currentQuestion!.answer];
@@ -280,7 +279,7 @@ export function calculateTrapAnswerScores(
             }
             if (chosenGroup) { // Handles being tricked, EVEN IF self-voting
                 chosenGroup.authors.forEach(authorId => {
-                    if (authorId === guesserId) return; // Don't give points for tricking oneself.
+                    // if (authorId === guesserId) return; // Allow points even if self-voting
                     
                     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
                     roundScores[authorId].points += 1;

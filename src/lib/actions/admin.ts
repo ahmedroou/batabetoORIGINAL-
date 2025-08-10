@@ -121,7 +121,8 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
                     answer: q.answer.trim(),
                     category: category.trim(),
                     randomKey: Math.random(), 
-                    dummyAnswers: hasDummyAnswers ? q.dummyAnswers.map(da => da.trim()) : [], 
+                    // Only add dummyAnswers if they exist and are valid
+                    ...(hasDummyAnswers && { dummyAnswers: q.dummyAnswers!.map(da => da.trim()) }),
                 };
                 
                 batch.set(docRef, questionData);

@@ -417,7 +417,7 @@ export interface TrapQuestion {
     question: string;
     answer: string;
     category: string;
-    dummyAnswers: string[];
+    dummyAnswers?: string[]; // Make dummyAnswers optional
     randomKey?: number;
 }
 
