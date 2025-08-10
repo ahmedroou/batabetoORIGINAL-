@@ -213,6 +213,27 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
     }
 }
 
+export async function setPlayerPresence(gameId: string, playerId: string, presence: 'present' | 'away') {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) return;
+            const game = gameDoc.data() as Game;
+
+            const playerIndex = game.players.findIndex(p => p.id === playerId);
+            if (playerIndex > -1) {
+                transaction.update(gameRef, {
+                    [`players.${playerIndex}.presence`]: presence,
+                });
+            }
+        });
+    } catch(e) {
+        // Fail silently, this is a non-critical update
+        console.warn("Could not update player presence:", e);
+    }
+}
+
 /**
  * A pure function to calculate scores for a round of Trap Answer.
  * This function is separated for testability and clarity.
@@ -246,7 +267,7 @@ export function calculateTrapAnswerScores(
 
     Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
         if (chosenAnswer === null || chosenAnswer === '__TIMEOUT__') {
-            if (chosenAnswer === '__TIMEOUT__') {
+             if (chosenAnswer === '__TIMEOUT__') {
                 timedOutGuesserIds.push(guesserId);
             }
             return;
