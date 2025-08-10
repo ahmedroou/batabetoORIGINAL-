@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -11,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Upload, Trash2, Sparkles, Edit } from 'lucide-react';
+import { Upload, Trash2, Sparkles, Edit, Save } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 import {
   uploadTrapAnswerQuestionsFromJson,
@@ -182,7 +182,7 @@ export default function QuestionManagementTab() {
         let result;
 
         if (deletionParams.game === 'trap-answer' && typeof deletionParams.duplicates === 'object') {
-            result = await deleteSimilarQuestions(deletionParams.game, deletionParams.duplicates.threshold, deletionParams.category);
+            result = await deleteSimilarQuestions('trap-answer', deletionParams.duplicates.threshold, deletionParams.category);
         } else if (deletionParams.game === 'word_war' && deletionParams.duplicates === 'word_war_duplicates') {
             result = await deleteDuplicateWords();
         } else {
@@ -509,3 +509,5 @@ export default function QuestionManagementTab() {
         </>
     );
 }
+
+    
