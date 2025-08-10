@@ -69,14 +69,11 @@ export default function GameClient() {
             localPlayerId = parsedPlayer.id;
             setPlayer(parsedPlayer); // Set player state here
         } else {
-            toast({ title: "خطأ", description: "لم يتم العثور على بيانات اللاعب لهذه اللعبة.", variant: "destructive" });
-            router.push('/');
-            return;
+            // This is a normal scenario if the user is just visiting the URL
+            // We will redirect later if they are not actually in the game.
         }
     } catch (error) {
-       toast({ title: "خطأ", description: "فشل في قراءة بيانات اللاعب.", variant: "destructive" });
-       router.push('/');
-       return;
+       console.error("Failed to read player data from session storage", error);
     }
 
     const gameDocRef = doc(db, "games", gameId);
@@ -88,10 +85,10 @@ export default function GameClient() {
           setGame(gameData);
           
           // The crucial check: Is our player ID still in the game's player list?
-          const currentPlayerInGame = Array.isArray(gameData.players) ? gameData.players.find(p => p.id === localPlayerId) : undefined;
+          // This relies on localPlayerId which is stable and fetched once.
+          const currentPlayerInGame = localPlayerId ? gameData.players.find(p => p.id === localPlayerId) : undefined;
           
-          // If the player is no longer in the list (or has the 'left' status), and it's not the final results screen, redirect.
-          if (!currentPlayerInGame || currentPlayerInGame.status === 'left') {
+          if (!currentPlayerInGame && localPlayerId) {
             if (gameData.gameState !== 'final_results') {
               sessionStorage.removeItem(`player-${gameId}`);
               toast({ title: "لقد غادرت اللعبة أو تم طردك" });
@@ -112,9 +109,7 @@ export default function GameClient() {
       }
     );
 
-    return () => {
-        unsub();
-    };
+    return () => unsub();
   }, [gameId, router, toast]);
 
 
@@ -150,7 +145,7 @@ export default function GameClient() {
 
   const self = Array.isArray(game.players) ? game.players.find(p => p.id === player.id) : undefined;
 
-  if (!self) {
+  if (!self && game.gameState !== 'final_results') {
       return (
         <main className="flex min-h-screen flex-col items-center justify-center p-4">
             <Card className="w-full max-w-md text-center p-8">
@@ -214,7 +209,7 @@ export default function GameClient() {
                     </div>
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                    {canStart && !self.isReady && (
+                    {canStart && !self?.isReady && (
                         <Button onClick={handleSetReady} className="w-full bg-green-600 hover:bg-green-700">أنا مستعد</Button>
                     )}
                      <Button onClick={handleLeaveGame} variant="destructive" className="w-full">
@@ -226,6 +221,8 @@ export default function GameClient() {
   }
   
   const renderGameContent = () => {
+    if (!self) return renderLobbyContent(); // Fallback if self is not found but not kicked yet
+    
     if (game.gameState === 'lobby' && game.challengeId) {
         return renderLobbyContent();
     }
