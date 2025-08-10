@@ -15,7 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
-import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, updateGameSettings as updateTrapAnswerSettings } from '@/lib/actions/trap-answer';
+import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, updateGameSettings as updateTrapAnswerSettings, setAwayStatus } from '@/lib/actions/trap-answer';
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
 import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings, EyeOff } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -32,6 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 
 
 const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
@@ -127,8 +128,19 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const uniqueDisplayAnswers = useMemo(() => game.trapAnswerState?.shuffledAnswers || [], [game.trapAnswerState?.shuffledAnswers]);
     
     const onTimeout = useCallback(() => {
-        handleTimeout(game.id, self.id);
-    }, [game.id, self.id]);
+        if(isHost) {
+            handleTimeout(game.id, self.id);
+        }
+    }, [game.id, self.id, isHost]);
+
+    // Re-added usePageVisibility hook
+    const isVisible = usePageVisibility();
+
+    useEffect(() => {
+        // Re-added logic to update away status
+        const isAway = !isVisible;
+        setAwayStatus(game.id, self.id, isAway);
+    }, [isVisible, game.id, self.id]);
 
     useEffect(() => {
         if (game.gameState === 'guessing') {
@@ -436,6 +448,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const renderAnswerSubmission = () => {
         const hasSubmitted = game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id);
         const answeredPlayers = game.trapAnswerState?.playerAnswers ? Object.keys(game.trapAnswerState.playerAnswers) : [];
+        const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
         const pendingPlayers = activePlayers.filter(p => !answeredPlayers.includes(p.id));
 
         return (
@@ -457,13 +470,16 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                          <div className="text-center p-4 rounded-lg bg-green-100 text-green-800 space-y-4">
                             <p className="font-semibold">تم إرسال إجابتك! في انتظار بقية اللاعبين...</p>
                              <div className="space-y-2">
-                                {pendingPlayers.map(p => (
-                                    <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle}/>
-                                        <span>في انتظار {p.name}...</span>
-                                        <Loader2 className="w-4 h-4 animate-spin"/>
-                                    </div>
-                                ))}
+                                {pendingPlayers.map(p => {
+                                    const isAway = awayPlayerIds.includes(p.id);
+                                    return (
+                                        <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
+                                            <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle}/>
+                                            <span>في انتظار {p.name}...</span>
+                                            {isAway ? <EyeOff className="w-4 h-4 text-red-500" /> : <Loader2 className="w-4 h-4 animate-spin"/>}
+                                        </div>
+                                    )
+                                })}
                             </div>
                         </div>
                     ) : (
@@ -487,6 +503,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const renderGuessing = () => {
         const hasGuessed = !!game.trapAnswerState?.playerGuesses?.[self.id];
         const answeredPlayers = game.trapAnswerState?.playerGuesses ? Object.keys(game.trapAnswerState.playerGuesses) : [];
+        const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
         const pendingPlayers = activePlayers.filter(p => !answeredPlayers.includes(p.id));
         
         return (
@@ -508,13 +525,16 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                          <div className="text-center p-4 rounded-lg bg-green-100 text-green-800 space-y-4">
                             <p className="font-semibold">تم تسجيل تخمينك! في انتظار بقية اللاعبين...</p>
                              <div className="space-y-2">
-                                {pendingPlayers.map(p => (
-                                    <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle}/>
-                                        <span>في انتظار {p.name}...</span>
-                                        <Loader2 className="w-4 h-4 animate-spin"/>
-                                    </div>
-                                ))}
+                                {pendingPlayers.map(p => {
+                                     const isAway = awayPlayerIds.includes(p.id);
+                                    return (
+                                        <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
+                                            <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle}/>
+                                            <span>في انتظار {p.name}...</span>
+                                            {isAway ? <EyeOff className="w-4 h-4 text-red-500" /> : <Loader2 className="w-4 h-4 animate-spin"/>}
+                                        </div>
+                                    )
+                                })}
                             </div>
                         </div>
                     ) : (
@@ -544,6 +564,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         
         const getPlayer = (playerId: string) => game.players.find(p => p.id === playerId);
         const timedOutPlayers = (results.timedOutGuesserIds || []).map(id => getPlayer(id)).filter((p): p is Player => !!p);
+        const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
 
         return (
             <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -632,6 +653,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                         <CardContent className="space-y-2">
                             {game.players.sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0)).map(p => {
                                 const roundScore = results.scores[p.id];
+                                const isAway = awayPlayerIds.includes(p.id);
                                 return (
                                     <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
                                         <div className="flex justify-between items-center">
@@ -643,6 +665,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                                 <div className='flex-grow'>
                                                     <div className="flex items-center gap-1.5">
                                                         <span className="font-bold block">{p.name}</span>
+                                                        {isAway && <EyeOff className="w-4 h-4 text-red-500" />}
                                                     </div>
                                                     {roundScore && roundScore.points !== 0 && (
                                                         <div className='flex flex-wrap gap-x-2'>
