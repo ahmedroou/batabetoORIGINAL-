@@ -154,7 +154,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             }
         }
         
-        // Use the server-shuffled order but with grouped texts
         return game.trapAnswerState.shuffledAnswers.map(shuffledText => {
             return displayAnswers.find(d => safeCompareStrings(d.text!, shuffledText) > 0.85);
         }).filter(Boolean) as { text: string; isCorrect: boolean; authors: string[] }[];
@@ -499,7 +498,9 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
     const renderAnswerSubmission = () => {
         const hasSubmitted = game.trapAnswerState?.playerAnswers?.hasOwnProperty(self.id);
-        
+        const answeredPlayers = game.trapAnswerState?.playerAnswers ? Object.keys(game.trapAnswerState.playerAnswers) : [];
+        const pendingPlayers = activePlayers.filter(p => !answeredPlayers.includes(p.id));
+
         return (
             <Card className="w-full max-w-lg animate-pop-in">
                  {game.trapAnswerState?.timerEndsAt && (
@@ -516,8 +517,17 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 </CardHeader>
                  <CardContent>
                     {hasSubmitted ? (
-                        <div className="text-center p-4 rounded-lg bg-green-100 text-green-800">
+                         <div className="text-center p-4 rounded-lg bg-green-100 text-green-800 space-y-4">
                             <p className="font-semibold">تم إرسال إجابتك! في انتظار بقية اللاعبين...</p>
+                            <div className="space-y-2">
+                                {pendingPlayers.map(p => (
+                                    <div key={p.id} className="flex items-center justify-center gap-2 text-sm text-yellow-800">
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" temporaryTitle={p.temporaryTitle} />
+                                        <span>في انتظار {p.name}...</span>
+                                        <Loader2 className="w-4 h-4 animate-spin"/>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     ) : (
                         <div className="space-y-4">
@@ -822,3 +832,4 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         </>
     );
 }
+

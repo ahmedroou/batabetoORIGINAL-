@@ -194,25 +194,6 @@ export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
     "المطبخ"
 ];
 
-export const DEFAULT_DRAW_AND_GUESS_CATEGORIES = [
-    "جملة مركبة",
-    "أمثال عامية",
-    "أنميات مشهورة",
-    "أفلام مشهورة",
-];
-
-
-export interface League {
-  id: string;
-  name: string;
-  adminId: string;
-  members: string[]; // array of user IDs
-  password?: string;
-  createdAt: Timestamp;
-  scores?: Record<string, number>; // { [userId]: score }
-  gamesPlayed?: Record<string, number>;
-}
-
 export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
 export type PlayerTeam = 'mafia' | 'good' | 'neutral' | 'red' | 'blue';
 export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
@@ -388,11 +369,10 @@ export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intr
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
-export type DrawAndGuessGameState = "lobby" | "category_selection" | "drawing" | "guessing" | "round-results" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type SnakesAndScissorsGameState = "lobby" | "rolling" | "answering" | "moving" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | DrawAndGuessGameState | PrisonGameState | SnakesAndScissorsGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | SnakesAndScissorsGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -459,129 +439,9 @@ export interface EmojiReaction {
 }
 
 
-export interface DrawingLine {
-    points: number[];
-    color: string;
-    strokeWidth: number;
-    tool: 'pen' | 'eraser';
-}
-
-export interface DrawingRect {
-    type: 'rect';
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    stroke: string;
-    strokeWidth: number;
-    isDrawing?: boolean;
-}
-
-export interface DrawingCircle {
-    type: 'circle';
-    x: number;
-    y: number;
-    radius: number;
-    stroke: string;
-    strokeWidth: number;
-    isDrawing?: boolean;
-}
-
-export interface DrawingSimpleLine {
-    type: 'line';
-    points: [number, number, number, number];
-    stroke: string;
-    strokeWidth: number;
-    isDrawing?: boolean;
-}
-
-export interface DrawingTriangle {
-    type: 'triangle';
-    x: number;
-    y: number;
-    radius: number;
-    stroke: string;
-    strokeWidth: number;
-    isDrawing?: boolean;
-}
-
-
-export type DrawingShape = DrawingRect | DrawingCircle | DrawingSimpleLine | DrawingTriangle;
-
-export interface DrawingData {
-    lines: DrawingLine[];
-    shapes: DrawingShape[];
-    bgColor: string;
-    width: number;
-    height: number;
-}
-export type GuessStatus = 'correct' | 'close' | 'incorrect';
-export interface PlayerGuess {
-    playerId: string;
-    playerName: string;
-    guess: string;
-    status: GuessStatus;
-}
-export interface DrawAndGuessPrompt {
-    id: string;
-    text: string;
-    category: string;
-}
-
-export type MafiaPhase = MafiaGameState;
-export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb' | 'shapeshift';
-
-export interface NightAction {
-    actorId: string;
-    action: NightActionType;
-    targetId: string;
-    disguiseRole?: PlayerRole;
-}
-
-export interface DayEvent {
-    type: 'death' | 'protection' | 'investigation' | 'spy_reveal' | 'execution';
-    message: string;
-    killedPlayer?: {
-        name: string;
-        avatarId: string;
-    };
-    revealedRole?: PlayerRole;
-    revealedTeam?: PlayerTeam;
-}
-
-export interface PrivateEvent {
-    type: 'investigation_result' | 'spy_result' | 'spy_result_soldier_block' | 'doctor_success';
-    message: string;
-    targetPlayer?: {
-        id: string;
-        name: string;
-        avatarId: string;
-        role?: PlayerRole;
-    };
-}
-
-
-export interface PublicChatMessage {
-    senderId: string;
-    senderName: string;
-    message: string;
-    timestamp: Timestamp;
-}
-
-export interface PrivateChatMessage {
-    senderId: string;
-    senderName: string;
-    message: string;
-    timestamp: Timestamp;
-}
-export interface PrivateChat {
-    participants: string[]; // [spyId, killerId]
-    messages: PrivateChatMessage[];
-}
-
 export interface WordWarCard {
     text: string;
-    color: 'red' | 'blue' | 'neutral' | 'assassin' | 'default';
+    color: 'red' | 'blue' | 'neutral' | 'assassin';
     revealed: boolean;
 }
 
@@ -607,7 +467,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'draw-and-guess' | 'prison' | 'snakes_and_scissors';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'prison' | 'snakes_and_scissors';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -669,6 +529,7 @@ export interface Game {
             points: number;
             breakdown: { reason: string, points: number }[];
         }>;
+        timedOutGuesserIds?: string[];
     };
     reactions?: Record<string, EmojiReaction>;
     trickStats?: {
@@ -725,30 +586,10 @@ export interface Game {
     guessesLeft?: number;
     turnResult?: 'hit' | 'miss' | 'neutral' | 'assassin';
     timerEndsAt?: Timestamp | null;
-    suspicions?: Record<number, string[]>; // { [cardIndex]: [playerId1, playerId2...] }
+    suspicions?: Record<string, number[]>; // { [team_color]: [cardIndex1, cardIndex2...] }
   };
     
-   // "Draw and Guess" specific state
-  drawAndGuessState?: {
-    settings: {
-        drawingTime: number;
-        guessingTime: number;
-        roundsPerPlayer: number;
-    };
-    categories?: string[];
-    fiveRandomCategories?: string[];
-    turnOrder?: string[];
-    drawerTurnCounts?: Record<string, number>; // { [playerId]: count }
-    currentDrawerId?: string;
-    prompt?: DrawAndGuessPrompt;
-    drawing?: DrawingData | null;
-    guesses?: PlayerGuess[];
-    ratings?: Record<string, number>; // { [raterId]: rating }
-    timerEndsAt?: Timestamp;
-    retries?: number; // Number of retries for the drawer
-  };
-  
-    // "The Prison" specific state
+  // "The Prison" specific state
   prisonState?: {
       settings: {
           biddingTime: number;
@@ -797,7 +638,6 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'trap-answer': 'الجواب المفخخ',
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
-    'draw-and-guess': 'لعبة رسمة',
     'prison': 'السجن',
     'snakes_and_scissors': 'السلم والمقص',
 };

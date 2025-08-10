@@ -230,6 +230,8 @@ export function calculateTrapAnswerScores(
 ) {
     const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: { points: 0, breakdown: [] } }), {});
     const newTrickStats: Game['trapAnswerState']['trickStats'] = { trickedBy: {}, trickedOthers: {} };
+    const timedOutGuesserIds: string[] = [];
+
 
     const answerGroups: { text: string; authors: string[] }[] = [];
     Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
@@ -244,7 +246,9 @@ export function calculateTrapAnswerScores(
 
     Object.entries(playerGuesses).forEach(([guesserId, chosenAnswer]) => {
         if (chosenAnswer === null || chosenAnswer === '__TIMEOUT__') {
-            // Player timed out, do nothing. They get 0 points by default.
+            if (chosenAnswer === '__TIMEOUT__') {
+                timedOutGuesserIds.push(guesserId);
+            }
             return;
         }
 
@@ -289,7 +293,7 @@ export function calculateTrapAnswerScores(
         }
     });
 
-    return { roundScores, resultsByAnswer, newTrickStats };
+    return { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds };
 }
 
 
@@ -312,7 +316,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
         if (Object.keys(newPlayerGuesses).length >= activePlayers.length) {
-            const { roundScores, resultsByAnswer, newTrickStats } = calculateTrapAnswerScores(
+            const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = calculateTrapAnswerScores(
                 activePlayers,
                 game.trapAnswerState!.currentQuestion!,
                 game.trapAnswerState!.playerAnswers!,
@@ -339,6 +343,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             const roundResults: Game['trapAnswerState']['lastRoundResults'] = {
                 scores: roundScores,
                 answers: resultsByAnswer,
+                timedOutGuesserIds,
             };
 
             transaction.update(gameRef, {
@@ -473,7 +478,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
     } else if (game.gameState === 'guessing') {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
-            // Submit a random guess for any player who hasn't guessed.
+            // Submit a timeout value for any player who hasn't guessed.
              if (!game.trapAnswerState?.playerGuesses?.[player.id]) {
                 await submitGuess(gameId, player.id, null); // `null` will trigger timeout logic in submitGuess
             }
