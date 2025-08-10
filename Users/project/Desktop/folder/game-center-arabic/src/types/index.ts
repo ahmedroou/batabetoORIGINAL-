@@ -394,16 +394,6 @@ export interface GameKing {
     kingId: string;
 }
 
-export interface BoardProperty {
-    id: number;
-    type: 'property' | 'fine' | 'start' | 'chance';
-    name: string;
-    price: number;
-    rent: number;
-    ownerId: string | null;
-    color: string | null;
-}
-
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";

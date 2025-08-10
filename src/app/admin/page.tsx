@@ -24,7 +24,7 @@ import ChallengesTab from './components/ChallengesTab';
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
 
 // Server Actions
-import { generateTestChallenge } from '@/app/actions';
+import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -63,8 +63,9 @@ export default function AdminPage() {
         setIsGeneratingTest(true);
         setTestingChallenge(challenge);
         try {
-            const { puzzle } = await generateTestChallenge({ challengeId: challenge.id });
-            const mockPlayer = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01.png', status: 'alive' as const, team: 'A' as const, leaderboardPoints: 0, score: 0 };
+            const { puzzle } = await generateGeniusChallenge({ challengeId: challenge.id });
+            const mockPlayer: Player = { id: 'admin_test', name: 'Admin', avatarId: 'Avatar01.png', status: 'alive', team: 'A', leaderboardPoints: 0, score: 0, position: 0 };
+            
             let durationInSeconds = 90; // Default
             if (challenge.id === 'quick_math') durationInSeconds = 60;
             if (challenge.id === 'code_breaker') durationInSeconds = 45;
@@ -76,8 +77,11 @@ export default function AdminPage() {
                 players: [mockPlayer], playerUids: ['admin_test'], gameState: 'challenge_active',
                 createdAt: Timestamp.now(),
                 challengeState: {
-                    puzzle: puzzle, results: [], playerProgress: {},
+                    duration: durationInSeconds,
                     challengeEndsAt: Timestamp.fromMillis(Date.now() + durationInSeconds * 1000),
+                    puzzle: puzzle, 
+                    results: [], 
+                    playerProgress: {},
                 },
             };
             setTestGame(mockGame);
@@ -160,4 +164,3 @@ export default function AdminPage() {
         </main>
     );
 }
-
