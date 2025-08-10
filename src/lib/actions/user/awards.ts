@@ -12,7 +12,7 @@ export function calculateEndOfGameAwards(game: Game) {
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     
     // Sort players by final score
-    const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
+    const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (a.score || 0));
 
     // Define awards based on rank
     const awardTiers = [
@@ -21,7 +21,7 @@ export function calculateEndOfGameAwards(game: Game) {
         { leaderboardPoints: 1, coins: 0 }, // 3rd place
     ];
 
-    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: number }> = {};
+    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: number, challengePoints?: number }> = {};
     let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
     let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
     
@@ -33,11 +33,13 @@ export function calculateEndOfGameAwards(game: Game) {
         // Team-based awards
         const winningTeam = game.gameResult!.winner;
         playersToUpdate.forEach(player => {
-            if (player.team === winningTeam) {
-                updates[player.id] = { leaderboardPoints: 3, coins: 2, gamesPlayed: 1 };
-            } else {
-                updates[player.id] = { leaderboardPoints: 0, coins: 0, gamesPlayed: 1 };
-            }
+            const points = player.team === winningTeam ? 3 : 0;
+            updates[player.id] = { 
+                leaderboardPoints: points, 
+                coins: player.team === winningTeam ? 2 : 0, 
+                gamesPlayed: 1,
+                challengePoints: points,
+            };
         });
     } else {
         // Individual awards
@@ -55,10 +57,12 @@ export function calculateEndOfGameAwards(game: Game) {
         });
         
         playerRanks.forEach(({ id, rank }) => {
-            let playerAwards = { leaderboardPoints: 0, coins: 0 };
+            let playerAwards = { leaderboardPoints: 0, coins: 0, challengePoints: 0 };
+            
             // Only give standard awards if it's not a short trap-answer game
             if (!isShortTrapAnswerGame) {
-                 playerAwards = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
+                 const tier = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
+                 playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
             }
             updates[id] = { ...playerAwards, gamesPlayed: 1 };
         });
@@ -90,8 +94,9 @@ export function calculateEndOfGameAwards(game: Game) {
                     cunningDeceiver = { playerId: deceiverId, name: deceiverPlayer.name, avatarId: deceiverPlayer.avatarId, count: trickStats.trickedOthers[deceiverId].length };
                     if (updates[deceiverId]) {
                         updates[deceiverId].leaderboardPoints += 1;
+                        updates[deceiverId].challengePoints = (updates[deceiverId].challengePoints || 0) + 1;
                     } else {
-                        updates[deceiverId] = { leaderboardPoints: 1, coins: 0, gamesPlayed: 1 };
+                        updates[deceiverId] = { leaderboardPoints: 1, coins: 0, gamesPlayed: 1, challengePoints: 1 };
                     }
                 }
             }

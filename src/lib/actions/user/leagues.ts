@@ -5,7 +5,7 @@
 import { db } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, getDoc, where, increment, runTransaction, arrayUnion, arrayRemove, deleteField, Timestamp, writeBatch, type Transaction } from 'firebase/firestore';
 import { generateLeagueId } from '../helpers';
-import type { UserProfile, League, Game } from '@/types';
+import type { UserProfile, League, Game, Challenge } from '@/types';
 import { updateUserWinCount } from './queries';
 import { calculateEndOfGameAwards } from './awards';
 import { sendSystemMail } from './mail';
@@ -303,6 +303,16 @@ export async function distributeEndOfGameAwards(game: Game) {
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     if (playersToUpdate.length === 0) return;
 
+    // Fetch active challenges
+    const now = Timestamp.now();
+    const challengesQuery = query(
+        collection(db, 'challenges'),
+        where('endsAt', '>', now)
+    );
+    const challengesSnapshot = await getDocs(challengesQuery);
+    const activeChallenges = challengesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Challenge));
+
+
     const { updates, winUpdate, specialAwards } = calculateEndOfGameAwards(game);
     const batch = writeBatch(db);
 
@@ -316,6 +326,21 @@ export async function distributeEndOfGameAwards(game: Game) {
             firestoreUpdates.coins = increment(playerUpdates.coins);
         }
         batch.update(userRef, firestoreUpdates);
+        
+        // Update scores in active challenges
+        if (playerUpdates.challengePoints && playerUpdates.challengePoints > 0) {
+            const player = game.players.find(p => p.id === playerId);
+            if (player) {
+                for (const challenge of activeChallenges) {
+                    if (challenge.participantIds?.includes(playerId) && (challenge.specificGameType === 'all' || challenge.specificGameType === game.gameType)) {
+                        const challengeRef = doc(db, 'challenges', challenge.id);
+                        batch.update(challengeRef, {
+                            [`scores.${playerId}`]: increment(playerUpdates.challengePoints)
+                        });
+                    }
+                }
+            }
+        }
     });
 
     if (winUpdate) {
@@ -344,3 +369,4 @@ export async function distributeEndOfGameAwards(game: Game) {
 export async function updateLeagueScoresForGameEnd(game: Game) {
     await distributeEndOfGameAwards(game);
 }
+

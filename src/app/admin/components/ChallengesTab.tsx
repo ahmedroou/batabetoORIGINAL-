@@ -8,12 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { createChallenge, updateChallenge, deleteChallenge, getAllChallengesForAdmin } from '@/lib/actions/challenges';
+import { createChallenge, updateChallenge, deleteChallenge, getAllChallengesForAdmin, finalizeChallenge } from '@/lib/actions/challenges';
 import { Game, GAME_TYPE_NAMES, ChallengePrize, Challenge } from '@/types';
-import { PlusCircle, Loader2, Trash2, Edit } from 'lucide-react';
+import { PlusCircle, Loader2, Trash2, Edit, Award, Play } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 
 const PrizeInput = ({ prize, onUpdate, onRemove }: { prize: ChallengePrize, onUpdate: (p: ChallengePrize) => void, onRemove: () => void }) => {
@@ -223,6 +224,18 @@ export default function ChallengesTab() {
         setChallengeToDelete(null);
     };
 
+    const handleFinalize = async (challengeId: string) => {
+        setIsSubmitting(true);
+        const result = await finalizeChallenge(challengeId);
+        if (result.success) {
+            toast({ title: "تم إنهاء البطولة بنجاح", description: `تم توزيع الجوائز على ${result.winnersCount} فائز.` });
+            fetchChallenges();
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: 'destructive' });
+        }
+        setIsSubmitting(false);
+    }
+
     return (
         <AlertDialog>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -248,16 +261,24 @@ export default function ChallengesTab() {
                 <CardContent>
                     {isFetching ? <div className="text-center"><Loader2 className="animate-spin"/></div> :
                         <div className="space-y-2 h-[60vh] overflow-y-auto">
-                            {challenges.map(challenge => (
-                                <div key={challenge.id} className="p-2 bg-muted rounded-md flex justify-between items-center">
+                            {challenges.map(challenge => {
+                                const isEnded = new Date(challenge.endsAt) < new Date();
+                                const isFinalized = !!challenge.winners;
+                                return (
+                                <div key={challenge.id} className={cn("p-2 rounded-md flex justify-between items-center", isEnded ? "bg-muted/50" : "bg-muted")}>
                                     <div>
                                         <p className="font-bold">{challenge.title}</p>
                                         <p className="text-xs text-muted-foreground">
-                                            تنتهي في: {challenge.endsAt ? format(new Date(challenge.endsAt), 'd MMMM, h:mm a', {locale: ar}) : 'N/A'}
+                                            {isFinalized ? "منتهية وموزعة الجوائز" : isEnded ? "انتهت - بانتظار توزيع الجوائز" : `تنتهي في: ${format(new Date(challenge.endsAt), 'd MMMM, h:mm a', {locale: ar})}`}
                                         </p>
                                     </div>
                                     <div className="flex gap-1">
-                                        <Button size="icon" variant="ghost" onClick={() => setEditingChallenge(challenge)}><Edit className="w-4 h-4"/></Button>
+                                        {isEnded && !isFinalized && (
+                                            <Button size="sm" onClick={() => handleFinalize(challenge.id)} disabled={isSubmitting}>
+                                                <Award className="w-4 h-4 ml-2"/> توزيع الجوائز
+                                            </Button>
+                                        )}
+                                        {!isFinalized && <Button size="icon" variant="ghost" onClick={() => setEditingChallenge(challenge)}><Edit className="w-4 h-4"/></Button>}
                                          <AlertDialogTrigger asChild>
                                             <Button size="icon" variant="ghost" className="text-destructive" onClick={() => setChallengeToDelete(challenge)} disabled={isSubmitting}>
                                                 <Trash2 className="w-4 h-4"/>
@@ -265,7 +286,7 @@ export default function ChallengesTab() {
                                         </AlertDialogTrigger>
                                     </div>
                                 </div>
-                            ))}
+                            )})}
                         </div>
                     }
                 </CardContent>
@@ -288,3 +309,4 @@ export default function ChallengesTab() {
         </AlertDialog>
     );
 }
+
