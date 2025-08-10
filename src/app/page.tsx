@@ -177,25 +177,16 @@ export default function Home() {
     }, []);
     
     useEffect(() => {
-        // This query fetches all games that haven't concluded.
-        // It's broader to prevent the "game disappearing" issue when its state changes from lobby.
+        // This query is now more robust and relies on a specific index.
         const q = query(
             collection(db, 'games'), 
-            where('gameState', '!=', 'final_results')
+            where('gameState', '==', 'lobby'),
+            where('expiresAt', '>', Timestamp.now()),
+            orderBy('expiresAt', 'desc')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const now = Timestamp.now();
-            // Client-side filtering ensures we only show valid lobbies in the list.
-            const lobbies = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() } as Game))
-                .filter(lobby => 
-                    lobby.gameState === 'lobby' && 
-                    lobby.expiresAt && 
-                    lobby.expiresAt.toMillis() > now.toMillis()
-                )
-                .sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-            
+            const lobbies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
             setActiveLobbies(lobbies);
             setIsLoadingLobbies(false);
         }, (error: any) => {
@@ -891,5 +882,3 @@ export default function Home() {
         </div>
     );
 }
-
-    
