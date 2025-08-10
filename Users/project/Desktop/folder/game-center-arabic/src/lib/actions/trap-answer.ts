@@ -19,21 +19,12 @@ import {
   deleteField,
 } from 'firebase/firestore';
 import type { Game, Player, TrapQuestion, UserProfile, League, EmojiReactionType } from '@/types';
-import { isFirebaseError, safeCompareStrings } from './helpers';
+import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { generateGameId } from '@/lib/actions/helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
 
 
-function shuffle<T>(array: T[]): T[] {
-    let currentIndex = array.length, randomIndex;
-    while (currentIndex !== 0) {
-        randomIndex = Math.floor(Math.random() * currentIndex);
-        currentIndex--;
-        [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
-    }
-    return array;
-}
 
 export async function getShuffledQuestions(category: string, count: number): Promise<TrapQuestion[]> {
     const q = query(collection(db, "trap_answer_questions"), where("category", "==", category));

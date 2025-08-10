@@ -69,6 +69,7 @@ describe('The Prison Game - Round Logic', () => {
             players: gamePlayers,
             playerScores: gamePlayers.reduce((acc, p) => ({ ...acc, [p.id]: 10 }), {}), // Start with 10 points each
             prisonState: {
+                settings: { rounds: 10, biddingTime: 30, answeringTime: 45, judgingTime: 60 },
                 aiJudgeResults: Object.entries(roundScores).map(([playerId, score]) => ({
                     playerId,
                     name: players.find(p => p.id === playerId)?.name || 'Unknown',
@@ -190,6 +191,7 @@ describe('The Prison Game - Timeout Logic', () => {
             gameState: 'open_auction',
             players: mockPlayers,
             prisonState: {
+                settings: { rounds: 10, biddingTime: 30, answeringTime: 45, judgingTime: 60 },
                 playerProgress: {
                     p1: { answers: ['a', 'b'] }, // p1 is answering
                     p2: { answers: ['c'] }        // p2 is also answering
@@ -210,6 +212,7 @@ describe('The Prison Game - Timeout Logic', () => {
             gameState: 'closed_auction_bidding',
             players: mockPlayers,
             prisonState: {
+                settings: { rounds: 10, biddingTime: 30, answeringTime: 45, judgingTime: 60 },
                 bids: { p1: 10, p2: 15 } // p2 is the highest bidder
             }
         };

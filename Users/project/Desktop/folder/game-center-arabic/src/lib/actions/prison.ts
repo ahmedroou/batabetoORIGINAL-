@@ -23,25 +23,8 @@ import {
 import type { Game, Player, PrisonQuestion, PlayerProgress, JudgePrisonAnswersInput, JudgeSingleSubmissionOutput, GameState } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
 import { updateLeagueScoresForGameEnd } from './user';
+import { shuffle } from './helpers';
 
-
-/**
- * A simple shuffle function to randomize array elements.
- * @param {Array<any>} array - The array to shuffle.
- * @returns {Array<any>} The shuffled array.
- */
-function shuffle(array: any[]) {
-    let currentIndex = array.length, randomIndex;
-    // While there remain elements to shuffle.
-    while (currentIndex !== 0) {
-        // Pick a remaining element.
-        randomIndex = Math.floor(Math.random() * currentIndex);
-        currentIndex--;
-        // And swap it with the current element.
-        [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
-    }
-    return array;
-}
 
 /**
  * Updates the game settings. Only the host can perform this action in the lobby state.

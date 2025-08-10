@@ -10,7 +10,7 @@ import { DayPhase } from './phases/DayPhase';
 import { ResultsPhase } from './phases/ResultsPhase';
 import { ExecutionAnimationOverlay } from './ExecutionAnimationOverlay';
 import { useState, useEffect } from 'react';
-import { transitionToNight } from '@/app/actions';
+import { transitionToNight } from '@/lib/actions/behind-the-mask';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface BehindTheMaskGameProps {
