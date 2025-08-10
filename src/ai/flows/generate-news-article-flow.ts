@@ -33,43 +33,71 @@ const analyzerPrompt = ai.definePrompt({
   input: { schema: NewsArticleInputSchema },
   output: { schema: EventSummarySchema },
   model: 'googleai/gemini-1.5-flash-latest',
-  prompt: `You are a news analyst for a social deduction and strategy game. Your job is to identify the most dramatic, important, and interesting events from a raw list of daily occurrences and headlines from the past week. Focus on betrayals, major victories, significant punishments, ongoing rivalries, and surprising outcomes.
+  prompt: `You are a news analyst for a social deduction and strategy game. Your job is to identify the most dramatic, important, and interesting events from a raw list of daily occurrences. Focus on betrayals, major victories, significant punishments, ongoing rivalries, and surprising outcomes.
 
 Today's Date: {{{date}}}
 ---
-**Recent Events (Last 24 Hours):**
+**Recent Social Events (Last 24 Hours):**
 {{#if events}}
 {{#each events}}
-- Event Type: {{type}}
-  Description: {{description}}
-  Timestamp: {{timestamp}}
+- Event Type: {{type}}, Description: {{description}}, Timestamp: {{timestamp}}
 {{/each}}
 {{else}}
-- No significant new events today.
+- No significant new social events today.
 {{/if}}
+---
+**Active Punishments:**
+{{#if punished_players}}
+{{#each punished_players}}
+- {{name}} is currently being punished.
+{{/each}}
+{{else}}
+- The community is peaceful; no one is currently being punished.
+{{/if}}
+---
+**Active Challenges:**
+{{#if active_challenges}}
+{{#each active_challenges}}
+- Challenge '{{title}}' is ongoing.
+{{/each}}
+{{/if}}
+---
+**Top Punisher:**
+{{#if top_punisher}}
+- {{top_punisher.name}} is known as the top punisher.
+{{else}}
+- No one has distinguished themselves as a top punisher yet.
+{{/if}}
+---
+**Top 5 Leaderboard:**
+{{#each leaderboard}}
+- {{name}} ({{leaderboardPoints}} points)
+{{/each}}
 ---
 **Previously Published Articles (Last 7 Days):**
 {{#if previous_articles}}
 {{#each previous_articles}}
 - Headline: "{{title}}" (Published by: {{authorName}})
 {{/each}}
-{{else}}
-- No articles published recently.
 {{/if}}
 ---
-Based on ALL of this information, provide a summary. Select only the key events that would make for a juicy news story. Connect new events to older stories if possible. Ignore minor events like simple game wins unless it was a duel or a significant match.
+Based on ALL of this information, provide a summary. Select only the key events that would make for a juicy news story. Connect new events to older stories if possible. Ignore minor events unless they contribute to a larger narrative (e.g., a top player losing a duel).
 `,
 });
 
 // 2. Define the Writer Prompt (using a more creative model)
 const writerPrompt = ai.definePrompt({
   name: 'newsArticleWriter',
-  input: { schema: z.object({ date: z.string(), summary: EventSummarySchema }) },
+  input: { schema: z.object({ date: z.string(), summary: EventSummarySchema, directive: z.string().optional() }) },
   output: { schema: DraftArticleSchema },
   model: 'googleai/gemini-1.5-pro-latest', // Use a more powerful model for creative writing
-  prompt: `You are a sarcastic and witty journalist for a game world's newspaper called "بطابيطو اليوم". Your audience loves drama, satire, and humor. Write a news article based on the provided summary of today's events.
+  prompt: `You are a sarcastic and witty journalist for a game world's newspaper called "بطابيطو اليوم". Your audience loves drama, satire, and humor. Write a news article in Arabic based on the provided summary of today's events.
 
 Today's Date: {{{date}}}
+
+{{#if directive}}
+**Admin's Directive:** Focus on this: {{{directive}}}
+{{/if}}
 
 Editor's Summary:
 - Overall Mood: {{{summary.overall_mood}}}
@@ -102,20 +130,17 @@ const newsGeneratorFlow = ai.defineFlow(
     }
 
     // Step 2: Write the article based on the summary
-    const { output: draftArticle } = await writerPrompt({ date: input.date, summary });
+    const { output: draftArticle } = await writerPrompt({ date: input.date, summary, directive: input.directive });
     if (!draftArticle) {
       throw new Error('AI Writer failed to produce an article.');
     }
-
-    // (Optional Step 3: Image Generation - can be added later)
-    // For now, we'll return a placeholder image or none at all.
-    // const imageUrl = await generateImageForArticle(draftArticle.headline);
 
     return {
       headline: draftArticle.headline,
       body: draftArticle.body,
       category: 'أخبار اللعبة',
-      // imageUrl: imageUrl,
+      // Image generation can be added here if needed in the future
+      imageUrl: "", 
     };
   }
 );

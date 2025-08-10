@@ -62,6 +62,7 @@ export default function NewsTab() {
     // AI Journalist State
     const [isGeneratingArticle, setIsGeneratingArticle] = useState(false);
     const [isDeletingOld, setIsDeletingOld] = useState(false);
+    const [aiDirective, setAiDirective] = useState('');
 
 
     const fetchAllData = useCallback(async () => {
@@ -200,7 +201,7 @@ export default function NewsTab() {
     
      const handleRunAiJournalist = async () => {
         setIsGeneratingArticle(true);
-        const result = await runAiJournalist();
+        const result = await runAiJournalist(aiDirective.trim() || undefined);
         if (result.success) {
             toast({ title: "نجاح", description: `تم إنشاء ونشر مقال جديد بنجاح بعنوان: "${result.article?.headline}"` });
             fetchAllData();
@@ -352,7 +353,11 @@ export default function NewsTab() {
                              <div>
                                 <h4 className="font-bold">توليد مقال اليوم</h4>
                                 <p className="text-xs text-muted-foreground mb-2">سيقوم الذكاء الاصطناعي بتحليل أحداث آخر 24 ساعة ومقالات الأسبوع الماضي لكتابة مقال جديد.</p>
-                                <Button className="w-full" onClick={handleRunAiJournalist} disabled={isGeneratingArticle}>
+                                <div className="space-y-2">
+                                    <Label htmlFor="ai-directive">توجيه (اختياري)</Label>
+                                    <Input id="ai-directive" value={aiDirective} onChange={e => setAiDirective(e.target.value)} placeholder="مثال: ركز على الصراع بين اللاعب س واللاعب ص" />
+                                </div>
+                                <Button className="w-full mt-2" onClick={handleRunAiJournalist} disabled={isGeneratingArticle}>
                                     {isGeneratingArticle ? <Loader2 className="animate-spin" /> : 'توليد ونشر مقال اليوم'}
                                 </Button>
                              </div>
