@@ -393,13 +393,11 @@ export async function handleTimeout(gameId: string, playerId: string) {
     if (!gameDoc.exists()) return;
     const game = gameDoc.data() as Game;
     
-    // Only the host should trigger timeouts to prevent multiple triggers
     if (game.hostId !== playerId) {
         return;
     }
 
     const timerEndsAt = game.trapAnswerState?.timerEndsAt;
-    // CRITICAL FIX: Ensure server-side timer has actually expired
     if (!timerEndsAt || timerEndsAt.toMillis() > Date.now()) {
         return; 
     }
@@ -412,10 +410,7 @@ export async function handleTimeout(gameId: string, playerId: string) {
         if (!categories || categories.length === 0 || !playerWhoseTurnItIs) return;
         const randomCategory = categories[Math.floor(Math.random() * categories.length)];
         
-        // This function is async and contains its own transaction logic.
-        // It's not ideal to call it from here, but for now we'll do it outside the transaction.
-        // A better approach would be to refactor selectCategoryAndGetQuestion to be callable from a transaction.
-        transaction.update(gameRef, {'trapAnswerState.timerEndsAt': null}); // Prevent re-triggering
+        transaction.update(gameRef, {'trapAnswerState.timerEndsAt': null});
         await selectCategoryAndGetQuestion(gameId, playerWhoseTurnItIs, randomCategory);
 
     } else if (game.gameState === 'answer-submission') {
@@ -441,11 +436,14 @@ export async function sendReaction(gameId: string, playerId: string, emoji: Emoj
 
 async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
     const playerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}) };
-    
+    const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
+
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
         for (const player of activePlayers) {
             if (!playerAnswers.hasOwnProperty(player.id)) {
+                // If the player is marked as 'away', treat them as if they submitted null.
+                // Otherwise, it's a regular timeout.
                 playerAnswers[player.id] = null;
             }
         }
@@ -459,7 +457,6 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
     const validPlayerAnswers = Object.values(playerAnswers).filter((ans): ans is string => ans !== null && ans.trim() !== '');
     let allPossibleAnswers = [question.answer, ...validPlayerAnswers];
     
-    // **FIX**: Use a safer check for dummy answers.
     if (Array.isArray(question.dummyAnswers) && question.dummyAnswers.length > 0) {
         allPossibleAnswers.push(question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)]);
     }
@@ -472,11 +469,13 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
         'trapAnswerState.playerAnswers': playerAnswers,
         'trapAnswerState.timerEndsAt': timerEndsAt,
         'trapAnswerState.shuffledAnswers': shuffledAnswers,
+        'trapAnswerState.awayPlayerIds': [], // Reset for the next phase
     });
 }
 
 async function _advanceToResults(transaction: Transaction, gameRef: any, game: Game, isTimeout: boolean = false) {
     const playerGuesses = { ...(game.trapAnswerState?.playerGuesses || {}) };
+    const awayPlayerIds = game.trapAnswerState?.awayPlayerIds || [];
 
     if (isTimeout) {
         const activePlayers = game.players.filter(p => p.status === 'alive');
@@ -492,7 +491,6 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
     }
 
     const activePlayers = game.players.filter(p => p.status === 'alive');
-    // **FIX**: Correctly destructure `timedOutGuesserIds` from the calculation.
     const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = await calculateTrapAnswerScores(
         activePlayers,
         game.trapAnswerState.currentQuestion,
@@ -516,7 +514,6 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
         mergedTrickStats.trickedOthers[trickerId] = [...(mergedTrickStats.trickedOthers[trickerId] || []), ...trickedIds];
     });
     
-    // **FIX**: Use the actual `timedOutGuesserIds` instead of an empty array.
     const roundResults = { scores: roundScores, answers: resultsByAnswer, timedOutGuesserIds };
 
     transaction.update(gameRef, {
