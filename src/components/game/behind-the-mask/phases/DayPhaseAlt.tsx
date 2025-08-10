@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { Game, Player, DayEvent, PublicChatMessage, PrivateEvent } from '@/types';
@@ -70,7 +69,7 @@ const SecretReportCard = ({ event, onClose }: { event: PrivateEvent, onClose: ()
     );
 };
 
-interface DayPhaseAltProps {
+interface DayPhaseProps {
     game: Game;
     self: Player;
 }
@@ -83,7 +82,7 @@ const PLAYER_COLORS = [
     'text-purple-400', 'text-pink-400', 'text-indigo-400', 'text-teal-400'
 ];
 
-export function DayPhaseAlt({ game, self }: DayPhaseAltProps) {
+export function DayPhaseAlt({ game, self }: DayPhaseProps) {
     const { toast } = useToast();
     const [message, setMessage] = useState("");
     const [timeLeft, setTimeLeft] = useState(180);

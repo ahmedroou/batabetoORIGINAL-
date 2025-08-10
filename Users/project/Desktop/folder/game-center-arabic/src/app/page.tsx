@@ -178,17 +178,15 @@ export default function Home() {
     }, []);
     
      useEffect(() => {
-        // This query is now simpler and more reliable. It just gets the newest lobbies.
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            orderBy('createdAt', 'desc'), // Order by creation time
-            limit(50) // Limit to a reasonable number
+            orderBy('createdAt', 'desc'),
+            limit(50)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const now = Timestamp.now();
-            // Client-side filter to ensure we only show non-expired lobbies
             const lobbies = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as Game))
                 .filter(lobby => lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis());

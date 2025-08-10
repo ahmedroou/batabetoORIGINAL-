@@ -180,13 +180,12 @@ export default function Home() {
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            orderBy('expiresAt', 'desc'),
+            orderBy('createdAt', 'desc'),
             limit(50)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const now = Timestamp.now();
-            // Client-side filter to ensure we only show non-expired lobbies
             const lobbies = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as Game))
                 .filter(lobby => lobby.expiresAt && lobby.expiresAt.toMillis() > now.toMillis());

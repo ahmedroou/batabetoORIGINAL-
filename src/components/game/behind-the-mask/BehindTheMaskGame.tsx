@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { LobbyPhase } from './phases/LobbyPhase';
 import { RoleRevealPhase } from './phases/RoleRevealPhase';
 import { NightPhase } from './phases/NightPhase';
-import { DayPhase } from './phases/DayPhase';
+import { DayPhaseAlt } from './phases/DayPhaseAlt';
 import { ResultsPhase } from './phases/ResultsPhase';
 import { ExecutionAnimationOverlay } from './ExecutionAnimationOverlay';
 import { useState, useEffect } from 'react';
@@ -61,7 +61,7 @@ export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
             case 'night':
                 return <NightPhase game={game} self={self} />;
             case 'day':
-                return <DayPhase game={game} self={self} />;
+                return <DayPhaseAlt game={game} self={self} />;
             case 'final_results':
                 return <ResultsPhase game={game} self={self} />;
             case 'execution': // While animation is not showing, show waiting screen
@@ -94,5 +94,3 @@ export function BehindTheMaskGame({ game, self }: BehindTheMaskGameProps) {
         </div>
     );
 }
-
-    
