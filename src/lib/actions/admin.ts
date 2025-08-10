@@ -125,10 +125,14 @@ export const uploadTrapAnswerQuestionsFromJson = withAdminAuth(async (adminId: s
                 typeof q.answer === 'string' && q.answer.trim() !== ''
             ) {
                 const docRef = doc(questionsCol);
+                const dummyAnswers = (Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string'))
+                    ? q.dummyAnswers.map(da => da.trim())
+                    : [];
+
                 batch.set(docRef, {
                     question: q.question.trim(),
                     answer: q.answer.trim(),
-                    dummyAnswers: Array.isArray(q.dummyAnswers) ? q.dummyAnswers.map(da => da.trim()) : [],
+                    dummyAnswers: dummyAnswers,
                     category: category.trim(),
                     randomKey: Math.random(),
                 });

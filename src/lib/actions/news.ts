@@ -1,3 +1,5 @@
+
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -21,9 +23,9 @@ import {
     limit,
     runTransaction,
 } from 'firebase/firestore';
-import type { Article, AudienceGroup, UserProfile, SocialEvent, Challenge } from '@/types';
+import type { Article, AudienceGroup, UserProfile, SocialEvent, Challenge, Game } from '@/types';
 import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
-import { getAllUsers, getTopPunisher, getTopUsers } from './user';
+import { getAllUsers, getTopPunisher, getTopUsers } from './user/queries';
 import { getChallenges } from './challenges';
 
 
@@ -270,46 +272,62 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     }
 }
 
-async function getJournalistSourceMaterial(): Promise<{
-    events: SocialEvent[];
-    previous_articles: Article[];
-    leaderboard: UserProfile[];
-    punished_players: UserProfile[];
-    top_punisher: UserProfile | null;
-    active_challenges: Challenge[];
-}> {
+async function getRecentFinishedGames(count: number): Promise<Game[]> {
+    try {
+        const gamesCol = collection(db, 'games');
+        const q = query(
+            gamesCol,
+            where('gameState', '==', 'final_results'),
+            orderBy('createdAt', 'desc'),
+            limit(count)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => doc.data() as Game);
+    } catch (error) {
+        console.error("Error fetching recent games:", error);
+        return [];
+    }
+}
+
+async function getJournalistSourceMaterial(directive?: string): Promise<any> {
     const oneDayAgo = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
     const eventsQuery = query(collection(db, 'social_events'), where('timestamp', '>=', oneDayAgo), orderBy('timestamp', 'desc'));
     
     const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const articlesQuery = query(collection(db, 'articles'), where('createdAt', '>=', sevenDaysAgo), orderBy('createdAt', 'desc'));
 
-    const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges] = await Promise.all([
+    const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges, recent_games] = await Promise.all([
         getDocs(eventsQuery),
         getDocs(articlesQuery),
         getTopUsers('leaderboardPoints', 5),
         getAllUsers('punished'),
         getTopPunisher(),
         getChallenges(),
+        getRecentFinishedGames(10),
     ]);
 
     const events = eventsSnapshot.docs.map(doc => ({ ...doc.data(), timestamp: doc.data().timestamp.toDate() } as SocialEvent));
     const previous_articles = articlesSnapshot.docs.map(doc => ({ ...doc.data(), createdAt: doc.data().createdAt.toDate() } as Article));
 
-    return { events, previous_articles, leaderboard, punished_players, top_punisher, active_challenges };
+    return { 
+        events, 
+        previous_articles, 
+        leaderboard, 
+        punished_players, 
+        top_punisher, 
+        active_challenges, 
+        recent_games,
+        directive,
+        date: new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    };
 }
 
 
-export async function runAiJournalist(): Promise<{success: boolean, article?: { headline: string }, error?: string}> {
+export async function runAiJournalist(directive?: string): Promise<{success: boolean, article?: { headline: string }, error?: string}> {
     try {
-        const sourceMaterial = await getJournalistSourceMaterial();
+        const sourceMaterial = await getJournalistSourceMaterial(directive);
         
-        const today = new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-        const generatedArticle = await generateNewsArticle({
-            date: today,
-            ...sourceMaterial,
-        });
+        const generatedArticle = await generateNewsArticle(sourceMaterial);
 
         if (!generatedArticle.headline || !generatedArticle.body) {
             throw new Error("فشل الذكاء الاصطناعي في توليد مقال متكامل.");

@@ -3,7 +3,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch } from 'firebase/firestore';
+import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch, increment } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
@@ -157,7 +157,7 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
 
 
 // Internal function to update win counts and check for new Game Kings
-export async function updateUserWinCount(gameType: any, userId: string, transaction: WriteBatch) {
+export async function updateUserWinCount(gameType: any, userId: string, batch: WriteBatch) {
     
     // This function should NOT handle team games, as that logic is in `distributeEndOfGameAwards`
     const teamGameTypes = ['word_war', 'king-of-genius', 'behind-the-mask'];
@@ -170,7 +170,7 @@ export async function updateUserWinCount(gameType: any, userId: string, transact
     // so we cannot `get` docs. We must perform updates blindly. This is acceptable
     // as we are only using increments.
     
-    transaction.update(userRef, {
+    batch.update(userRef, {
       [`winCounts.${gameType}`]: increment(1)
     });
 }
@@ -297,4 +297,32 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
     }
 }
 
-    
+export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
+    try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, orderBy(field, 'desc'), limit(count));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+    } catch (error) {
+        console.error(`Error getting top users by ${field}:`, error);
+        return [];
+    }
+}
+
+export async function getTopPunisher(): Promise<UserProfile | null> {
+    try {
+        const q = query(collection(db, 'users'), orderBy('punishmentsIssued', 'desc'), limit(1));
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+            return null;
+        }
+        const userDoc = snapshot.docs[0];
+        if(!userDoc.data().punishmentsIssued || userDoc.data().punishmentsIssued === 0) return null;
+        return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+    } catch (error) {
+        // This can happen if the 'punishmentsIssued' index is not created yet.
+        // It's not a critical error, so we just log it and return null.
+        console.warn("Could not fetch top punisher, likely due to a missing index:", error);
+        return null;
+    }
+}
