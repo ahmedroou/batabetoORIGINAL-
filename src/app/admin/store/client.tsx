@@ -19,7 +19,7 @@ import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { setAvatarPrices, setPunishmentAvatarPrices, setDefaultAvatar, setSocialRanks, addPermissionToRank, removePermissionFromRank, getAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar, getTopUsers } from '@/lib/actions/admin';
-import { getRanks } from '@/lib/actions/user/queries';
+import { getRanks, getTopUsers as queryTopUsers } from '@/lib/actions/user/queries';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -66,8 +66,8 @@ export default function AdminStoreClient() {
             getPunishmentAvatarPrices(),
             getRanks(),
             getDefaultAvatar(),
-            getTopUsers('coins', 5),
-            getTopUsers('leaderboardPoints', 5),
+            queryTopUsers('coins', 5),
+            queryTopUsers('leaderboardPoints', 5),
         ]);
 
 
@@ -329,17 +329,13 @@ export default function AdminStoreClient() {
     };
 
 
-    if (loading || isLoadingData) {
+    if (loading || !userProfile?.isAdmin) {
         return (
             <div className="flex min-h-screen items-center justify-center">
                 <Loader2 className="h-12 w-12 animate-spin" />
             </div>
         );
     }
-     if (!userProfile?.isAdmin) {
-        return null;
-    }
-
 
     return (
         <main className="flex min-h-screen flex-col items-center p-4 md:p-8 bg-muted/40">
