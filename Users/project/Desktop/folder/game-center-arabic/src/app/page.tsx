@@ -47,7 +47,7 @@ const FunkyFace = ({ className }: { className?: string }) => (
     </svg>
 );
 
-type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-behind-the-mask" | "create-word_war" | "create-draw-and-guess" | "create-prison" | "join" | "league" | null;
+type LoadingState = "create-king-of-genius" | "create-trap-answer" | "create-behind-the-mask" | "create-word_war" | "create-prison" | "join" | "league" | null;
 
 interface LastChampion {
     name: string;
@@ -178,11 +178,12 @@ export default function Home() {
     }, []);
     
      useEffect(() => {
+        // This query is now simpler and more reliable. It just gets the newest lobbies.
         const q = query(
             collection(db, 'games'), 
             where('gameState', '==', 'lobby'),
-            orderBy('expiresAt', 'desc'),
-            limit(50)
+            orderBy('createdAt', 'desc'), // Order by creation time
+            limit(50) // Limit to a reasonable number
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -882,6 +883,3 @@ export default function Home() {
         </div>
     );
 }
-
-
-    
