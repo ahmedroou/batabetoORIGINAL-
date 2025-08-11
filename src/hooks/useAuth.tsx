@@ -50,7 +50,7 @@ interface AuthContextType {
   newArticlesAvailable: boolean;
   activeChallenges: Challenge[];
   newChallengeAvailable: boolean;
-  markChallengeAsSeen: (challengeDate: Date) => void;
+  markChallengeAsSeen: (challengeDate: Date | Timestamp) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -286,9 +286,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => unsubscribeChallenges();
 }, [user]);
 
-    const markChallengeAsSeen = (challengeDate: Date) => {
+    const markChallengeAsSeen = (challengeDate: Date | Timestamp) => {
         if(challengeDate) {
-            localStorage.setItem('lastChallengeView', challengeDate.getTime().toString());
+            const dateToStore = challengeDate instanceof Timestamp ? challengeDate.toMillis() : challengeDate.getTime();
+            localStorage.setItem('lastChallengeView', dateToStore.toString());
             setNewChallengeAvailable(false);
         }
     };
