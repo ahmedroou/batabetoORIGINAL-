@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -183,7 +183,7 @@ const CategoryManager = ({
 export default function QuestionManagementTab() {
     const { toast } = useToast();
 
-    const [selectedGame, setSelectedGame] = useState<Game['gameType'] | 'trap-answer/educated-merchant' | ''>('');
+    const [selectedGame, setSelectedGame] = useState<'trap-answer' | 'educated-merchant' | 'word_war' | 'prison' | ''>('');
     const [selectedJsonFile, setSelectedJsonFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -199,7 +199,7 @@ export default function QuestionManagementTab() {
     const [activeCategoryManager, setActiveCategoryManager] = useState<'trap-answer' | 'educated-merchant' | null>(null);
 
     const currentCategoryList = useMemo(() => {
-        if(selectedGame === 'trap-answer/educated-merchant') {
+        if(selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') {
             return activeCategoryManager === 'trap-answer' ? trapAnswerCategories : merchantCategories;
         }
         return [];
@@ -222,11 +222,15 @@ export default function QuestionManagementTab() {
         fetchCategories();
     }, []);
     
-    const handleGameSelection = (game: Game['gameType'] | 'trap-answer/educated-merchant' | '') => {
+    const handleGameSelection = (game: 'trap-answer' | 'educated-merchant' | 'word_war' | 'prison' | '') => {
         setSelectedGame(game);
         setSelectedCategory('');
-        if(game !== 'trap-answer/educated-merchant') {
-            setActiveCategoryManager(null);
+        if(game === 'trap-answer') {
+            setActiveCategoryManager('trap-answer');
+        } else if (game === 'educated-merchant') {
+            setActiveCategoryManager('educated-merchant');
+        } else {
+             setActiveCategoryManager(null);
         }
     }
 
@@ -257,7 +261,8 @@ export default function QuestionManagementTab() {
                 let result;
 
                 switch(selectedGame) {
-                    case 'trap-answer/educated-merchant':
+                    case 'trap-answer':
+                    case 'educated-merchant':
                          if (!selectedCategory) {
                             throw new Error('الرجاء اختيار قسم لرفع الأسئلة إليه.');
                         }
@@ -365,14 +370,15 @@ export default function QuestionManagementTab() {
                         <SelectValue placeholder="اختر لعبة لرفع محتوى لها..." />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="trap-answer/educated-merchant">الجواب المفخخ / التاجر المتعلم</SelectItem>
+                        <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
+                        <SelectItem value="educated-merchant">التاجر المتعلم</SelectItem>
                         <SelectItem value="word_war">حرب الكلمات</SelectItem>
                         <SelectItem value="prison">السجن</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
             
-             {selectedGame === 'trap-answer/educated-merchant' && (
+             {(selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') && (
                 <div className="space-y-2">
                     <Label htmlFor="category-select-upload">2. اختر القسم</Label>
                     <div className="flex items-center gap-2">
@@ -386,17 +392,13 @@ export default function QuestionManagementTab() {
                                 </SelectContent>
                             </Select>
                          </div>
-                         <div className="flex border rounded-md">
-                            <Button variant={activeCategoryManager === 'trap-answer' ? 'default' : 'ghost'} size="sm" onClick={() => setActiveCategoryManager('trap-answer')}>الجواب المفخخ</Button>
-                             <Button variant={activeCategoryManager === 'educated-merchant' ? 'default' : 'ghost'} size="sm" onClick={() => setActiveCategoryManager('educated-merchant')}>التاجر المتعلم</Button>
-                         </div>
                     </div>
                 </div>
             )}
             
             <div className="space-y-2">
                 <Label htmlFor="json-upload-input">
-                    {selectedGame === 'trap-answer/educated-merchant' ? '3.' : '2.'} اختر ملف المحتوى (JSON)
+                    {(selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') ? '3.' : '2.'} اختر ملف المحتوى (JSON)
                 </Label>
                 <Input id="json-upload-input" type="file" accept=".json" onChange={handleJsonFileChange} />
                 <p className="text-xs text-muted-foreground">{getUploadHelperText()}</p>
@@ -411,8 +413,10 @@ export default function QuestionManagementTab() {
     
     const getUploadHelperText = () => {
         switch(selectedGame) {
-            case 'trap-answer/educated-merchant':
-                return "يجب أن يكون الملف مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `question` و `answer` وحقل اختياري `dummyAnswers` (مصفوفة من 3 إجابات خاطئة).";
+            case 'trap-answer':
+                return "يجب أن يكون الملف مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `question` و `answer`.";
+             case 'educated-merchant':
+                return "يجب أن يكون الملف مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `question` و `answer` وحقل اختياري `dummyAnswers` (مصفوفة من الإجابات الخاطئة).";
             case 'word_war': return "الملف يجب أن يكون مصفوفة من الكلمات (strings).";
             case 'prison': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `text`.";
             default: return "اختر لعبة لرؤية تعليمات الرفع.";
@@ -429,7 +433,8 @@ export default function QuestionManagementTab() {
                             <SelectValue placeholder="اختر لعبة لحذف محتوى منها..." />
                         </SelectTrigger>
                         <SelectContent>
-                             <SelectItem value="trap-answer/educated-merchant">الجواب المفخخ / التاجر المتعلم</SelectItem>
+                             <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
+                             <SelectItem value="educated-merchant">التاجر المتعلم</SelectItem>
                             <SelectItem value="word_war">حرب الكلمات</SelectItem>
                             <SelectItem value="prison">السجن</SelectItem>
                         </SelectContent>
@@ -438,7 +443,7 @@ export default function QuestionManagementTab() {
              );
          }
         
-         if (selectedGame === 'trap-answer/educated-merchant') {
+         if (selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') {
              return renderTrapAnswerDelete();
          }
          if (selectedGame === 'word_war') {
@@ -456,7 +461,7 @@ export default function QuestionManagementTab() {
                 <Label>حذف حسب القسم</Label>
                 <div className="flex items-center gap-2">
                      <div className="flex-grow">
-                        <Select onValueChange={(val) => val && handleDeleteClick({ game: 'trap-answer', category: val })} >
+                        <Select onValueChange={(val) => val && handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: val })} >
                              <SelectTrigger>
                                 <SelectValue placeholder={activeCategoryManager ? `اختر قسمًا لحذف كل أسئلته...` : 'اختر نوع الأقسام أولاً...'} />
                             </SelectTrigger>
@@ -465,10 +470,6 @@ export default function QuestionManagementTab() {
                             </SelectContent>
                         </Select>
                      </div>
-                      <div className="flex border rounded-md">
-                        <Button variant={activeCategoryManager === 'trap-answer' ? 'default' : 'ghost'} size="sm" onClick={() => setActiveCategoryManager('trap-answer')}>الجواب المفخخ</Button>
-                        <Button variant={activeCategoryManager === 'educated-merchant' ? 'default' : 'ghost'} size="sm" onClick={() => setActiveCategoryManager('educated-merchant')}>التاجر المتعلم</Button>
-                    </div>
                 </div>
             </div>
              <div className="space-y-2 border-t pt-4">
