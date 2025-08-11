@@ -33,6 +33,11 @@ export default function StoreClient() {
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [purchaseCandidate, setPurchaseCandidate] = useState<{avatar: AvatarPrice, type: 'regular' | 'punishment'} | null>(null);
 
+    // Pagination state
+    const [visibleRegularCount, setVisibleRegularCount] = useState(8);
+    const [visiblePunishmentCount, setVisiblePunishmentCount] = useState(8);
+
+
     const fetchPageData = useCallback(async () => {
         setIsLoadingData(true);
         const [pricesResult, punishmentPricesResult] = await Promise.all([
@@ -118,6 +123,9 @@ export default function StoreClient() {
         const currentPrices = type === 'regular' ? prices : punishmentPrices;
         const avatarList = type === 'regular' ? AVATAR_IDS : PUNISHMENT_AVATAR_IDS;
         const unlockedList = type === 'regular' ? userProfile.unlockedAvatars : (userProfile.unlockedPunishmentAvatars || []);
+        
+        const visibleCount = type === 'regular' ? visibleRegularCount : visiblePunishmentCount;
+        const setVisibleCount = type === 'regular' ? setVisibleRegularCount : setVisiblePunishmentCount;
 
         return (
             <CardContent>
@@ -128,7 +136,7 @@ export default function StoreClient() {
                 ) : (
                     <ScrollArea className="h-[60vh]">
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-1">
-                            {avatarList.map(avatarId => {
+                            {avatarList.slice(0, visibleCount).map(avatarId => {
                                 const isUnlocked = unlockedList.includes(avatarId);
                                 const itemPrice = currentPrices[avatarId];
                                 const price = itemPrice?.price ?? -1;
@@ -154,6 +162,13 @@ export default function StoreClient() {
                                 </div>
                             )})}
                         </div>
+                          {visibleCount < avatarList.length && (
+                            <div className="text-center mt-4">
+                                <Button variant="outline" onClick={() => setVisibleCount(prev => prev + 8)}>
+                                    عرض المزيد
+                                </Button>
+                            </div>
+                        )}
                     </ScrollArea>
                 )}
             </CardContent>
