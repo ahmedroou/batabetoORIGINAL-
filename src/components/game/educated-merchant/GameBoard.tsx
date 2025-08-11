@@ -4,7 +4,7 @@
 import type { Player, Property } from '@/types';
 import { motion } from 'framer-motion';
 import { PlayerAvatar } from '../PlayerAvatar';
-import { Home, Zap, Building2 } from 'lucide-react';
+import { Home, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface GameBoardProps {
@@ -22,8 +22,8 @@ const getPlayerColor = (playerId: string, players: Player[]) => {
     return colors[index % colors.length];
 };
 
-const Tile = ({ property, playersOnTile }: { property: Property, playersOnTile: Player[] }) => {
-    const ownerColor = property.ownerId ? getPlayerColor(property.ownerId, playersOnTile) : null;
+const Tile = ({ property, playersOnTile, allPlayers }: { property: Property, playersOnTile: Player[], allPlayers: Player[] }) => {
+    const ownerColor = property.ownerId ? getPlayerColor(property.ownerId, allPlayers) : null;
     
     return (
         <div className={cn(
@@ -40,7 +40,6 @@ const Tile = ({ property, playersOnTile }: { property: Property, playersOnTile: 
 
             <div className="flex-grow flex flex-col items-center justify-center">
                  {property.type === 'start' && <Home className="w-8 h-8 text-green-500"/>}
-                 {property.type === 'chance' && <Zap className="w-8 h-8 text-yellow-500"/>}
                  {property.type === 'property' && <Building2 className="w-8 h-8 text-gray-500"/>}
                 <p className="text-xs font-bold truncate w-full mt-1">{property.name}</p>
                 {property.price > 0 && <p className="text-xs font-semibold text-green-600 dark:text-green-400">{property.price} د.ع</p>}
@@ -57,18 +56,27 @@ export function GameBoard({ board, players }: GameBoardProps) {
         return <div className="text-center">جاري تحميل اللوحة...</div>;
     }
 
-    const boardSize = Math.sqrt(board.length + 4); // Assuming a square board with corners
-    const sideLength = Math.ceil(board.length / 4);
+    const boardSize = Math.sqrt(board.length);
+    const sideLength = Math.ceil(board.length / 4) + 1;
+
 
     const getTilePosition = (index: number) => {
-        // This logic places tiles in a square loop
-        if (index < sideLength) return { row: 0, col: index }; // Top row
-        if (index < sideLength * 2) return { row: index - sideLength, col: sideLength -1 }; // Right col
-        if (index < sideLength * 3) return { row: sideLength - 1, col: sideLength - 1 - (index - sideLength * 2) }; // Bottom row
-        return { row: sideLength - 1 - (index - sideLength * 3), col: 0 }; // Left col
+        const perimeter = (sideLength - 1) * 4;
+        const effectiveIndex = index % perimeter;
+
+        if (effectiveIndex < sideLength) { // Top row
+            return { row: 0, col: effectiveIndex };
+        }
+        if (effectiveIndex < sideLength * 2 - 1) { // Right col
+            return { row: effectiveIndex - (sideLength - 1), col: sideLength - 1 };
+        }
+        if (effectiveIndex < sideLength * 3 - 2) { // Bottom row
+            return { row: sideLength - 1, col: sideLength - 1 - (effectiveIndex - (sideLength * 2 - 2)) };
+        }
+        // Left col
+        return { row: sideLength - 1 - (effectiveIndex - (sideLength * 3 - 3)), col: 0 };
     };
     
-    // Create a grid representation
     const grid: (Property | null)[][] = Array(sideLength).fill(null).map(() => Array(sideLength).fill(null));
     board.forEach((property, index) => {
         const { row, col } = getTilePosition(index);
@@ -90,7 +98,7 @@ export function GameBoard({ board, players }: GameBoardProps) {
                             return null;
                          }
                         const playersOnTile = players.filter(p => p.position === property.id);
-                        return <Tile key={property.id} property={property} playersOnTile={playersOnTile}/>;
+                        return <Tile key={property.id} property={property} playersOnTile={playersOnTile} allPlayers={players} />;
                     })
                 ))}
             </div>

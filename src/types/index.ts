@@ -493,7 +493,7 @@ export interface DuelChallenge {
 
 export interface Property {
     id: number; // Index on the board
-    type: 'property' | 'start' | 'chance'; // Example types
+    type: 'property' | 'start';
     name: string;
     category: string; // Question category
     price: number;

@@ -50,8 +50,6 @@ function generateBoard(questionsByCategory: Record<string, EducatedMerchantQuest
     for (let i = 0; i < BOARD_SIZE; i++) {
         if (i === 0) {
             board.push({ id: i, type: 'start', name: 'نقطة البداية', category: 'special', price: 0, rent: 0, ownerId: null });
-        } else if (i % Math.floor(BOARD_SIZE / 4) === 0) {
-            board.push({ id: i, type: 'chance', name: 'فرصة', category: 'special', price: 0, rent: 0, ownerId: null });
         } else {
              const category = categories[i % categories.length];
              const price = shuffledPrices[i % shuffledPrices.length] || BASE_PROPERTY_PRICE;
@@ -154,7 +152,6 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         const property = game.educatedMerchantState?.board.find(p => p.id === player?.position);
 
         if (!property || property.type !== 'property') {
-            // Landed on Start or Chance, just end the turn for now
             await endTurn(gameId, playerId);
             return;
         }
@@ -165,21 +162,27 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
             const rent = property.rent;
 
             if (playerBalance < rent) {
-                // Bankrupt logic here in the future
-                playerBalance = 0;
+                const playerIndex = game.players.findIndex(p => p.id === playerId);
+                if (playerIndex > -1) {
+                    const updatedPlayers = [...game.players];
+                    updatedPlayers[playerIndex].status = 'bankrupt';
+                    updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
+                     transaction.update(gameRef, { players: updatedPlayers });
+                }
             } else {
-                playerBalance -= rent;
+                 transaction.update(gameRef, {
+                    [`playerScores.${playerId}`]: increment(-rent),
+                    [`playerScores.${property.ownerId}`]: increment(rent)
+                });
             }
             
-            transaction.update(gameRef, {
-                [`playerScores.${playerId}`]: playerBalance,
-                [`playerScores.${property.ownerId}`]: (game.playerScores?.[property.ownerId] || 0) + rent
-            });
-            
             await endTurn(gameId, playerId);
-        } else {
-            // Property is unowned or owned by the player, transition state
+        } else if (!property.ownerId) {
+            // Property is unowned, transition state for player to decide
             transaction.update(gameRef, { gameState: 'property_action' });
+        } else {
+            // Player landed on their own property, just end turn
+            await endTurn(gameId, playerId);
         }
     });
 }
@@ -231,21 +234,22 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             if(!property) throw new Error("Player not on a property.");
 
             const isCorrect = answer === question.correctAnswer;
-            let updatedBalances = { ...game.playerScores };
+            
+            const propertyIndex = game.educatedMerchantState!.board.findIndex(p => p.id === property.id);
 
             if (isCorrect) {
-                updatedBalances[playerId] -= property.price;
-                const propertyIndex = game.educatedMerchantState!.board.findIndex(p => p.id === property.id);
-                transaction.update(gameRef, {
+                 transaction.update(gameRef, {
+                    [`playerScores.${playerId}`]: increment(-property.price),
                     [`educatedMerchantState.board.${propertyIndex}.ownerId`]: playerId
                 });
             } else {
-                const refund = Math.floor(property.price / 4);
-                updatedBalances[playerId] = (updatedBalances[playerId] || 0) + refund - property.price;
+                const penalty = Math.floor(property.price * 0.75);
+                 transaction.update(gameRef, {
+                    [`playerScores.${playerId}`]: increment(-penalty)
+                });
             }
 
             transaction.update(gameRef, {
-                playerScores: updatedBalances,
                 'educatedMerchantState.currentQuestion': null, // Clear question
             });
          });
@@ -267,7 +271,8 @@ export async function endTurn(gameId: string, playerId: string) {
             const es = game.educatedMerchantState;
 
             if (es?.turnOrder[es.currentTurnIndex] !== playerId) {
-                throw new Error("ليس دورك لإنهاء الدور.");
+                // This can happen due to race conditions, it's safe to ignore.
+                return;
             }
 
             let nextIndex = (es.currentTurnIndex + 1) % es.turnOrder.length;
@@ -289,6 +294,8 @@ export async function endTurn(gameId: string, playerId: string) {
             
             if (newRound > maxRounds || nonBankruptPlayers.length <= 1) {
                  nextGameState = 'final_results';
+                 const winner = nonBankruptPlayers.sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0))[0];
+                 transaction.update(gameRef, { gameResult: { winner: winner?.id || 'game_over', message: 'انتهت اللعبة!' }});
             }
 
             transaction.update(gameRef, {

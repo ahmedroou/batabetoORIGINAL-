@@ -7,6 +7,7 @@ import { PlayerHUD } from './PlayerHUD';
 import { DiceRoll } from './DiceRoll';
 import { PropertyCard } from './PropertyCard';
 import { QuestionModal } from './QuestionModal';
+import { FinalResults } from './FinalResults';
 
 interface EducatedMerchantGameProps {
     game: Game;
@@ -19,6 +20,10 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
     const canRoll = game.gameState === 'rolling' && isMyTurn;
     const showPropertyInteraction = game.gameState === 'property_action' && isMyTurn;
     const showQuestion = game.gameState === 'question' && isMyTurn;
+
+    if(game.gameState === 'final_results') {
+        return <FinalResults game={game} />
+    }
 
     return (
         <div className="w-full h-screen flex flex-col md:flex-row items-center justify-center p-2 gap-4 bg-gray-100 dark:bg-gray-900">
