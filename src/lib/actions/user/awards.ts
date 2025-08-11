@@ -53,7 +53,7 @@ export function calculateEndOfGameAwards(game: Game) {
              const score = finalScores[player.id] || 0;
              if (score < lastScore) {
                 currentRank = index + 1;
-            } else if (lastScore === -Infinity) {
+            } else if (index === 0) { // First player always gets rank 1
                 currentRank = 1;
             }
             playerRanks.push({ id: player.id, rank: currentRank });
@@ -95,7 +95,7 @@ export function calculateEndOfGameAwards(game: Game) {
                 const deceiverId = deceiverCandidates[0][0];
                 const deceiverPlayer = game.players.find(p => p.id === deceiverId);
                 if (deceiverPlayer) {
-                    cunningDeceiver = { playerId: deceiverId, name: deceiverPlayer.name, avatarId: deceiverPlayer.avatarId, count: trickStats.trickedOthers[deceiverId].length };
+                    cunningDeceiver = { playerId: deceiverId, name: deceiverPlayer.name, avatarId: deceiverPlayer.avatarId, count: trickStats.trickedOthers[deceiverId]!.length };
                     if (updates[deceiverId]) {
                         updates[deceiverId].leaderboardPoints += 1;
                         updates[deceiverId].challengePoints = (updates[deceiverId].challengePoints || 0) + 1;
@@ -113,7 +113,7 @@ export function calculateEndOfGameAwards(game: Game) {
                 const foolId = foolCandidates[0][0];
                 const foolPlayer = game.players.find(p => p.id === foolId);
                 if (foolPlayer) {
-                    deceivedFool = { playerId: foolId, name: foolPlayer.name, avatarId: foolPlayer.avatarId, count: trickStats.trickedBy[foolId].length };
+                    deceivedFool = { playerId: foolId, name: foolPlayer.name, avatarId: foolPlayer.avatarId, count: trickStats.trickedBy[foolId]!.length };
                 }
             }
         }
