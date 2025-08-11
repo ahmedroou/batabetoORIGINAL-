@@ -32,7 +32,7 @@ const analyzerPrompt = ai.definePrompt({
   name: 'newsEventAnalyzer',
   input: { schema: NewsArticleInputSchema },
   output: { schema: EventSummarySchema },
-  model: 'googleai/gemini-1.5-pro-latest',
+  model: 'googleai/gemini-2.5-pro',
   prompt: `You are a news analyst for a social deduction and strategy game. Your job is to identify the most dramatic, important, and interesting events from a raw list of daily occurrences. Focus on betrayals, major victories, significant punishments, ongoing rivalries, and surprising outcomes.
 
 Today's Date: {{{date}}}
@@ -99,7 +99,7 @@ const writerPrompt = ai.definePrompt({
   name: 'newsArticleWriter',
   input: { schema: z.object({ date: z.string(), summary: EventSummarySchema, directive: z.string().optional() }) },
   output: { schema: DraftArticleSchema },
-  model: 'googleai/gemini-1.5-pro-latest', // Use a more powerful model for creative writing
+  model: 'googleai/gemini-2.5-pro', // Use a more powerful model for creative writing
   prompt: `You are a sarcastic and witty journalist for a game world's newspaper called "بطابيطو اليوم". Your audience loves drama, satire, and humor. Write a news article in Arabic based on the provided summary of today's events.
 
 Today's Date: {{{date}}}
