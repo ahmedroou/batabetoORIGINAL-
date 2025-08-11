@@ -217,9 +217,7 @@ export async function revealCard(gameId: string, playerId: string, cardText: str
         const card = cards[cardIndex];
         if (card.revealed) return;
 
-        // Create a new card object with revealed set to true
         const newCard = { ...card, revealed: true };
-        // Create a new cards array with the updated card
         const newCards = [...cards.slice(0, cardIndex), newCard, ...cards.slice(cardIndex + 1)];
         
         let updates: any = {
@@ -247,6 +245,7 @@ export async function revealCard(gameId: string, playerId: string, cardText: str
             turnShouldEnd = true;
         }
 
+        // Check for win AFTER revealing the current card but BEFORE ending the turn
         const winCheckResult = checkWinCondition(newCards);
         if (winCheckResult) {
             winner = winCheckResult;
@@ -256,13 +255,18 @@ export async function revealCard(gameId: string, playerId: string, cardText: str
             updates.gameState = 'board_reveal';
             updates.gameResult = winner;
             updates['wordWarState.timerEndsAt'] = deleteField();
-            gameDataForLeagueUpdate = { ...game, ...updates };
-        } else if (turnShouldEnd || guessesLeft <= 0) {
+            gameDataForLeagueUpdate = { ...game, ...updates, gameResult: winner }; // Capture state for league update
+            transaction.update(gameRef, updates);
+            return; // End execution here
+        } 
+        
+        if (turnShouldEnd || guessesLeft <= 0) {
             updates.gameState = 'guide_turn';
             updates['wordWarState.turn'] = wwState.turn === 'red' ? 'blue' : 'red';
             updates['wordWarState.currentHint'] = null;
             updates['wordWarState.guessesLeft'] = 0;
             updates['wordWarState.suspicions'] = {};
+            updates['wordWarState.timerEndsAt'] = deleteField();
         } else {
             updates['wordWarState.guessesLeft'] = guessesLeft;
         }
