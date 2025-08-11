@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -278,6 +277,7 @@ export interface Player {
   isReady?: boolean; 
   temporaryTitle?: string | null;
   bankruptAt?: Timestamp;
+  color?: string; // e.g. '#8B5CF6'
 }
 
 export interface Humiliation {
