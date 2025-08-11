@@ -1,6 +1,6 @@
-
 "use client";
 
+import { useState } from 'react';
 import type { Game, Player } from '@/types';
 import { GameBoard } from './GameBoard';
 import { PlayerHUD } from './PlayerHUD';
@@ -18,6 +18,8 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
 
     const es = game.educatedMerchantState;
     if (!es) return <div>جاري تحميل حالة اللعبة...</div>;
+    
+    const [diceRollResult, setDiceRollResult] = useState<number | null>(null);
 
     const isMyTurn = es.turnOrder[es.currentTurnIndex] === self.id;
     const canRoll = game.gameState === 'rolling' && isMyTurn;
@@ -45,9 +47,13 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
                 <GameBoard 
                     board={es.board || []} 
                     players={game.players}
+                    gameId={game.id}
+                    diceRoll={game.gameState === 'movement' ? es.lastDiceRoll || null : null}
+                    isMyTurn={isMyTurn}
+                    activePlayerId={es.turnOrder[es.currentTurnIndex]}
                 />
                 
-                {canRoll && <DiceRoll gameId={game.id} selfId={self.id} />}
+                {canRoll && <DiceRoll gameId={game.id} selfId={self.id} onRollComplete={setDiceRollResult} />}
                 {showPropertyInteraction && <PropertyCard game={game} self={self} />}
                 {showQuestion && <QuestionModal game={game} self={self} />}
 

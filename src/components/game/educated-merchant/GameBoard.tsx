@@ -1,47 +1,44 @@
-
 "use client";
 
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Player, Property } from '@/types';
-import { motion } from 'framer-motion';
+import { motion, useAnimate } from 'framer-motion';
 import { PlayerAvatar } from '../PlayerAvatar';
-import { Home, Building2, CircleDollarSign, Gavel } from 'lucide-react';
+import { Home, Building2, Gavel } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { handlePropertyAction } from '@/lib/actions/educated-merchant';
 
 interface GameBoardProps {
     board: Property[];
     players: Player[];
+    gameId: string;
+    diceRoll: number | null;
+    isMyTurn: boolean;
+    activePlayerId: string;
 }
 
-const TILE_SIZE_LG = 'w-28 h-28'; // For large screens
-const TILE_SIZE_MD = 'w-24 h-24'; // For medium screens
-const TILE_SIZE_SM = 'w-20 h-20'; // For small screens
+const TILE_SIZE_LG = 112; // w-28
+const TILE_SIZE_MD = 96;  // w-24
+const TILE_SIZE_SM = 80;  // w-20
+const TILE_GAP = 4;       // gap-1
 
-const getPlayerColor = (playerId: string, players: Player[]) => {
-    const index = players.findIndex(p => p.id === playerId);
-    const colors = ['#EF4444', '#3B82F6', '#22C55E', '#EAB308']; // red, blue, green, yellow
-    return colors[index % colors.length];
-};
+const Tile = React.forwardRef<HTMLDivElement, { property: Property }>(({ property }, ref) => {
+    const ownerColor = null; // Owner color logic can be added later if needed
 
-const Tile = ({ property, playersOnTile, allPlayers }: { property: Property, playersOnTile: Player[], allPlayers: Player[] }) => {
-    const ownerColor = property.ownerId ? getPlayerColor(property.ownerId, allPlayers) : null;
-    
     return (
-        <div className={cn(
-            'relative rounded-lg border-2 flex flex-col items-center justify-center text-center p-1 transition-all duration-300',
-            TILE_SIZE_SM, `md:${TILE_SIZE_MD}`, `lg:${TILE_SIZE_LG}`,
-            ownerColor ? 'shadow-lg' : 'bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-700'
-        )} style={{ borderColor: ownerColor || undefined }}>
-            
-            <div className="absolute top-1 right-1 flex -space-x-2">
-                {playersOnTile.map(p => (
-                    <PlayerAvatar key={p.id} avatarId={p.avatarId} className="w-6 h-6 rounded-full border-2 border-white" />
-                ))}
-            </div>
-
+        <div 
+            ref={ref}
+            className={cn(
+                'relative rounded-lg border-2 flex flex-col items-center justify-center text-center p-1 transition-all duration-300 w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28',
+                ownerColor ? 'shadow-lg' : 'bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-700'
+            )} 
+            style={{ borderColor: ownerColor || undefined }}
+            id={`tile-${property.id}`}
+        >
             <div className="flex-grow flex flex-col items-center justify-center">
-                 {property.type === 'start' && <Home className="w-8 h-8 text-green-500"/>}
-                 {property.type === 'property' && <Building2 className="w-8 h-8 text-gray-500"/>}
-                 {property.type === 'fine' && <Gavel className="w-8 h-8 text-red-500"/>}
+                {property.type === 'start' && <Home className="w-8 h-8 text-green-500"/>}
+                {property.type === 'property' && <Building2 className="w-8 h-8 text-gray-500"/>}
+                {property.type === 'fine' && <Gavel className="w-8 h-8 text-red-500"/>}
                 <p className="text-xs font-bold truncate w-full mt-1">{property.name}</p>
                 {property.type === 'property' && property.price > 0 && <p className="text-xs font-semibold text-green-600 dark:text-green-400">{property.price} د.ع</p>}
                 {property.type === 'fine' && property.fineAmount && <p className="text-xs font-semibold text-red-600 dark:text-red-400">{property.fineAmount} د.ع</p>}
@@ -51,59 +48,140 @@ const Tile = ({ property, playersOnTile, allPlayers }: { property: Property, pla
             )}
         </div>
     );
-};
+});
+Tile.displayName = 'Tile';
 
-export function GameBoard({ board, players }: GameBoardProps) {
-    if (!board || board.length === 0) {
-        return <div className="text-center">جاري تحميل اللوحة...</div>;
-    }
 
-    const boardSize = Math.sqrt(board.length);
+export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId }: GameBoardProps) {
+    const gridRef = useRef<HTMLDivElement>(null);
+    const tileRefs = useRef<Record<number, HTMLDivElement | null>>({});
+    const [tilePositions, setTilePositions] = useState<Record<number, {x: number, y: number}>>({});
+    const [playerScopes, setPlayerScopes] = useState<Record<string, any>>({});
+
     const sideLength = Math.ceil(board.length / 4) + 1;
 
+    // Calculate and store tile positions on mount and resize
+    useEffect(() => {
+        const calculatePositions = () => {
+            if (!gridRef.current) return;
+            const gridRect = gridRef.current.getBoundingClientRect();
+            const newPositions: Record<number, { x: number, y: number }> = {};
+            board.forEach(property => {
+                const tileEl = tileRefs.current[property.id];
+                if (tileEl) {
+                    const tileRect = tileEl.getBoundingClientRect();
+                    newPositions[property.id] = {
+                        x: tileRect.left - gridRect.left,
+                        y: tileRect.top - gridRect.top
+                    };
+                }
+            });
+            setTilePositions(newPositions);
+        };
 
-    const getTilePosition = (index: number) => {
-        const perimeter = (sideLength - 1) * 4;
-        const effectiveIndex = index % perimeter;
+        calculatePositions();
+        window.addEventListener('resize', calculatePositions);
+        return () => window.removeEventListener('resize', calculatePositions);
+    }, [board]);
 
-        if (effectiveIndex < sideLength) { // Top row
-            return { row: 0, col: effectiveIndex };
-        }
-        if (effectiveIndex < sideLength * 2 - 1) { // Right col
-            return { row: effectiveIndex - (sideLength - 1), col: sideLength - 1 };
-        }
-        if (effectiveIndex < sideLength * 3 - 2) { // Bottom row
-            return { row: sideLength - 1, col: sideLength - 1 - (effectiveIndex - (sideLength * 2 - 2)) };
-        }
-        // Left col
-        return { row: sideLength - 1 - (effectiveIndex - (sideLength * 3 - 3)), col: 0 };
-    };
+    // Animate player movement
+    useEffect(() => {
+        const movePlayer = async () => {
+            if (diceRoll === null || !isMyTurn || Object.keys(tilePositions).length === 0) return;
+            
+            const player = players.find(p => p.id === activePlayerId);
+            const [scope, animate] = playerScopes[activePlayerId] || [];
+
+            if (!player || !scope || !animate) return;
+            
+            const startPos = player.position;
+            const sequence = [];
+            for (let i = 1; i <= diceRoll; i++) {
+                const nextPosIndex = (startPos + i) % board.length;
+                const nextPosCoords = tilePositions[nextPosIndex];
+                if (nextPosCoords) {
+                    sequence.push(
+                        animate(scope, { x: nextPosCoords.x + 20, y: nextPosCoords.y + 20 }, { duration: 0.4, type: 'spring', stiffness: 200, damping: 15 })
+                    );
+                }
+            }
+
+            await Promise.all(sequence);
+            
+            // After animation, trigger the next game logic step
+            await handlePropertyAction(gameId, activePlayerId);
+        };
+
+        movePlayer();
+    }, [diceRoll, isMyTurn, tilePositions, players, activePlayerId, playerScopes, board.length, gameId]);
     
-    const grid: (Property | null)[][] = Array(sideLength).fill(null).map(() => Array(sideLength).fill(null));
-    board.forEach((property, index) => {
-        const { row, col } = getTilePosition(index);
-        if (grid[row] && grid[row][col] === null) {
-            grid[row][col] = property;
-        }
-    });
+    // Function to render the board grid
+    const renderGrid = () => {
+        const grid: (Property | null)[][] = Array(sideLength).fill(null).map(() => Array(sideLength).fill(null));
+        
+        board.forEach((property, index) => {
+            const getTilePosition = (idx: number) => {
+                const perimeter = (sideLength - 1) * 4;
+                const effectiveIndex = idx % perimeter;
+                if (effectiveIndex < sideLength) return { row: 0, col: effectiveIndex };
+                if (effectiveIndex < sideLength * 2 - 1) return { row: effectiveIndex - (sideLength - 1), col: sideLength - 1 };
+                if (effectiveIndex < sideLength * 3 - 2) return { row: sideLength - 1, col: sideLength - 1 - (effectiveIndex - (sideLength * 2 - 2)) };
+                return { row: sideLength - 1 - (effectiveIndex - (sideLength * 3 - 3)), col: 0 };
+            };
+            const { row, col } = getTilePosition(index);
+            if (grid[row] && grid[row][col] === null) {
+                grid[row][col] = property;
+            }
+        });
+
+        return grid.map((row, rowIndex) => (
+            row.map((property, colIndex) => {
+                if (property === null) {
+                    if (rowIndex > 0 && rowIndex < sideLength - 1 && colIndex > 0 && colIndex < sideLength - 1) {
+                        return <div key={`${rowIndex}-${colIndex}`} className="w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28" />;
+                    }
+                    return null;
+                }
+                return (
+                    <Tile
+                        key={property.id}
+                        property={property}
+                        ref={el => tileRefs.current[property.id] = el}
+                    />
+                );
+            })
+        ));
+    };
 
     return (
-        <div className="p-4 bg-gray-300 dark:bg-gray-800/50 rounded-2xl shadow-2xl">
-            <div className="grid gap-1" style={{gridTemplateColumns: `repeat(${sideLength}, min-content)`}}>
-                {grid.map((row, rowIndex) => (
-                    row.map((property, colIndex) => {
-                         if (property === null) {
-                             // Render empty space for the center
-                            if (rowIndex > 0 && rowIndex < sideLength - 1 && colIndex > 0 && colIndex < sideLength - 1) {
-                                return <div key={`${rowIndex}-${colIndex}`} className={cn(TILE_SIZE_SM, `md:${TILE_SIZE_MD}`, `lg:${TILE_SIZE_LG}`)} />;
-                            }
-                            return null;
-                         }
-                        const playersOnTile = players.filter(p => p.position === property.id);
-                        return <Tile key={property.id} property={property} playersOnTile={playersOnTile} allPlayers={players} />;
-                    })
-                ))}
+        <div className="p-2 md:p-4 bg-gray-300 dark:bg-gray-800/50 rounded-2xl shadow-2xl relative">
+            <div ref={gridRef} className="grid gap-1" style={{gridTemplateColumns: `repeat(${sideLength}, min-content)`}}>
+                {renderGrid()}
+            </div>
+             <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+                {players.map((player) => {
+                    const initialPos = tilePositions[player.position] || {x: 0, y: 0};
+                    // eslint-disable-next-line react-hooks/rules-of-hooks
+                    const [scope, animate] = useAnimate();
+                    
+                    // eslint-disable-next-line react-hooks/rules-of-hooks
+                    useEffect(() => {
+                        setPlayerScopes(prev => ({...prev, [player.id]: [scope, animate]}));
+                    }, [scope, animate, player.id]);
+
+                    return (
+                        <motion.div
+                            key={player.id}
+                            ref={scope}
+                            className="absolute z-10"
+                            initial={{ x: initialPos.x + 20, y: initialPos.y + 20 }}
+                        >
+                            <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10 md:w-12 md:h-12 border-2 rounded-full shadow-lg" />
+                        </motion.div>
+                    );
+                })}
             </div>
         </div>
     );
 }
+

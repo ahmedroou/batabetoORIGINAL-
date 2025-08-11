@@ -1,8 +1,7 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, collection, getDocs, query, updateDoc, arrayUnion, increment, FieldValue } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, collection, getDocs, query, updateDoc, arrayUnion, increment, FieldValue, deleteField } from 'firebase/firestore';
 import type { Game, Player, Property, EducatedMerchantQuestion } from '@/types';
 import { shuffle } from './helpers';
 
@@ -123,28 +122,25 @@ export async function rollDice(gameId: string, playerId: string): Promise<{ succ
             const oldPosition = game.players[playerIndex].position;
             const newPosition = (oldPosition + diceResult) % BOARD_SIZE;
 
-            const updatedPlayers = [...game.players];
-            updatedPlayers[playerIndex].position = newPosition;
-            
             let updatedBalances = { ...game.playerScores };
             let newActivityLog = [...(es.activityLog || [])];
-            newActivityLog.push(`${updatedPlayers[playerIndex].name} رمى النرد وحصل على ${diceResult}.`);
+            newActivityLog.push(`${game.players[playerIndex].name} رمى النرد وحصل على ${diceResult}.`);
 
             if (newPosition < oldPosition) { // Passed start
                 updatedBalances[playerId] = (updatedBalances[playerId] || 0) + PASS_START_BONUS;
-                newActivityLog.push(`${updatedPlayers[playerIndex].name} مر بنقطة البداية وحصل على ${PASS_START_BONUS} د.ع.`);
+                newActivityLog.push(`${game.players[playerIndex].name} مر بنقطة البداية وحصل على ${PASS_START_BONUS} د.ع.`);
             }
 
             transaction.update(gameRef, {
-                players: updatedPlayers,
+                // We DO NOT update player position here. The client will animate it.
+                // We just store the dice roll and change state.
                 playerScores: updatedBalances,
+                gameState: 'movement',
                 'educatedMerchantState.lastDiceRoll': diceResult,
                 'educatedMerchantState.activityLog': newActivityLog
             });
         });
         
-        await handlePropertyAction(gameId, playerId);
-
         return { success: true, diceResult };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -158,10 +154,19 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         if(!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
 
-        const player = game.players.find(p => p.id === playerId);
-        const property = game.educatedMerchantState?.board.find(p => p.id === player?.position);
+        const playerIndex = game.players.findIndex(p => p.id === playerId);
+        const oldPosition = game.players[playerIndex].position;
+        const newPosition = (oldPosition + (game.educatedMerchantState?.lastDiceRoll || 0)) % BOARD_SIZE;
+
+        const updatedPlayers = [...game.players];
+        updatedPlayers[playerIndex].position = newPosition;
+        
+        const property = game.educatedMerchantState?.board.find(p => p.id === newPosition);
         
         let newActivityLog = [...(game.educatedMerchantState?.activityLog || [])];
+
+        // Update player position first
+        transaction.update(gameRef, { players: updatedPlayers });
 
         if (!property || property.type === 'start') {
             await endTurn(gameId, playerId, transaction);
@@ -170,7 +175,7 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
 
         if (property.type === 'fine') {
             const fine = property.fineAmount || 0;
-            newActivityLog.push(`${player?.name} دفع غرامة بقيمة ${fine} د.ع.`);
+            newActivityLog.push(`${updatedPlayers[playerIndex].name} دفع غرامة بقيمة ${fine} د.ع.`);
             transaction.update(gameRef, { 
                 [`playerScores.${playerId}`]: increment(-fine),
                 'educatedMerchantState.activityLog': newActivityLog,
@@ -184,17 +189,16 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
             let playerBalance = game.playerScores?.[playerId] || 0;
             const rent = property.rent;
             const owner = game.players.find(p => p.id === property.ownerId);
-            newActivityLog.push(`${player?.name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${owner?.name}.`);
+            newActivityLog.push(`${updatedPlayers[playerIndex].name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${owner?.name}.`);
 
             if (playerBalance < rent) {
-                const playerIndex = game.players.findIndex(p => p.id === playerId);
-                if (playerIndex > -1) {
-                    const updatedPlayers = [...game.players];
-                    updatedPlayers[playerIndex].status = 'bankrupt';
-                    updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
+                const bankruptPlayerIndex = updatedPlayers.findIndex(p => p.id === playerId);
+                if (bankruptPlayerIndex > -1) {
+                    updatedPlayers[bankruptPlayerIndex].status = 'bankrupt';
+                    updatedPlayers[bankruptPlayerIndex].bankruptAt = Timestamp.now();
                      transaction.update(gameRef, { 
                          players: updatedPlayers,
-                         'educatedMerchantState.activityLog': [...newActivityLog, `${player?.name} أفلس!`],
+                         'educatedMerchantState.activityLog': [...newActivityLog, `${updatedPlayers[playerIndex].name} أفلس!`],
                      });
                 }
             } else {
@@ -331,13 +335,17 @@ export async function endTurn(gameId: string, playerId: string, existingTransact
         if (newRound > maxRounds || nonBankruptPlayers.length <= 1) {
              nextGameState = 'final_results';
              const winner = nonBankruptPlayers.sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0))[0];
-             transaction.update(gameRef, { gameResult: { winner: winner?.id || 'game_over', message: 'انتهت اللعبة!' }});
+             transaction.update(gameRef, { 
+                 gameResult: { winner: winner?.id || 'game_over', message: 'انتهت اللعبة!' },
+                 'educatedMerchantState.lastDiceRoll': deleteField(),
+             });
         }
 
         transaction.update(gameRef, {
             gameState: nextGameState,
             round: newRound,
             'educatedMerchantState.currentTurnIndex': nextIndex,
+             'educatedMerchantState.lastDiceRoll': deleteField(), // Clear dice roll for next turn
         });
     };
 
