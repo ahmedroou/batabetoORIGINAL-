@@ -1,9 +1,7 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, collection, getDocs, query, updateDoc, arrayUnion, increment, FieldValue, deleteField, where, limit, getDoc, setDoc } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, collection, getDocs, query, updateDoc, arrayUnion, increment, FieldValue, deleteField, where, limit, getDoc, setDoc, Transaction } from 'firebase/firestore';
 import type { Game, Player, Property, EducatedMerchantQuestion, GameState } from '@/types';
 import { shuffle } from './helpers';
 
@@ -168,17 +166,9 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
 
         const oldPosition = player.position;
         const newPosition = (oldPosition + (es.lastDiceRoll || 0)) % BOARD_SIZE;
-        const newProperty = es.board.find(p => p.id === newPosition);
-        if (!newProperty) throw new Error("Property not found on board.");
-
-        let ownerData: UserProfile | null = null;
-        if (newProperty.type === 'property' && newProperty.ownerId && newProperty.ownerId !== playerId) {
-            const ownerDoc = await transaction.get(doc(db, 'users', newProperty.ownerId));
-            if (ownerDoc.exists()) {
-                ownerData = ownerDoc.data() as UserProfile;
-            }
-        }
-        // --- END READ PHASE ---
+        
+        // Ensure you have a non-mutated copy for the endTurn call
+        const gameForNextStep = JSON.parse(JSON.stringify(game));
 
         // --- 2. LOGIC & WRITE PHASE ---
         const updatedPlayers = [...game.players];
@@ -194,13 +184,18 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
             newActivityLog.push(`${player.name} مر بنقطة البداية وحصل على ${PASS_START_BONUS} د.ع.`);
         }
 
+        const newProperty = es.board.find(p => p.id === newPosition);
+        if (!newProperty) throw new Error("Property not found on board.");
+
+        let updates: any = {
+            players: updatedPlayers,
+            playerScores: updatedBalances,
+            'educatedMerchantState.activityLog': newActivityLog,
+        };
+
         if (newProperty.type === 'start') {
-            transaction.update(gameRef, {
-                players: updatedPlayers,
-                playerScores: updatedBalances,
-                'educatedMerchantState.activityLog': newActivityLog
-            });
-            await endTurn(gameRef, game, playerId, transaction);
+            transaction.update(gameRef, updates);
+            await endTurn(transaction, gameRef, { ...gameForNextStep, ...updates });
             return;
         }
 
@@ -215,43 +210,55 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
             } else {
                  updatedBalances[playerId] -= fine;
             }
-            transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
-            await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances }, playerId, transaction);
+            updates.players = updatedPlayers;
+            updates.playerScores = updatedBalances;
+            updates['educatedMerchantState.activityLog'] = newActivityLog;
+            transaction.update(gameRef, updates);
+            await endTurn(transaction, gameRef, { ...gameForNextStep, ...updates });
             return;
         }
 
         if (newProperty.type === 'property') {
-            if (newProperty.ownerId && newProperty.ownerId !== playerId && ownerData) {
-                const rent = newProperty.rent;
-                newActivityLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${ownerData.name}.`);
+            if (newProperty.ownerId && newProperty.ownerId !== playerId) {
+                 const ownerDoc = await transaction.get(doc(db, 'users', newProperty.ownerId));
+                 if (ownerDoc.exists()) {
+                    const ownerData = ownerDoc.data() as UserProfile;
+                    const rent = newProperty.rent;
+                    newActivityLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${ownerData.name}.`);
 
-                if ((updatedBalances[playerId] || 0) < rent) {
-                    updatedPlayers[playerIndex].status = 'bankrupt';
-                    updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
-                    newActivityLog.push(`${player.name} أفلس!`);
-                    updatedBalances[newProperty.ownerId] += updatedBalances[playerId] || 0;
-                    updatedBalances[playerId] = 0;
-                } else {
-                     updatedBalances[playerId] -= rent;
-                     updatedBalances[newProperty.ownerId] += rent;
-                }
-                transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
-                await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances }, playerId, transaction);
+                    if ((updatedBalances[playerId] || 0) < rent) {
+                        updatedPlayers[playerIndex].status = 'bankrupt';
+                        updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
+                        newActivityLog.push(`${player.name} أفلس!`);
+                        updatedBalances[newProperty.ownerId] += updatedBalances[playerId] || 0;
+                        updatedBalances[playerId] = 0;
+                    } else {
+                         updatedBalances[playerId] -= rent;
+                         updatedBalances[newProperty.ownerId] += rent;
+                    }
+                    updates.players = updatedPlayers;
+                    updates.playerScores = updatedBalances;
+                    updates['educatedMerchantState.activityLog'] = newActivityLog;
+                    transaction.update(gameRef, updates);
+                    await endTurn(transaction, gameRef, { ...gameForNextStep, ...updates });
+                 } else {
+                    // Owner doesn't exist? Property should be free.
+                    updates.gameState = 'property_action';
+                    transaction.update(gameRef, updates);
+                 }
             } else if (!newProperty.ownerId) {
-                transaction.update(gameRef, { 
-                    gameState: 'property_action',
-                    players: updatedPlayers,
-                    playerScores: updatedBalances,
-                    'educatedMerchantState.activityLog': newActivityLog,
-                });
+                updates.gameState = 'property_action';
+                transaction.update(gameRef, updates);
             } else { // Landed on own property
                 newActivityLog.push(`${player.name} وقف على عقاره.`);
-                transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
-                await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances }, playerId, transaction);
+                updates['educatedMerchantState.activityLog'] = newActivityLog;
+                transaction.update(gameRef, updates);
+                await endTurn(transaction, gameRef, { ...gameForNextStep, ...updates });
             }
         }
     });
 }
+
 
 export async function buyPropertyAttempt(gameId: string, playerId: string): Promise<{success: boolean, error?: string}> {
      const gameRef = doc(db, 'games', gameId);
@@ -275,11 +282,7 @@ export async function buyPropertyAttempt(gameId: string, playerId: string): Prom
             // Deduct the full price immediately
             transaction.update(gameRef, {
                 [`playerScores.${playerId}`]: increment(-property.price),
-                'educatedMerchantState.activityLog': arrayUnion(`${player?.name} قرر شراء ${property.name} وخصم ${property.price} د.ع.`)
-            });
-
-            // Transition to question state
-            transaction.update(gameRef, {
+                'educatedMerchantState.activityLog': arrayUnion(`${player?.name} قرر شراء ${property.name} وخصم ${property.price} د.ع.`),
                 gameState: 'question',
                 'educatedMerchantState.currentQuestion': randomQuestion,
                 'educatedMerchantState.timerEndsAt': Timestamp.fromMillis(Date.now() + QUESTION_TIME_SECONDS * 1000),
@@ -311,34 +314,28 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             const propertyIndex = game.educatedMerchantState!.board.findIndex(p => p.id === property.id);
             let newActivityLog = [...(game.educatedMerchantState?.activityLog || [])];
             let updates: any = {};
-            let gameDataForNextStep = { ...game };
+            
+            const gameForNextStep = JSON.parse(JSON.stringify(game));
 
             if (isCorrect) {
                 newActivityLog.push(`${player?.name} أجاب بشكل صحيح وامتلك ${property.name}.`);
                 updates[`educatedMerchantState.board.${propertyIndex}.ownerId`] = playerId;
+                gameForNextStep.educatedMerchantState.board[propertyIndex].ownerId = playerId;
             } else {
                 const refundAmount = Math.floor(property.price * 0.25);
                 newActivityLog.push(`${player?.name} أجاب بشكل خاطئ وخسر جزءًا من ماله! استرد ${refundAmount} د.ع.`);
                 updates[`playerScores.${playerId}`] = increment(refundAmount);
+                gameForNextStep.playerScores[playerId] = (gameForNextStep.playerScores[playerId] || 0) + refundAmount;
             }
 
             updates['educatedMerchantState.currentQuestion'] = deleteField();
             updates['educatedMerchantState.timerEndsAt'] = deleteField();
             updates['educatedMerchantState.activityLog'] = newActivityLog;
-
-            // Apply updates to the game object for the next function call
-            gameDataForNextStep.educatedMerchantState!.activityLog = newActivityLog;
-            if(updates[`playerScores.${playerId}`]) {
-                gameDataForNextStep.playerScores![playerId] += (updates[`playerScores.${playerId}`] as any).operand; // Manually apply increment for next step
-            }
-             if(isCorrect) {
-                 gameDataForNextStep.educatedMerchantState!.board[propertyIndex].ownerId = playerId;
-             }
+            gameForNextStep.educatedMerchantState.activityLog = newActivityLog;
             
             transaction.update(gameRef, updates);
             
-            // Now, immediately end the turn in the same transaction, passing the already-read game state
-            await endTurn(gameRef, gameDataForNextStep, playerId, transaction);
+            await endTurn(transaction, gameRef, gameForNextStep);
          });
 
          return { success: true };
@@ -347,15 +344,11 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     }
 }
 
-export async function endTurn(gameRef: any, game: Game, playerId: string, transaction: Transaction) {
+async function endTurn(transaction: Transaction, gameRef: any, game: Game) {
     const es = game.educatedMerchantState;
     if (!es) throw new Error("Game state is not initialized.");
-
-    const currentTurnPlayerId = es.turnOrder[es.currentTurnIndex];
-    if (currentTurnPlayerId !== playerId) {
-        console.warn(`Player ${playerId} tried to end turn, but it's ${currentTurnPlayerId}'s turn.`);
-        return;
-    }
+    
+    const playerId = es.turnOrder[es.currentTurnIndex];
 
     const nonBankruptPlayers = game.players.filter(p => p.status !== 'bankrupt');
 
@@ -365,6 +358,7 @@ export async function endTurn(gameRef: any, game: Game, playerId: string, transa
              gameState: 'final_results',
              gameResult: { winner: winner?.id || 'game_over', message: 'انتهت اللعبة بإفلاس المنافسين!' },
              'educatedMerchantState.lastDiceRoll': deleteField(),
+             'educatedMerchantState.board': es.board, // Ensure board is not deleted
         });
         return;
     }
@@ -391,6 +385,7 @@ export async function endTurn(gameRef: any, game: Game, playerId: string, transa
              gameState: 'final_results',
              gameResult: { winner: finalWinner?.id || 'game_over', message: 'انتهت الجولات!' },
              'educatedMerchantState.lastDiceRoll': deleteField(),
+             'educatedMerchantState.board': es.board,
          });
          return;
     }
@@ -400,5 +395,6 @@ export async function endTurn(gameRef: any, game: Game, playerId: string, transa
         round: newRound,
         'educatedMerchantState.currentTurnIndex': nextIndex,
         'educatedMerchantState.lastDiceRoll': deleteField(),
+        'educatedMerchantState.board': es.board,
     });
 }
