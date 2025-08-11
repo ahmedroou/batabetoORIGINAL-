@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import type { Challenge, ChallengePrize, UserProfile } from '@/types';
+import type { Challenge, ChallengePrize, UserProfile, EntryFee } from '@/types';
 import { getChallenges, joinChallenge, getChallengeDetails } from '@/lib/actions/challenges';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,8 +17,9 @@ import { cn } from '@/lib/utils';
 import { GAME_TYPE_NAMES } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent as AlertDialogContentAlt, AlertDialogDescription as AlertDialogDescriptionAlt, AlertDialogFooter as AlertDialogFooterAlt, AlertDialogHeader as AlertDialogHeaderAlt, AlertDialogTitle as AlertDialogTitleAlt } from '@/components/ui/alert-dialog';
 
 
 const PRIZE_ICONS: Record<ChallengePrize['type'], React.ElementType> = {
@@ -109,10 +111,25 @@ const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challen
     )
 }
 
+const EntryFeeDisplay = ({ entryFee }: { entryFee?: EntryFee }) => {
+    if (!entryFee || entryFee.value <= 0) return null;
+    
+    const Icon = entryFee.type === 'coins' ? CircleDollarSign : Trophy;
+    const text = entryFee.type === 'coins' ? 'كوينز' : 'نقاط صدارة';
+    
+    return (
+        <div className="absolute bottom-2 right-2 flex items-center gap-1 text-xs bg-yellow-900/70 text-yellow-200 px-2 py-1 rounded-full backdrop-blur-sm">
+            <Icon className="w-3 h-3" />
+            <span>{entryFee.value} {text}</span>
+        </div>
+    );
+};
+
 const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: number; }) => {
     const { user, userProfile } = useAuth();
     const { toast } = useToast();
     const [isJoining, setIsJoining] = useState(false);
+    const [isConfirmingJoin, setIsConfirmingJoin] = useState(false);
     const [timeLeft, setTimeLeft] = useState('');
     const topThree = challenge.topParticipants || [];
 
@@ -145,6 +162,7 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
             toast({ title: "خطأ في الانضمام", description: result.error, variant: 'destructive' });
         }
         setIsJoining(false);
+        setIsConfirmingJoin(false);
     };
 
     const cardVariants = {
@@ -163,9 +181,10 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
     return (
         <motion.div variants={cardVariants} initial="hidden" animate="visible">
             <Card className={cn(
-                "h-full flex flex-col bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20",
+                "h-full flex flex-col bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20 relative",
                 isEnded && "opacity-60 bg-gray-900/70 border-gray-700/50"
                 )}>
+                <EntryFeeDisplay entryFee={challenge.entryFee} />
                 <CardHeader>
                     <div className="flex justify-between items-start">
                         <CardTitle className="text-2xl text-purple-300">{challenge.title}</CardTitle>
@@ -231,10 +250,31 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
                             </Button>
                         }/>
                     </div>
-                     <Button onClick={handleJoin} disabled={isJoining || isParticipant || isEnded} className="w-full bg-purple-600 hover:bg-purple-700">
+                     <Button onClick={() => setIsConfirmingJoin(true)} disabled={isJoining || isParticipant || isEnded} className="w-full bg-purple-600 hover:bg-purple-700">
                          {isJoining ? <Loader2 className="animate-spin" /> : isParticipant ? 'أنت مشارك' : isEnded ? 'انتهت البطولة' : 'انضم للبطولة'}
                      </Button>
                 </CardFooter>
+                 <AlertDialog open={isConfirmingJoin} onOpenChange={setIsConfirmingJoin}>
+                    <AlertDialogContentAlt>
+                        <AlertDialogHeaderAlt>
+                            <AlertDialogTitleAlt>تأكيد الانضمام إلى البطولة</AlertDialogTitleAlt>
+                            <AlertDialogDescriptionAlt>
+                                هل أنت متأكد من رغبتك في الانضمام إلى بطولة "{challenge.title}"؟
+                                {challenge.entryFee && challenge.entryFee.value > 0 && (
+                                    <span className="block mt-2 font-bold text-yellow-500">
+                                        سيتم خصم {challenge.entryFee.value} {challenge.entryFee.type === 'coins' ? 'كوينز' : 'نقاط صدارة'} من رصيدك.
+                                    </span>
+                                )}
+                            </AlertDialogDescriptionAlt>
+                        </AlertDialogHeaderAlt>
+                        <AlertDialogFooterAlt>
+                            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleJoin} disabled={isJoining} className="bg-purple-600 hover:bg-purple-700">
+                                {isJoining ? <Loader2 className="animate-spin" /> : 'تأكيد الانضمام'}
+                            </AlertDialogAction>
+                        </AlertDialogFooterAlt>
+                    </AlertDialogContentAlt>
+                 </AlertDialog>
             </Card>
         </motion.div>
     );

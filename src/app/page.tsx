@@ -20,10 +20,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
 import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, getChallenges, joinChallenge } from "@/lib/actions/user";
 import { doc, onSnapshot, collection, query, where, orderBy, Timestamp, limit } from "firebase/firestore";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Game, SocialRank, UserProfile, League, Mail, GameKing, Challenge, ChallengePrize } from '@/types';
+import type { Game, SocialRank, UserProfile, League, Mail, GameKing, Challenge, ChallengePrize, EntryFee } from '@/types';
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
@@ -61,6 +61,22 @@ const gameCards = [
     { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات الصحيحة لتفوز بالمزاد أو تخاطر بالعقوبة.' },
 ];
 
+const EntryFeeDisplay = ({ entryFee }: { entryFee?: EntryFee }) => {
+    if (!entryFee || entryFee.value <= 0) {
+        return <p className="text-lg text-green-400 font-bold">انضمام مجاني!</p>;
+    }
+    const Icon = entryFee.type === 'coins' ? CircleDollarSign : Trophy;
+    const text = entryFee.type === 'coins' ? 'كوينز' : 'نقاط صدارة';
+    return (
+        <div className="flex items-center justify-center gap-2 p-2 rounded-lg bg-yellow-900/50">
+            <Icon className="w-6 h-6 text-yellow-300"/>
+            <p className="text-lg font-bold text-yellow-200">
+                رسوم الدخول: {entryFee.value} {text}
+            </p>
+        </div>
+    )
+}
+
 const NewChallengeDialog = ({ challenge, isOpen, onOpenChange, onJoin }: { challenge: Challenge | null, isOpen: boolean, onOpenChange: (open: boolean) => void, onJoin: (challengeId: string) => Promise<any> }) => {
     const { toast } = useToast();
     const [isJoining, setIsJoining] = useState(false);
@@ -90,9 +106,10 @@ const NewChallengeDialog = ({ challenge, isOpen, onOpenChange, onJoin }: { chall
                     <DialogTitle className="text-3xl text-purple-300">بطولة جديدة انطلقت!</DialogTitle>
                     <DialogDescription className="text-gray-300 text-xl font-bold">{challenge.title}</DialogDescription>
                 </DialogHeader>
-                <div className="space-y-2 text-center">
+                <div className="space-y-4 text-center">
                     <p>الهدف: <span className="font-bold text-amber-300">{challenge.targetPoints} نقطة صدارة</span></p>
                     <p>اللعبة: <span className="font-bold text-amber-300">{challenge.specificGameType === 'all' ? 'كل الألعاب' : GAME_TYPE_NAMES[challenge.specificGameType as Game['gameType']]}</span></p>
+                    <EntryFeeDisplay entryFee={challenge.entryFee} />
                 </div>
                 <DialogFooter className="flex-col sm:flex-col sm:space-x-0 gap-2">
                     <Button onClick={handleJoinClick} disabled={isJoining} className="w-full bg-purple-600 hover:bg-purple-700">
