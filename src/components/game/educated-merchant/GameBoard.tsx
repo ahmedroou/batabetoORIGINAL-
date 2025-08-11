@@ -13,6 +13,7 @@ interface GameBoardProps {
   board: Property[];
   players: Player[];
   gameId: string;
+  gameState: GameState;
   diceRoll: number | null;
   isMyTurn: boolean;
   activePlayerId: string;
@@ -27,7 +28,7 @@ const Tile = React.forwardRef<
       ref={ref}
       className={cn(
         "relative rounded-lg border-2 flex flex-col items-center justify-center text-center p-1 transition-all duration-300 hover:scale-105 hover:shadow-primary/50",
-        "w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28", // Responsive sizes
+        "flex-shrink-0 flex-grow-0 basis-24", // Use flex-basis for responsive sizing
         ownerColor
           ? "shadow-lg"
           : "bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-700"
@@ -74,6 +75,7 @@ export function GameBoard({
   board,
   players,
   gameId,
+  gameState,
   diceRoll,
   isMyTurn,
   activePlayerId,
@@ -84,7 +86,6 @@ export function GameBoard({
     Record<number, { x: number; y: number }>
   >({});
   
-  // A map to hold animation controls for each player
   const playerAnimators = useMemo(() => new Map<string, ReturnType<typeof useAnimate>>(), []);
   players.forEach(p => {
       if (!playerAnimators.has(p.id)) {
@@ -102,7 +103,6 @@ export function GameBoard({
     [board.length]
   );
 
-  // حساب مواقع المربعات
   useEffect(() => {
     const calculatePositions = () => {
       if (!gridRef.current) return;
@@ -130,7 +130,6 @@ export function GameBoard({
     return () => resizeObserver.disconnect();
   }, [board]);
 
-  // تحريك اللاعبين خطوة بخطوة
   useEffect(() => {
     const movePlayer = async () => {
       if (diceRoll === null || !isMyTurn || Object.keys(tilePositions).length === 0)
@@ -160,11 +159,10 @@ export function GameBoard({
         }
       }
       
-      // Call the action to handle landing on the property
       await handlePropertyAction(gameId, activePlayerId);
     };
 
-    if(game.gameState === 'movement') {
+    if(gameState === 'movement') {
       movePlayer();
     }
   }, [
@@ -176,85 +174,64 @@ export function GameBoard({
     playerAnimators,
     board.length,
     gameId,
-    game.gameState
+    gameState
   ]);
 
-  // رسم اللوحة
   const renderGrid = () => {
-    const grid: (Property | null)[][] = Array(sideLength)
-      .fill(null)
-      .map(() => Array(sideLength).fill(null));
+    const gridRows: React.ReactNode[] = [];
+    const perimeterPositions = new Map<string, Property>();
 
     board.forEach((property, index) => {
-      const getTilePosition = (idx: number) => {
-        const perimeter = (sideLength - 1) * 4;
-        const effectiveIndex = idx % perimeter;
-        if (effectiveIndex < sideLength) return { row: 0, col: effectiveIndex };
-        if (effectiveIndex < sideLength * 2 - 1)
-          return { row: effectiveIndex - (sideLength - 1), col: sideLength - 1 };
-        if (effectiveIndex < sideLength * 3 - 2)
-          return {
-            row: sideLength - 1,
-            col: sideLength - 1 - (effectiveIndex - (sideLength * 2 - 2)),
-          };
-        return {
-          row: sideLength - 1 - (effectiveIndex - (sideLength * 3 - 3)),
-          col: 0,
+        const getTilePosition = (idx: number) => {
+            const perimeter = (sideLength - 1) * 4;
+            const effectiveIndex = idx % perimeter;
+            if (effectiveIndex < sideLength) return { row: 0, col: effectiveIndex };
+            if (effectiveIndex < sideLength * 2 - 1) return { row: effectiveIndex - (sideLength - 1), col: sideLength - 1 };
+            if (effectiveIndex < sideLength * 3 - 2) return { row: sideLength - 1, col: sideLength - 1 - (effectiveIndex - (sideLength * 2 - 2)) };
+            return { row: sideLength - 1 - (effectiveIndex - (sideLength * 3 - 3)), col: 0 };
         };
-      };
-      const { row, col } = getTilePosition(index);
-      if (grid[row] && grid[row][col] === null) {
-        grid[row][col] = property;
-      }
+        const { row, col } = getTilePosition(index);
+        perimeterPositions.set(`${row}-${col}`, property);
     });
 
-    return grid.map((row, rowIndex) =>
-      row.map((property, colIndex) => {
-        if (property === null) {
-          if (
-            rowIndex > 0 &&
-            rowIndex < sideLength - 1 &&
-            colIndex > 0 &&
-            colIndex < sideLength - 1
-          ) {
-            return (
-              <div
-                key={`${rowIndex}-${colIndex}`}
-                className="w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28 flex items-center justify-center"
-              >
-                {rowIndex === Math.floor(sideLength / 2) &&
-                  colIndex === Math.floor(sideLength / 2) && (
-                    <div className="text-center text-xl font-bold text-gray-700 dark:text-gray-300">
-                      التاجر المتعلم
+    for (let r = 0; r < sideLength; r++) {
+        const rowChildren: React.ReactNode[] = [];
+        for (let c = 0; c < sideLength; c++) {
+            const property = perimeterPositions.get(`${r}-${c}`);
+            if (property) {
+                const ownerColor = property.ownerId ? players.find((p) => p.id === property.ownerId)?.color : undefined;
+                rowChildren.push(
+                    <Tile
+                        key={property.id}
+                        property={property}
+                        ownerColor={ownerColor}
+                        ref={(el) => (tileRefs.current[property.id] = el)}
+                    />
+                );
+            } else if (r > 0 && r < sideLength - 1 && c > 0 && c < sideLength - 1) {
+                rowChildren.push(
+                     <div key={`${r}-${c}`} className="flex-shrink-0 flex-grow-0 basis-24 flex items-center justify-center">
+                        {r === Math.floor(sideLength / 2) && c === Math.floor(sideLength / 2) && (
+                            <div className="text-center text-xl font-bold text-gray-700 dark:text-gray-300">التاجر المتعلم</div>
+                        )}
                     </div>
-                  )}
-              </div>
-            );
-          }
-          return null;
+                );
+            }
         }
-        const ownerColor = property.ownerId
-          ? players.find((p) => p.id === property.ownerId)?.color
-          : undefined;
-
-        return (
-          <Tile
-            key={property.id}
-            property={property}
-            ownerColor={ownerColor}
-            ref={(el) => (tileRefs.current[property.id] = el)}
-          />
+        gridRows.push(
+            <div key={r} className="flex gap-1 justify-center">
+                {rowChildren}
+            </div>
         );
-      })
-    );
+    }
+    return gridRows;
   };
 
   return (
     <div className="p-1 md:p-2 bg-gray-300 dark:bg-gray-800/50 rounded-2xl shadow-2xl relative self-center">
       <div
         ref={gridRef}
-        className="grid gap-1"
-        style={{ gridTemplateColumns: `repeat(${sideLength}, min-content)` }}
+        className="flex flex-col gap-1"
       >
         {renderGrid()}
       </div>
@@ -282,7 +259,7 @@ export function GameBoard({
             >
               <PlayerAvatar
                 avatarId={player.avatarId}
-                className="w-8 h-8 md:w-10 md:h-10 border-2 rounded-full shadow-lg"
+                className="w-8 h-8 md:w-8 md:h-8 border-2 rounded-full shadow-lg"
               />
             </motion.div>
           );
@@ -291,4 +268,3 @@ export function GameBoard({
     </div>
   );
 }
-

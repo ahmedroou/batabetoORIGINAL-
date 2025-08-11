@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo } from "react";
@@ -41,7 +42,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
     return <FinalResults game={game} />;
   }
 
-  if (!es.board?.length) {
+  if (!es.board || es.board.length === 0) {
     return <div className="text-center p-6 text-lg">جاري تحميل لوحة اللعب...</div>;
   }
 
@@ -55,7 +56,8 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
               board={es.board}
               players={game.players}
               gameId={game.id}
-              diceRoll={game.gameState === "movement" ? es.lastDiceRoll ?? null : null}
+              gameState={game.gameState}
+              diceRoll={es.lastDiceRoll ?? null}
               isMyTurn={isMyTurn}
               activePlayerId={activePlayerId}
             />
@@ -71,7 +73,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
               transition={{ duration: 0.3 }}
-              className="absolute bottom-4"
+              className="absolute z-20 flex flex-col items-center justify-center"
             >
               <DiceRoll gameId={game.id} selfId={self.id} onRollComplete={() => {}} />
             </motion.div>
