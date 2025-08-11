@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createChallenge, updateChallenge, deleteChallenge, getAllChallengesForAdmin, finalizeChallenge } from '@/lib/actions/challenges';
-import { Game, GAME_TYPE_NAMES, ChallengePrize, Challenge } from '@/types';
+import { Game, GAME_TYPE_NAMES, ChallengePrize, Challenge, EntryFee } from '@/types';
 import { PlusCircle, Loader2, Trash2, Edit, Award, Play } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
 import { format } from 'date-fns';
@@ -41,7 +41,7 @@ const ChallengeForm = ({
   onSubmit,
   isSubmitting,
 }: {
-  initialData: Partial<Omit<Challenge, 'id' | 'createdAt' | 'participantIds'>> & {durationInHours?: number | string},
+  initialData: Partial<Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt'>> & {durationInHours?: number | string},
   onSubmit: (data: any) => void,
   isSubmitting: boolean
 }) => {
@@ -49,6 +49,7 @@ const ChallengeForm = ({
     const [durationHours, setDurationHours] = useState(String(initialData.durationInHours || '168'));
     const [targetPoints, setTargetPoints] = useState(String(initialData.targetPoints || '100'));
     const [specificGameType, setSpecificGameType] = useState<Game['gameType'] | 'all'>(initialData.specificGameType || 'all');
+    const [entryFee, setEntryFee] = useState<EntryFee>(initialData.entryFee || { type: 'coins', value: 0 });
     const [firstPlacePrizes, setFirstPlacePrizes] = useState<ChallengePrize[]>(initialData.firstPlacePrize || [{ type: 'coins', value: 5 }]);
     const [secondPlacePrizes, setSecondPlacePrizes] = useState<ChallengePrize[]>(initialData.secondPlacePrize || [{ type: 'coins', value: 50 }]);
     const [thirdPlacePrizes, setThirdPlacePrizes] = useState<ChallengePrize[]>(initialData.thirdPlacePrize || [{ type: 'coins', value: 25 }]);
@@ -58,6 +59,7 @@ const ChallengeForm = ({
         setDurationHours(String(initialData.durationInHours || '168'));
         setTargetPoints(String(initialData.targetPoints || '100'));
         setSpecificGameType(initialData.specificGameType || 'all');
+        setEntryFee(initialData.entryFee || { type: 'coins', value: 0 });
         setFirstPlacePrizes(initialData.firstPlacePrize || [{ type: 'coins', value: 5 }]);
         setSecondPlacePrizes(initialData.secondPlacePrize || [{ type: 'coins', value: 50 }]);
         setThirdPlacePrizes(initialData.thirdPlacePrize || [{ type: 'coins', value: 25 }]);
@@ -81,6 +83,7 @@ const ChallengeForm = ({
             durationInHours: Number(durationHours),
             targetPoints: Number(targetPoints),
             specificGameType,
+            entryFee: entryFee.value > 0 ? entryFee : null,
             firstPlacePrize: firstPlacePrizes.filter(p => p.value > 0),
             secondPlacePrize: secondPlacePrizes.filter(p => p.value > 0),
             thirdPlacePrize: thirdPlacePrizes.filter(p => p.value > 0),
@@ -118,6 +121,19 @@ const ChallengeForm = ({
                         ))}
                     </SelectContent>
                 </Select>
+            </div>
+             <div className="space-y-2 p-3 border rounded-lg bg-muted/50">
+                <Label className="font-semibold">رسوم الدخول (اختياري)</Label>
+                <div className="flex gap-2 items-center">
+                    <Select value={entryFee.type} onValueChange={(v) => setEntryFee({ ...entryFee, type: v as any })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="coins">كوينز</SelectItem>
+                            <SelectItem value="leaderboardPoints">نقاط صدارة</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Input type="text" inputMode="numeric" pattern="[0-9]*" value={entryFee.value} onChange={(e) => setEntryFee({ ...entryFee, value: Number(e.target.value) || 0 })} placeholder="القيمة (0 ليكون مجاني)" />
+                </div>
             </div>
 
             <div className="space-y-4 pt-4 border-t">
@@ -239,8 +255,8 @@ export default function ChallengesTab() {
     
     const getDurationInHours = (challenge: Challenge) => {
         if (!challenge.createdAt || !challenge.endsAt) return 168; // Default
-        const createdAtMs = (challenge.createdAt as Timestamp).toMillis();
-        const endsAtMs = (challenge.endsAt as any).toMillis();
+        const createdAtMs = (challenge.createdAt instanceof Timestamp ? challenge.createdAt.toMillis() : new Date(challenge.createdAt).getTime());
+        const endsAtMs = (challenge.endsAt instanceof Timestamp ? challenge.endsAt.toMillis() : new Date(challenge.endsAt).getTime());
         return Math.round((endsAtMs - createdAtMs) / (1000 * 60 * 60));
     }
 
@@ -255,7 +271,7 @@ export default function ChallengesTab() {
                 </CardHeader>
                 <CardContent>
                     <ChallengeForm
-                        initialData={editingChallenge ? { ...editingChallenge, durationInHours: getDurationInHours(editingChallenge) } : { title: '', durationInHours: '168', targetPoints: '100', specificGameType: 'all', firstPlacePrize: [{type:'coins', value: 5}], secondPlacePrize: [{type:'coins', value: 50}], thirdPlacePrize: [{type:'coins', value: 25}] } as any}
+                        initialData={editingChallenge ? { ...editingChallenge, durationInHours: getDurationInHours(editingChallenge) } : { title: '', durationInHours: '168', targetPoints: '100', specificGameType: 'all', firstPlacePrize: [{type:'coins', value: 5}], secondPlacePrize: [{type:'coins', value: 50}], thirdPlacePrize: [{type:'coins', value: 25}], entryFee: { type: 'coins', value: 0 } } as any}
                         onSubmit={editingChallenge ? handleUpdateChallenge : handleCreateChallenge}
                         isSubmitting={isSubmitting}
                     />
@@ -271,14 +287,15 @@ export default function ChallengesTab() {
                     {isFetching ? <div className="text-center"><Loader2 className="animate-spin"/></div> :
                         <div className="space-y-2 h-[60vh] overflow-y-auto">
                             {challenges.map(challenge => {
-                                const isEnded = new Date(challenge.endsAt) < new Date();
+                                const endsAtDate = challenge.endsAt instanceof Timestamp ? challenge.endsAt.toDate() : new Date(challenge.endsAt);
+                                const isEnded = endsAtDate < new Date();
                                 const isFinalized = !!challenge.winners;
                                 return (
                                 <div key={challenge.id} className={cn("p-2 rounded-md flex justify-between items-center", isEnded ? "bg-muted/50" : "bg-muted")}>
                                     <div>
                                         <p className="font-bold">{challenge.title}</p>
                                         <p className="text-xs text-muted-foreground">
-                                            {isFinalized ? "منتهية وموزعة الجوائز" : isEnded ? "انتهت - بانتظار توزيع الجوائز" : `تنتهي في: ${format(new Date(challenge.endsAt), 'd MMMM, h:mm a', {locale: ar})}`}
+                                            {isFinalized ? "منتهية وموزعة الجوائز" : isEnded ? "انتهت - بانتظار توزيع الجوائز" : `تنتهي في: ${format(endsAtDate, 'd MMMM, h:mm a', {locale: ar})}`}
                                         </p>
                                     </div>
                                     <div className="flex gap-1">

@@ -247,38 +247,11 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
 
             const updateData: Partial<Game> & {[key:string]: any} = {};
 
-            // Handle entry fee for challenges
-            if (game.challengeDetails?.entryFee && game.challengeDetails.entryFee.value > 0) {
-                const { type, value } = game.challengeDetails.entryFee;
-                const userCurrency = type === 'coins' ? playerDetails.coins : playerDetails.leaderboardPoints;
-                if (userCurrency < value) {
-                    throw new Error(`ليس لديك ما يكفي من ${type === 'coins' ? 'الكوينز' : 'نقاط الصدارة'} للانضمام.`);
-                }
-                 const userRef = doc(db, 'users', userId);
-                 transaction.update(userRef, { [type]: increment(-value) });
-            }
-            
             const updatedPlayers = [...game.players, newPlayer];
             const updatedPlayerUids = [...(game.playerUids || []), newPlayer.id];
             
             updateData.players = updatedPlayers;
             updateData.playerUids = updatedPlayerUids;
-
-            if (challengeId) {
-                const challengeRef = doc(db, 'challenges', challengeId);
-                transaction.update(challengeRef, { participantCount: increment(1) });
-                // Also update the player count in the challenge's room list
-                const challengeDoc = await transaction.get(challengeRef);
-                if (challengeDoc.exists()) {
-                    const challengeData = challengeDoc.data() as Challenge;
-                    const roomIndex = (challengeData.gameRoomIds || []).findIndex(r => r.id === gameId);
-                    if (roomIndex !== -1) {
-                        const newRoomIds = [...challengeData.gameRoomIds!];
-                        newRoomIds[roomIndex].playerCount = updatedPlayers.length;
-                        updateData['challengeDetails.gameRoomIds'] = newRoomIds;
-                    }
-                }
-            }
             
             if (['trap-answer', 'prison', 'behind-the-mask', 'word_war'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };

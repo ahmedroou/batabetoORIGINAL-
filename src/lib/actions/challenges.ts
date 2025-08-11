@@ -24,7 +24,7 @@ import type { Challenge, ChallengePrize, Game, UserProfile } from '@/types';
 import { sendSystemMail } from './user/mail';
 
 
-type CreateChallengeInput = Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt' | 'participantCount'> & { durationInHours: number };
+type CreateChallengeInput = Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt' | 'participantCount' | 'scores'> & { durationInHours: number };
 
 /**
  * Creates a new tournament-style challenge. Admin only.
@@ -117,6 +117,18 @@ export async function joinChallenge(challengeId: string, userId: string): Promis
             throw new Error("أنت مشترك بالفعل في هذه البطولة.");
         }
 
+        // Handle entry fee
+        if (challengeData.entryFee && challengeData.entryFee.value > 0) {
+            const { type, value } = challengeData.entryFee;
+            const userCurrency = type === 'coins' ? userData.coins : userData.leaderboardPoints;
+            if ((userCurrency || 0) < value) {
+                throw new Error(`ليس لديك ما يكفي من ${type === 'coins' ? 'الكوينز' : 'نقاط الصدارة'} للانضمام (المطلوب: ${value}).`);
+            }
+            // Deduct the fee
+            transaction.update(userRef, { [type]: increment(-value) });
+        }
+
+
         // Add user to challenge
         transaction.update(challengeRef, {
             participantIds: arrayUnion(userId),
@@ -145,18 +157,20 @@ export async function joinChallenge(challengeId: string, userId: string): Promis
  * @param {Partial<Challenge>} data - The data to update.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function updateChallenge(challengeId: string, data: Partial<Omit<Challenge, 'id' | 'createdAt'>> & {durationInHours?: number}): Promise<{ success: boolean; error?: string }> {
+export async function updateChallenge(challengeId: string, data: Partial<Omit<Challenge, 'id' | 'createdAt' | 'participantCount' | 'participantIds' | 'scores'>> & {durationInHours?: number}): Promise<{ success: boolean; error?: string }> {
     try {
         const challengeRef = doc(db, 'challenges', challengeId);
         let updateData: any = { ...data };
 
+        const docSnap = await getDoc(challengeRef);
+        if(!docSnap.exists()){
+            throw new Error("Challenge not found.");
+        }
+        const challenge = docSnap.data() as Challenge;
+        
         if (updateData.durationInHours) {
-            const docSnap = await getDoc(challengeRef);
-            if(docSnap.exists()){
-                const challenge = docSnap.data() as Challenge;
-                const createdAtMillis = (challenge.createdAt as Timestamp).toMillis();
-                updateData.endsAt = Timestamp.fromMillis(createdAtMillis + updateData.durationInHours * 60 * 60 * 1000);
-            }
+            const createdAtMillis = (challenge.createdAt as Timestamp).toMillis();
+            updateData.endsAt = Timestamp.fromMillis(createdAtMillis + updateData.durationInHours * 60 * 60 * 1000);
             delete updateData.durationInHours;
         }
 
@@ -225,24 +239,24 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
 
         const winners: Challenge['winners'] = {};
         let winnersCount = 0;
-        const batch = writeBatch(db);
-
-        const applyPrizes = (userId: string, prizes: ChallengePrize[]) => {
+        
+        const applyPrizes = async (userId: string, prizes: ChallengePrize[]) => {
             const userRef = doc(db, 'users', userId);
             const updates: { [key: string]: any } = {};
-            let mailBody = "تهانينا! لقد فزت بالجوائز التالية في بطولة: " + challengeData.title + "\n";
+            let mailBody = `تهانينا! لقد فزت بالجوائز التالية في بطولة: ${challengeData.title}\n\n`;
 
-            prizes.forEach(prize => {
+            for (const prize of prizes) {
                 updates[prize.type] = increment(prize.value);
                 mailBody += `- ${prize.value} ${prize.type}\n`;
-            });
-            batch.update(userRef, updates);
-            return sendSystemMail(userId, { subject: `🎉 لقد فزت في البطولة!`, body: mailBody });
+            }
+            
+            transaction.update(userRef, updates);
+            await sendSystemMail(userId, { subject: `🎉 لقد فزت في البطولة!`, body: mailBody });
         };
         
         if (sortedWinners.length > 0) {
             const firstPlace = sortedWinners[0];
-            const firstPlayerDoc = await getDoc(doc(db, 'users', firstPlace[0]));
+            const firstPlayerDoc = await transaction.get(doc(db, 'users', firstPlace[0]));
             if (firstPlayerDoc.exists()) {
                 winners.first = { id: firstPlace[0], name: firstPlayerDoc.data().name };
                 await applyPrizes(firstPlace[0], challengeData.firstPlacePrize);
@@ -252,7 +266,7 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         
         if (sortedWinners.length > 1) {
             const secondPlace = sortedWinners[1];
-            const secondPlayerDoc = await getDoc(doc(db, 'users', secondPlace[0]));
+             const secondPlayerDoc = await transaction.get(doc(db, 'users', secondPlace[0]));
              if (secondPlayerDoc.exists()) {
                 winners.second = { id: secondPlace[0], name: secondPlayerDoc.data().name };
                 await applyPrizes(secondPlace[0], challengeData.secondPlacePrize);
@@ -262,15 +276,13 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         
         if (sortedWinners.length > 2) {
             const thirdPlace = sortedWinners[2];
-            const thirdPlayerDoc = await getDoc(doc(db, 'users', thirdPlace[0]));
+            const thirdPlayerDoc = await transaction.get(doc(db, 'users', thirdPlace[0]));
             if (thirdPlayerDoc.exists()) {
                 winners.third = { id: thirdPlace[0], name: thirdPlayerDoc.data().name };
                 await applyPrizes(thirdPlace[0], challengeData.thirdPlacePrize);
                 winnersCount++;
             }
         }
-        
-        await batch.commit();
         
         transaction.update(challengeRef, { winners: winners });
 

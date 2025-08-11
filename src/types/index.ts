@@ -116,6 +116,11 @@ export type ChallengePrize = {
     value: number;
 };
 
+export type EntryFee = {
+    type: 'coins' | 'leaderboardPoints';
+    value: number;
+};
+
 export interface Challenge {
     id: string;
     title: string;
@@ -124,11 +129,13 @@ export interface Challenge {
     firstPlacePrize: ChallengePrize[];
     secondPlacePrize: ChallengePrize[];
     thirdPlacePrize: ChallengePrize[];
+    entryFee?: EntryFee;
     
     endsAt: Date;
     createdAt: Timestamp;
     participantIds: string[];
     participantCount: number;
+    scores: Record<string, number>;
     winners?: {
         first?: { id: string, name: string };
         second?: { id: string, name: string };
@@ -681,5 +688,3 @@ export interface PrivateChat {
     participants: string[];
     messages: PrivateChatMessage[];
 }
-
-    
