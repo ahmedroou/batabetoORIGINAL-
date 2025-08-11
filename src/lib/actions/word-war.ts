@@ -257,16 +257,17 @@ export async function revealCard(gameId: string, playerId: string, cardText: str
             updates['wordWarState.timerEndsAt'] = deleteField();
             gameDataForLeagueUpdate = { ...game, ...updates, gameResult: winner }; // Capture state for league update
             transaction.update(gameRef, updates);
-            return; // End execution here
+            return;
         } 
         
         if (turnShouldEnd || guessesLeft <= 0) {
+            const turnTime = game.wordWarState?.settings?.turnTime || 60;
             updates.gameState = 'guide_turn';
             updates['wordWarState.turn'] = wwState.turn === 'red' ? 'blue' : 'red';
             updates['wordWarState.currentHint'] = null;
             updates['wordWarState.guessesLeft'] = 0;
             updates['wordWarState.suspicions'] = {};
-            updates['wordWarState.timerEndsAt'] = deleteField();
+            updates['wordWarState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + turnTime * 1000);
         } else {
             updates['wordWarState.guessesLeft'] = guessesLeft;
         }
@@ -290,6 +291,7 @@ export async function endTurn(gameId: string, playerId: string) {
 
         const currentTeam = game.wordWarState.turn;
         const nextTeam = currentTeam === 'red' ? 'blue' : 'red';
+        const turnTime = game.wordWarState?.settings?.turnTime || 60;
 
         transaction.update(gameRef, {
             gameState: 'guide_turn',
@@ -297,7 +299,7 @@ export async function endTurn(gameId: string, playerId: string) {
             'wordWarState.currentHint': null,
             'wordWarState.guessesLeft': 0,
             'wordWarState.suspicions': {},
-            'wordWarState.timerEndsAt': deleteField(),
+            'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
         });
     });
 }
@@ -323,6 +325,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
         const currentTeam = game.wordWarState.turn;
         const nextTeam = currentTeam === 'red' ? 'blue' : 'red';
+        const turnTime = game.wordWarState?.settings?.turnTime || 60;
 
         transaction.update(gameRef, {
             gameState: 'guide_turn',
@@ -330,7 +333,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
             'wordWarState.currentHint': null,
             'wordWarState.guessesLeft': 0,
             'wordWarState.suspicions': {},
-            'wordWarState.timerEndsAt': deleteField(),
+            'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
         });
     });
 }
