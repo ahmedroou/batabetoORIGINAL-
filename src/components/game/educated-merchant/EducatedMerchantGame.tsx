@@ -9,7 +9,8 @@ import { DiceRoll } from './DiceRoll';
 import { PropertyCard } from './PropertyCard';
 import { QuestionModal } from './QuestionModal';
 import { FinalResults } from './FinalResults';
-import { Lobby } from './Lobby'; // Import the new Lobby component
+import { Lobby } from './Lobby';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface EducatedMerchantGameProps {
     game: Game;
@@ -38,7 +39,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
     }
 
     return (
-        <div className="w-full h-screen flex flex-col md:flex-row-reverse items-stretch p-2 gap-4 bg-gray-100 dark:bg-gray-900">
+        <div className="w-full h-screen flex flex-col md:flex-row p-2 gap-4 bg-gray-100 dark:bg-gray-900">
             {/* Player HUD */}
             <div className="w-full md:w-[350px] shrink-0">
                 <PlayerHUD 
@@ -51,14 +52,18 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
 
             {/* Game Board and Actions */}
             <div className="flex-grow flex flex-col items-center justify-center relative min-h-0">
-                <GameBoard 
-                    board={es.board || []} 
-                    players={game.players}
-                    gameId={game.id}
-                    diceRoll={game.gameState === 'movement' ? es.lastDiceRoll || null : null}
-                    isMyTurn={isMyTurn}
-                    activePlayerId={es.turnOrder[es.currentTurnIndex]}
-                />
+                 <ScrollArea className="w-full h-full">
+                    <div className="w-full h-full flex items-center justify-center p-4">
+                        <GameBoard 
+                            board={es.board || []} 
+                            players={game.players}
+                            gameId={game.id}
+                            diceRoll={game.gameState === 'movement' ? es.lastDiceRoll || null : null}
+                            isMyTurn={isMyTurn}
+                            activePlayerId={es.turnOrder[es.currentTurnIndex]}
+                        />
+                    </div>
+                </ScrollArea>
                 
                 {canRoll && <DiceRoll gameId={game.id} selfId={self.id} onRollComplete={() => {}} />}
                 {showPropertyInteraction && <PropertyCard game={game} self={self} />}
