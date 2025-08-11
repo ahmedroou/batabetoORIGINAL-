@@ -4,11 +4,8 @@
 
 /**
  * @fileoverview Actions specific to the "Trap Answer" game.
- * @version 3.2
- * @summary This version addresses multiple critical bugs to stabilize gameplay.
- * 1. Correctly advances to final results by fixing score update logic.
- * 2. Unifies answer and guess timers under a single admin setting.
- * 3. Implements intelligent dummy answer insertion, only adding them when necessary.
+ * @version 3.3
+ * @summary This version tracks AFK players across rounds for a potential cheater list.
  */
 
 import { db } from '@/lib/firebase';
@@ -87,6 +84,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
             'trapAnswerState.trickStats': { trickedBy: {}, trickedOthers: {} },
             'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + CATEGORY_SELECTION_TIME_S * 1000),
             'trapAnswerState.awayPlayerIds': [],
+            'trapAnswerState.afkStats': {}, // Initialize AFK stats
         });
     });
 }
@@ -236,7 +234,10 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     gameResult: { winner: winnerId || '', message: 'انتهت اللعبة' },
                     trapAnswerState: {
                         ...(game.trapAnswerState!),
-                        finalAwards: finalAwardsResult.specialAwards
+                        finalAwards: {
+                            ...finalAwardsResult.specialAwards,
+                            afkStats: game.trapAnswerState?.afkStats || {}
+                        }
                     }
                 };
                 gameDataForLeagueUpdate = finalGameData;
@@ -471,6 +472,12 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
     });
 
     const roundResults = { scores: roundScores, answers: resultsByAnswer, timedOutGuesserIds, awayPlayerIdsDuringRound };
+    
+    // Update AFK stats
+    const afkStats = { ...(game.trapAnswerState.afkStats || {}) };
+    awayPlayerIdsDuringRound.forEach(playerId => {
+        afkStats[playerId] = (afkStats[playerId] || 0) + 1;
+    });
 
     transaction.update(gameRef, {
         gameState: 'round-results',
@@ -480,5 +487,6 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
         'trapAnswerState.timerEndsAt': deleteField(),
         'trapAnswerState.trickStats': mergedTrickStats,
         'trapAnswerState.awayPlayerIds': [],
+        'trapAnswerState.afkStats': afkStats, // Save the updated AFK stats
     });
 }

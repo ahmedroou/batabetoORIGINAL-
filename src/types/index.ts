@@ -599,9 +599,11 @@ export interface Game {
     finalAwards?: {
         deceivedFool?: { playerId: string; name: string; avatarId: string; count: number } | null;
         cunningDeceiver?: { playerId: string; name: string; avatarId: string; count: number } | null;
+        afkStats?: Record<string, number>;
     };
     awayPlayerIds?: string[]; 
     awayPlayerIdsInAnsweringPhase?: string[];
+    afkStats?: Record<string, number>; // { [playerId]: count }
   };
 
   // "خلف القناع" (Mafia) specific state
@@ -715,7 +717,7 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
 export type MafiaPhase = 'lobby' | 'role_reveal' | 'night' | 'day' | 'execution' | 'final_results';
 
 export type DayEventType = 'death' | 'protection' | 'execution' | 'no_execution';
-export type DayEvent = {
+export interface DayEvent {
     type: DayEventType;
     message: string;
     killedPlayer?: { name: string; avatarId: string; };

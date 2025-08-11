@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
 import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, updateGameSettings as updateTrapAnswerSettings, setAwayStatus } from '@/lib/actions/trap-answer';
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
-import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings, EyeOff } from 'lucide-react';
+import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings, EyeOff, AlertTriangle } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -719,7 +719,16 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         });
 
         const winner = rankedPlayers[0];
-        const { cunningDeceiver, deceivedFool } = game.trapAnswerState?.finalAwards || {};
+        const { cunningDeceiver, deceivedFool, afkStats } = game.trapAnswerState?.finalAwards || {};
+
+        const afkPlayers = Object.entries(afkStats || {})
+            .map(([playerId, count]) => {
+                const player = game.players.find(p => p.id === playerId);
+                return { ...player, afkCount: count };
+            })
+            .filter(p => p.id) // Filter out any potential undefined players
+            .sort((a, b) => (b.afkCount || 0) - (a.afkCount || 0))
+            .slice(0, 3);
         
         return (
             <Card className="w-full max-w-2xl animate-pop-in">
@@ -729,7 +738,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                     {winner && <CardDescription className="text-2xl font-bold">الفائز هو {winner.name}!</CardDescription>}
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
                         {cunningDeceiver && (
                             <div className="p-3 rounded-lg bg-red-100 border border-red-300">
                                 <h3 className="font-bold text-red-800 flex items-center justify-center gap-2"><VenetianMask /> المخادع المكار</h3>
@@ -747,6 +756,24 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                             </div>
                         )}
                     </div>
+
+                    {afkPlayers.length > 0 && (
+                        <div className="p-3 rounded-lg bg-yellow-100 border border-yellow-300 mt-4">
+                            <h3 className="font-bold text-yellow-800 flex items-center justify-center gap-2"><AlertTriangle /> غشاشين محتملين</h3>
+                             <div className="space-y-1 mt-2">
+                                {afkPlayers.map(p => (
+                                    <div key={p.id} className="flex justify-between items-center text-sm p-1 bg-yellow-50 rounded-md">
+                                        <div className="flex items-center gap-2">
+                                            <PlayerAvatar avatarId={p.avatarId!} className="w-6 h-6"/>
+                                            <span>{p.name}</span>
+                                        </div>
+                                        <span className="font-bold">{p.afkCount} مرات</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    
                     <div className="space-y-2 pt-4">
                         <h3 className="font-bold text-center">الترتيب النهائي</h3>
                         {rankedPlayers.map((p) => (
