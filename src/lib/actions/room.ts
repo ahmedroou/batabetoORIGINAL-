@@ -1,6 +1,6 @@
 
 
-"use server";
+'use server';
 
 /**
  * @fileoverview Actions for managing game rooms: creating, joining, leaving.
@@ -174,6 +174,14 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 guides: { red: '', blue: '' },
                 turn: 'red',
             };
+        } else if (gameType === 'educated-merchant') {
+            newGame.educatedMerchantState = {
+                settings: { maxRounds: 20 },
+                board: [],
+                turnOrder: [],
+                currentTurnIndex: 0,
+                activityLog: [],
+            };
         }
 
         await removePlayerFromPreviousLobbies(userId, gameId);
@@ -254,7 +262,7 @@ export async function joinGameRoom(gameId: string, userId: string, avatarId: str
             updateData.players = updatedPlayers;
             updateData.playerUids = updatedPlayerUids;
             
-            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war'].includes(game.gameType)) {
+            if (['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'educated-merchant'].includes(game.gameType)) {
                 updateData.playerScores = { ...(game.playerScores || {}), [newPlayer.id]: 0 };
             }
             
