@@ -11,6 +11,8 @@ const BASE_PROPERTY_PRICE = 100;
 const MAX_PROPERTY_PRICE = 500;
 const PRICE_INCREMENT = 25;
 const PASS_START_BONUS = 200;
+const QUESTION_TIME_SECONDS = 25;
+
 
 async function fetchAllQuestions(): Promise<EducatedMerchantQuestion[]> {
     const questionsCol = collection(db, "trap_answer_questions");
@@ -25,8 +27,11 @@ async function fetchAllQuestions(): Promise<EducatedMerchantQuestion[]> {
     return snapshot.docs.map(doc => {
         const data = doc.data();
         const correctAnswer = data.answer;
-        const dummyAnswers = data.dummyAnswers || ['بديل ١', 'بديل ٢', 'بديل ٣'];
-        const options = shuffle([correctAnswer, ...dummyAnswers.slice(0, 3)]);
+        const dummyAnswers = Array.isArray(data.dummyAnswers) && data.dummyAnswers.length > 0 
+            ? data.dummyAnswers 
+            : ['بديل ١', 'بديل ٢', 'بديل ٣'];
+        
+        const options = shuffle([correctAnswer, ...shuffle(dummyAnswers).slice(0, 3)]);
         
         return {
             id: doc.id,
@@ -54,7 +59,7 @@ function generateBoard(questionsByCategory: Record<string, EducatedMerchantQuest
         } else if (i === 21) {
              board.push({ id: i, type: 'fine', name: 'غرامة كبيرة', category: 'special', price: 0, rent: 0, ownerId: null, fineAmount: 100 });
         } else {
-             const category = categories[i % categories.length];
+             const category = categories[i % categories.length] || 'عام';
              const price = shuffledPrices[i % shuffledPrices.length] || BASE_PROPERTY_PRICE;
              board.push({ id: i, type: 'property', name: `عقار ${i}`, category, price, rent: Math.floor(price / 4), ownerId: null });
         }
@@ -79,7 +84,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
             if (!acc[q.category]) {
                 acc[q.category] = [];
             }
-            acc[q.category].push(q);
+            acc[q.category]!.push(q);
             return acc;
         }, {} as Record<string, EducatedMerchantQuestion[]>);
         
@@ -132,8 +137,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<{ succ
             }
 
             transaction.update(gameRef, {
-                // We DO NOT update player position here. The client will animate it.
-                // We just store the dice roll and change state.
                 playerScores: updatedBalances,
                 gameState: 'movement',
                 'educatedMerchantState.lastDiceRoll': diceResult,
@@ -153,17 +156,19 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         const gameDoc = await transaction.get(gameRef);
         if(!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
+        const es = game.educatedMerchantState;
+        if (!es) throw new Error("Game state is not initialized.");
 
         const playerIndex = game.players.findIndex(p => p.id === playerId);
         const oldPosition = game.players[playerIndex].position;
-        const newPosition = (oldPosition + (game.educatedMerchantState?.lastDiceRoll || 0)) % BOARD_SIZE;
+        const newPosition = (oldPosition + (es.lastDiceRoll || 0)) % BOARD_SIZE;
 
         const updatedPlayers = [...game.players];
         updatedPlayers[playerIndex].position = newPosition;
         
-        const property = game.educatedMerchantState?.board.find(p => p.id === newPosition);
+        const property = es.board.find(p => p.id === newPosition);
         
-        let newActivityLog = [...(game.educatedMerchantState?.activityLog || [])];
+        let newActivityLog = [...(es.activityLog || [])];
 
         // Update player position first
         transaction.update(gameRef, { players: updatedPlayers });
@@ -245,7 +250,8 @@ export async function buyPropertyAttempt(gameId: string, playerId: string): Prom
 
             transaction.update(gameRef, {
                 gameState: 'question',
-                'educatedMerchantState.currentQuestion': randomQuestion
+                'educatedMerchantState.currentQuestion': randomQuestion,
+                'educatedMerchantState.timerEndsAt': Timestamp.fromMillis(Date.now() + QUESTION_TIME_SECONDS * 1000),
             });
         });
         return { success: true };
@@ -282,18 +288,21 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
                     'educatedMerchantState.activityLog': newActivityLog,
                 });
             } else {
-                const penalty = Math.floor(property.price * 0.75);
-                newActivityLog.push(`${player?.name} أجاب بشكل خاطئ وخسر ${penalty} د.ع.`);
+                const penalty = Math.floor(property.price * 0.25);
+                newActivityLog.push(`${player?.name} أجاب بشكل خاطئ واسترد ${penalty} د.ع.`);
                  transaction.update(gameRef, {
-                    [`playerScores.${playerId}`]: increment(-penalty),
+                    [`playerScores.${playerId}`]: increment(-(property.price - penalty)),
                     'educatedMerchantState.activityLog': newActivityLog,
                 });
             }
 
             transaction.update(gameRef, {
                 'educatedMerchantState.currentQuestion': null, // Clear question
+                'educatedMerchantState.timerEndsAt': deleteField(),
             });
          });
+
+         await new Promise(resolve => setTimeout(resolve, 2000));
          await endTurn(gameId, playerId);
          return { success: true };
 
@@ -310,8 +319,10 @@ export async function endTurn(gameId: string, playerId: string, existingTransact
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         const es = game.educatedMerchantState;
+        if (!es) throw new Error("Game state not initialized.");
 
-        if (es?.turnOrder[es.currentTurnIndex] !== playerId) {
+
+        if (es.turnOrder[es.currentTurnIndex] !== playerId) {
             return;
         }
 
@@ -345,7 +356,7 @@ export async function endTurn(gameId: string, playerId: string, existingTransact
             gameState: nextGameState,
             round: newRound,
             'educatedMerchantState.currentTurnIndex': nextIndex,
-             'educatedMerchantState.lastDiceRoll': deleteField(), // Clear dice roll for next turn
+             'educatedMerchantState.lastDiceRoll': deleteField(),
         });
     };
 

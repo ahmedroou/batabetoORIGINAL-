@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -269,9 +268,6 @@ export interface Player {
   position: number; 
   isReady?: boolean; 
   temporaryTitle?: string | null;
-  // Educated Merchant specific fields
-  balance?: number;
-  properties?: number[]; // Array of property indices
   bankruptAt?: Timestamp;
 }
 
@@ -687,7 +683,6 @@ export interface Game {
   educatedMerchantState?: {
     settings?: {
         maxRounds: number;
-        questionTime: number;
     };
     board: Property[];
     turnOrder: string[];
@@ -753,3 +748,4 @@ export interface PrivateChat {
     participants: string[];
     messages: PrivateChatMessage[];
 }
+    
