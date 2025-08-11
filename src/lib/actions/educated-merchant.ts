@@ -166,18 +166,19 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         const player = game.players[playerIndex];
         if (!player) throw new Error("Player not found in game.");
 
-        const oldPosition = player.position;
-        const newPosition = (oldPosition + (es.lastDiceRoll || 0)) % BOARD_SIZE;
-        const property = es.board.find(p => p.id === newPosition);
-        if (!property) throw new Error("Property not found on board.");
-
         let ownerDoc: any = null;
-        if (property.type === 'property' && property.ownerId && property.ownerId !== playerId) {
+        const property = es.board.find(p => p.id === player.position);
+        if (property?.type === 'property' && property.ownerId && property.ownerId !== playerId) {
             ownerDoc = await transaction.get(doc(db, 'users', property.ownerId));
         }
         // --- END READ PHASE ---
 
         // --- 2. LOGIC PHASE (PREPARE UPDATES) ---
+        const oldPosition = player.position;
+        const newPosition = (oldPosition + (es.lastDiceRoll || 0)) % BOARD_SIZE;
+        const newProperty = es.board.find(p => p.id === newPosition);
+        if (!newProperty) throw new Error("Property not found on board.");
+
         const updatedPlayers = [...game.players];
         updatedPlayers[playerIndex].position = newPosition;
 
@@ -191,68 +192,55 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
             newActivityLog.push(`${player.name} مر بنقطة البداية وحصل على ${PASS_START_BONUS} د.ع.`);
         }
 
-        // --- 3. WRITE PHASE ---
-        transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances });
-
-        if (property.type === 'start') {
+        if (newProperty.type === 'start') {
             await endTurn(gameId, playerId, transaction);
             return;
         }
 
-        if (property.type === 'fine') {
-            const fine = property.fineAmount || 0;
+        if (newProperty.type === 'fine') {
+            const fine = newProperty.fineAmount || 0;
             newActivityLog.push(`${player.name} دفع غرامة بقيمة ${fine} د.ع.`);
             if ((updatedBalances[playerId] || 0) < fine) {
                 updatedPlayers[playerIndex].status = 'bankrupt';
                 updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
                 newActivityLog.push(`${player.name} أفلس!`);
-                transaction.update(gameRef, {
-                    players: updatedPlayers,
-                    'educatedMerchantState.activityLog': newActivityLog,
-                    [`playerScores.${playerId}`]: 0,
-                });
+                updatedBalances[playerId] = 0;
             } else {
-                 transaction.update(gameRef, { 
-                    [`playerScores.${playerId}`]: increment(-fine),
-                    'educatedMerchantState.activityLog': newActivityLog,
-                });
+                 updatedBalances[playerId] -= fine;
             }
+            transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
             await endTurn(gameId, playerId, transaction);
             return;
         }
 
-        if (property.type === 'property') {
+        if (newProperty.type === 'property') {
             const ownerData = ownerDoc?.data() as UserProfile | null;
-            if (property.ownerId && property.ownerId !== playerId && ownerData) {
-                const rent = property.rent;
+            if (newProperty.ownerId && newProperty.ownerId !== playerId && ownerData) {
+                const rent = newProperty.rent;
                 newActivityLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${ownerData.name}.`);
 
                 if ((updatedBalances[playerId] || 0) < rent) {
                     updatedPlayers[playerIndex].status = 'bankrupt';
                     updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
                     newActivityLog.push(`${player.name} أفلس!`);
-                    transaction.update(gameRef, {
-                        players: updatedPlayers,
-                        [`playerScores.${property.ownerId}`]: increment(updatedBalances[playerId] || 0),
-                        [`playerScores.${playerId}`]: 0,
-                        'educatedMerchantState.activityLog': newActivityLog
-                    });
+                    updatedBalances[newProperty.ownerId] += updatedBalances[playerId] || 0;
+                    updatedBalances[playerId] = 0;
                 } else {
-                     transaction.update(gameRef, {
-                        [`playerScores.${playerId}`]: increment(-rent),
-                        [`playerScores.${property.ownerId}`]: increment(rent),
-                        'educatedMerchantState.activityLog': newActivityLog,
-                    });
+                     updatedBalances[playerId] -= rent;
+                     updatedBalances[newProperty.ownerId] += rent;
                 }
+                transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
                 await endTurn(gameId, playerId, transaction);
-            } else if (!property.ownerId) {
+            } else if (!newProperty.ownerId) {
                 transaction.update(gameRef, { 
                     gameState: 'property_action',
+                    players: updatedPlayers,
+                    playerScores: updatedBalances,
                     'educatedMerchantState.activityLog': newActivityLog,
                 });
             } else { // Landed on own property
                 newActivityLog.push(`${player.name} وقف على عقاره.`);
-                transaction.update(gameRef, {'educatedMerchantState.activityLog': newActivityLog});
+                transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
                 await endTurn(gameId, playerId, transaction);
             }
         }
@@ -316,34 +304,29 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             
             const propertyIndex = game.educatedMerchantState!.board.findIndex(p => p.id === property.id);
             let newActivityLog = [...(game.educatedMerchantState?.activityLog || [])];
+            let updates: any = {};
 
             if (isCorrect) {
                 newActivityLog.push(`${player?.name} أجاب بشكل صحيح وامتلك ${property.name}.`);
-                // Money was already deducted. Just assign ownership.
-                 transaction.update(gameRef, {
-                    [`educatedMerchantState.board.${propertyIndex}.ownerId`]: playerId,
-                    'educatedMerchantState.activityLog': newActivityLog,
-                });
+                updates[`educatedMerchantState.board.${propertyIndex}.ownerId`] = playerId;
+                updates['educatedMerchantState.activityLog'] = newActivityLog;
             } else {
-                // Return only 25% of the price as a refund for incorrect answer
                 const refundAmount = Math.floor(property.price * 0.25);
                 newActivityLog.push(`${player?.name} أجاب بشكل خاطئ وخسر جزءًا من ماله! استرد ${refundAmount} د.ع.`);
-                 transaction.update(gameRef, {
-                    [`playerScores.${playerId}`]: increment(refundAmount),
-                    'educatedMerchantState.activityLog': newActivityLog,
-                });
+                updates[`playerScores.${playerId}`] = increment(refundAmount);
+                updates['educatedMerchantState.activityLog'] = newActivityLog;
             }
 
-            transaction.update(gameRef, {
-                'educatedMerchantState.currentQuestion': deleteField(),
-                'educatedMerchantState.timerEndsAt': deleteField(),
-            });
+            updates['educatedMerchantState.currentQuestion'] = deleteField();
+            updates['educatedMerchantState.timerEndsAt'] = deleteField();
+
+            transaction.update(gameRef, updates);
+            
+            // Now, immediately end the turn in the same transaction
+            await endTurn(gameId, playerId, transaction);
          });
 
-         await new Promise(resolve => setTimeout(resolve, 2000));
-         await endTurn(gameId, playerId);
          return { success: true };
-
     } catch (error: any) {
          return { success: false, error: error.message };
     }
