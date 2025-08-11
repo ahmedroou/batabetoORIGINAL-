@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { Player, Property, GameState } from "@/types";
 import { motion, useAnimate } from "framer-motion";
 import { PlayerAvatar } from "../PlayerAvatar";
@@ -25,7 +26,8 @@ const Tile = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "relative rounded-lg border-2 flex flex-col items-center justify-center text-center p-1 transition-all duration-300 w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28 hover:scale-105",
+        "relative rounded-lg border-2 flex flex-col items-center justify-center text-center p-1 transition-all duration-300 hover:scale-105 hover:shadow-primary/50",
+        "w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28", // Responsive sizes
         ownerColor
           ? "shadow-lg"
           : "bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-700"
@@ -91,6 +93,9 @@ export function GameBoard({
       }
   });
 
+  if (!board) {
+    return <div className="text-center p-6 text-lg">جاري تحميل اللوحة...</div>;
+  }
 
   const sideLength = useMemo(
     () => Math.ceil(board.length / 4) + 1,
@@ -142,22 +147,26 @@ export function GameBoard({
       for (let i = 1; i <= diceRoll; i++) {
         const nextPosIndex = (startPos + i) % board.length;
         const nextPosCoords = tilePositions[nextPosIndex];
+        const playerOffset = players.findIndex(p => p.id === player.id) % 4;
         if (nextPosCoords) {
            await animate(
             scope.current,
             { 
-              x: nextPosCoords.x + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5, 
-              y: nextPosCoords.y + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5 
+              x: nextPosCoords.x + 10 + (playerOffset * 5), 
+              y: nextPosCoords.y + 10 + (playerOffset * 5)
             },
             { duration: 0.35, type: "spring", stiffness: 200, damping: 18 }
           );
         }
       }
-
+      
+      // Call the action to handle landing on the property
       await handlePropertyAction(gameId, activePlayerId);
     };
 
-    movePlayer();
+    if(game.gameState === 'movement') {
+      movePlayer();
+    }
   }, [
     diceRoll,
     isMyTurn,
@@ -167,6 +176,7 @@ export function GameBoard({
     playerAnimators,
     board.length,
     gameId,
+    game.gameState
   ]);
 
   // رسم اللوحة
@@ -212,7 +222,6 @@ export function GameBoard({
                 key={`${rowIndex}-${colIndex}`}
                 className="w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28 flex items-center justify-center"
               >
-                {/* وسط اللوحة */}
                 {rowIndex === Math.floor(sideLength / 2) &&
                   colIndex === Math.floor(sideLength / 2) && (
                     <div className="text-center text-xl font-bold text-gray-700 dark:text-gray-300">
@@ -250,11 +259,12 @@ export function GameBoard({
         {renderGrid()}
       </div>
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-        {players.map((player) => {
+        {players.map((player, pIndex) => {
           const animator = playerAnimators.get(player.id);
           if (!animator) return null;
           
           const initialPos = tilePositions[player.position] || { x: 0, y: 0 };
+          const playerOffset = pIndex % 4;
           
           return (
             <motion.div
@@ -262,12 +272,12 @@ export function GameBoard({
               ref={animator[0]}
               className="absolute z-10"
               initial={{ 
-                  x: initialPos.x + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5, 
-                  y: initialPos.y + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5
+                  x: initialPos.x + 10 + (playerOffset * 5), 
+                  y: initialPos.y + 10 + (playerOffset * 5)
               }}
               animate={{ 
-                  x: initialPos.x + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5, 
-                  y: initialPos.y + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5
+                  x: initialPos.x + 10 + (playerOffset * 5), 
+                  y: initialPos.y + 10 + (playerOffset * 5)
               }}
             >
               <PlayerAvatar
@@ -281,3 +291,4 @@ export function GameBoard({
     </div>
   );
 }
+
