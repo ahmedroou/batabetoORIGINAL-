@@ -20,6 +20,23 @@ interface QuestionModalProps {
 
 const QUESTION_TIME_LIMIT = 25;
 
+
+const SpectatorView = ({ questionText, activePlayerName }: { questionText: string, activePlayerName: string }) => (
+    <Card className="w-full max-w-lg mx-auto shadow-2xl bg-gray-900/80 text-white border-purple-500/50 backdrop-blur-sm">
+        <CardHeader className="text-center">
+            <CardTitle className="flex items-center justify-center gap-2"><HelpCircle /> سؤال التاجر للاعب</CardTitle>
+            <CardDescription className="text-2xl font-bold pt-2 text-purple-300">{activePlayerName}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 text-center">
+            <p className="text-lg font-semibold p-4 bg-black/30 rounded-lg">{questionText}</p>
+            <div className="flex items-center justify-center gap-2 text-yellow-400 animate-pulse">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <p>في انتظار إجابة اللاعب...</p>
+            </div>
+        </CardContent>
+    </Card>
+);
+
 export function QuestionModal({ game, self }: QuestionModalProps) {
     const { toast } = useToast();
     const [timeLeft, setTimeLeft] = useState(QUESTION_TIME_LIMIT);
@@ -28,19 +45,20 @@ export function QuestionModal({ game, self }: QuestionModalProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const question = game.educatedMerchantState?.currentQuestion;
-
+    const isMyTurn = game.educatedMerchantState?.turnOrder[game.educatedMerchantState.currentTurnIndex] === self.id;
+    
     const handleTimeout = useCallback(async () => {
-        if (isSubmitting || submittedAnswer) return;
+        if (isSubmitting || submittedAnswer || !isMyTurn) return;
         setIsSubmitting(true);
-        setSubmittedAnswer('__TIMEOUT__'); // Mark timeout internally
-        const result = await answerQuestion(game.id, self.id, null); // Null answer for timeout
+        setSubmittedAnswer('__TIMEOUT__');
+        const result = await answerQuestion(game.id, self.id, null);
         if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: 'destructive' });
         }
-    }, [game.id, self.id, isSubmitting, submittedAnswer, toast]);
+    }, [game.id, self.id, isSubmitting, submittedAnswer, toast, isMyTurn]);
 
     useEffect(() => {
-        if (submittedAnswer || !game.educatedMerchantState?.timerEndsAt) return;
+        if (!isMyTurn || submittedAnswer || !game.educatedMerchantState?.timerEndsAt) return;
 
         const endTime = game.educatedMerchantState.timerEndsAt.toMillis();
         
@@ -55,37 +73,55 @@ export function QuestionModal({ game, self }: QuestionModalProps) {
         };
         
         const timer = setInterval(updateTimer, 1000);
-        updateTimer(); // Initial call
+        updateTimer();
         
         return () => clearInterval(timer);
-    }, [submittedAnswer, game.educatedMerchantState?.timerEndsAt, handleTimeout]);
+    }, [submittedAnswer, game.educatedMerchantState?.timerEndsAt, handleTimeout, isMyTurn]);
 
 
     const handleSubmit = async () => {
-        if (!selectedAnswer || isSubmitting) return;
+        if (!selectedAnswer || isSubmitting || !isMyTurn) return;
         setIsSubmitting(true);
         setSubmittedAnswer(selectedAnswer);
         const result = await answerQuestion(game.id, self.id, selectedAnswer);
         if (result.error) {
             toast({ title: "خطأ", description: result.error, variant: 'destructive' });
-            setIsSubmitting(false); // Allow retry on error
+            setIsSubmitting(false);
         }
     };
     
     if (!question) return null;
-
+    
+    // --- Spectator View ---
+    if (!isMyTurn) {
+        const activePlayerId = game.educatedMerchantState?.turnOrder[game.educatedMerchantState.currentTurnIndex];
+        const activePlayer = game.players.find(p => p.id === activePlayerId);
+        return (
+            <div className="absolute inset-0 z-30 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                 <motion.div
+                    className="w-full"
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring' }}
+                >
+                    <SpectatorView questionText={question.question} activePlayerName={activePlayer?.name || '...'} />
+                </motion.div>
+            </div>
+        );
+    }
+    
+    // --- Active Player View ---
     const getOptionStyle = (option: string) => {
         if (!submittedAnswer) {
             return selectedAnswer === option ? 'border-primary bg-primary/10' : 'border-border bg-transparent hover:bg-muted/50';
         }
-        if (option === question.correctAnswer) {
-            return 'border-green-500 bg-green-500/20 text-green-800 dark:text-green-300';
-        }
         if (option === submittedAnswer) {
-            return 'border-red-500 bg-red-500/20 text-red-800 dark:text-red-400';
+            return answerIsCorrect(option) ? 'border-green-500 bg-green-500/20 text-green-800 dark:text-green-300' : 'border-red-500 bg-red-500/20 text-red-800 dark:text-red-400';
         }
         return 'border-border bg-transparent opacity-50';
     };
+
+    const answerIsCorrect = (answer: string) => answer === question.correctAnswer;
 
 
     return (
@@ -126,21 +162,20 @@ export function QuestionModal({ game, self }: QuestionModalProps) {
                             value={selectedAnswer || ''}
                             onValueChange={setSelectedAnswer}
                             disabled={!!submittedAnswer}
-                            className="space-y-3"
+                            className="grid grid-cols-1 md:grid-cols-2 gap-3"
                         >
                             {question.options.map((option, index) => (
                                 <Label key={index} htmlFor={`option-${index}`} 
                                     className={cn(
-                                        "flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all duration-300",
+                                        "flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all duration-300",
                                         getOptionStyle(option)
                                     )}
                                 >
-                                    <RadioGroupItem value={option} id={`option-${index}`} className="w-6 h-6 mt-1 shrink-0" />
+                                    <RadioGroupItem value={option} id={`option-${index}`} className="w-5 h-5 mt-1 shrink-0" />
                                     <span className="text-base font-medium flex-grow">{option}</span>
-                                     {submittedAnswer && (
+                                     {submittedAnswer && selectedAnswer === option && (
                                         <div className="shrink-0">
-                                            {option === question.correctAnswer && <Check className="w-6 h-6 text-green-600" />}
-                                            {option === submittedAnswer && option !== question.correctAnswer && <X className="w-6 h-6 text-red-600" />}
+                                            {answerIsCorrect(option) ? <Check className="w-6 h-6 text-green-600" /> : <X className="w-6 h-6 text-red-600" />}
                                         </div>
                                     )}
                                 </Label>
@@ -158,7 +193,7 @@ export function QuestionModal({ game, self }: QuestionModalProps) {
                             ) : (
                                 <motion.div key="wait" className="w-full text-center p-2 bg-muted rounded-md" initial={{opacity: 0}} animate={{opacity: 1}}>
                                     <p className="font-bold animate-pulse">
-                                         {submittedAnswer === '__TIMEOUT__' ? "انتهى الوقت!" : (submittedAnswer === question.correctAnswer ? "إجابة صحيحة!" : "إجابة خاطئة!")}
+                                         {submittedAnswer === '__TIMEOUT__' ? "انتهى الوقت!" : (answerIsCorrect(submittedAnswer) ? "إجابة صحيحة!" : "إجابة خاطئة!")}
                                          {' '}جاري العودة للوحة...
                                     </p>
                                 </motion.div>

@@ -29,7 +29,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
   const canRoll = game.gameState === "rolling" && isMyTurn;
   const showDiceRoll = (game.gameState === 'rolling' || game.gameState === 'movement') && es.lastDiceRoll !== null;
   const showPropertyInteraction = game.gameState === "property_action" && isMyTurn;
-  const showQuestion = game.gameState === "question" && isMyTurn;
+  const showQuestion = game.gameState === "question";
 
   const activePlayerId = es.turnOrder?.[es.currentTurnIndex] || "";
 
@@ -91,16 +91,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
           )}
 
           {showQuestion && (
-            <motion.div
-              key="question-modal"
-              initial={{ y: 50, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 50, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="absolute z-30"
-            >
-              <QuestionModal game={game} self={self} />
-            </motion.div>
+            <QuestionModal game={game} self={self} />
           )}
         </AnimatePresence>
       </div>
