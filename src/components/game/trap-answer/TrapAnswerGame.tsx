@@ -114,7 +114,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const { toast } = useToast();
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [settings, setSettings] = useState(game.trapAnswerState?.settings || { categories: [], rounds: 10, answerTime: 60, guessTime: 60 });
+    const [settings, setSettings] = useState(game.trapAnswerState?.settings || { categories: [], rounds: 10, answerTime: 60 });
     const [isCopying, setIsCopying] = useState(false);
     
     const [trapAnswer, setTrapAnswer] = useState('');
@@ -367,7 +367,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                                 <Input id="rounds" type="number" value={settings.rounds} onChange={(e) => handleSettingsChange({ rounds: parseInt(e.target.value, 10) || 1 })} />
                             </div>
                              <div className="space-y-2">
-                                <Label htmlFor="answer-time">وقت الإجابة (ثواني)</Label>
+                                <Label htmlFor="answer-time">وقت الإجابة والتخمين (ثواني)</Label>
                                 <Input id="answer-time" type="number" value={settings.answerTime} onChange={(e) => handleSettingsChange({ answerTime: parseInt(e.target.value, 10) || 60 })} />
                             </div>
                             <Button onClick={handleSaveSettings} disabled={isSubmitting} className="w-full">

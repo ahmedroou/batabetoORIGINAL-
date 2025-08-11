@@ -4,20 +4,11 @@
 
 /**
  * @fileoverview Actions specific to the "Trap Answer" game.
- * @version 3.1
- * @summary
- * Key Fixes in this version:
- * 1.  **Correct State Propagation**: Fixed a critical bug where the latest player guess was not correctly
- * passed to the scoring function, causing the game to stall. Both `submitTrapAnswer` and `submitGuess` now
- * reliably advance the game state.
- * 2.  **Accurate Timeout Tracking**: The `timedOutGuesserIds` are now correctly calculated and stored in the
- * round results, ensuring timeout information is properly displayed.
- * 3.  **Robust Dummy Answer Handling**: Added safer checks to prevent errors when handling optional dummy answers.
- * 4.  **Code Consistency**: Standardized the logic in `submitTrapAnswer` and `submitGuess` for better
- * maintainability and to prevent similar bugs in the future.
- * 5.  **Final Results Bug**: Corrected logic in `nextTrapAnswerRound` to properly transition to the `final_results` state.
- * 6.  **Timer Settings**: Ensured `answerTime` from settings is used for both answering and guessing phases.
- * 7.  **Smart Dummy Answers**: Dummy answers are now only added if the total number of options is less than 4.
+ * @version 3.2
+ * @summary This version addresses multiple critical bugs to stabilize gameplay.
+ * 1. Correctly advances to final results by fixing score update logic.
+ * 2. Unifies answer and guess timers under a single admin setting.
+ * 3. Implements intelligent dummy answer insertion, only adding them when necessary.
  */
 
 import { db } from '@/lib/firebase';
@@ -399,12 +390,18 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
     const question = game.trapAnswerState?.currentQuestion;
     if (!question) throw new Error("Question data is missing for advancing state.");
     
-    const validPlayerAnswers = Object.values(playerAnswers).filter((ans): ans is string => ans !== null && ans.trim() !== '');
-    
-    const allPossibleAnswers = new Set<string>();
-    allPossibleAnswers.add(question.answer);
-    validPlayerAnswers.forEach(ans => allPossibleAnswers.add(ans));
+    // Create a Set of unique, non-null, non-empty, and correctly-cased trap answers from players.
+    const uniquePlayerTraps = new Set(
+        Object.values(playerAnswers)
+            .filter((ans): ans is string => typeof ans === 'string' && ans.trim() !== '')
+            .map(ans => ans.trim())
+    );
 
+    // Start building the final list of options
+    const allPossibleAnswers = new Set<string>([question.answer]);
+    uniquePlayerTraps.forEach(trap => allPossibleAnswers.add(trap));
+    
+    // Only add dummy answers if we have less than 4 unique options so far.
     if (allPossibleAnswers.size < 4 && Array.isArray(question.dummyAnswers) && question.dummyAnswers.length > 0) {
         const shuffledDummies = shuffle([...question.dummyAnswers]);
         for (const dummy of shuffledDummies) {
@@ -457,7 +454,9 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
 
     const finalScores = { ...(game.playerScores || {}) };
     Object.entries(roundScores).forEach(([pid, data]) => {
-        finalScores[pid] = (finalScores[pid] || 0) + data.points;
+        if (data && typeof data.points === 'number') {
+             finalScores[pid] = (finalScores[pid] || 0) + data.points;
+        }
     });
 
     const mergedTrickStats = {
