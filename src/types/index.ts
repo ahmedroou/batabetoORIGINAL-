@@ -226,6 +226,14 @@ export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
     "المطبخ"
 ];
 
+export const DEFAULT_EDUCATED_MERCHANT_CATEGORIES = [
+    "علوم",
+    "رياضيات",
+    "برمجة",
+    "أحياء",
+    "كيمياء"
+];
+
 export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
 export type PlayerTeam = 'mafia' | 'good' | 'neutral' | 'red' | 'blue';
 export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison' | 'bankrupt';
@@ -363,7 +371,6 @@ export interface UserProfile {
   rebellionPoints?: number;
   trophies: number;
   gamesPlayed: number;
-  punishmentsIssued?: number;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
   winCounts?: Record<Game['gameType'], number>;

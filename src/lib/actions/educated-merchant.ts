@@ -16,7 +16,7 @@ const QUESTION_TIME_SECONDS = 25;
 
 
 async function getAvailableCategories(): Promise<string[]> {
-    const settingsDoc = await getDoc(doc(db, 'game_settings', 'trap_answer_categories'));
+    const settingsDoc = await getDoc(doc(db, 'game_settings', 'educated_merchant_categories'));
     if (settingsDoc.exists() && settingsDoc.data().list) {
         return settingsDoc.data().list;
     }

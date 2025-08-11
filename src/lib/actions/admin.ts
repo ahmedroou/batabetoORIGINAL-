@@ -27,7 +27,7 @@ import {
 } from 'firebase/firestore';
 import { isFirebaseError,  safeCompareStrings } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, Decree } from '@/types';
-import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
+import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
@@ -209,14 +209,17 @@ export async function uploadWordWarWordsFromJson(words: string[]) {
     }
 };
 
-export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' , category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
+export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'educated-merchant' , category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
         return { error: 'يجب تحديد معيار للعد.' };
     }
 
     let collectionName: string;
     switch(criteria.game) {
-        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
+        case 'trap-answer':
+        case 'educated-merchant':
+            collectionName = 'trap_answer_questions'; 
+            break;
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
         default: return { error: "نوع لعبة غير مدعوم." };
@@ -236,12 +239,12 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
         } else if (criteria.duplicates === 'word_war_duplicates' && criteria.game === 'word_war') {
             const { count: duplicateCount } = await findDuplicateWords();
             count = duplicateCount;
-        } else if (criteria.category && !criteria.duplicates && criteria.game === 'trap-answer') {
+        } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
             const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             count = querySnapshot.size;
         } else if (criteria.searchTerm) {
-            const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
+            const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
             const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
@@ -250,7 +253,7 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
                     count++;
                 }
             });
-        } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
+        } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
             const searchTerm = criteria.answerSearchTerm.trim();
             const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
@@ -268,14 +271,17 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
     }
 };
 
-export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
+export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'educated-merchant', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
         return { error: 'يجب تحديد معيار للحذف.' };
     }
 
      let collectionName: string;
     switch(criteria.game) {
-        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
+        case 'trap-answer':
+        case 'educated-merchant':
+            collectionName = 'trap_answer_questions'; 
+            break;
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
         default: return { error: "نوع لعبة غير مدعوم." };
@@ -293,7 +299,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
                 batch.delete(doc.ref);
                 count++;
             });
-        } else if (criteria.category && criteria.game === 'trap-answer') {
+        } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
             const q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
@@ -304,7 +310,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
                 count++;
             });
         } else if (criteria.searchTerm) {
-            const textFieldName = criteria.game === 'trap-answer' ? 'question' : 'text';
+            const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
             const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
@@ -317,7 +323,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
             if (count === 0) {
                 return { success: true, count: 0, message: 'لم يتم العثور على عناصر تحتوي على هذا النص.' };
             }
-        } else if (criteria.answerSearchTerm && criteria.game === 'trap-answer') {
+        } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
             const searchTerm = criteria.answerSearchTerm.trim();
             const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
             querySnapshot.forEach(doc => {
@@ -536,7 +542,7 @@ export async function adminUpdateUser(userId: string, data: Partial<UserProfile>
     }
 };
 
-
+// --- Trap Answer Categories ---
 export async function getTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
     try {
         const docRef = doc(db, 'game_settings', 'trap_answer_categories');
@@ -548,7 +554,7 @@ export async function getTrapAnswerCategories(): Promise<{success: boolean, cate
         return { success: true, categories: DEFAULT_TRAP_ANSWER_CATEGORIES };
     } catch (error) {
         console.error("Error getting trap answer categories:", error);
-        return { success: false, error: 'Failed to fetch categories.' };
+        return { success: false, error: 'Failed to fetch trap answer categories.' };
     }
 }
 
@@ -570,7 +576,7 @@ export async function addTrapAnswerCategory(category: string): Promise<{success:
             return { success: true };
         }
         console.error("Error adding trap answer category:", error);
-        return { success: false, error: 'Failed to add category.' };
+        return { success: false, error: 'Failed to add trap answer category.' };
     }
 };
 
@@ -614,7 +620,7 @@ export async function editTrapAnswerCategory(oldCategory: string, newCategory: s
 
     } catch (error) {
         console.error("Error editing category:", error);
-        return { success: false, error: 'فشل تعديل القسم.' };
+        return { success: false, error: 'فشل تعديل قسم الجواب المفخخ.' };
     }
 };
 
@@ -652,9 +658,121 @@ export async function deleteTrapAnswerCategory(categoryToDelete: string): Promis
 
     } catch (error) {
         console.error("Error deleting category:", error);
-        return { success: false, error: 'فشل حذف القسم والأسئلة المرتبطة به.' };
+        return { success: false, error: 'فشل حذف قسم الجواب المفخخ والأسئلة المرتبطة به.' };
     }
 };
+
+
+// --- Educated Merchant Categories ---
+export async function getEducatedMerchantCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
+    try {
+        const docRef = doc(db, 'game_settings', 'educated_merchant_categories');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().list?.length > 0) {
+            return { success: true, categories: docSnap.data().list };
+        }
+        // If it doesn't exist, create it with default values
+        await setDoc(docRef, { list: DEFAULT_EDUCATED_MERCHANT_CATEGORIES });
+        return { success: true, categories: DEFAULT_EDUCATED_MERCHANT_CATEGORIES };
+    } catch (error) {
+        console.error("Error getting educated merchant categories:", error);
+        return { success: false, error: 'Failed to fetch educated merchant categories.' };
+    }
+}
+
+export async function addEducatedMerchantCategory(category: string): Promise<{success: boolean, error?: string}> {
+    if (!category || typeof category !== 'string' || category.trim() === '') {
+        return { error: 'اسم القسم غير صالح.' };
+    }
+    try {
+        const settingsRef = doc(db, 'game_settings', 'educated_merchant_categories');
+        await updateDoc(settingsRef, {
+            list: arrayUnion(category.trim())
+        });
+        return { success: true };
+    } catch (error) {
+        if (isFirebaseError(error) && error.code === 'not-found') {
+            await setDoc(doc(db, 'game_settings', 'educated_merchant_categories'), {
+                list: [category.trim()]
+            });
+            return { success: true };
+        }
+        console.error("Error adding educated merchant category:", error);
+        return { success: false, error: 'Failed to add educated merchant category.' };
+    }
+};
+
+export async function editEducatedMerchantCategory(oldCategory: string, newCategory: string): Promise<{ success: boolean; error?: string }> {
+    if (!oldCategory || !newCategory || oldCategory.trim() === '' || newCategory.trim() === '') {
+        return { error: 'الاسم القديم والجديد مطلوبان.' };
+    }
+    if (oldCategory.trim() === newCategory.trim()) {
+        return { error: 'الاسم الجديد للقسم يجب أن يختلف عن الاسم القديم.' };
+    }
+
+    const batch = writeBatch(db);
+    const settingsRef = doc(db, 'game_settings', 'educated_merchant_categories');
+    
+    try {
+        const settingsSnap = await getDoc(settingsRef);
+        if (!settingsSnap.exists()) {
+            throw new Error("مستند إعدادات الأقسام غير موجود.");
+        }
+        
+        const categories: string[] = settingsSnap.data().list || [];
+        if (!categories.includes(oldCategory)) {
+            return { error: 'القسم القديم غير موجود.' };
+        }
+        if (categories.includes(newCategory.trim())) {
+            return { error: 'الاسم الجديد للقسم موجود بالفعل.' };
+        }
+
+        const updatedCategories = categories.map(c => c === oldCategory ? newCategory.trim() : c);
+        batch.update(settingsRef, { list: updatedCategories });
+        
+        // Note: This does NOT update questions. If questions need to be re-categorized,
+        // it must be done manually or with a separate script.
+        
+        await batch.commit();
+        return { success: true };
+
+    } catch (error) {
+        console.error("Error editing category:", error);
+        return { success: false, error: 'فشل تعديل قسم التاجر المتعلم.' };
+    }
+};
+
+export async function deleteEducatedMerchantCategory(categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> {
+    // This function only deletes the category name, not the questions associated with it.
+    if (!categoryToDelete || categoryToDelete.trim() === '') {
+        return { error: 'يجب تحديد قسم للحذف.' };
+    }
+    
+    const settingsRef = doc(db, 'game_settings', 'educated_merchant_categories');
+
+    try {
+        const settingsSnap = await getDoc(settingsRef);
+        if (!settingsSnap.exists()) throw new Error("مستند إعدادات الأقسام غير موجود.");
+        
+        const categories: string[] = settingsSnap.data().list || [];
+        if (categories.length <= 1) {
+            return { error: "لا يمكن حذف آخر قسم متبقٍ." };
+        }
+        if (!categories.includes(categoryToDelete)) {
+            return { error: "القسم المحدد للحذف غير موجود." };
+        }
+        
+        await updateDoc(settingsRef, { list: arrayRemove(categoryToDelete) });
+        
+        return { success: true, count: 0 }; // count refers to deleted questions, which is 0 here.
+
+    } catch (error) {
+        console.error("Error deleting category:", error);
+        return { success: false, error: 'فشل حذف قسم التاجر المتعلم.' };
+    }
+};
+
+
 
 export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
     try {

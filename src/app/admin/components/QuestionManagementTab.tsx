@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -19,6 +19,10 @@ import {
   deleteTrapAnswerCategory,
   editTrapAnswerCategory,
   getTrapAnswerCategories,
+  getEducatedMerchantCategories,
+  addEducatedMerchantCategory,
+  editEducatedMerchantCategory,
+  deleteEducatedMerchantCategory,
   deleteQuestions,
   countQuestions,
   uploadWordWarWordsFromJson,
@@ -26,17 +30,154 @@ import {
   uploadPrisonQuestionsFromJson,
   deleteSimilarQuestions,
 } from '@/lib/actions/admin';
-import { Game } from '@/types';
+import type { Game } from '@/types';
 
 
 type DeletionParams = {
-    game: 'trap-answer' | 'word_war' | 'prison'; 
+    game: 'trap-answer' | 'word_war' | 'prison' | 'educated-merchant'; 
     category?: string; 
     all?: boolean; 
     duplicates?: 'word_war_duplicates' | { threshold: number };
     searchTerm?: string;
     answerSearchTerm?: string;
 };
+
+
+const CategoryManager = ({ 
+    gameType, 
+    categories, 
+    setCategories,
+    onAdd,
+    onEdit,
+    onDelete,
+ }: { 
+    gameType: 'trap-answer' | 'educated-merchant',
+    categories: string[],
+    setCategories: React.Dispatch<React.SetStateAction<string[]>>,
+    onAdd: (name: string) => Promise<any>,
+    onEdit: (oldName: string, newName: string) => Promise<any>,
+    onDelete: (name: string) => Promise<any>,
+}) => {
+    const { toast } = useToast();
+    const [newCategoryName, setNewCategoryName] = useState('');
+    const [editingCategory, setEditingCategory] = useState<{ oldName: string; newName: string } | null>(null);
+    const [deletingCategory, setDeletingCategory] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+     const handleAddCategory = async () => {
+        if (!newCategoryName.trim()) {
+            toast({ title: 'اسم القسم مطلوب', variant: 'destructive' });
+            return;
+        }
+        setIsSubmitting(true);
+        const result = await onAdd(newCategoryName);
+        if (result.success) {
+            toast({ title: 'تمت إضافة القسم بنجاح' });
+            setCategories([...categories, newCategoryName.trim()]);
+            setNewCategoryName('');
+        } else {
+            toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+        }
+        setIsSubmitting(false);
+    };
+
+    const handleEditCategory = async () => {
+        if (!editingCategory || !editingCategory.newName.trim()) return;
+        setIsSubmitting(true);
+        const result = await onEdit(editingCategory.oldName, editingCategory.newName);
+        if (result.success) {
+            toast({ title: 'تم تعديل القسم بنجاح' });
+            setCategories(categories.map(c => (c === editingCategory.oldName ? editingCategory.newName : c)));
+            setEditingCategory(null);
+        } else {
+            toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+        }
+        setIsSubmitting(false);
+    };
+
+     const handleDeleteCategory = async () => {
+        if (!deletingCategory) return;
+        setIsSubmitting(true);
+        const result = await onDelete(deletingCategory);
+        if (result.success) {
+            toast({ title: 'تم حذف القسم', description: `تم حذف ${result.count || 0} سؤال مرتبط به.` });
+            setCategories(categories.filter(c => c !== deletingCategory));
+            setDeletingCategory(null);
+        } else {
+            toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+        }
+        setIsSubmitting(false);
+    };
+
+    return (
+        <>
+            <Card>
+                <CardHeader>
+                    <CardTitle>إدارة أقسام {gameType === 'trap-answer' ? "الجواب المفخخ" : "التاجر المتعلم"}</CardTitle>
+                    <CardDescription>إضافة وتعديل وحذف الأقسام لهذه اللعبة.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                     <div className="space-y-2">
+                        <Label>إضافة قسم جديد</Label>
+                        <div className="flex gap-2">
+                            <Input placeholder="اسم القسم الجديد" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} />
+                            <Button onClick={handleAddCategory} disabled={isSubmitting}>
+                                {isSubmitting ? '...' : 'إضافة'}
+                            </Button>
+                        </div>
+                    </div>
+                     <div className="space-y-2">
+                        <Label>الأقسام الحالية</Label>
+                        <ScrollArea className="h-64 border rounded-md p-2">
+                            {categories.map(cat => (
+                                <div key={cat} className="flex justify-between items-center p-1.5 bg-muted/50 rounded-md mb-2">
+                                     {editingCategory?.oldName === cat ? (
+                                        <Input
+                                            value={editingCategory.newName}
+                                            onChange={(e) => setEditingCategory({ ...editingCategory, newName: e.target.value })}
+                                            className="h-8"
+                                            disabled={isSubmitting}
+                                        />
+                                    ) : (
+                                        <span className="font-semibold">{cat}</span>
+                                    )}
+                                    <div className="flex gap-1">
+                                        {editingCategory?.oldName === cat ? (
+                                             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleEditCategory} disabled={isSubmitting}>
+                                                <Save className="w-4 h-4 text-green-500" />
+                                            </Button>
+                                        ) : (
+                                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingCategory({ oldName: cat, newName: cat })}>
+                                                <Edit className="w-4 h-4" />
+                                            </Button>
+                                        )}
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeletingCategory(cat)}>
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </ScrollArea>
+                    </div>
+                </CardContent>
+            </Card>
+            <AlertDialog open={!!deletingCategory} onOpenChange={() => setDeletingCategory(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>حذف القسم "{deletingCategory}"؟</AlertDialogTitle>
+                  <AlertDialogDescription>سيتم حذف هذا القسم وجميع الأسئلة المرتبطة به بشكل نهائي. لا يمكن التراجع عن هذا الإجراء.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteCategory} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
+                    {isSubmitting ? 'جاري الحذف...' : 'نعم، قم بالحذف'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+        </>
+    )
+}
 
 
 export default function QuestionManagementTab() {
@@ -51,27 +192,42 @@ export default function QuestionManagementTab() {
     const [deletionParams, setDeletionParams] = useState<DeletionParams | null>(null);
     const [deletionCount, setDeletionCount] = useState<number | null>(null);
 
-    // States for Categories
-    const [categories, setCategories] = useState<string[]>([]);
-    const [newCategoryName, setNewCategoryName] = useState('');
-    const [isAddingCategory, setIsAddingCategory] = useState(false);
-    const [editingCategory, setEditingCategory] = useState<{ oldName: string; newName: string } | null>(null);
-    const [isEditingCat, setIsEditingCat] = useState(false);
-    const [deletingCategory, setDeletingCategory] = useState<string | null>(null);
-    const [isDeletingCat, setIsDeletingCat] = useState(false);
-
-     const [selectedCategory, setSelectedCategory] = useState('');
+    // Categories state
+    const [trapAnswerCategories, setTrapAnswerCategories] = useState<string[]>([]);
+    const [merchantCategories, setMerchantCategories] = useState<string[]>([]);
+    
+    // Derived state for the current category list and selected category
+    const [selectedCategory, setSelectedCategory] = useState('');
+    const currentCategoryList = selectedGame === 'trap-answer' ? trapAnswerCategories : selectedGame === 'educated-merchant' ? merchantCategories : [];
+    
+    const [activeCategoryManager, setActiveCategoryManager] = useState<'trap-answer' | 'educated-merchant' | null>(null);
 
 
     useEffect(() => {
         const fetchCategories = async () => {
-            const result = await getTrapAnswerCategories();
-            if (result.success && result.categories) {
-                setCategories(result.categories);
+            const [trapRes, merchantRes] = await Promise.all([
+                getTrapAnswerCategories(),
+                getEducatedMerchantCategories(),
+            ]);
+            if (trapRes.success && trapRes.categories) {
+                setTrapAnswerCategories(trapRes.categories);
+            }
+             if (merchantRes.success && merchantRes.categories) {
+                setMerchantCategories(merchantRes.categories);
             }
         };
         fetchCategories();
     }, []);
+    
+    const handleGameSelection = (game: Game['gameType'] | '') => {
+        setSelectedGame(game);
+        setSelectedCategory(''); // Reset selected category when game changes
+        if(game === 'trap-answer' || game === 'educated-merchant') {
+            setActiveCategoryManager(game);
+        } else {
+            setActiveCategoryManager(null);
+        }
+    }
 
     const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const fileInput = event.target;
@@ -101,6 +257,7 @@ export default function QuestionManagementTab() {
 
                 switch(selectedGame) {
                     case 'trap-answer':
+                    case 'educated-merchant':
                          if (!selectedCategory) {
                             throw new Error('الرجاء اختيار قسم لرفع الأسئلة إليه.');
                         }
@@ -199,70 +356,24 @@ export default function QuestionManagementTab() {
         setDeletionCount(null);
     };
 
-    const handleAddCategory = async () => {
-        if (!newCategoryName.trim()) {
-            toast({ title: 'اسم القسم مطلوب', variant: 'destructive' });
-            return;
-        }
-        setIsAddingCategory(true);
-        const result = await addTrapAnswerCategory(newCategoryName);
-        if (result.success) {
-            toast({ title: 'تمت إضافة القسم بنجاح' });
-            setCategories([...categories, newCategoryName.trim()]);
-            setNewCategoryName('');
-        } else {
-            toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
-        }
-        setIsAddingCategory(false);
-    };
-
-    const handleEditCategory = async () => {
-        if (!editingCategory || !editingCategory.newName.trim()) return;
-        setIsEditingCat(true);
-        const result = await editTrapAnswerCategory(editingCategory.oldName, editingCategory.newName);
-        if (result.success) {
-            toast({ title: 'تم تعديل القسم بنجاح' });
-            setCategories(categories.map(c => (c === editingCategory.oldName ? editingCategory.newName : c)));
-            setEditingCategory(null);
-        } else {
-            toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
-        }
-        setIsEditingCat(false);
-    };
-
-     const handleDeleteCategory = async () => {
-        if (!deletingCategory) return;
-        setIsDeletingCat(true);
-        const result = await deleteTrapAnswerCategory(deletingCategory);
-        if (result.success) {
-            toast({ title: 'تم حذف القسم', description: `تم حذف ${result.count || 0} سؤال مرتبط به.` });
-            setCategories(categories.filter(c => c !== deletingCategory));
-            setDeletingCategory(null);
-        } else {
-            toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
-        }
-        setIsDeletingCat(false);
-    };
-
-
     const renderUploadForm = () => (
         <div className="space-y-4">
             <div className="space-y-2">
                 <Label htmlFor="game-select-upload">1. اختر اللعبة</Label>
-                <Select onValueChange={(v) => setSelectedGame(v as any)} value={selectedGame}>
+                <Select onValueChange={(v) => handleGameSelection(v as any)} value={selectedGame}>
                     <SelectTrigger id="game-select-upload">
                         <SelectValue placeholder="اختر لعبة لرفع محتوى لها..." />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="trap-answer">الجواب المفخخ / التاجر المتعلم</SelectItem>
+                        <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
+                        <SelectItem value="educated-merchant">التاجر المتعلم</SelectItem>
                         <SelectItem value="word_war">حرب الكلمات</SelectItem>
                         <SelectItem value="prison">السجن</SelectItem>
                     </SelectContent>
                 </Select>
-                 {selectedGame === 'trap-answer' && <p className="text-xs text-muted-foreground pt-1">يستخدم "التاجر المتعلم" نفس أسئلة "الجواب المفخخ". ارفع الأسئلة هنا لكلا اللعبتين.</p>}
             </div>
             
-             {selectedGame === 'trap-answer' && (
+             {(selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') && (
                 <div className="space-y-2">
                     <Label htmlFor="category-select-upload">2. اختر القسم</Label>
                     <Select onValueChange={setSelectedCategory} value={selectedCategory}>
@@ -270,7 +381,7 @@ export default function QuestionManagementTab() {
                             <SelectValue placeholder="اختر قسمًا..." />
                         </SelectTrigger>
                         <SelectContent>
-                            {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                            {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                         </SelectContent>
                     </Select>
                 </div>
@@ -278,7 +389,7 @@ export default function QuestionManagementTab() {
             
             <div className="space-y-2">
                 <Label htmlFor="json-upload-input">
-                    {selectedGame === 'trap-answer' ? '3.' : '2.'} اختر ملف المحتوى (JSON)
+                    {(selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') ? '3.' : '2.'} اختر ملف المحتوى (JSON)
                 </Label>
                 <Input id="json-upload-input" type="file" accept=".json" onChange={handleJsonFileChange} />
                 <p className="text-xs text-muted-foreground">{getUploadHelperText()}</p>
@@ -293,7 +404,9 @@ export default function QuestionManagementTab() {
     
     const getUploadHelperText = () => {
         switch(selectedGame) {
-            case 'trap-answer': return "يجب أن يكون الملف مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `question` و `answer`. حقل `dummyAnswers` اختياري للتاجر المتعلم.";
+            case 'trap-answer': 
+            case 'educated-merchant':
+                return "يجب أن يكون الملف مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `question` و `answer`.";
             case 'word_war': return "الملف يجب أن يكون مصفوفة من الكلمات (strings).";
             case 'prison': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `text`.";
             default: return "اختر لعبة لرؤية تعليمات الرفع.";
@@ -305,12 +418,13 @@ export default function QuestionManagementTab() {
              return (
                  <div className="space-y-2">
                     <Label htmlFor="game-select-delete">1. اختر اللعبة</Label>
-                    <Select onValueChange={(v) => setSelectedGame(v as any)} value={selectedGame}>
+                    <Select onValueChange={(v) => handleGameSelection(v as any)} value={selectedGame}>
                         <SelectTrigger id="game-select-delete">
                             <SelectValue placeholder="اختر لعبة لحذف محتوى منها..." />
                         </SelectTrigger>
                         <SelectContent>
                              <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
+                             <SelectItem value="educated-merchant">التاجر المتعلم</SelectItem>
                             <SelectItem value="word_war">حرب الكلمات</SelectItem>
                             <SelectItem value="prison">السجن</SelectItem>
                         </SelectContent>
@@ -319,7 +433,7 @@ export default function QuestionManagementTab() {
              );
          }
         
-         if (selectedGame === 'trap-answer') {
+         if (selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') {
              return renderTrapAnswerDelete();
          }
          if (selectedGame === 'word_war') {
@@ -335,24 +449,24 @@ export default function QuestionManagementTab() {
         <div className="space-y-4">
             <div className="space-y-2">
                 <Label>حذف حسب القسم</Label>
-                <Select onValueChange={(val) => val && handleDeleteClick({ game: 'trap-answer', category: val })} >
+                <Select onValueChange={(val) => val && handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: val })} >
                      <SelectTrigger>
                         <SelectValue placeholder="اختر قسمًا لحذف جميع أسئلته..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {categories.map(cat => <SelectItem key={cat} value={cat}>حذف كل أسئلة "{cat}"</SelectItem>)}
+                        {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>حذف كل أسئلة "{cat}"</SelectItem>)}
                     </SelectContent>
                 </Select>
             </div>
              <div className="space-y-2 border-t pt-4">
                  <h4 className="font-bold">حذف الأسئلة المكررة</h4>
                  <p className="text-sm text-muted-foreground">سيقوم هذا الإجراء بفحص الأسئلة المتشابهة وحذفها مع الإبقاء على أحدث نسخة.</p>
-                  <Select onValueChange={(val) => val && handleDeleteClick({ game: 'trap-answer', category: val, duplicates: { threshold: 0.85 } })} >
+                  <Select onValueChange={(val) => val && handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: val, duplicates: { threshold: 0.85 } })} >
                      <SelectTrigger>
                         <SelectValue placeholder="اختر قسمًا لفحص التكرارات فيه..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {categories.map(cat => <SelectItem key={cat} value={cat}>حذف المكرر من "{cat}"</SelectItem>)}
+                        {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>حذف المكرر من "{cat}"</SelectItem>)}
                     </SelectContent>
                 </Select>
             </div>
@@ -416,7 +530,7 @@ export default function QuestionManagementTab() {
                     <CardDescription>رفع وحذف الأسئلة والكلمات للألعاب المختلفة.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Tabs defaultValue="upload" className="w-full" onValueChange={() => setSelectedGame('')}>
+                    <Tabs defaultValue="upload" className="w-full" onValueChange={() => handleGameSelection('')}>
                         <TabsList className="grid w-full grid-cols-2">
                             <TabsTrigger value="upload">رفع المحتوى</TabsTrigger>
                             <TabsTrigger value="delete">حذف المحتوى</TabsTrigger>
@@ -427,55 +541,28 @@ export default function QuestionManagementTab() {
                 </CardContent>
             </Card>
 
-             <Card>
-                <CardHeader>
-                    <CardTitle>إدارة الأقسام</CardTitle>
-                    <CardDescription>إدارة أقسام لعبة "الجواب المفخخ" و "التاجر المتعلم".</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                     <div className="space-y-2">
-                        <Label>إضافة قسم جديد</Label>
-                        <div className="flex gap-2">
-                            <Input placeholder="اسم القسم الجديد" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} />
-                            <Button onClick={handleAddCategory} disabled={isAddingCategory}>
-                                {isAddingCategory ? '...' : 'إضافة'}
-                            </Button>
-                        </div>
-                    </div>
-                     <div className="space-y-2">
-                        <Label>الأقسام الحالية</Label>
-                        <ScrollArea className="h-64 border rounded-md p-2">
-                            {categories.map(cat => (
-                                <div key={cat} className="flex justify-between items-center p-1.5 bg-muted/50 rounded-md mb-2">
-                                     {editingCategory?.oldName === cat ? (
-                                        <Input
-                                            value={editingCategory.newName}
-                                            onChange={(e) => setEditingCategory({ ...editingCategory, newName: e.target.value })}
-                                            className="h-8"
-                                        />
-                                    ) : (
-                                        <span className="font-semibold">{cat}</span>
-                                    )}
-                                    <div className="flex gap-1">
-                                        {editingCategory?.oldName === cat ? (
-                                             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleEditCategory} disabled={isEditingCat}>
-                                                <Save className="w-4 h-4 text-green-500" />
-                                            </Button>
-                                        ) : (
-                                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingCategory({ oldName: cat, newName: cat })}>
-                                                <Edit className="w-4 h-4" />
-                                            </Button>
-                                        )}
-                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeletingCategory(cat)}>
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            ))}
-                        </ScrollArea>
-                    </div>
-                </CardContent>
-            </Card>
+            <div className="md:col-span-1">
+                {activeCategoryManager === 'trap-answer' && (
+                    <CategoryManager
+                        gameType="trap-answer"
+                        categories={trapAnswerCategories}
+                        setCategories={setTrapAnswerCategories}
+                        onAdd={addTrapAnswerCategory}
+                        onEdit={editTrapAnswerCategory}
+                        onDelete={deleteTrapAnswerCategory}
+                    />
+                )}
+                 {activeCategoryManager === 'educated-merchant' && (
+                    <CategoryManager
+                        gameType="educated-merchant"
+                        categories={merchantCategories}
+                        setCategories={setMerchantCategories}
+                        onAdd={addEducatedMerchantCategory}
+                        onEdit={editEducatedMerchantCategory}
+                        onDelete={deleteEducatedMerchantCategory}
+                    />
+                )}
+            </div>
         </div>
 
             <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -492,23 +579,6 @@ export default function QuestionManagementTab() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-
-            <AlertDialog open={!!deletingCategory} onOpenChange={() => setDeletingCategory(null)}>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>حذف القسم "{deletingCategory}"؟</AlertDialogTitle>
-                  <AlertDialogDescription>سيتم حذف هذا القسم وجميع الأسئلة المرتبطة به بشكل نهائي. لا يمكن التراجع عن هذا الإجراء.</AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteCategory} disabled={isDeletingCat} className="bg-destructive hover:bg-destructive/90">
-                    {isDeletingCat ? 'جاري الحذف...' : 'نعم، قم بالحذف'}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
         </>
     );
 }
-
-    
