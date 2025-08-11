@@ -350,6 +350,7 @@ export interface UserProfile {
   audienceGroups?: string[];
   humiliation?: Humiliation | null;
   allegiance?: ActiveAllegiance | null;
+  allegianceRequests?: AllegianceRequest[];
   taxDemands?: TaxDemand[];
   alliances?: Alliance[];
   decrees?: Decree[];
@@ -599,7 +600,7 @@ export interface Game {
     guessesLeft?: number;
     turnResult?: 'hit' | 'miss' | 'neutral' | 'assassin';
     timerEndsAt?: Timestamp | null;
-    suspicions?: Record<string, number[]>; // { [team_color]: [cardIndex1, cardIndex2...] }
+    suspicions?: Record<string, string[]>; // { [cardText]: [playerId1, playerId2, ...] }
   };
     
   // "The Prison" specific state

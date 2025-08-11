@@ -115,7 +115,25 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية (التكلفة ${honorCost}).`);
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك إذلال لاعب من نفس طبقتك أو أعلى.");
-        if (target.allegiance?.to === actorId) throw new Error("لا يمكنك إذلال لاعب أعلن ولاءه لك.");
+        
+        // Protection check
+        if (target.allegiance) {
+            const protectorRef = doc(db, "users", target.allegiance.to);
+            const protectorDoc = await transaction.get(protectorRef);
+            if (protectorDoc.exists()) {
+                const protector = protectorDoc.data() as UserProfile;
+                const protectorRank = getRank(protector.leaderboardPoints, allRanks);
+                if (protectorRank && actorRank.threshold <= protectorRank.threshold) {
+                    if ((protector.honorPoints || 0) >= 2) {
+                        // Punishment is blocked
+                        transaction.update(protectorRef, { honorPoints: increment(-2) });
+                        transaction.update(actorRef, { honorPoints: increment(-honorCost) }); // Attacker still loses honor
+                        throw new Error(`فشل الإذلال! اللاعب ${target.name} تحت حماية ${protector.name}.`);
+                    }
+                }
+            }
+        }
+
 
         if (target.humiliation && new Date(target.humiliation.until) > new Date()) {
             throw new Error("هذا اللاعب مُذل بالفعل.");
@@ -148,45 +166,9 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
     });
 }
 
-export async function requestAllegiance(actorId: string, targetId: string, durationInDays: number, offer: { amount: number, currency: 'coins' }): Promise<{ success: boolean, error?: string }> {
-     const LOYALTY_COST_MAP: Record<number, number> = { 1: 3, 2: 6, 3: 8 };
-     const loyaltyCost = LOYALTY_COST_MAP[durationInDays] || 3;
-
-    return runTransaction(db, async (transaction) => {
-        const actorRef = doc(db, "users", actorId);
-        const targetRef = doc(db, "users", targetId);
-
-        const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
-
-        if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
-
-        const actor = actorDoc.data() as UserProfile;
-        
-        if ((actor.loyaltyPoints || 0) < loyaltyCost) throw new Error(`لا تملك نقاط ولاء كافية (التكلفة ${loyaltyCost}).`);
-        if(actor.coins < offer.amount) throw new Error("لا تملك ما يكفي من الكوينز لتقديم هذا العرض.");
-
-        const newRequest: AllegianceRequest = {
-            fromId: actorId,
-            fromName: actor.name,
-            fromAvatar: actor.avatarId,
-            offer,
-            durationInDays,
-            status: 'pending',
-            createdAt: new Date(),
-        };
-
-        transaction.update(targetRef, {
-            allegianceRequests: arrayUnion(newRequest)
-        });
-
-        return { success: true };
-    }).catch((error: any) => {
-        return { success: false, error: error.message || "فشل إرسال طلب الولاء." };
-    });
-}
-
 
 export async function issueDecree(actorId: string, targetId: string, title: string, durationInDays: number): Promise<{ success: boolean; error?: string }> {
+    const allRanks = await getRanks();
     const honorCost = 7; // Fixed cost of 7 honor points as requested.
      return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
@@ -197,6 +179,8 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
         if (!actorDoc.exists() || !targetDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
         
         const actor = actorDoc.data() as UserProfile;
+        const target = targetDoc.data() as UserProfile;
+        
         if (!actor.permissions?.includes('can_force_name_change')) {
             throw new Error("ليس لديك صلاحية إصدار المراسيم.");
         }
@@ -206,18 +190,46 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
         if (lastPunishment && (Date.now() - (lastPunishment as any).toMillis() < 24 * 60 * 60 * 1000)) {
             throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
         }
+
+        // Protection Check
+        if (target.allegiance) {
+             const protectorRef = doc(db, "users", target.allegiance.to);
+             const protectorDoc = await transaction.get(protectorRef);
+             if (protectorDoc.exists()) {
+                const protector = protectorDoc.data() as UserProfile;
+                 const getRank = (points: number, ranks: SocialRank[]) => {
+                    const sortedRanks = [...ranks].sort((a, b) => b.threshold - a.threshold);
+                    for (const rank of sortedRanks) {
+                        if (points >= rank.threshold) return rank;
+                    }
+                    return sortedRanks[sortedRanks.length - 1] || null;
+                };
+                const actorRank = getRank(actor.leaderboardPoints, allRanks);
+                const protectorRank = getRank(protector.leaderboardPoints, allRanks);
+
+                if (protectorRank && actorRank!.threshold <= protectorRank.threshold) {
+                     if ((protector.honorPoints || 0) >= 2) {
+                        transaction.update(protectorRef, { honorPoints: increment(-2) });
+                        transaction.update(actorRef, { honorPoints: increment(-honorCost) }); // Attacker still loses honor
+                        throw new Error(`فشل إصدار المرسوم! اللاعب ${target.name} تحت حماية ${protector.name}.`);
+                    }
+                }
+             }
+        }
         
         // Remove existing decrees for this actor on the target before adding a new one
         const targetData = targetDoc.data() as UserProfile;
         const otherDecrees = (targetData.decrees || []).filter(d => d.issuedBy !== actorId);
         
         const newDecree: Decree = {
+            id: generateGameId(), // Just to give it a unique ID for React keys
             title: title,
             issuedBy: actorId,
             issuedByName: actor.name,
             at: new Date(),
             until: new Date(Date.now() + durationInDays * 24 * 60 * 60 * 1000),
             durationInDays: durationInDays,
+            taxToLift: 0, // Decrees are not paid off, they expire
         };
         
         transaction.update(actorRef, { 
@@ -455,6 +467,7 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
 }
 
 export async function forceAvatarChange(actorId: string, targetId: string, avatarId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean; error?: string }> {
+     const allRanks = await getRanks();
      const honorCost = durationInDays * 2;
      return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
@@ -478,6 +491,32 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         const lastPunishment = actor.lastPunishmentTimestamp?.[targetId];
         if (lastPunishment && (Date.now() - (lastPunishment as any).toMillis() < 24 * 60 * 60 * 1000)) {
             throw new Error("لا يمكنك معاقبة هذا اللاعب مرة أخرى إلا بعد مرور 24 ساعة.");
+        }
+
+        // Protection Check
+        if (target.allegiance) {
+             const protectorRef = doc(db, "users", target.allegiance.to);
+             const protectorDoc = await transaction.get(protectorRef);
+             if (protectorDoc.exists()) {
+                const protector = protectorDoc.data() as UserProfile;
+                 const getRank = (points: number, ranks: SocialRank[]) => {
+                    const sortedRanks = [...ranks].sort((a, b) => b.threshold - a.threshold);
+                    for (const rank of sortedRanks) {
+                        if (points >= rank.threshold) return rank;
+                    }
+                    return sortedRanks[sortedRanks.length - 1] || null;
+                };
+                const actorRank = getRank(actor.leaderboardPoints, allRanks);
+                const protectorRank = getRank(protector.leaderboardPoints, allRanks);
+
+                if (protectorRank && actorRank!.threshold <= protectorRank.threshold) {
+                     if ((protector.honorPoints || 0) >= 2) {
+                        transaction.update(protectorRef, { honorPoints: increment(-2) });
+                        transaction.update(actorRef, { honorPoints: increment(-honorCost) }); // Attacker still loses honor
+                        throw new Error(`فشل تغيير الصورة! اللاعب ${target.name} تحت حماية ${protector.name}.`);
+                    }
+                }
+             }
         }
         
         transaction.update(actorRef, {
