@@ -8,9 +8,15 @@ import { Cairo } from 'next/font/google';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Crown, Home, Swords, Briefcase, Newspaper, Users } from 'lucide-react';
+import { Crown, Home, Swords, Briefcase, Newspaper, Users, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 
 const cairo = Cairo({
@@ -23,6 +29,15 @@ const cairo = Cairo({
 // This component remains a Client Component and can use hooks.
 const NavbarClient = () => {
     const { newArticlesAvailable, newChallengeAvailable } = useAuth();
+    
+    const navLinks = [
+        { href: "/", label: "الرئيسية", icon: Home, notification: false },
+        { href: "/news", label: "الجريدة", icon: Newspaper, notification: newArticlesAvailable },
+        { href: "/society", label: "المجتمع", icon: Users, notification: false },
+        { href: "/challenges", label: "التحديات", icon: Swords, notification: newChallengeAvailable },
+        { href: "/kings", label: "قاعة الملوك", icon: Crown, notification: false }
+    ];
+
     return (
         <nav className="bg-background/80 backdrop-blur-sm border-b sticky top-0 z-50">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -32,49 +47,44 @@ const NavbarClient = () => {
                             <span className="font-bold text-xl text-primary cursor-pointer">بطابيطو</span>
                         </Link>
                     </div>
-                    <div className="flex items-center gap-2">
-                         <Button variant="ghost" asChild>
-                            <Link href="/">
-                                <Home className="ml-2 h-4 w-4" />
-                                الرئيسية
-                            </Link>
-                        </Button>
-                         <Button variant="ghost" asChild>
-                            <Link href="/news" className="relative">
-                                {newArticlesAvailable && (
-                                    <span className="absolute top-1.5 right-1.5 flex h-3 w-3">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                                    </span>
-                                )}
-                                <Newspaper className="ml-2 h-4 w-4" />
-                                الجريدة
-                            </Link>
-                        </Button>
-                         <Button variant="ghost" asChild>
-                            <Link href="/society">
-                                <Users className="ml-2 h-4 w-4" />
-                                المجتمع
-                            </Link>
-                        </Button>
-                          <Button variant="ghost" asChild>
-                            <Link href="/challenges" className="relative">
-                                 {newChallengeAvailable && (
-                                    <span className="absolute top-1.5 right-1.5 flex h-3 w-3">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                                    </span>
-                                )}
-                                <Swords className="ml-2 h-4 w-4" />
-                                التحديات
-                            </Link>
-                        </Button>
-                         <Button variant="ghost" asChild>
-                            <Link href="/kings">
-                                <Crown className="ml-2 h-4 w-4" />
-                                قاعة الملوك
-                            </Link>
-                        </Button>
+
+                    {/* Desktop Navigation */}
+                    <div className="hidden md:flex items-center gap-2">
+                        {navLinks.map(link => (
+                             <Button key={link.href} variant="ghost" asChild>
+                                <Link href={link.href} className="relative">
+                                    {link.notification && (
+                                        <span className="absolute top-1.5 right-1.5 flex h-3 w-3">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                        </span>
+                                    )}
+                                    <link.icon className="ml-2 h-4 w-4" />
+                                    {link.label}
+                                </Link>
+                            </Button>
+                        ))}
+                    </div>
+
+                    {/* Mobile Navigation */}
+                    <div className="md:hidden">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                    <Menu />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                                {navLinks.map(link => (
+                                     <DropdownMenuItem key={link.href} asChild>
+                                        <Link href={link.href} className="flex items-center justify-between w-full">
+                                            <span>{link.label}</span>
+                                            {link.notification && <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>}
+                                        </Link>
+                                    </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
             </div>
