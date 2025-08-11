@@ -376,7 +376,6 @@ export interface UserProfile {
   audienceGroups?: string[];
   humiliation?: Humiliation | null;
   allegiance?: ActiveAllegiance | null;
-  allegianceRequests?: AllegianceRequest[];
   taxDemands?: TaxDemand[];
   alliances?: Alliance[];
   decrees?: Decree[];
@@ -685,17 +684,18 @@ export interface Game {
 
   // "Educated Merchant" specific state
   educatedMerchantState?: {
-    settings: {
+    settings?: {
         maxRounds: number;
         questionTime: number;
     };
     board: Property[];
     turnOrder: string[];
     currentTurnIndex: number;
-    lastDiceRoll?: number[];
+    lastDiceRoll?: number;
     currentQuestion?: EducatedMerchantQuestion | null;
+    questionsByCategory?: Record<string, EducatedMerchantQuestion[]>;
     timerEndsAt?: Timestamp | null;
-    activityLog: string[];
+    activityLog?: string[];
   };
 }
 
