@@ -1,21 +1,23 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import type { Challenge, Game, ChallengePrize } from '@/types';
-import { getChallenges, joinChallenge } from '@/lib/actions/challenges';
+import type { Challenge, ChallengePrize, UserProfile } from '@/types';
+import { getChallenges, joinChallenge, getChallengeDetails } from '@/lib/actions/challenges';
 import { Skeleton } from '@/components/ui/skeleton';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CircleDollarSign, Diamond, Swords, Calendar, Play, Users, DoorOpen, Trophy, Star, Shield, Flag, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { CircleDollarSign, Diamond, Swords, Calendar, Play, Users, DoorOpen, Trophy, Star, Shield, Flag, Loader2, ListOrdered } from 'lucide-react';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { GAME_TYPE_NAMES } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
+import { PlayerAvatar } from '@/components/game/PlayerAvatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 
 const PRIZE_ICONS: Record<ChallengePrize['type'], React.ElementType> = {
@@ -47,26 +49,82 @@ const PrizeDisplay = ({ prizes }: { prizes: ChallengePrize[] }) => {
     );
 };
 
+const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challenge, trigger: React.ReactNode }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [participants, setParticipants] = useState<UserProfile[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const fetchDetails = useCallback(async () => {
+        if (!isOpen) return;
+        setIsLoading(true);
+        const details = await getChallengeDetails(challenge.id);
+        if (details) {
+            setParticipants(details.participants || []);
+        }
+        setIsLoading(false);
+    }, [isOpen, challenge.id]);
+    
+    useEffect(() => {
+        fetchDetails();
+    }, [fetchDetails]);
+
+    return (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>{trigger}</DialogTrigger>
+            <DialogContent className="bg-gray-900 border-purple-500 text-white max-w-lg">
+                <DialogHeader className="text-center">
+                    <DialogTitle className="text-2xl text-purple-300">{challenge.title}</DialogTitle>
+                    <DialogDescription className="text-gray-400">
+                        قائمة صدارة المشاركين في البطولة
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                    {isLoading ? (
+                        <div className="flex justify-center items-center h-64"><Loader2 className="w-8 h-8 animate-spin" /></div>
+                    ) : (
+                        <ScrollArea className="h-96">
+                            <div className="space-y-2 pr-4">
+                                {participants.length > 0 ? (
+                                    participants
+                                        .sort((a,b) => (challenge.scores[b.uid] || 0) - (challenge.scores[a.uid] || 0))
+                                        .map((participant, index) => (
+                                            <div key={participant.uid} className="flex justify-between items-center bg-gray-800 p-2 rounded-lg">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="font-bold text-lg w-6 text-center text-gray-400">{index + 1}</span>
+                                                    <PlayerAvatar avatarId={participant.avatarId} className="w-10 h-10"/>
+                                                    <p className="font-semibold">{participant.name}</p>
+                                                </div>
+                                                <p className="font-bold text-lg text-yellow-400">{challenge.scores[participant.uid] || 0} نقطة</p>
+                                            </div>
+                                        ))
+                                ) : (
+                                    <p className="text-center text-gray-500 h-64 flex items-center justify-center">لا يوجد مشاركون بعد.</p>
+                                )}
+                            </div>
+                        </ScrollArea>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: number; }) => {
     const { user, userProfile } = useAuth();
     const { toast } = useToast();
     const [isJoining, setIsJoining] = useState(false);
     const [timeLeft, setTimeLeft] = useState('');
+    const topThree = challenge.topParticipants || [];
 
     useEffect(() => {
         const calculateTimeLeft = () => {
             if (!challenge.endsAt) return "غير محدد";
-            // Ensure challenge.endsAt is a Date object before calling getTime()
             const endsAtDate = challenge.endsAt instanceof Date ? challenge.endsAt : new Date(challenge.endsAt);
             if (isNaN(endsAtDate.getTime())) return "تاريخ غير صالح";
 
             const difference = endsAtDate.getTime() - new Date().getTime();
             if (difference > 0) {
-                const days = Math.floor(difference / (1000 * 60 * 60 * 24));
-                const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
-                if (days > 0) return `${days} يوم و ${hours} ساعة`;
-                if (hours > 0) return `${hours} ساعة`;
-                return `أقل من ساعة`;
+                return formatDistanceToNowStrict(endsAtDate, { locale: ar, addSuffix: true });
             }
             return "انتهت";
         };
@@ -83,7 +141,6 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
         const result = await joinChallenge(challenge.id, user.uid);
         if (result.success) {
             toast({ title: "لقد انضممت إلى البطولة بنجاح!" });
-            // You might want to refresh the challenges list or user profile here
         } else {
             toast({ title: "خطأ في الانضمام", description: result.error, variant: 'destructive' });
         }
@@ -123,29 +180,60 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
                         الهدف: {challenge.targetPoints} نقطة صدارة | اللعبة: {challenge.specificGameType === 'all' ? 'كل الألعاب' : GAME_TYPE_NAMES[challenge.specificGameType as Game['gameType']]}
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="flex-grow space-y-3">
-                    <div className="space-y-2">
-                        <div>
-                            <p className="font-bold text-amber-300 flex items-center gap-2"><Trophy className="w-4 h-4"/>المركز الأول</p>
-                            <PrizeDisplay prizes={challenge.firstPlacePrize} />
+                <CardContent className="flex-grow space-y-4">
+                     <div>
+                        <h4 className="font-semibold text-gray-300 mb-2">الجوائز:</h4>
+                         <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Trophy className="w-5 h-5 text-yellow-400"/>
+                                <span className="font-bold text-sm">المركز الأول:</span>
+                                <PrizeDisplay prizes={challenge.firstPlacePrize} />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Trophy className="w-5 h-5 text-slate-400"/>
+                                 <span className="font-bold text-sm">المركز الثاني:</span>
+                                <PrizeDisplay prizes={challenge.secondPlacePrize} />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                 <Trophy className="w-5 h-5 text-orange-400"/>
+                                 <span className="font-bold text-sm">المركز الثالث:</span>
+                                <PrizeDisplay prizes={challenge.thirdPlacePrize} />
+                            </div>
                         </div>
+                     </div>
+                     
+                    {topThree.length > 0 && (
                          <div>
-                            <p className="font-bold text-slate-300 flex items-center gap-2"><Trophy className="w-4 h-4"/>المركز الثاني</p>
-                            <PrizeDisplay prizes={challenge.secondPlacePrize} />
-                        </div>
-                         <div>
-                            <p className="font-bold text-orange-400 flex items-center gap-2"><Trophy className="w-4 h-4"/>المركز الثالث</p>
-                            <PrizeDisplay prizes={challenge.thirdPlacePrize} />
-                        </div>
-                    </div>
+                            <h4 className="font-semibold text-gray-300 mb-2">أفضل 3 لاعبين:</h4>
+                             <div className="space-y-2">
+                                {topThree.map((player, idx) => (
+                                    <div key={player.uid} className="flex justify-between items-center bg-black/20 p-1.5 rounded-md">
+                                        <div className="flex items-center gap-2">
+                                             <span className="font-bold text-sm w-5">{idx+1}.</span>
+                                            <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
+                                            <span className="text-sm font-semibold">{player.name}</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-yellow-300">{challenge.scores[player.uid] || 0}</span>
+                                    </div>
+                                ))}
+                            </div>
+                         </div>
+                    )}
+
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
                     <div className="flex justify-between items-center w-full">
                         <span className="flex items-center gap-1 text-xs"><Users/>{challenge.participantCount || 0} مشارك</span>
-                         <Button onClick={handleJoin} disabled={isJoining || isParticipant || isEnded} className="bg-purple-600 hover:bg-purple-700">
-                             {isJoining ? <Loader2 className="animate-spin" /> : isParticipant ? 'أنت مشارك' : isEnded ? 'انتهت البطولة' : 'انضم للبطولة'}
-                         </Button>
+                        <ChallengeLeaderboardDialog challenge={challenge} trigger={
+                            <Button variant="outline" size="sm">
+                                <ListOrdered className="ml-2 w-4 h-4"/>
+                                قائمة الصدارة
+                            </Button>
+                        }/>
                     </div>
+                     <Button onClick={handleJoin} disabled={isJoining || isParticipant || isEnded} className="w-full bg-purple-600 hover:bg-purple-700">
+                         {isJoining ? <Loader2 className="animate-spin" /> : isParticipant ? 'أنت مشارك' : isEnded ? 'انتهت البطولة' : 'انضم للبطولة'}
+                     </Button>
                 </CardFooter>
             </Card>
         </motion.div>
@@ -197,5 +285,3 @@ export default function SocietyChallenges() {
         </div>
     );
 }
-
-    

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -19,6 +20,7 @@ import {
     getDoc,
     increment,
     runTransaction,
+    limit,
 } from 'firebase/firestore';
 import type { Challenge, ChallengePrize, Game, UserProfile } from '@/types';
 import { sendSystemMail } from './user/mail';
@@ -58,8 +60,8 @@ export async function createChallenge(challengeData: CreateChallengeInput): Prom
 
 
 /**
- * Retrieves all active challenges.
- * @returns {Promise<Challenge[]>} An array of active challenges.
+ * Retrieves all active challenges, including top 3 participants for each.
+ * @returns {Promise<Challenge[]>} An array of active challenges with top participant data.
  */
 export async function getChallenges(): Promise<Challenge[]> {
     try {
@@ -71,7 +73,7 @@ export async function getChallenges(): Promise<Challenge[]> {
         );
         const snapshot = await getDocs(q);
         
-        return snapshot.docs.map(doc => {
+        const challenges = snapshot.docs.map(doc => {
             const data = doc.data();
             return {
                 id: doc.id,
@@ -81,9 +83,62 @@ export async function getChallenges(): Promise<Challenge[]> {
             } as Challenge;
         });
 
+        // Fetch top 3 participants for each challenge
+        for (const challenge of challenges) {
+            if (challenge.scores) {
+                const sortedParticipantIds = Object.keys(challenge.scores).sort((a, b) => (challenge.scores[b] || 0) - (challenge.scores[a] || 0));
+                const top3Ids = sortedParticipantIds.slice(0, 3);
+                
+                if (top3Ids.length > 0) {
+                    const usersQuery = query(collection(db, 'users'), where('__name__', 'in', top3Ids));
+                    const usersSnapshot = await getDocs(usersQuery);
+                    const topUsersData = usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+                    challenge.topParticipants = topUsersData.sort((a,b) => (challenge.scores[b.uid] || 0) - (challenge.scores[a.uid] || 0));
+                } else {
+                     challenge.topParticipants = [];
+                }
+            }
+        }
+        
+        return challenges;
+
     } catch (error) {
         console.error("Error fetching challenges:", error);
         return [];
+    }
+}
+
+/**
+ * Gets full details for a single challenge, including all participants.
+ * @param {string} challengeId - The ID of the challenge to fetch.
+ * @returns {Promise<Challenge | null>} The challenge object with full participant details.
+ */
+export async function getChallengeDetails(challengeId: string): Promise<Challenge | null> {
+    try {
+        const challengeRef = doc(db, 'challenges', challengeId);
+        const challengeDoc = await getDoc(challengeRef);
+        if (!challengeDoc.exists()) return null;
+
+        const challengeData = {
+            id: challengeDoc.id,
+            ...challengeDoc.data(),
+             createdAt: (challengeDoc.data().createdAt as Timestamp)?.toDate() || new Date(),
+             endsAt: (challengeDoc.data().endsAt as Timestamp)?.toDate(),
+        } as Challenge;
+
+        if (challengeData.participantIds && challengeData.participantIds.length > 0) {
+            const usersQuery = query(collection(db, 'users'), where('__name__', 'in', challengeData.participantIds));
+            const usersSnapshot = await getDocs(usersQuery);
+            challengeData.participants = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
+        } else {
+            challengeData.participants = [];
+        }
+
+        return challengeData;
+
+    } catch (error) {
+        console.error("Error fetching challenge details:", error);
+        return null;
     }
 }
 

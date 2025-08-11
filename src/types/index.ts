@@ -141,6 +141,9 @@ export interface Challenge {
         second?: { id: string, name: string };
         third?: { id: string, name: string };
     };
+    // Added for displaying top players on the main card view
+    topParticipants?: UserProfile[]; 
+    participants?: UserProfile[];
 }
 
 
