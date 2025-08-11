@@ -262,25 +262,33 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [latestArticleDate]);
   
    useEffect(() => {
-        getChallenges().then(challenges => {
-            setActiveChallenges(challenges);
-            if (challenges.length > 0) {
-                const lastChallengeViewDate = localStorage.getItem('lastChallengeView');
-                const latestChallengeDate = challenges[0]?.createdAt;
-                if(latestChallengeDate) {
-                    if (!lastChallengeViewDate || new Date(latestChallengeDate).getTime() > new Date(lastChallengeViewDate).getTime()) {
-                        setNewChallengeAvailable(true);
-                    } else {
-                        setNewChallengeAvailable(false);
-                    }
+    if (!user) return; // Don't fetch challenges if there's no user
+    const challengesQuery = query(collection(db, 'challenges'), orderBy('createdAt', 'desc'), limit(1));
+    
+    const unsubscribeChallenges = onSnapshot(challengesQuery, (snapshot) => {
+        if (!snapshot.empty) {
+            const latestChallenge = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Challenge;
+            setActiveChallenges([latestChallenge]); // We only care about the latest one for notifications
+            
+            const lastSeenTimestamp = localStorage.getItem('lastChallengeView');
+            const latestChallengeTimestamp = (latestChallenge.createdAt as Timestamp)?.toMillis();
+            
+            if (latestChallengeTimestamp) {
+                if (!lastSeenTimestamp || latestChallengeTimestamp > parseInt(lastSeenTimestamp, 10)) {
+                    setNewChallengeAvailable(true);
+                } else {
+                    setNewChallengeAvailable(false);
                 }
             }
-        });
-    }, []);
+        }
+    });
+
+    return () => unsubscribeChallenges();
+}, [user]);
 
     const markChallengeAsSeen = (challengeDate: Date) => {
         if(challengeDate) {
-            localStorage.setItem('lastChallengeView', challengeDate.toISOString());
+            localStorage.setItem('lastChallengeView', challengeDate.getTime().toString());
             setNewChallengeAvailable(false);
         }
     };

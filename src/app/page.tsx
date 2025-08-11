@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { AnimatePresence, motion } from "framer-motion";
 import { AVATAR_IDS } from "@/data/avatars";
-import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, getChallenges } from "@/lib/actions/user";
+import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, getChallenges, joinChallenge } from "@/lib/actions/user";
 import { doc, onSnapshot, collection, query, where, orderBy, Timestamp, limit } from "firebase/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -156,14 +156,12 @@ export default function Home() {
     const [isSubmittingGender, setIsSubmittingGender] = useState(false);
     
     const [isNewChallengeDialogOpen, setIsNewChallengeDialogOpen] = useState(false);
-    const [hasShownChallengeDialog, setHasShownChallengeDialog] = useState(false);
 
      useEffect(() => {
-        if (newChallengeAvailable && activeChallenges.length > 0 && !hasShownChallengeDialog) {
+        if (newChallengeAvailable && activeChallenges.length > 0) {
             setIsNewChallengeDialogOpen(true);
-            setHasShownChallengeDialog(true); 
         }
-    }, [newChallengeAvailable, activeChallenges, hasShownChallengeDialog]);
+    }, [newChallengeAvailable, activeChallenges]);
 
 
     useEffect(() => {
