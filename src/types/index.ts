@@ -278,8 +278,8 @@ export interface Player {
 export interface Humiliation {
     by: string; // ID of the humiliator
     byName: string;
-    at: Date | Timestamp;
-    until: Date | Timestamp;
+    at: Date;
+    until: Date;
     taxToLift: number;
     durationInDays: number;
 }
@@ -330,7 +330,7 @@ export interface Decree {
     issuedBy: string;
     issuedByName: string;
     at: Date;
-    until: Date | Timestamp;
+    until: Date;
     durationInDays: number;
     taxToLift: number;
 }
@@ -380,10 +380,10 @@ export interface UserProfile {
   alliances?: Alliance[];
   decrees?: Decree[];
   duelChallenges?: DuelChallenge[];
-  lastPunishmentTimestamp?: Record<string, Timestamp>; // { [targetId]: timestamp }
+  lastPunishmentTimestamp?: Record<string, number>; // { [targetId]: timestamp }
   originalAvatarToRevert?: { 
       id: string; 
-      until: Date | Timestamp;
+      until: Date;
       taxToLift: number; 
       by: string; 
       byName: string;
@@ -493,12 +493,13 @@ export interface DuelChallenge {
 
 export interface Property {
     id: number; // Index on the board
-    type: 'property' | 'start';
+    type: 'property' | 'start' | 'fine';
     name: string;
     category: string; // Question category
     price: number;
     rent: number;
     ownerId: string | null;
+    fineAmount?: number;
 }
 
 export interface EducatedMerchantQuestion {

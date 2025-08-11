@@ -13,17 +13,18 @@ interface PlayerHUDProps {
     players: Player[];
     balances: Record<string, number>;
     currentTurnPlayerId?: string;
+    activityLog?: string[];
 }
 
-export function PlayerHUD({ players, balances, currentTurnPlayerId }: PlayerHUDProps) {
+export function PlayerHUD({ players, balances, currentTurnPlayerId, activityLog = [] }: PlayerHUDProps) {
 
     return (
         <Card className="w-full h-full flex flex-col bg-gray-200 dark:bg-gray-800">
             <CardHeader>
                 <CardTitle className="text-center text-2xl">اللاعبون</CardTitle>
             </CardHeader>
-            <CardContent className="flex-grow p-2">
-                <ScrollArea className="h-full">
+            <CardContent className="flex-grow p-2 flex flex-col min-h-0">
+                <ScrollArea className="flex-grow">
                     <div className="space-y-2 p-2">
                         {players.map((player, index) => {
                             const isCurrentTurn = player.id === currentTurnPlayerId;
@@ -58,6 +59,20 @@ export function PlayerHUD({ players, balances, currentTurnPlayerId }: PlayerHUDP
                         })}
                     </div>
                 </ScrollArea>
+                 <div className="mt-2 shrink-0">
+                    <h3 className="text-center font-bold text-sm mb-1">آخر الأحداث</h3>
+                    <ScrollArea className="h-24 p-2 bg-gray-300 dark:bg-gray-900/50 rounded-lg">
+                        <div className="space-y-1.5 text-xs text-right">
+                            {activityLog.length > 0 ? (
+                                activityLog.slice().reverse().map((log, index) => (
+                                    <p key={index} className="[&:not(:first-child)]:text-muted-foreground">{log}</p>
+                                ))
+                            ) : (
+                                <p className="text-center text-muted-foreground">لم تبدأ الأحداث بعد.</p>
+                            )}
+                        </div>
+                    </ScrollArea>
+                </div>
             </CardContent>
         </Card>
     );

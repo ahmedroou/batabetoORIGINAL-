@@ -4,7 +4,7 @@
 import type { Player, Property } from '@/types';
 import { motion } from 'framer-motion';
 import { PlayerAvatar } from '../PlayerAvatar';
-import { Home, Building2 } from 'lucide-react';
+import { Home, Building2, CircleDollarSign, Gavel } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface GameBoardProps {
@@ -41,8 +41,10 @@ const Tile = ({ property, playersOnTile, allPlayers }: { property: Property, pla
             <div className="flex-grow flex flex-col items-center justify-center">
                  {property.type === 'start' && <Home className="w-8 h-8 text-green-500"/>}
                  {property.type === 'property' && <Building2 className="w-8 h-8 text-gray-500"/>}
+                 {property.type === 'fine' && <Gavel className="w-8 h-8 text-red-500"/>}
                 <p className="text-xs font-bold truncate w-full mt-1">{property.name}</p>
-                {property.price > 0 && <p className="text-xs font-semibold text-green-600 dark:text-green-400">{property.price} د.ع</p>}
+                {property.type === 'property' && property.price > 0 && <p className="text-xs font-semibold text-green-600 dark:text-green-400">{property.price} د.ع</p>}
+                {property.type === 'fine' && property.fineAmount && <p className="text-xs font-semibold text-red-600 dark:text-red-400">{property.fineAmount} د.ع</p>}
             </div>
             {ownerColor && (
                 <div className="absolute bottom-0 w-full h-2 rounded-b-md" style={{ backgroundColor: ownerColor }}/>
