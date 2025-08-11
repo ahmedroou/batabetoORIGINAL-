@@ -90,6 +90,28 @@ export interface Permission {
     category: 'economic' | 'social' | 'gameplay' | 'meta';
 }
 
+export interface BlackMarketListing {
+    id: string;
+    requesterId: string;
+    requesterName: string;
+    requesterAvatar: string;
+    description: string;
+    reward: number;
+    status: 'open' | 'in_progress' | 'completed' | 'cancelled';
+    createdAt: Date;
+    offers: ServiceOffer[];
+    acceptedOffer?: ServiceOffer;
+}
+
+export interface ServiceOffer {
+    providerId: string;
+    providerName: string;
+    providerAvatar: string;
+    price: number;
+    timestamp: Date;
+}
+
+
 export interface AudienceGroup {
     id: string;
     name: string;
@@ -206,7 +228,7 @@ export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
 
 export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
 export type PlayerTeam = 'mafia' | 'good' | 'neutral' | 'red' | 'blue';
-export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison';
+export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison' | 'bankrupt';
 
 export type ClanMemberRole = 'leader' | 'vice-leader' | 'member';
 
@@ -247,13 +269,17 @@ export interface Player {
   position: number; 
   isReady?: boolean; 
   temporaryTitle?: string | null;
+  // Educated Merchant specific fields
+  balance?: number;
+  properties?: number[]; // Array of property indices
+  bankruptAt?: Timestamp;
 }
 
 export interface Humiliation {
     by: string; // ID of the humiliator
     byName: string;
-    at: Date;
-    until: Date;
+    at: Date | Timestamp;
+    until: Date | Timestamp;
     taxToLift: number;
     durationInDays: number;
 }
@@ -304,7 +330,7 @@ export interface Decree {
     issuedBy: string;
     issuedByName: string;
     at: Date;
-    until: Date;
+    until: Date | Timestamp;
     durationInDays: number;
     taxToLift: number;
 }
@@ -358,7 +384,7 @@ export interface UserProfile {
   lastPunishmentTimestamp?: Record<string, Timestamp>; // { [targetId]: timestamp }
   originalAvatarToRevert?: { 
       id: string; 
-      until: Date; 
+      until: Date | Timestamp;
       taxToLift: number; 
       by: string; 
       byName: string;
@@ -380,8 +406,9 @@ export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submi
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
+export type EducatedMerchantGameState = "lobby" | "rolling" | "movement" | "property_action" | "question" | "turn_end" | "final_results";
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -465,6 +492,24 @@ export interface DuelChallenge {
     createdAt: Date;
 }
 
+export interface Property {
+    id: number; // Index on the board
+    type: 'property' | 'start' | 'chance'; // Example types
+    name: string;
+    category: string; // Question category
+    price: number;
+    rent: number;
+    ownerId: string | null;
+}
+
+export interface EducatedMerchantQuestion {
+    id: string;
+    question: string;
+    options: string[];
+    correctAnswer: string;
+    category: string;
+}
+
 export interface Game {
   id: string;
   hostId: string;
@@ -477,7 +522,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'prison';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'prison' | 'educated-merchant';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -637,6 +682,21 @@ export interface Game {
       judgeExplanation?: string;
       isRejectionJustified?: boolean;
   };
+
+  // "Educated Merchant" specific state
+  educatedMerchantState?: {
+    settings: {
+        maxRounds: number;
+        questionTime: number;
+    };
+    board: Property[];
+    turnOrder: string[];
+    currentTurnIndex: number;
+    lastDiceRoll?: number[];
+    currentQuestion?: EducatedMerchantQuestion | null;
+    timerEndsAt?: Timestamp | null;
+    activityLog: string[];
+  };
 }
 
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
@@ -645,6 +705,7 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
     'prison': 'السجن',
+    'educated-merchant': 'التاجر المتعلم',
 };
 
 // Sub-states for Mafia game
