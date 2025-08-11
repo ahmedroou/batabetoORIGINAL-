@@ -4,7 +4,7 @@
 
 import { db } from '@/lib/firebase';
 import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch, increment } from 'firebase/firestore';
-import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge } from '@/types';
+import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge, Game } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 
 
@@ -157,14 +157,8 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
 
 
 // Internal function to update win counts and check for new Game Kings
-export async function updateUserWinCount(gameType: any, userId: string, batch: WriteBatch) {
+export async function updateUserWinCount(gameType: Game['gameType'], userId: string, batch: WriteBatch) {
     
-    // This function should NOT handle team games, as that logic is in `distributeEndOfGameAwards`
-    const teamGameTypes = ['word_war', 'king-of-genius', 'behind-the-mask'];
-    if (teamGameTypes.includes(gameType)) {
-        return; 
-    }
-
     const userRef = doc(db, 'users', userId);
     // Note: This function now accepts a WriteBatch object instead of a full transaction,
     // so we cannot `get` docs. We must perform updates blindly. This is acceptable

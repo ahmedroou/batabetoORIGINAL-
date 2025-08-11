@@ -51,7 +51,7 @@ async function removePlayerFromPreviousLobbies(userId: string, currentRoomId: st
     const querySnapshot = await getDocs(playerInGamesQuery);
     
     if (querySnapshot.empty) {
-        return; // This was missing, causing an issue where nothing was returned.
+        return; 
     }
 
     const batch = writeBatch(db);
@@ -139,6 +139,7 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                     categories: categoriesResult.categories || [],
                     rounds: 10,
                     answerTime: 60,
+                    guessTime: 60,
                 },
                 trickStats: { trickedBy: {}, trickedOthers: {} },
             };

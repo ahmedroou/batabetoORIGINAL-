@@ -12,7 +12,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X, Shuffle, LogOut, Copy, Check, UserX, HelpCircle, UserCog, UserRoundCheck, ThumbsDown, EyeOff, Settings, Save } from 'lucide-react';
-import { PlayerAvatar } from '../PlayerAvatar';
+import { PlayerAvatar } from '../../PlayerAvatar';
 import * as roomActions from '@/lib/actions/room';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
@@ -105,7 +105,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const isHost = game.hostId === self.id;
 
     const onTimeout = useCallback(() => {
-        if((game.gameState === 'preparation' || game.gameState === 'guide_turn' || game.gameState === 'guesser_turn')) {
+        if(isHost && (game.gameState === 'preparation' || game.gameState === 'guide_turn' || game.gameState === 'guesser_turn')) {
             wordWarActions.handleTimeout(game.id, self.id);
         }
     }, [game.id, self.id, game.gameState, isHost]);
@@ -266,7 +266,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             setIsSubmitting(true);
             const result = await roomActions.leaveGame(game.id, self.id);
             if (result.success) {
-              sessionStorage.removeItem(`player-${game.id}`);
+              sessionStorage.removeItem(`player-id-${game.id}`);
               router.push('/');
               toast({ title: "لقد غادرت الغرفة." })
             } else {
@@ -324,7 +324,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             const activePlayers = game.players.filter(p => p.status !== 'left');
             if (activePlayers.length < 4) return { disabled: true, text: "تحتاج إلى 4 لاعبين على الأقل" };
             if (unassigned.length > 0) return { disabled: true, text: `في انتظار ${unassigned.length} لاعبين` };
-            // Removed team balance check
+            if (teamRedPlayers.length !== teamBluePlayers.length) return { disabled: true, text: "يجب أن تكون الفرق متوازنة" };
             return { disabled: false, text: "بدء اللعبة" };
         }
         const startButtonState = getStartButtonState();
@@ -485,6 +485,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             {teamRedPlayers.map(p => (
                                     <div key={p.id} className="flex flex-col items-center text-center">
                                          <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8 rounded-full" />
+                                         {wwState.guides.red === p.id && <Eye className="w-4 h-4 text-primary" />}
                                     </div>
                             ))}
                             </div>
@@ -496,6 +497,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             {teamBluePlayers.map(p => (
                                     <div key={p.id} className="flex flex-col items-center text-center">
                                          <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8 rounded-full" />
+                                         {wwState.guides.blue === p.id && <Eye className="w-4 h-4 text-primary" />}
                                     </div>
                             ))}
                             </div>

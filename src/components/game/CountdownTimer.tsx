@@ -25,11 +25,15 @@ export const CountdownTimer = ({ expiryTimestamp, onExpire }: CountdownTimerProp
 
     useEffect(() => {
         if (!expiryTimestamp) return;
+        
+        // This ref is to prevent multiple onExpire calls if the component re-renders quickly near zero.
+        const expireHasBeenCalled = { current: false };
 
         const timer = setInterval(() => {
             const remaining = calculateTimeLeft();
             setTimeLeft(remaining);
-            if (remaining <= 0) {
+            if (remaining <= 0 && !expireHasBeenCalled.current) {
+                expireHasBeenCalled.current = true;
                 clearInterval(timer);
                 onExpireRef.current();
             }
@@ -37,6 +41,7 @@ export const CountdownTimer = ({ expiryTimestamp, onExpire }: CountdownTimerProp
 
         return () => clearInterval(timer);
     }, [expiryTimestamp, calculateTimeLeft]);
+
 
     if (!expiryTimestamp || timeLeft <= 0) return null;
 

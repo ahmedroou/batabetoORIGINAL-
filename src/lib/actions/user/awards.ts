@@ -12,7 +12,7 @@ export function calculateEndOfGameAwards(game: Game) {
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     
     // Sort players by final score
-    const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (a.score || 0));
+    const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
 
     // Define awards based on rank
     const awardTiers = [
@@ -41,19 +41,23 @@ export function calculateEndOfGameAwards(game: Game) {
                 challengePoints: points,
             };
         });
+        // Win count for team games is handled separately in the `distributeEndOfGameAwards` function.
+        // So `winUpdate` remains null here.
     } else {
         // Individual awards
         const playerRanks: { id: string, rank: number }[] = [];
         let currentRank = 0;
         let lastScore = -Infinity;
+        
         sortedPlayers.forEach((player, index) => {
-             if ((finalScores[player.id] || 0) < lastScore) {
+             const score = finalScores[player.id] || 0;
+             if (score < lastScore) {
                 currentRank = index + 1;
             } else if (lastScore === -Infinity) {
                 currentRank = 1;
             }
             playerRanks.push({ id: player.id, rank: currentRank });
-            lastScore = finalScores[player.id] || 0;
+            lastScore = score;
         });
         
         playerRanks.forEach(({ id, rank }) => {
@@ -120,4 +124,3 @@ export function calculateEndOfGameAwards(game: Game) {
 
     return { updates, winUpdate, specialAwards };
 }
-
