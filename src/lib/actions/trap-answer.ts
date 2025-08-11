@@ -4,7 +4,7 @@
 
 /**
  * @fileoverview Actions specific to the "Trap Answer" game.
- * @version 3.0 (Corrected)
+ * @version 3.1
  * @summary
  * Key Fixes in this version:
  * 1.  **Correct State Propagation**: Fixed a critical bug where the latest player guess was not correctly
@@ -15,6 +15,9 @@
  * 3.  **Robust Dummy Answer Handling**: Added safer checks to prevent errors when handling optional dummy answers.
  * 4.  **Code Consistency**: Standardized the logic in `submitTrapAnswer` and `submitGuess` for better
  * maintainability and to prevent similar bugs in the future.
+ * 5.  **Final Results Bug**: Corrected logic in `nextTrapAnswerRound` to properly transition to the `final_results` state.
+ * 6.  **Timer Settings**: Ensured `answerTime` from settings is used for both answering and guessing phases.
+ * 7.  **Smart Dummy Answers**: Dummy answers are now only added if the total number of options is less than 4.
  */
 
 import { db } from '@/lib/firebase';
@@ -49,7 +52,6 @@ import { calculateEndOfGameAwards } from './user/awards';
 const SIMILARITY_THRESHOLD = 0.85;
 const CATEGORY_SELECTION_TIME_S = 30;
 const DEFAULT_ANSWER_TIME_S = 60;
-const DEFAULT_GUESS_TIME_S = 60;
 
 // --- Settings and Game Setup ---
 
@@ -122,12 +124,10 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
         const questionsCol = collection(db, "trap_answer_questions");
         const randomKey = Math.random();
         
-        // Query for a random document. This is a common Firestore pattern.
         const q1 = query(questionsCol, where("category", "==", category), where("randomKey", ">=", randomKey), limit(1));
         let querySnapshot = await getDocs(q1);
 
         if (querySnapshot.empty) {
-            // If no doc found, wrap around and query from the start
             const q2 = query(questionsCol, where("category", "==", category), where("randomKey", "<", randomKey), limit(1));
             querySnapshot = await getDocs(q2);
         }
@@ -178,7 +178,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         const newPlayerAnswers = { ...(game.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
         transaction.update(gameRef, { 'trapAnswerState.playerAnswers': newPlayerAnswers });
         
-        const activePlayers = game.players.filter(p => p.status !== 'left');
+        const activePlayers = game.players.filter(p => p.status === 'alive');
         const hasEveryoneAnswered = activePlayers.every(p => newPlayerAnswers.hasOwnProperty(p.id));
         
         if (hasEveryoneAnswered) {
@@ -254,7 +254,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     gameState: 'final_results',
                     gameResult: finalGameData.gameResult,
                     'trapAnswerState.finalAwards': finalGameData.trapAnswerState.finalAwards,
-                    'trapAnswerState.timerEndsAt': null,
+                    'trapAnswerState.timerEndsAt': deleteField(),
                 });
             } else {
                 const nextTurnIndex = ((game.trapAnswerState?.currentTurnIndex || 0) + 1) % game.players.length;
@@ -269,8 +269,8 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                     'trapAnswerState.playerAnswers': {},
                     'trapAnswerState.playerGuesses': {},
                     'trapAnswerState.lastRoundResults': {},
-                    'trapAnswerState.selectedCategory': null,
-                    'trapAnswerState.currentQuestion': null,
+                    'trapAnswerState.selectedCategory': deleteField(),
+                    'trapAnswerState.currentQuestion': deleteField(),
                     'trapAnswerState.timerEndsAt': Timestamp.fromMillis(Date.now() + CATEGORY_SELECTION_TIME_S * 1000),
                     'trapAnswerState.reactions': {},
                     'trapAnswerState.shuffledAnswers': [],
@@ -304,7 +304,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
         if (game.hostId !== hostId) return;
         
-        transaction.update(gameRef, {'trapAnswerState.timerEndsAt': null});
+        transaction.update(gameRef, {'trapAnswerState.timerEndsAt': deleteField()});
 
         if (game.gameState === 'category-selection') {
             const turnOrder = game.trapAnswerState?.turnOrder || [];
@@ -374,7 +374,6 @@ export async function setAwayStatus(gameId: string, playerId: string, isAway: bo
         await updateDoc(gameRef, updateData);
     } catch (error) {
         console.error(`Failed to update away status for player ${playerId} in game ${gameId}:`, error);
-        // Don't throw error to the client, just log it.
     }
 }
 
@@ -395,20 +394,26 @@ async function _advanceToGuessing(transaction: Transaction, gameRef: any, game: 
         }
     }
 
-    const guessTime = game.trapAnswerState?.settings?.guessTime || DEFAULT_GUESS_TIME_S;
-    const timerEndsAt = Timestamp.fromMillis(Date.now() + guessTime * 1000);
+    const answerTime = game.trapAnswerState?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
+    const timerEndsAt = Timestamp.fromMillis(Date.now() + answerTime * 1000);
     const question = game.trapAnswerState?.currentQuestion;
     if (!question) throw new Error("Question data is missing for advancing state.");
     
     const validPlayerAnswers = Object.values(playerAnswers).filter((ans): ans is string => ans !== null && ans.trim() !== '');
-    let allPossibleAnswers = [question.answer, ...validPlayerAnswers];
     
-    if (Array.isArray(question.dummyAnswers) && question.dummyAnswers.length > 0) {
-        allPossibleAnswers.push(question.dummyAnswers[Math.floor(Math.random() * question.dummyAnswers.length)]);
+    const allPossibleAnswers = new Set<string>();
+    allPossibleAnswers.add(question.answer);
+    validPlayerAnswers.forEach(ans => allPossibleAnswers.add(ans));
+
+    if (allPossibleAnswers.size < 4 && Array.isArray(question.dummyAnswers) && question.dummyAnswers.length > 0) {
+        const shuffledDummies = shuffle([...question.dummyAnswers]);
+        for (const dummy of shuffledDummies) {
+            if (allPossibleAnswers.size >= 4) break;
+            allPossibleAnswers.add(dummy);
+        }
     }
 
-    const uniqueDisplayAnswers = Array.from(new Set(allPossibleAnswers));
-    const shuffledAnswers = shuffle(uniqueDisplayAnswers);
+    const shuffledAnswers = shuffle(Array.from(allPossibleAnswers));
     
     transaction.update(gameRef, {
         gameState: 'guessing',
@@ -438,7 +443,6 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
 
     const activePlayers = game.players.filter(p => p.status === 'alive');
     
-    // Combine away players from both phases
     const awayInAnswering = game.trapAnswerState.awayPlayerIdsInAnsweringPhase || [];
     const awayInGuessing = game.trapAnswerState.awayPlayerIds || [];
     const awayPlayerIdsDuringRound = Array.from(new Set([...awayInAnswering, ...awayInGuessing]));
@@ -474,7 +478,7 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
         playerScores: finalScores,
         'trapAnswerState.playerGuesses': playerGuesses,
         'trapAnswerState.lastRoundResults': roundResults,
-        'trapAnswerState.timerEndsAt': null,
+        'trapAnswerState.timerEndsAt': deleteField(),
         'trapAnswerState.trickStats': mergedTrickStats,
         'trapAnswerState.awayPlayerIds': [],
     });
