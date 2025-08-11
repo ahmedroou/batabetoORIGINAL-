@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions specific to the "Word War" game.
  */
@@ -30,17 +31,18 @@ import { calculateEndOfGameAwards } from './user/awards';
 const generateCards = async (): Promise<WordWarCard[]> => {
     const wordsCol = collection(db, 'word_war_words');
     const snapshot = await getDocs(wordsCol);
-    if (snapshot.docs.length < 25) {
-        throw new Error("لا توجد كلمات كافية في قاعدة البيانات. تحتاج إلى 25 كلمة على الأقل.");
+    const WORD_COUNT = 40;
+    if (snapshot.docs.length < WORD_COUNT) {
+        throw new Error(`لا توجد كلمات كافية في قاعدة البيانات. تحتاج إلى ${WORD_COUNT} كلمة على الأقل.`);
     }
     
     const allWords = snapshot.docs.map(doc => doc.data().text as string);
-    const shuffledWords = shuffle(allWords).slice(0, 25);
+    const shuffledWords = shuffle(allWords).slice(0, WORD_COUNT);
     
-    // 9 Red, 8 Blue, 7 Neutral, 1 Assassin
-    const redCount = 9;
-    const blueCount = 8;
-    const neutralCount = 7;
+    // 15 Red, 14 Blue, 10 Neutral, 1 Assassin
+    const redCount = 15;
+    const blueCount = 14;
+    const neutralCount = 10;
     const assassinCount = 1;
 
     const colors: WordWarCard['color'][] = [
@@ -191,13 +193,13 @@ export async function submitHint(gameId: string, playerId: string, word: string,
         transaction.update(gameRef, {
             gameState: 'guesser_turn',
             'wordWarState.currentHint': { word, count },
-            'wordWarState.guessesLeft': count, // Strictly the count number.
+            'wordWarState.guessesLeft': count,
             'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
         });
     });
 }
 
-export async function revealCard(gameId: string, playerId: string, cardIndex: number) {
+export async function revealCard(gameId: string, playerId: string, cardText: string) {
     let gameDataForLeagueUpdate: Game | null = null;
     await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
@@ -209,8 +211,10 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
         if (!wwState || game.gameState !== 'guesser_turn') return;
 
         const cards = [...wwState.cards];
+        const cardIndex = cards.findIndex(c => c.text === cardText);
+        if (cardIndex === -1) throw new Error("Card not found.");
+        
         const card = cards[cardIndex];
-
         if (card.revealed) return;
 
         // Create a new card object with revealed set to true
@@ -253,7 +257,7 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
             updates.gameResult = winner;
             updates['wordWarState.timerEndsAt'] = deleteField();
             gameDataForLeagueUpdate = { ...game, ...updates };
-        } else if (turnShouldEnd || guessesLeft <= 0) { // Changed to <= 0 to handle last guess
+        } else if (turnShouldEnd || guessesLeft <= 0) {
             updates.gameState = 'guide_turn';
             updates['wordWarState.turn'] = wwState.turn === 'red' ? 'blue' : 'red';
             updates['wordWarState.currentHint'] = null;
@@ -327,7 +331,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
     });
 }
 
-export async function toggleSuspicion(gameId: string, playerId: string, cardIndex: number) {
+export async function toggleSuspicion(gameId: string, playerId: string, cardText: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -340,7 +344,7 @@ export async function toggleSuspicion(gameId: string, playerId: string, cardInde
         if (!player?.team) throw new Error("Player not assigned to a team.");
 
         const suspicions = game.wordWarState.suspicions || {};
-        const cardSuspicions = suspicions[cardIndex] || [];
+        const cardSuspicions = suspicions[cardText] || [];
         const isSuspectedByMe = cardSuspicions.includes(playerId);
 
         let newCardSuspicions;
@@ -353,11 +357,11 @@ export async function toggleSuspicion(gameId: string, playerId: string, cardInde
         if (newCardSuspicions.length === 0) {
             // If the array is empty, remove the key from the map
             transaction.update(gameRef, {
-                [`wordWarState.suspicions.${cardIndex}`]: deleteField()
+                [`wordWarState.suspicions.${cardText}`]: deleteField()
             });
         } else {
             transaction.update(gameRef, {
-                [`wordWarState.suspicions.${cardIndex}`]: newCardSuspicions
+                [`wordWarState.suspicions.${cardText}`]: newCardSuspicions
             });
         }
     });

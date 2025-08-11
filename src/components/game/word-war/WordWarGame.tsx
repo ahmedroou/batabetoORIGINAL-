@@ -70,12 +70,12 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const router = useRouter();
     const [hintWord, setHintWord] = useState('');
     const [hintNumber, setHintNumber] = useState(1);
-    const [isSubmitting, setIsSubmitting] = useState(false);
     
     // State for Lobby
     const [isCopying, setIsCopying] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     const [turnTime, setTurnTime] = useState(game.wordWarState?.settings?.turnTime || 60);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     
     const wwState = game.wordWarState;
 
@@ -428,7 +428,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                      <CardFooter className="flex-col gap-2">
                         {isHost && (
                             <div className="flex gap-2 w-full">
-                                <Button onClick={handleStartGame} disabled={startButtonState.disabled || isSubmitting} className="flex-grow">
+                                <Button onClick={handleStartGame} disabled={startButtonState.disabled} className="flex-grow">
                                     {isSubmitting ? <Loader2 className="animate-spin" /> : startButtonState.text}
                                 </Button>
                                 <Button onClick={handleRandomizeTeams} disabled={isSubmitting} variant="outline">
@@ -471,7 +471,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             : '';
             
         return (
-            <div className={cn("w-full h-screen flex flex-col p-4 bg-gray-50 transition-shadow duration-500", turnGlowClass)}>
+            <div className={cn("w-full h-screen flex flex-col p-1 sm:p-2 md:p-4 bg-gray-50 transition-shadow duration-500", turnGlowClass)}>
                  {(wwState.timerEndsAt && game.gameState !== 'final_results') && (
                     <div className="absolute top-4 right-4 z-10">
                         <CountdownTimer 
@@ -509,12 +509,12 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                     </div>
                 </header>
 
-                <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
+                <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-1 sm:gap-2 p-1 md:p-2 max-w-7xl mx-auto">
                     {wwState.cards.map((card, index) => {
                         const canPlayerClick = isGuesserTurn && !card.revealed;
-                        const cardSuspicions = wwState.suspicions?.[card.text] || [];
-                        const isSuspectedByAnyTeam = cardSuspicions.length > 0;
-                        const isSuspectedByMyTeam = cardSuspicions.some(playerId => game.players.find(p => p.id === playerId)?.team === self.team);
+                        const suspicionsForCard = wwState.suspicions?.[card.text] || [];
+                        const isSuspectedByAnyTeam = suspicionsForCard.length > 0;
+                        const isSuspectedByMyTeam = suspicionsForCard.some(playerId => game.players.find(p => p.id === playerId)?.team === self.team);
                         
                         return (
                             <motion.div
@@ -526,11 +526,11 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                             >
                                  <div
                                     className={cn(
-                                        'relative w-full h-20 md:h-24 rounded-md flex items-center justify-center p-2 text-center font-bold text-base md:text-lg shadow-md transition-all duration-300 transform overflow-hidden',
+                                        'relative w-full h-20 md:h-24 rounded-md flex items-center justify-center p-1 text-center font-bold text-xs sm:text-sm md:text-base shadow-md transition-all duration-300 transform overflow-hidden',
                                         getCardColorStyles(card, isGuide, game.gameState, isSuspectedByAnyTeam),
                                         canPlayerClick && "cursor-pointer"
                                     )}
-                                    onClick={() => canPlayerClick && wordWarActions.revealCard(game.id, self.id, index)}
+                                    onClick={() => canPlayerClick && wordWarActions.revealCard(game.id, self.id, card.text)}
                                 >
                                      <span className={cn(card.revealed && "opacity-20")}>
                                         {card.text}
@@ -558,7 +558,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                      </div>
                                 )}
                                 <div className="absolute bottom-0 left-1 flex items-center -space-x-2">
-                                    {cardSuspicions.map(playerId => {
+                                    {suspicionsForCard.map(playerId => {
                                         const suspectingPlayer = game.players.find(p => p.id === playerId);
                                         if (!suspectingPlayer) return null;
                                         return (
