@@ -9,6 +9,7 @@ import { DiceRoll } from './DiceRoll';
 import { PropertyCard } from './PropertyCard';
 import { QuestionModal } from './QuestionModal';
 import { FinalResults } from './FinalResults';
+import { Lobby } from './Lobby'; // Import the new Lobby component
 
 interface EducatedMerchantGameProps {
     game: Game;
@@ -16,19 +17,24 @@ interface EducatedMerchantGameProps {
 }
 
 export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) {
-
     const es = game.educatedMerchantState;
-    if (!es) return <div>جاري تحميل حالة اللعبة...</div>;
-    
-    const [diceRollResult, setDiceRollResult] = useState<number | null>(null);
+    if (!es) return <Lobby game={game} self={self} />; // Fallback to lobby if state is missing
 
-    const isMyTurn = es.turnOrder[es.currentTurnIndex] === self.id;
+    const isMyTurn = es.turnOrder && es.turnOrder[es.currentTurnIndex] === self.id;
     const canRoll = game.gameState === 'rolling' && isMyTurn;
     const showPropertyInteraction = game.gameState === 'property_action' && isMyTurn;
     const showQuestion = game.gameState === 'question' && isMyTurn;
+    
+    if (game.gameState === 'lobby') {
+        return <Lobby game={game} self={self} />;
+    }
 
     if(game.gameState === 'final_results') {
         return <FinalResults game={game} />
+    }
+    
+    if (!es.board || es.board.length === 0) {
+        return <div>جاري تحميل لوحة اللعب...</div>
     }
 
     return (
@@ -54,7 +60,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
                     activePlayerId={es.turnOrder[es.currentTurnIndex]}
                 />
                 
-                {canRoll && <DiceRoll gameId={game.id} selfId={self.id} onRollComplete={setDiceRollResult} />}
+                {canRoll && <DiceRoll gameId={game.id} selfId={self.id} onRollComplete={() => {}} />}
                 {showPropertyInteraction && <PropertyCard game={game} self={self} />}
                 {showQuestion && <QuestionModal game={game} self={self} />}
 
