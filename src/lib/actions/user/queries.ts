@@ -317,5 +317,3 @@ export async function getTopPunisher(): Promise<UserProfile | null> {
         return null;
     }
 }
-
-    

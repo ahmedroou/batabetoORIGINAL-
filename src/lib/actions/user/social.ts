@@ -1,7 +1,8 @@
 
+
 'use server';
 
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { doc, serverTimestamp, updateDoc, collection, getDoc, increment, runTransaction, arrayUnion, setDoc, deleteField } from 'firebase/firestore';
 import type { UserProfile, SocialRank, Humiliation, AllegianceRequest, ActiveAllegiance, TaxDemand, Alliance, Decree, DuelChallenge, SocialEvent } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';

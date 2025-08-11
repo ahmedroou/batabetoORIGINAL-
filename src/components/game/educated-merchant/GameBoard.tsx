@@ -1,9 +1,8 @@
-
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useEffect, useMemo } from "react";
 import type { Player, Property } from "@/types";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { PlayerAvatar } from "../PlayerAvatar";
 import { Home, Building2, Gavel } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,148 +18,253 @@ interface GameBoardProps {
   gameState: string;
 }
 
-const TILE_SIZE_LG = 110;
-const TILE_SIZE_MD = 90;
-const TILE_SIZE_SM = 70;
+const TILE_GAP = 6; // px
 
-const Tile = React.forwardRef<
-  HTMLDivElement,
-  { property: Property; ownerColor?: string }
->(({ property, ownerColor }, ref) => {
+// --- Small color helpers ---
+function hexToRgb(hex: string) {
+  if (!hex) return null;
+  const h = hex.replace('#', '');
+  if (h.length === 3) {
+    return {
+      r: parseInt(h[0] + h[0], 16),
+      g: parseInt(h[1] + h[1], 16),
+      b: parseInt(h[2] + h[2], 16),
+    };
+  }
+  if (h.length === 6) {
+    return {
+      r: parseInt(h.slice(0, 2), 16),
+      g: parseInt(h.slice(2, 4), 16),
+      b: parseInt(h.slice(4, 6), 16),
+    };
+  }
+  return null;
+}
+
+function hexToRgba(hex: string, alpha = 1) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return `rgba(0,0,0,${alpha})`;
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
+function getContrastColor(hex: string) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return '#000';
+  // relative luminance
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 0.6 ? '#000000' : '#ffffff';
+}
+
+function categoryHue(category?: string) {
+  const s = (category || "generic").toString();
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash << 5) - hash + s.charCodeAt(i);
+  const hue = Math.abs(hash) % 360;
+  return hue;
+}
+
+function categoryGradientStyle(category?: string) {
+  const hue = categoryHue(category);
+  return {
+    background: `linear-gradient(135deg, hsla(${hue},70%,96%,0.95), hsla(${hue},70%,70%,0.95))`,
+    borderColor: `hsl(${hue} 55% 45%)`,
+  } as React.CSSProperties;
+}
+
+const Tile = React.forwardRef<HTMLDivElement, {
+  property: Property;
+  ownerColor?: string | undefined;
+  playersOnTile?: Player[];
+  isActive?: boolean;
+}>(({ property, ownerColor, playersOnTile = [], isActive = false }, ref) => {
+  const catStyle = property.type === 'property' ? categoryGradientStyle(property.category) : undefined;
+
+  // If tile is owned, mix owner color as a soft overlay to make the entire tile feel like player's color
+  const ownerOverlayStyle: React.CSSProperties | undefined = ownerColor
+    ? {
+        background: `linear-gradient(135deg, ${hexToRgba(ownerColor, 0.15)}, ${hexToRgba(ownerColor, 0.28)}), ${catStyle?.background || 'transparent'}`,
+        borderColor: ownerColor,
+      }
+    : undefined;
+
+  const textColor = ownerColor ? getContrastColor(ownerColor) : undefined;
+
   return (
-    <div
+    <motion.div
       ref={ref}
+      layout
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      whileHover={{ scale: 1.02 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 24 }}
       className={cn(
-        "relative rounded-md border-2 flex flex-col items-center justify-center text-center p-1 transition-all duration-300 aspect-square hover:bg-gray-300 dark:hover:bg-gray-700",
-        ownerColor ? "shadow-lg" : "bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-700"
+        'relative rounded-lg border p-2 flex flex-col items-center justify-center text-center select-none',
+        property.type === 'start' ? 'shadow-inner' : 'shadow',
+        isActive ? 'ring-4 ring-offset-2 ring-opacity-60' : ''
       )}
-      style={{ borderColor: ownerColor || undefined }}
-      id={`tile-${property.id}`}
+      style={{
+        ...(ownerOverlayStyle || catStyle || {}),
+        borderWidth: ownerColor ? 2 : 1,
+        borderStyle: 'solid',
+        boxShadow: ownerColor ? '0 8px 22px rgba(0,0,0,0.12)' : undefined,
+      }}
+      title={`${property.name}${property.type === 'property' ? ` — ${property.price} د.ع — إيجار ${property.rent}` : ''}`}
+      aria-label={property.name}
     >
-      <div className="flex-grow flex flex-col items-center justify-center">
-        {property.type === "start" && <Home className="w-4 h-4 md:w-6 md:h-6 text-green-500" />}
-        {property.type === "property" && <Building2 className="w-4 h-4 md:w-6 md:h-6 text-gray-500" />}
-        {property.type === "fine" && <Gavel className="w-4 h-4 md:w-6 md:h-6 text-red-500" />}
-        <p className="text-[8px] md:text-xs font-bold truncate w-full mt-1">{property.name}</p>
-        {property.type === "property" && property.price > 0 && (
-          <p className="text-[8px] md:text-xs font-semibold text-green-600 dark:text-green-400">{property.price} د.ع</p>
+      <div className="flex-grow flex flex-col items-center justify-center min-h-[36px]">
+        {property.type === 'start' && <Home className="w-5 h-5 md:w-6 md:h-6 text-green-700" />}
+        {property.type === 'property' && <Building2 className="w-5 h-5 md:w-6 md:h-6 text-gray-700" />}
+        {property.type === 'fine' && <Gavel className="w-5 h-5 md:w-6 md:h-6 text-red-700" />}
+
+        <p className="text-[10px] md:text-xs font-extrabold truncate w-full mt-1" style={{ color: textColor }}>{property.name}</p>
+
+        {property.type === 'property' && property.price > 0 && (
+          <p className="text-[10px] md:text-xs font-semibold mt-0.5" style={{ color: textColor }}>{property.price} د.ع</p>
         )}
-        {property.type === "fine" && property.fineAmount && (
-           <p className="text-[8px] md:text-xs font-semibold text-red-600 dark:text-red-400">{property.fineAmount} د.ع</p>
+
+        {property.type === 'fine' && property.fineAmount && (
+          <p className="text-[10px] md:text-xs font-semibold mt-0.5" style={{ color: textColor }}>{property.fineAmount} د.ع</p>
         )}
       </div>
-      {ownerColor && (
-        <div
-          className="absolute bottom-0 w-full h-1 md:h-2 rounded-b-md"
-          style={{ backgroundColor: ownerColor }}
-        />
+
+      {/* owner bar */}
+      {ownerColor ? (
+        <div className="absolute left-0 bottom-0 w-full h-1 rounded-b-md" style={{ background: ownerColor }} />
+      ) : (
+        <div className="absolute left-0 bottom-0 w-full h-1 bg-transparent" />
       )}
-    </div>
+
+      {/* players tokens stacked */}
+      {playersOnTile.length > 0 && (
+        <div className="absolute left-1 bottom-1 flex gap-0.5 items-center">
+          {playersOnTile.slice(0, 4).map((pl, i) => (
+            <div
+              key={pl.id}
+              className="w-4 h-4 md:w-5 md:h-5 rounded-full border-2 border-white shadow-sm overflow-hidden"
+              style={{ transform: `translateX(${i * 6}px)`, zIndex: 20 + i }}
+              title={pl.name}
+            >
+              <PlayerAvatar avatarId={pl.avatarId} className="w-full h-full" />
+            </div>
+          ))}
+          {playersOnTile.length > 4 && (
+            <div className="flex items-center justify-center text-[10px] w-4 h-4 rounded-full bg-gray-800 text-white ml-1">+{playersOnTile.length - 4}</div>
+          )}
+        </div>
+      )}
+    </motion.div>
   );
 });
-Tile.displayName = "Tile";
+Tile.displayName = 'Tile';
 
-export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId, gameState }: GameBoardProps) {
-    if (!board || board.length === 0) {
-        return <div className="text-center p-6 text-lg">جاري تحميل اللوحة...</div>;
+export default function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId, gameState }: GameBoardProps) {
+  if (!board || board.length === 0) {
+    return <div className="text-center p-6 text-lg">جاري تحميل اللوحة...</div>;
+  }
+
+  const sideLength = useMemo(() => Math.ceil(board.length / 4) + 1, [board.length]);
+
+  const perimeterPositions = useMemo(() => {
+    const positions = new Map<number, { gridRow: number; gridColumn: number }>();
+    const n = sideLength;
+    const perimeterCount = (n - 1) * 4;
+
+    for (let i = 0; i < board.length; i++) {
+      const idx = i % perimeterCount;
+      let row = 1, col = 1;
+
+      if (idx < n) {
+        row = 1;
+        col = idx + 1;
+      } else if (idx < n + (n - 2)) {
+        row = idx - (n - 1) + 1;
+        col = n;
+      } else if (idx < n + (n - 2) + (n - 1)) {
+        row = n;
+        col = n - (idx - (n + (n - 2)));
+      } else {
+        row = n - (idx - (n + (n - 2) + (n - 1)));
+        col = 1;
+      }
+
+      positions.set(i, { gridRow: row, gridColumn: col });
     }
+    return positions;
+  }, [board, sideLength]);
 
-    const sideLength = useMemo(
-        () => Math.ceil(board.length / 4) + 1,
-        [board.length]
-    );
+  const activePlayer = players.find(p => p.id === activePlayerId);
+  const activePosition = activePlayer?.position;
 
-    const perimeterPositions = useMemo(() => {
-        const positions = new Map<number, { gridRow: number; gridColumn: number }>();
-        const perimeter = (sideLength - 1) * 4;
-        board.forEach((_, index) => {
-            const effectiveIndex = index % perimeter;
-            let row = 1, col = 1;
-            if (effectiveIndex < sideLength) {
-                row = 1;
-                col = effectiveIndex + 1;
-            } else if (effectiveIndex < sideLength * 2 - 1) {
-                row = (effectiveIndex - (sideLength - 1)) + 1;
-                col = sideLength;
-            } else if (effectiveIndex < sideLength * 3 - 2) {
-                row = sideLength;
-                col = sideLength - (effectiveIndex - (sideLength * 2 - 2));
-            } else {
-                row = sideLength - (effectiveIndex - (sideLength * 3 - 3));
-                col = 1;
-            }
-            positions.set(index, { gridRow: row, gridColumn: col });
-        });
-        return positions;
-    }, [board, sideLength]);
+  useEffect(() => {
+    const movePlayer = async () => {
+      if (diceRoll === null || !isMyTurn) return;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      try {
+        await handlePropertyAction(gameId, activePlayerId);
+      } catch (e) {
+        console.error('handlePropertyAction failed', e);
+      }
+    };
 
-    useEffect(() => {
-        const movePlayer = async () => {
-            if (diceRoll === null || !isMyTurn) return;
-            // Delay before calling the server action to let players see the dice
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            await handlePropertyAction(gameId, activePlayerId);
-        };
+    if (gameState === 'movement') movePlayer();
+  }, [diceRoll, isMyTurn, gameId, activePlayerId, gameState]);
 
-        if (gameState === "movement") {
-            movePlayer();
-        }
-    }, [diceRoll, isMyTurn, gameId, activePlayerId, gameState]);
+  return (
+    <div className="p-2 rounded-3xl shadow-2xl bg-gradient-to-br from-violet-50 to-violet-100 dark:from-zinc-900 dark:to-zinc-800 w-full max-w-[92vh] mx-auto">
+      <div
+        className="relative w-full h-full grid"
+        style={{
+          gridTemplateColumns: `repeat(${sideLength}, minmax(40px, 1fr))`,
+          gridTemplateRows: `repeat(${sideLength}, minmax(40px, 1fr))`,
+          gap: `${TILE_GAP}px`,
+        }}
+      >
+        {board.map((property, idx) => {
+          const pos = perimeterPositions.get(idx);
+          if (!pos) return null;
 
-    return (
-        <div className="p-1 md:p-2 bg-gray-300 dark:bg-gray-800/50 rounded-2xl shadow-2xl self-center w-full max-w-[90vh] aspect-square">
-            <div
-                className="relative w-full h-full grid"
-                style={{
-                    gridTemplateColumns: `repeat(${sideLength}, 1fr)`,
-                    gridTemplateRows: `repeat(${sideLength}, 1fr)`,
-                    gap: '4px'
-                }}
-            >
-                {board.map((property, index) => {
-                    const pos = perimeterPositions.get(index);
-                    if (!pos) return null;
-                    const ownerColor = property.ownerId ? players.find(p => p.id === property.ownerId)?.color : undefined;
-                    return (
-                        <div key={property.id} style={{ gridRow: pos.gridRow, gridColumn: pos.gridColumn }}>
-                            <Tile property={property} ownerColor={ownerColor} />
-                        </div>
-                    );
-                })}
-                {players.map((player, pIndex) => {
-                    const pos = perimeterPositions.get(player.position);
-                    if (!pos || player.status === 'bankrupt') return null;
-                    return (
-                        <motion.div
-                            key={player.id}
-                            layout
-                            className="absolute z-10 flex items-center justify-center p-0.5"
-                            style={{
-                                gridRow: pos.gridRow,
-                                gridColumn: pos.gridColumn,
-                            }}
-                             initial={{ opacity: 0, scale: 0.5 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                        >
-                            <div style={{ transform: `translate(${(pIndex % 4) * 6 - 9}px, ${Math.floor(pIndex / 4) * 6 - 9}px)` }}>
-                                <PlayerAvatar
-                                    avatarId={player.avatarId}
-                                    className="w-4 h-4 md:w-5 md:h-5 border-2 rounded-full shadow-lg"
-                                />
-                            </div>
-                        </motion.div>
-                    );
-                })}
-                <div
-                    className="flex items-center justify-center text-center"
-                    style={{ gridArea: `2 / 2 / ${sideLength} / ${sideLength}`}}
-                >
-                    {gameState === 'rolling' || (gameState === 'movement' && diceRoll !== null) ? null : (
-                         <h2 className="text-xl md:text-3xl font-bold text-gray-700 dark:text-gray-300">التاجر المتعلم</h2>
-                    )}
-                </div>
+          const ownerColor = property.ownerId ? players.find(p => p.id === property.ownerId)?.color : undefined;
+          const playersOnTile = players.filter(pl => pl.position === property.id && pl.status !== 'bankrupt');
+          const isActive = activePosition === property.id;
+
+          return (
+            <div key={property.id} style={{ gridRow: pos.gridRow, gridColumn: pos.gridColumn }} className="p-0">
+              <Tile property={property} ownerColor={ownerColor} playersOnTile={playersOnTile} isActive={isActive} />
             </div>
+          );
+        })}
+
+        <div
+          className="flex items-center justify-center flex-col p-2 rounded-xl bg-gradient-to-tl from-white/60 to-transparent dark:from-black/40"
+          style={{ gridArea: `2 / 2 / ${sideLength} / ${sideLength}` }}
+        >
+          <h2 className="text-lg md:text-2xl font-extrabold text-violet-700 dark:text-violet-300">التاجر المتعلّم</h2>
+
+          <div className="mt-2 flex items-center gap-3">
+            <div className={cn("px-3 py-1 rounded-full text-sm font-semibold shadow-sm flex items-center gap-2", isMyTurn ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-800 dark:bg-zinc-700 dark:text-zinc-200') }>
+              <span>{isMyTurn ? 'دورك الآن' : 'انتظر دورك'}</span>
+              {isMyTurn && <span className="text-xs opacity-80">•</span>}
+            </div>
+
+            <div className="text-sm text-gray-700 dark:text-gray-300">
+              {activePlayer ? (
+                <span>اللاعب التالي: <strong>{activePlayer.name}</strong></span>
+              ) : (
+                <span>جارٍ تحديث الحالة...</span>
+              )}
+            </div>
+
+            <div className="ml-2 text-sm">
+              {diceRoll !== null && (
+                <div className="px-2 py-1 bg-white/80 dark:bg-black/40 rounded-md shadow">نرد: <strong>{diceRoll}</strong></div>
+              )}
+            </div>
+          </div>
         </div>
-    );
+      </div>
+    </div>
+  );
 }
