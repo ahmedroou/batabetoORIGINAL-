@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Skull, Crown } from 'lucide-react';
+import { Skull, Crown, Activity } from 'lucide-react';
 
 interface PlayerHUDProps {
     players: Player[];
@@ -60,11 +60,11 @@ export function PlayerHUD({ players, balances, currentTurnPlayerId, activityLog 
                     </div>
                 </ScrollArea>
                  <div className="mt-2 shrink-0">
-                    <h3 className="text-center font-bold text-sm mb-1">آخر الأحداث</h3>
-                    <ScrollArea className="h-24 p-2 bg-gray-300 dark:bg-gray-900/50 rounded-lg">
+                    <h3 className="text-center font-bold text-sm mb-1 flex items-center justify-center gap-2"><Activity/> آخر الأحداث</h3>
+                    <ScrollArea className="h-32 p-2 bg-gray-300 dark:bg-gray-900/50 rounded-lg">
                         <div className="space-y-1.5 text-xs text-right">
                             {activityLog.length > 0 ? (
-                                activityLog.slice().reverse().map((log, index) => (
+                                activityLog.slice(-10).reverse().map((log, index) => (
                                     <p key={index} className="[&:not(:first-child)]:text-muted-foreground">{log}</p>
                                 ))
                             ) : (
