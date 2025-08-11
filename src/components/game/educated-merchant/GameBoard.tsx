@@ -2,8 +2,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import type { Player, Property, GameState } from "@/types";
-import { motion, useAnimate } from "framer-motion";
+import type { Player, Property } from "@/types";
+import { motion } from "framer-motion";
 import { PlayerAvatar } from "../PlayerAvatar";
 import { Home, Building2, Gavel } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,12 +13,12 @@ interface GameBoardProps {
   board: Property[];
   players: Player[];
   gameId: string;
-  gameState: GameState;
   diceRoll: number | null;
   isMyTurn: boolean;
   activePlayerId: string;
 }
 
+// Tile component remains largely the same visually but is now a grid item.
 const Tile = React.forwardRef<
   HTMLDivElement,
   { property: Property; ownerColor?: string }
@@ -27,42 +27,27 @@ const Tile = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "relative rounded-lg border-2 flex flex-col items-center justify-center text-center p-1 transition-all duration-300 hover:scale-105 hover:shadow-primary/50",
-        "flex-shrink-0 flex-grow-0 basis-24", // Use flex-basis for responsive sizing
-        ownerColor
-          ? "shadow-lg"
-          : "bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-700"
+        "relative rounded-md border-2 flex flex-col items-center justify-center text-center p-1 transition-all duration-300 aspect-square",
+        ownerColor ? "shadow-lg" : "bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-700"
       )}
       style={{ borderColor: ownerColor || undefined }}
       id={`tile-${property.id}`}
     >
       <div className="flex-grow flex flex-col items-center justify-center">
-        {property.type === "start" && (
-          <Home className="w-8 h-8 text-green-500" />
-        )}
-        {property.type === "property" && (
-          <Building2 className="w-8 h-8 text-gray-500" />
-        )}
-        {property.type === "fine" && (
-          <Gavel className="w-8 h-8 text-red-500" />
-        )}
-        <p className="text-xs font-bold truncate w-full mt-1">
-          {property.name}
-        </p>
+        {property.type === "start" && <Home className="w-4 h-4 md:w-6 md:h-6 text-green-500" />}
+        {property.type === "property" && <Building2 className="w-4 h-4 md:w-6 md:h-6 text-gray-500" />}
+        {property.type === "fine" && <Gavel className="w-4 h-4 md:w-6 md:h-6 text-red-500" />}
+        <p className="text-[8px] md:text-xs font-bold truncate w-full mt-1">{property.name}</p>
         {property.type === "property" && property.price > 0 && (
-          <p className="text-xs font-semibold text-green-600 dark:text-green-400">
-            {property.price} د.ع
-          </p>
+          <p className="text-[8px] md:text-xs font-semibold text-green-600 dark:text-green-400">{property.price} د.ع</p>
         )}
         {property.type === "fine" && property.fineAmount && (
-          <p className="text-xs font-semibold text-red-600 dark:text-red-400">
-            {property.fineAmount} د.ع
-          </p>
+           <p className="text-[8px] md:text-xs font-semibold text-red-600 dark:text-red-400">{property.fineAmount} د.ع</p>
         )}
       </div>
       {ownerColor && (
         <div
-          className="absolute bottom-0 w-full h-2 rounded-b-md"
+          className="absolute bottom-0 w-full h-1 md:h-2 rounded-b-md"
           style={{ backgroundColor: ownerColor }}
         />
       )}
@@ -71,199 +56,114 @@ const Tile = React.forwardRef<
 });
 Tile.displayName = "Tile";
 
-export function GameBoard({
-  board,
-  players,
-  gameId,
-  gameState,
-  diceRoll,
-  isMyTurn,
-  activePlayerId,
-}: GameBoardProps) {
-  const gridRef = useRef<HTMLDivElement>(null);
-  const tileRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const [tilePositions, setTilePositions] = useState<
-    Record<number, { x: number; y: number }>
-  >({});
+export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId }: GameBoardProps) {
   
-  const playerAnimators = useMemo(() => new Map<string, ReturnType<typeof useAnimate>>(), []);
+  const playerAnimators = useMemo(() => new Map<string, any>(), []);
   players.forEach(p => {
-      if (!playerAnimators.has(p.id)) {
-          // eslint-disable-next-line react-hooks/rules-of-hooks
-          playerAnimators.set(p.id, useAnimate());
-      }
+    if (!playerAnimators.has(p.id)) {
+        // This is a placeholder; framer-motion's layout animation will handle it.
+    }
   });
 
-  if (!board) {
-    return <div className="text-center p-6 text-lg">جاري تحميل اللوحة...</div>;
-  }
+  const sideLength = Math.ceil(board.length / 4) + 1;
+  const perimeterPositions = useMemo(() => {
+    const positions = new Map<number, { gridRow: number; gridColumn: number }>();
+    if (board.length === 0) return positions;
 
-  const sideLength = useMemo(
-    () => Math.ceil(board.length / 4) + 1,
-    [board.length]
-  );
-
-  useEffect(() => {
-    const calculatePositions = () => {
-      if (!gridRef.current) return;
-      const gridRect = gridRef.current.getBoundingClientRect();
-      const newPositions: Record<number, { x: number; y: number }> = {};
-      board.forEach((property) => {
-        const tileEl = tileRefs.current[property.id];
-        if (tileEl) {
-          const tileRect = tileEl.getBoundingClientRect();
-          newPositions[property.id] = {
-            x: tileRect.left - gridRect.left,
-            y: tileRect.top - gridRect.top,
-          };
+    const perimeter = (sideLength - 1) * 4;
+    board.forEach((_, index) => {
+        const effectiveIndex = index % perimeter;
+        let row = 1, col = 1;
+        if (effectiveIndex < sideLength) { // Top row
+            row = 1;
+            col = effectiveIndex + 1;
+        } else if (effectiveIndex < sideLength * 2 - 1) { // Right column
+            row = (effectiveIndex - (sideLength - 1)) + 1;
+            col = sideLength;
+        } else if (effectiveIndex < sideLength * 3 - 2) { // Bottom row
+            row = sideLength;
+            col = sideLength - (effectiveIndex - (sideLength * 2 - 2));
+        } else { // Left column
+            row = sideLength - (effectiveIndex - (sideLength * 3 - 3));
+            col = 1;
         }
-      });
-      setTilePositions(newPositions);
-    };
+        positions.set(index, { gridRow: row, gridColumn: col });
+    });
+    return positions;
+  }, [board, sideLength]);
 
-    calculatePositions();
-    const resizeObserver = new ResizeObserver(calculatePositions);
-    if(gridRef.current) {
-        resizeObserver.observe(gridRef.current);
-    }
-    
-    return () => resizeObserver.disconnect();
-  }, [board]);
 
   useEffect(() => {
     const movePlayer = async () => {
-      if (diceRoll === null || !isMyTurn || Object.keys(tilePositions).length === 0)
-        return;
-
-      const player = players.find((p) => p.id === activePlayerId);
-      const animator = playerAnimators.get(activePlayerId);
-
-      if (!player || !animator) return;
-
-      const [scope, animate] = animator;
-      const startPos = player.position;
-
-      for (let i = 1; i <= diceRoll; i++) {
-        const nextPosIndex = (startPos + i) % board.length;
-        const nextPosCoords = tilePositions[nextPosIndex];
-        const playerOffset = players.findIndex(p => p.id === player.id) % 4;
-        if (nextPosCoords) {
-           await animate(
-            scope.current,
-            { 
-              x: nextPosCoords.x + 10 + (playerOffset * 5), 
-              y: nextPosCoords.y + 10 + (playerOffset * 5)
-            },
-            { duration: 0.35, type: "spring", stiffness: 200, damping: 18 }
-          );
-        }
-      }
-      
+      if (diceRoll === null || !isMyTurn) return;
+      await new Promise(resolve => setTimeout(resolve, 500)); // Wait for dice animation
       await handlePropertyAction(gameId, activePlayerId);
     };
 
-    if(gameState === 'movement') {
-      movePlayer();
+    if (diceRoll !== null) {
+        movePlayer();
     }
-  }, [
-    diceRoll,
-    isMyTurn,
-    tilePositions,
-    players,
-    activePlayerId,
-    playerAnimators,
-    board.length,
-    gameId,
-    gameState
-  ]);
+  }, [diceRoll, isMyTurn, gameId, activePlayerId]);
 
-  const renderGrid = () => {
-    const gridRows: React.ReactNode[] = [];
-    const perimeterPositions = new Map<string, Property>();
-
-    board.forEach((property, index) => {
-        const getTilePosition = (idx: number) => {
-            const perimeter = (sideLength - 1) * 4;
-            const effectiveIndex = idx % perimeter;
-            if (effectiveIndex < sideLength) return { row: 0, col: effectiveIndex };
-            if (effectiveIndex < sideLength * 2 - 1) return { row: effectiveIndex - (sideLength - 1), col: sideLength - 1 };
-            if (effectiveIndex < sideLength * 3 - 2) return { row: sideLength - 1, col: sideLength - 1 - (effectiveIndex - (sideLength * 2 - 2)) };
-            return { row: sideLength - 1 - (effectiveIndex - (sideLength * 3 - 3)), col: 0 };
-        };
-        const { row, col } = getTilePosition(index);
-        perimeterPositions.set(`${row}-${col}`, property);
-    });
-
-    for (let r = 0; r < sideLength; r++) {
-        const rowChildren: React.ReactNode[] = [];
-        for (let c = 0; c < sideLength; c++) {
-            const property = perimeterPositions.get(`${r}-${c}`);
-            if (property) {
-                const ownerColor = property.ownerId ? players.find((p) => p.id === property.ownerId)?.color : undefined;
-                rowChildren.push(
-                    <Tile
-                        key={property.id}
-                        property={property}
-                        ownerColor={ownerColor}
-                        ref={(el) => (tileRefs.current[property.id] = el)}
-                    />
-                );
-            } else if (r > 0 && r < sideLength - 1 && c > 0 && c < sideLength - 1) {
-                rowChildren.push(
-                     <div key={`${r}-${c}`} className="flex-shrink-0 flex-grow-0 basis-24 flex items-center justify-center">
-                        {r === Math.floor(sideLength / 2) && c === Math.floor(sideLength / 2) && (
-                            <div className="text-center text-xl font-bold text-gray-700 dark:text-gray-300">التاجر المتعلم</div>
-                        )}
-                    </div>
-                );
-            }
-        }
-        gridRows.push(
-            <div key={r} className="flex gap-1 justify-center">
-                {rowChildren}
-            </div>
-        );
-    }
-    return gridRows;
-  };
-
+  if (!board || board.length === 0) {
+    return <div className="text-center p-6 text-lg">جاري تحميل اللوحة...</div>;
+  }
+  
   return (
-    <div className="p-1 md:p-2 bg-gray-300 dark:bg-gray-800/50 rounded-2xl shadow-2xl relative self-center">
+    <div className="p-1 md:p-2 bg-gray-300 dark:bg-gray-800/50 rounded-2xl shadow-2xl self-center w-full max-w-[90vh] aspect-square">
       <div
-        ref={gridRef}
-        className="flex flex-col gap-1"
+        className="relative w-full h-full grid"
+        style={{
+          gridTemplateColumns: `repeat(${sideLength}, 1fr)`,
+          gridTemplateRows: `repeat(${sideLength}, 1fr)`,
+          gap: '4px'
+        }}
       >
-        {renderGrid()}
-      </div>
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-        {players.map((player, pIndex) => {
-          const animator = playerAnimators.get(player.id);
-          if (!animator) return null;
+        {/* Render Tiles */}
+        {board.map((property, index) => {
+          const pos = perimeterPositions.get(index);
+          if (!pos) return null;
           
-          const initialPos = tilePositions[player.position] || { x: 0, y: 0 };
-          const playerOffset = pIndex % 4;
+          const ownerColor = property.ownerId ? players.find(p => p.id === property.ownerId)?.color : undefined;
+          
+          return (
+            <div key={property.id} style={{ gridRow: pos.gridRow, gridColumn: pos.gridColumn }}>
+                <Tile property={property} ownerColor={ownerColor} />
+            </div>
+          );
+        })}
+
+        {/* Render Players */}
+        {players.map((player, pIndex) => {
+          const pos = perimeterPositions.get(player.position);
+          if (!pos || player.status === 'bankrupt') return null;
           
           return (
             <motion.div
               key={player.id}
-              ref={animator[0]}
-              className="absolute z-10"
-              initial={{ 
-                  x: initialPos.x + 10 + (playerOffset * 5), 
-                  y: initialPos.y + 10 + (playerOffset * 5)
+              layoutId={`player-${player.id}`}
+              className="absolute z-10 flex items-center justify-center p-0.5"
+              style={{
+                gridRow: pos.gridRow,
+                gridColumn: pos.gridColumn,
               }}
-              animate={{ 
-                  x: initialPos.x + 10 + (playerOffset * 5), 
-                  y: initialPos.y + 10 + (playerOffset * 5)
-              }}
+              transition={{ type: "spring", stiffness: 200, damping: 20 }}
             >
-              <PlayerAvatar
-                avatarId={player.avatarId}
-                className="w-8 h-8 md:w-8 md:h-8 border-2 rounded-full shadow-lg"
-              />
+                <div style={{ transform: `translate(${(pIndex % 4) * 8 - 12}px, ${Math.floor(pIndex / 4) * 8 - 12}px)` }}>
+                    <PlayerAvatar
+                        avatarId={player.avatarId}
+                        className="w-5 h-5 md:w-6 md:h-6 border-2 rounded-full shadow-lg"
+                        />
+                </div>
             </motion.div>
           );
         })}
+        <div 
+          className="flex items-center justify-center text-center"
+          style={{ gridArea: `2 / 2 / ${sideLength} / ${sideLength}`}}
+        >
+             <h2 className="text-xl md:text-3xl font-bold text-gray-700 dark:text-gray-300">التاجر المتعلم</h2>
+        </div>
       </div>
     </div>
   );
