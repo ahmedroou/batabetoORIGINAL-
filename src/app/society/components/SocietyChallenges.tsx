@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -77,7 +78,7 @@ const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challen
                 <DialogHeader className="text-center">
                     <DialogTitle className="text-2xl text-purple-300">{challenge.title}</DialogTitle>
                     <DialogDescription className="text-gray-400">
-                        قائمة صدارة المشاركين في البطولة
+                        أفضل 10 لاعبين في صدارة البطولة
                     </DialogDescription>
                 </DialogHeader>
                 <div className="py-4">
@@ -87,18 +88,16 @@ const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challen
                         <ScrollArea className="h-96">
                             <div className="space-y-2 pr-4">
                                 {participants.length > 0 ? (
-                                    participants
-                                        .sort((a,b) => (challenge.scores[b.uid] || 0) - (challenge.scores[a.uid] || 0))
-                                        .map((participant, index) => (
-                                            <div key={participant.uid} className="flex justify-between items-center bg-gray-800 p-2 rounded-lg">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="font-bold text-lg w-6 text-center text-gray-400">{index + 1}</span>
-                                                    <PlayerAvatar avatarId={participant.avatarId} className="w-10 h-10"/>
-                                                    <p className="font-semibold">{participant.name}</p>
-                                                </div>
-                                                <p className="font-bold text-lg text-yellow-400">{challenge.scores[participant.uid] || 0} نقطة</p>
+                                    participants.map((participant, index) => (
+                                        <div key={participant.uid} className="flex justify-between items-center bg-gray-800 p-2 rounded-lg">
+                                            <div className="flex items-center gap-3">
+                                                <span className="font-bold text-lg w-6 text-center text-gray-400">{index + 1}</span>
+                                                <PlayerAvatar avatarId={participant.avatarId} className="w-10 h-10"/>
+                                                <p className="font-semibold">{participant.name}</p>
                                             </div>
-                                        ))
+                                            <p className="font-bold text-lg text-yellow-400">{challenge.scores[participant.uid] || 0} نقطة</p>
+                                        </div>
+                                    ))
                                 ) : (
                                     <p className="text-center text-gray-500 h-64 flex items-center justify-center">لا يوجد مشاركون بعد.</p>
                                 )}
@@ -112,15 +111,17 @@ const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challen
 }
 
 const EntryFeeDisplay = ({ entryFee }: { entryFee?: EntryFee }) => {
-    if (!entryFee || entryFee.value <= 0) return null;
+    if (!entryFee || entryFee.value <= 0) {
+        return <p className="text-sm font-semibold text-green-400">انضمام مجاني!</p>;
+    }
     
     const Icon = entryFee.type === 'coins' ? CircleDollarSign : Trophy;
     const text = entryFee.type === 'coins' ? 'كوينز' : 'نقاط صدارة';
     
     return (
-        <div className="absolute bottom-2 right-2 flex items-center gap-1 text-xs bg-yellow-900/70 text-yellow-200 px-2 py-1 rounded-full backdrop-blur-sm">
+        <div className="flex items-center gap-1 text-xs bg-yellow-900/70 text-yellow-200 px-2 py-1 rounded-full backdrop-blur-sm">
             <Icon className="w-3 h-3" />
-            <span>{entryFee.value} {text}</span>
+            <span>رسوم الانضمام: {entryFee.value} {text}</span>
         </div>
     );
 };
@@ -184,7 +185,6 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
                 "h-full flex flex-col bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20 relative",
                 isEnded && "opacity-60 bg-gray-900/70 border-gray-700/50"
                 )}>
-                <EntryFeeDisplay entryFee={challenge.entryFee} />
                 <CardHeader>
                     <div className="flex justify-between items-start">
                         <CardTitle className="text-2xl text-purple-300">{challenge.title}</CardTitle>
@@ -244,13 +244,14 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
                     <div className="flex justify-between items-center w-full">
                         <span className="flex items-center gap-1 text-xs"><Users/>{challenge.participantCount || 0} مشارك</span>
                         <ChallengeLeaderboardDialog challenge={challenge} trigger={
-                            <Button variant="outline" size="sm">
+                             <Button variant="link" size="sm" className="text-purple-300">
                                 <ListOrdered className="ml-2 w-4 h-4"/>
-                                قائمة الصدارة
+                                عرض التفاصيل
                             </Button>
                         }/>
                     </div>
-                     <Button onClick={() => setIsConfirmingJoin(true)} disabled={isJoining || isParticipant || isEnded} className="w-full bg-purple-600 hover:bg-purple-700">
+                     <EntryFeeDisplay entryFee={challenge.entryFee} />
+                     <Button onClick={() => setIsConfirmingJoin(true)} disabled={isJoining || isParticipant || isEnded} className="w-full bg-purple-600 hover:bg-purple-700 mt-2">
                          {isJoining ? <Loader2 className="animate-spin" /> : isParticipant ? 'أنت مشارك' : isEnded ? 'انتهت البطولة' : 'انضم للبطولة'}
                      </Button>
                 </CardFooter>

@@ -109,9 +109,10 @@ export async function getChallenges(): Promise<Challenge[]> {
 }
 
 /**
- * Gets full details for a single challenge, including all participants.
+ * Gets full details for a single challenge, including the top 10 participants.
+ * This is optimized to only fetch necessary data.
  * @param {string} challengeId - The ID of the challenge to fetch.
- * @returns {Promise<Challenge | null>} The challenge object with full participant details.
+ * @returns {Promise<Challenge | null>} The challenge object with top 10 participant details.
  */
 export async function getChallengeDetails(challengeId: string): Promise<Challenge | null> {
     try {
@@ -122,16 +123,28 @@ export async function getChallengeDetails(challengeId: string): Promise<Challeng
         const challengeData = {
             id: challengeDoc.id,
             ...challengeDoc.data(),
-             createdAt: (challengeDoc.data().createdAt as Timestamp)?.toDate() || new Date(),
-             endsAt: (challengeDoc.data().endsAt as Timestamp)?.toDate(),
+            createdAt: (challengeDoc.data().createdAt as Timestamp)?.toDate() || new Date(),
+            endsAt: (challengeDoc.data().endsAt as Timestamp)?.toDate(),
         } as Challenge;
 
-        if (challengeData.participantIds && challengeData.participantIds.length > 0) {
-            const usersQuery = query(collection(db, 'users'), where('__name__', 'in', challengeData.participantIds));
-            const usersSnapshot = await getDocs(usersQuery);
-            challengeData.participants = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
+        // --- Optimization: Fetch only top 10 participants ---
+        if (challengeData.scores) {
+            const sortedParticipantIds = Object.keys(challengeData.scores).sort((a, b) => (challengeData.scores[b] || 0) - (challengeData.scores[a] || 0));
+            const top10Ids = sortedParticipantIds.slice(0, 10);
+            
+            if (top10Ids.length > 0) {
+                // Fetch only the user profiles for the top 10
+                const usersQuery = query(collection(db, 'users'), where('__name__', 'in', top10Ids));
+                const usersSnapshot = await getDocs(usersQuery);
+                const topUsersData = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
+
+                // Sort the fetched users again to ensure correct order
+                challengeData.participants = topUsersData.sort((a, b) => (challengeData.scores[b.uid] || 0) - (challengeData.scores[a.uid] || 0));
+            } else {
+                challengeData.participants = [];
+            }
         } else {
-            challengeData.participants = [];
+             challengeData.participants = [];
         }
 
         return challengeData;
@@ -187,7 +200,8 @@ export async function joinChallenge(challengeId: string, userId: string): Promis
         // Add user to challenge
         transaction.update(challengeRef, {
             participantIds: arrayUnion(userId),
-            participantCount: increment(1)
+            participantCount: increment(1),
+            [`scores.${userId}`]: 0,
         });
 
         // Add challenge to user's profile
