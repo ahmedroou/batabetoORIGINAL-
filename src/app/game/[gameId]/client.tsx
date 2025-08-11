@@ -17,6 +17,7 @@ import { TrapAnswerGame } from "@/components/game/trap-answer/TrapAnswerGame";
 import { WordWarGame } from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
+import { EducatedMerchantGame } from '@/components/game/educated-merchant/EducatedMerchantGame';
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -215,6 +216,7 @@ export default function GameClient() {
       case 'king-of-genius': return <KingOfGeniusGame game={game} player={player} self={self} isHost={game.hostId === self.id} />;
       case 'behind-the-mask': return <BehindTheMaskGame game={game} self={self} />;
       case 'prison': return <PrisonGame game={game} self={self} />;
+      case 'educated-merchant': return <EducatedMerchantGame game={game} self={self} />;
       default: return <p>حالة غير معروفة للعبة "{game.gameType}"</p>;
     }
   };
