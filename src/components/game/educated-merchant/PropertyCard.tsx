@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Game, Player, Property } from '@/types';
@@ -63,7 +64,9 @@ export function PropertyCard({ game, self }: PropertyCardProps) {
                 <CardHeader className="text-center pb-2">
                     <Building2 className="w-12 h-12 mx-auto text-primary" />
                     <CardTitle className="text-2xl">{currentProperty.name}</CardTitle>
-                    <CardDescription>فئة: {currentProperty.category}</CardDescription>
+                    <CardDescription>
+                        هل تريد شراء هذا العقار؟ سيتم خصم المبلغ وعرض سؤال عليك.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                     <div className="flex justify-between items-center text-lg p-2 bg-muted rounded-md">

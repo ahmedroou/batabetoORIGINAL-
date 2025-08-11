@@ -4,7 +4,7 @@
 
 import { db } from '@/lib/firebase';
 import { doc, runTransaction, Timestamp, collection, getDocs, query, updateDoc, arrayUnion, increment, FieldValue, deleteField, where, limit, getDoc, setDoc } from 'firebase/firestore';
-import type { Game, Player, Property, EducatedMerchantQuestion } from '@/types';
+import type { Game, Player, Property, EducatedMerchantQuestion, GameState } from '@/types';
 import { shuffle } from './helpers';
 
 const BOARD_SIZE = 28;
@@ -171,15 +171,22 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         const property = es.board.find(p => p.id === newPosition);
         if (!property) throw new Error("Property not found on board.");
 
+        let ownerDoc: any = null;
+        let ownerData: UserProfile | null = null;
+        if (property.type === 'property' && property.ownerId && property.ownerId !== playerId) {
+            ownerDoc = await transaction.get(doc(db, 'users', property.ownerId));
+            if (ownerDoc.exists()) {
+                ownerData = ownerDoc.data() as UserProfile;
+            }
+        }
+        // --- END READ PHASE ---
+
         // --- 2. LOGIC PHASE (PREPARE UPDATES) ---
         const updatedPlayers = [...game.players];
         updatedPlayers[playerIndex].position = newPosition;
 
         let newActivityLog = [...(es.activityLog || [])];
         let updatedBalances = { ...(game.playerScores || {}) };
-        let nextGameState: GameState = game.gameState;
-        let ownerDoc: any = null;
-        let ownerData: UserProfile | null = null;
         
         const passedStart = (oldPosition + (es.lastDiceRoll || 0)) >= BOARD_SIZE;
 
@@ -188,16 +195,7 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
             newActivityLog.push(`${player.name} مر بنقطة البداية وحصل على ${PASS_START_BONUS} د.ع.`);
         }
 
-        // --- READ OWNER DOC IF NEEDED ---
-        if (property.type === 'property' && property.ownerId && property.ownerId !== playerId) {
-            ownerDoc = await transaction.get(doc(db, 'users', property.ownerId));
-            if (ownerDoc.exists()) {
-                ownerData = ownerDoc.data() as UserProfile;
-            }
-        }
-        
         // --- 3. WRITE PHASE ---
-        // Always update player position and starting balance first
         transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances });
 
         if (property.type === 'start') {
@@ -208,7 +206,7 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         if (property.type === 'fine') {
             const fine = property.fineAmount || 0;
             newActivityLog.push(`${player.name} دفع غرامة بقيمة ${fine} د.ع.`);
-            if (updatedBalances[playerId] < fine) {
+            if ((updatedBalances[playerId] || 0) < fine) {
                 updatedPlayers[playerIndex].status = 'bankrupt';
                 updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
                 newActivityLog.push(`${player.name} أفلس!`);
@@ -232,13 +230,13 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
                 const rent = property.rent;
                 newActivityLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${ownerData.name}.`);
 
-                if (updatedBalances[playerId] < rent) {
+                if ((updatedBalances[playerId] || 0) < rent) {
                     updatedPlayers[playerIndex].status = 'bankrupt';
                     updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
                     newActivityLog.push(`${player.name} أفلس!`);
                     transaction.update(gameRef, {
                         players: updatedPlayers,
-                        [`playerScores.${property.ownerId}`]: increment(updatedBalances[playerId]),
+                        [`playerScores.${property.ownerId}`]: increment(updatedBalances[playerId] || 0),
                         [`playerScores.${playerId}`]: 0,
                         'educatedMerchantState.activityLog': newActivityLog
                     });
@@ -274,7 +272,7 @@ export async function buyPropertyAttempt(gameId: string, playerId: string): Prom
             const player = game.players.find(p => p.id === playerId);
             const property = game.educatedMerchantState?.board.find(p => p.id === player?.position);
             
-            if (!property || property.ownerId) throw new Error("This property cannot be bought.");
+            if (!property || property.type !== 'property' || property.ownerId) throw new Error("This property cannot be bought.");
             if ((game.playerScores?.[playerId] || 0) < property.price) throw new Error("You cannot afford this property.");
             
             const randomQuestion = await fetchRandomQuestionForCategory(property.category);
@@ -283,6 +281,13 @@ export async function buyPropertyAttempt(gameId: string, playerId: string): Prom
                  throw new Error(`No questions available for category "${property.category}". The purchase cannot proceed.`);
             }
 
+            // Deduct the full price immediately
+            transaction.update(gameRef, {
+                [`playerScores.${playerId}`]: increment(-property.price),
+                'educatedMerchantState.activityLog': arrayUnion(`${player?.name} قرر شراء ${property.name} وخصم ${property.price} د.ع.`)
+            });
+
+            // Transition to question state
             transaction.update(gameRef, {
                 gameState: 'question',
                 'educatedMerchantState.currentQuestion': randomQuestion,
@@ -316,17 +321,18 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             let newActivityLog = [...(game.educatedMerchantState?.activityLog || [])];
 
             if (isCorrect) {
-                newActivityLog.push(`${player?.name} أجاب بشكل صحيح واشترى ${property.name}.`);
+                newActivityLog.push(`${player?.name} أجاب بشكل صحيح وامتلك ${property.name}.`);
+                // Money was already deducted. Just assign ownership.
                  transaction.update(gameRef, {
-                    [`playerScores.${playerId}`]: increment(-property.price),
                     [`educatedMerchantState.board.${propertyIndex}.ownerId`]: playerId,
                     'educatedMerchantState.activityLog': newActivityLog,
                 });
             } else {
-                const penalty = Math.floor(property.price * 0.25);
-                newActivityLog.push(`${player?.name} أجاب بشكل خاطئ وخسر ${penalty} د.ع.`);
+                // Return only 25% of the price as a refund for incorrect answer
+                const refundAmount = Math.floor(property.price * 0.25);
+                newActivityLog.push(`${player?.name} أجاب بشكل خاطئ وخسر جزءًا من ماله! استرد ${refundAmount} د.ع.`);
                  transaction.update(gameRef, {
-                    [`playerScores.${playerId}`]: increment(-penalty),
+                    [`playerScores.${playerId}`]: increment(refundAmount),
                     'educatedMerchantState.activityLog': newActivityLog,
                 });
             }
