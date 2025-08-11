@@ -12,7 +12,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Brain, CheckCircle, Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Clock, Hand, UserCheck, Eye, X, Shuffle, LogOut, Copy, Check, UserX, HelpCircle, UserCog, UserRoundCheck, ThumbsDown, EyeOff, Settings, Save } from 'lucide-react';
-import { PlayerAvatar } from '../../PlayerAvatar';
+import { PlayerAvatar } from '../PlayerAvatar';
 import * as roomActions from '@/lib/actions/room';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
