@@ -322,9 +322,9 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         
         const getStartButtonState = () => {
             const activePlayers = game.players.filter(p => p.status !== 'left');
-            if (activePlayers.length < 4) return { disabled: true, text: "تحتاج إلى 4 لاعبين على الأقل" };
+            if (activePlayers.length < 2) return { disabled: true, text: "تحتاج إلى لاعبين على الأقل" };
             if (unassigned.length > 0) return { disabled: true, text: `في انتظار ${unassigned.length} لاعبين` };
-            if (teamRedPlayers.length !== teamBluePlayers.length) return { disabled: true, text: "يجب أن تكون الفرق متوازنة" };
+            if (teamRedPlayers.length === 0 || teamBluePlayers.length === 0) return { disabled: true, text: "يجب أن يكون كلا الفريقين بهما لاعبون" };
             return { disabled: false, text: "بدء اللعبة" };
         }
         const startButtonState = getStartButtonState();
@@ -508,11 +508,9 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                 <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
                     {wwState.cards.map((card, index) => {
                         const canPlayerClick = isGuesserTurn && !card.revealed;
-                        const allSuspicions = wwState.suspicions || {};
-                        const redSuspicions = allSuspicions.red || [];
-                        const blueSuspicions = allSuspicions.blue || [];
-                        const isSuspectedByAnyTeam = redSuspicions.includes(index) || blueSuspicions.includes(index);
-                        const isSuspectedByMyTeam = (self.team === 'red' && redSuspicions.includes(index)) || (self.team === 'blue' && blueSuspicions.includes(index));
+                        const cardSuspicions = wwState.suspicions?.[index] || [];
+                        const isSuspectedByAnyTeam = cardSuspicions.length > 0;
+                        const isSuspectedByMyTeam = cardSuspicions.some(playerId => game.players.find(p => p.id === playerId)?.team === self.team);
                         
                         return (
                             <motion.div
@@ -555,23 +553,22 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                         </Button>
                                      </div>
                                 )}
-                                <div className="absolute bottom-0 left-1 flex items-center gap-0.5">
-                                    {game.players.map(p => {
-                                        if (p.team === self.team && (wwState.suspicions?.[self.team!] || []).includes(index) && p.id === self.id) {
-                                            return (
-                                                <TooltipProvider key={p.id}>
-                                                    <Tooltip>
-                                                        <TooltipTrigger>
-                                                            <PlayerAvatar avatarId={p.avatarId} className="w-4 h-4 rounded-full border border-white" />
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            <p>{p.name} يشك في هذه الكلمة</p>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
-                                            )
-                                        }
-                                        return null;
+                                <div className="absolute bottom-0 left-1 flex items-center -space-x-2">
+                                    {cardSuspicions.map(playerId => {
+                                        const suspectingPlayer = game.players.find(p => p.id === playerId);
+                                        if (!suspectingPlayer) return null;
+                                        return (
+                                            <TooltipProvider key={playerId}>
+                                                <Tooltip>
+                                                    <TooltipTrigger>
+                                                        <PlayerAvatar avatarId={suspectingPlayer.avatarId} className="w-5 h-5 rounded-full border border-white" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>{suspectingPlayer.name} يشك في هذه الكلمة</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        )
                                     })}
                                 </div>
                             </motion.div>

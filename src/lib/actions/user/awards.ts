@@ -71,7 +71,7 @@ export function calculateEndOfGameAwards(game: Game) {
             updates[id] = { ...playerAwards, gamesPlayed: 1 };
         });
 
-        // The winner is determined regardless of game length, but awards are not given for short games
+        // The winner is determined regardless of game length
         if (playerRanks.length > 0 && playerRanks[0].rank === 1) {
             const firstPlaceScore = finalScores[playerRanks[0].id] || 0;
             const winners = sortedPlayers.filter(p => (finalScores[p.id] || 0) === firstPlaceScore);

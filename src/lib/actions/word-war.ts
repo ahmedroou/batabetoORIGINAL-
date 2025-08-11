@@ -114,7 +114,7 @@ export async function selectTeam(gameId: string, playerId: string, team: 'red' |
     });
 }
 
-export async function startWordWarGame(gameId: string, hostId: string) {
+export async function startGame(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -122,7 +122,9 @@ export async function startWordWarGame(gameId: string, hostId: string) {
         const game = gameDoc.data() as Game;
 
         if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
-        if (game.players.length < 4) throw new Error("The game requires at least 4 players.");
+        
+        const activePlayers = game.players.filter(p => p.status !== 'left');
+        if (activePlayers.length < 2) throw new Error("تحتاج إلى لاعبين على الأقل لبدء اللعبة.");
         if (game.players.some(p => !p.team)) throw new Error("All players must be assigned to a team.");
         
         const cards = await generateCards();
@@ -131,7 +133,7 @@ export async function startWordWarGame(gameId: string, hostId: string) {
         const redTeam = game.players.filter(p => p.team === 'red');
         const blueTeam = game.players.filter(p => p.team === 'blue');
         
-        if (redTeam.length === 0 || blueTeam.length === 0) throw new Error("Each team must have at least one player.");
+        if (redTeam.length === 0 || blueTeam.length === 0) throw new Error("يجب أن يكون لدى كل فريق لاعب واحد على الأقل.");
 
         const shuffledRedTeam = shuffle(redTeam);
         const shuffledBlueTeam = shuffle(blueTeam);
@@ -187,7 +189,7 @@ export async function submitHint(gameId: string, playerId: string, word: string,
         transaction.update(gameRef, {
             gameState: 'guesser_turn',
             'wordWarState.currentHint': { word, count },
-            'wordWarState.guessesLeft': count, // Strictly the count number. A bonus guess can be added on the frontend display.
+            'wordWarState.guessesLeft': count, // Strictly the count number.
             'wordWarState.timerEndsAt': Timestamp.fromMillis(Date.now() + turnTime * 1000),
         });
     });
@@ -249,7 +251,7 @@ export async function revealCard(gameId: string, playerId: string, cardIndex: nu
             updates.gameResult = winner;
             updates['wordWarState.timerEndsAt'] = deleteField();
             gameDataForLeagueUpdate = { ...game, ...updates };
-        } else if (turnShouldEnd || guessesLeft === 0) {
+        } else if (turnShouldEnd || guessesLeft <= 0) { // Changed to <= 0 to handle last guess
             updates.gameState = 'guide_turn';
             updates['wordWarState.turn'] = wwState.turn === 'red' ? 'blue' : 'red';
             updates['wordWarState.currentHint'] = null;
