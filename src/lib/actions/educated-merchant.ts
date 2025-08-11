@@ -2,7 +2,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, collection, getDocs, query, updateDoc, arrayUnion, increment, FieldValue, deleteField, where, limit } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, collection, getDocs, query, updateDoc, arrayUnion, increment, FieldValue, deleteField, where, limit, getDoc } from 'firebase/firestore';
 import type { Game, Player, Property, EducatedMerchantQuestion } from '@/types';
 import { shuffle } from './helpers';
 
@@ -108,8 +108,6 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
             'educatedMerchantState.turnOrder': turnOrder,
             'educatedMerchantState.currentTurnIndex': 0,
             'educatedMerchantState.activityLog': ["بدأت اللعبة!"],
-            // DO NOT STORE ALL QUESTIONS IN THE GAME DOCUMENT
-            // 'educatedMerchantState.questionsByCategory': questionsByCategory,
             playerScores: initialBalances,
             'players': game.players.map(p => ({ ...p, position: 0, bankruptAt: null })),
         });
