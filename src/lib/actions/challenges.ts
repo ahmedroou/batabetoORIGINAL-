@@ -18,8 +18,10 @@ import {
     deleteDoc,
     getDoc,
     increment,
+    runTransaction,
 } from 'firebase/firestore';
-import type { Challenge, ChallengePrize, Game } from '@/types';
+import type { Challenge, ChallengePrize, Game, UserProfile } from '@/types';
+import { sendSystemMail } from './user/mail';
 
 
 type CreateChallengeInput = Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt' | 'participantCount'> & { durationInHours: number };
@@ -42,6 +44,7 @@ export async function createChallenge(challengeData: CreateChallengeInput): Prom
             endsAt: endsAt,
             participantIds: [],
             participantCount: 0,
+            scores: {},
         };
 
         await addDoc(challengesCollectionRef, newChallenge);
@@ -96,19 +99,37 @@ export async function joinChallenge(challengeId: string, userId: string): Promis
     const userRef = doc(db, 'users', userId);
     
     return runTransaction(db, async (transaction) => {
-        const challengeDoc = await transaction.get(challengeRef);
+        const [challengeDoc, userDoc] = await Promise.all([
+            transaction.get(challengeRef),
+            transaction.get(userRef)
+        ]);
+
         if (!challengeDoc.exists()) {
             throw new Error("البطولة غير موجودة.");
         }
+        if (!userDoc.exists()) {
+            throw new Error("المستخدم غير موجود.");
+        }
         const challengeData = challengeDoc.data() as Challenge;
+        const userData = userDoc.data() as UserProfile;
 
         if (challengeData.participantIds?.includes(userId)) {
             throw new Error("أنت مشترك بالفعل في هذه البطولة.");
         }
 
+        // Add user to challenge
         transaction.update(challengeRef, {
             participantIds: arrayUnion(userId),
             participantCount: increment(1)
+        });
+
+        // Add challenge to user's profile
+        transaction.update(userRef, {
+            challenges: arrayUnion({
+                id: challengeId,
+                title: challengeData.title,
+                joinedAt: Timestamp.now(),
+            })
         });
 
         return { success: true };
@@ -124,20 +145,22 @@ export async function joinChallenge(challengeId: string, userId: string): Promis
  * @param {Partial<Challenge>} data - The data to update.
  * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function updateChallenge(challengeId: string, data: Partial<Omit<Challenge, 'id' | 'createdAt'>>): Promise<{ success: boolean; error?: string }> {
+export async function updateChallenge(challengeId: string, data: Partial<Omit<Challenge, 'id' | 'createdAt'>> & {durationInHours?: number}): Promise<{ success: boolean; error?: string }> {
     try {
         const challengeRef = doc(db, 'challenges', challengeId);
-        if ((data as any).durationInHours) {
+        let updateData: any = { ...data };
+
+        if (updateData.durationInHours) {
             const docSnap = await getDoc(challengeRef);
             if(docSnap.exists()){
                 const challenge = docSnap.data() as Challenge;
                 const createdAtMillis = (challenge.createdAt as Timestamp).toMillis();
-                data.endsAt = Timestamp.fromMillis(createdAtMillis + (data as any).durationInHours * 60 * 60 * 1000);
+                updateData.endsAt = Timestamp.fromMillis(createdAtMillis + updateData.durationInHours * 60 * 60 * 1000);
             }
-            delete (data as any).durationInHours;
+            delete updateData.durationInHours;
         }
 
-        await updateDoc(challengeRef, data);
+        await updateDoc(challengeRef, updateData);
         return { success: true };
     } catch (error: any) {
         console.error("Error updating challenge:", error);
@@ -182,4 +205,79 @@ export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
         console.error("Error fetching all challenges for admin:", error);
         return [];
     }
+}
+
+
+export async function finalizeChallenge(challengeId: string): Promise<{ success: boolean; winnersCount: number; error?: string }> {
+    const challengeRef = doc(db, 'challenges', challengeId);
+    
+    return runTransaction(db, async (transaction) => {
+        const challengeDoc = await transaction.get(challengeRef);
+        if (!challengeDoc.exists()) throw new Error("Challenge not found.");
+        const challengeData = challengeDoc.data() as Challenge;
+
+        if (challengeData.winners) throw new Error("This challenge has already been finalized.");
+
+        const scores = challengeData.scores || {};
+        const sortedWinners = Object.entries(scores)
+            .sort(([, scoreA], [, scoreB]) => scoreB - scoreA)
+            .slice(0, 3);
+
+        const winners: Challenge['winners'] = {};
+        let winnersCount = 0;
+        const batch = writeBatch(db);
+
+        const applyPrizes = (userId: string, prizes: ChallengePrize[]) => {
+            const userRef = doc(db, 'users', userId);
+            const updates: { [key: string]: any } = {};
+            let mailBody = "تهانينا! لقد فزت بالجوائز التالية في بطولة: " + challengeData.title + "\n";
+
+            prizes.forEach(prize => {
+                updates[prize.type] = increment(prize.value);
+                mailBody += `- ${prize.value} ${prize.type}\n`;
+            });
+            batch.update(userRef, updates);
+            return sendSystemMail(userId, { subject: `🎉 لقد فزت في البطولة!`, body: mailBody });
+        };
+        
+        if (sortedWinners.length > 0) {
+            const firstPlace = sortedWinners[0];
+            const firstPlayerDoc = await getDoc(doc(db, 'users', firstPlace[0]));
+            if (firstPlayerDoc.exists()) {
+                winners.first = { id: firstPlace[0], name: firstPlayerDoc.data().name };
+                await applyPrizes(firstPlace[0], challengeData.firstPlacePrize);
+                winnersCount++;
+            }
+        }
+        
+        if (sortedWinners.length > 1) {
+            const secondPlace = sortedWinners[1];
+            const secondPlayerDoc = await getDoc(doc(db, 'users', secondPlace[0]));
+             if (secondPlayerDoc.exists()) {
+                winners.second = { id: secondPlace[0], name: secondPlayerDoc.data().name };
+                await applyPrizes(secondPlace[0], challengeData.secondPlacePrize);
+                winnersCount++;
+             }
+        }
+        
+        if (sortedWinners.length > 2) {
+            const thirdPlace = sortedWinners[2];
+            const thirdPlayerDoc = await getDoc(doc(db, 'users', thirdPlace[0]));
+            if (thirdPlayerDoc.exists()) {
+                winners.third = { id: thirdPlace[0], name: thirdPlayerDoc.data().name };
+                await applyPrizes(thirdPlace[0], challengeData.thirdPlacePrize);
+                winnersCount++;
+            }
+        }
+        
+        await batch.commit();
+        
+        transaction.update(challengeRef, { winners: winners });
+
+        return { success: true, winnersCount };
+
+    }).catch((error: any) => {
+        console.error("Error finalizing challenge:", error);
+        return { success: false, winnersCount: 0, error: error.message };
+    });
 }

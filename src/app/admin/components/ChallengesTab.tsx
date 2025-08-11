@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Timestamp } from 'firebase/firestore';
 
 
 const PrizeInput = ({ prize, onUpdate, onRemove }: { prize: ChallengePrize, onUpdate: (p: ChallengePrize) => void, onRemove: () => void }) => {
@@ -40,22 +41,22 @@ const ChallengeForm = ({
   onSubmit,
   isSubmitting,
 }: {
-  initialData: Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt'> & {durationInHours: number},
+  initialData: Partial<Omit<Challenge, 'id' | 'createdAt' | 'participantIds'>> & {durationInHours?: number | string},
   onSubmit: (data: any) => void,
   isSubmitting: boolean
 }) => {
-    const [title, setTitle] = useState(initialData.title);
+    const [title, setTitle] = useState(initialData.title || '');
     const [durationHours, setDurationHours] = useState(String(initialData.durationInHours || '168'));
-    const [targetPoints, setTargetPoints] = useState(String(initialData.targetPoints));
+    const [targetPoints, setTargetPoints] = useState(String(initialData.targetPoints || '100'));
     const [specificGameType, setSpecificGameType] = useState<Game['gameType'] | 'all'>(initialData.specificGameType || 'all');
     const [firstPlacePrizes, setFirstPlacePrizes] = useState<ChallengePrize[]>(initialData.firstPlacePrize || [{ type: 'coins', value: 5 }]);
     const [secondPlacePrizes, setSecondPlacePrizes] = useState<ChallengePrize[]>(initialData.secondPlacePrize || [{ type: 'coins', value: 50 }]);
     const [thirdPlacePrizes, setThirdPlacePrizes] = useState<ChallengePrize[]>(initialData.thirdPlacePrize || [{ type: 'coins', value: 25 }]);
 
     useEffect(() => {
-        setTitle(initialData.title);
+        setTitle(initialData.title || '');
         setDurationHours(String(initialData.durationInHours || '168'));
-        setTargetPoints(String(initialData.targetPoints));
+        setTargetPoints(String(initialData.targetPoints || '100'));
         setSpecificGameType(initialData.specificGameType || 'all');
         setFirstPlacePrizes(initialData.firstPlacePrize || [{ type: 'coins', value: 5 }]);
         setSecondPlacePrizes(initialData.secondPlacePrize || [{ type: 'coins', value: 50 }]);
@@ -235,6 +236,14 @@ export default function ChallengesTab() {
         }
         setIsSubmitting(false);
     }
+    
+    const getDurationInHours = (challenge: Challenge) => {
+        if (!challenge.createdAt || !challenge.endsAt) return 168; // Default
+        const createdAtMs = (challenge.createdAt as Timestamp).toMillis();
+        const endsAtMs = (challenge.endsAt as any).toMillis();
+        return Math.round((endsAtMs - createdAtMs) / (1000 * 60 * 60));
+    }
+
 
     return (
         <AlertDialog>
@@ -246,7 +255,7 @@ export default function ChallengesTab() {
                 </CardHeader>
                 <CardContent>
                     <ChallengeForm
-                        initialData={editingChallenge || { title: '', durationInHours: '168', targetPoints: '100', specificGameType: 'all', firstPlacePrize: [{type:'coins', value: 5}], secondPlacePrize: [{type:'coins', value: 50}], thirdPlacePrize: [{type:'coins', value: 25}] } as any}
+                        initialData={editingChallenge ? { ...editingChallenge, durationInHours: getDurationInHours(editingChallenge) } : { title: '', durationInHours: '168', targetPoints: '100', specificGameType: 'all', firstPlacePrize: [{type:'coins', value: 5}], secondPlacePrize: [{type:'coins', value: 50}], thirdPlacePrize: [{type:'coins', value: 25}] } as any}
                         onSubmit={editingChallenge ? handleUpdateChallenge : handleCreateChallenge}
                         isSubmitting={isSubmitting}
                     />
@@ -309,4 +318,3 @@ export default function ChallengesTab() {
         </AlertDialog>
     );
 }
-
