@@ -2,7 +2,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, collection, getDocs, query, updateDoc, arrayUnion, increment, FieldValue, deleteField } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, collection, getDocs, query, updateDoc, arrayUnion, increment, FieldValue, deleteField, where, limit } from 'firebase/firestore';
 import type { Game, Player, Property, EducatedMerchantQuestion } from '@/types';
 import { shuffle } from './helpers';
 
@@ -15,38 +15,51 @@ const PASS_START_BONUS = 200;
 const QUESTION_TIME_SECONDS = 25;
 
 
-async function fetchAllQuestions(): Promise<EducatedMerchantQuestion[]> {
-    const questionsCol = collection(db, "trap_answer_questions");
-    const q = query(questionsCol);
-    const snapshot = await getDocs(q);
-    
-    if (snapshot.empty) {
-        console.warn("No questions found in 'trap_answer_questions' collection. Educated Merchant may not work correctly.");
-        return [];
+async function getAvailableCategories(): Promise<string[]> {
+    const settingsDoc = await getDoc(doc(db, 'game_settings', 'trap_answer_categories'));
+    if (settingsDoc.exists() && settingsDoc.data().list) {
+        return settingsDoc.data().list;
     }
-    
-    return snapshot.docs.map(doc => {
-        const data = doc.data();
-        const correctAnswer = data.answer;
-        const dummyAnswers = Array.isArray(data.dummyAnswers) && data.dummyAnswers.length > 0 
-            ? data.dummyAnswers 
-            : ['بديل ١', 'بديل ٢', 'بديل ٣'];
-        
-        const options = shuffle([correctAnswer, ...shuffle(dummyAnswers).slice(0, 3)]);
-        
-        return {
-            id: doc.id,
-            question: data.question,
-            options: options,
-            correctAnswer: correctAnswer,
-            category: data.category
-        } as EducatedMerchantQuestion;
-    });
+    return []; // Return empty array if no categories are set up
 }
 
-function generateBoard(questionsByCategory: Record<string, EducatedMerchantQuestion[]>): Property[] {
+async function fetchRandomQuestionForCategory(category: string): Promise<EducatedMerchantQuestion | null> {
+    const questionsCol = collection(db, "trap_answer_questions");
+    const randomKey = Math.random();
+    
+    const q1 = query(questionsCol, where("category", "==", category), where("randomKey", ">=", randomKey), limit(1));
+    let snapshot = await getDocs(q1);
+
+    if (snapshot.empty) {
+        const q2 = query(questionsCol, where("category", "==", category), where("randomKey", "<", randomKey), limit(1));
+        snapshot = await getDocs(q2);
+    }
+    
+    if (snapshot.empty) {
+        console.warn(`No questions found for category: ${category}`);
+        return null;
+    }
+
+    const docData = snapshot.docs[0].data();
+    const correctAnswer = docData.answer;
+    const dummyAnswers = Array.isArray(docData.dummyAnswers) && docData.dummyAnswers.length > 0 
+        ? docData.dummyAnswers 
+        : ['بديل ١', 'بديل ٢', 'بديل ٣'];
+    
+    const options = shuffle([correctAnswer, ...shuffle(dummyAnswers).slice(0, 3)]);
+
+    return {
+        id: snapshot.docs[0].id,
+        question: docData.question,
+        options,
+        correctAnswer,
+        category: docData.category
+    };
+}
+
+
+function generateBoard(categories: string[]): Property[] {
     const board: Property[] = [];
-    const categories = Object.keys(questionsByCategory);
     if(categories.length === 0) return [];
     
     const propertyPrices = Array.from({ length: (MAX_PROPERTY_PRICE - BASE_PROPERTY_PRICE) / PRICE_INCREMENT + 1 }, (_, i) => BASE_PROPERTY_PRICE + i * PRICE_INCREMENT);
@@ -79,17 +92,13 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
         if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
         if (game.gameState !== 'lobby') return;
         if (game.players.length < 2) throw new Error("The game requires at least 2 players.");
-
-        const allQuestions = await fetchAllQuestions();
-        const questionsByCategory = allQuestions.reduce((acc, q) => {
-            if (!acc[q.category]) {
-                acc[q.category] = [];
-            }
-            acc[q.category]!.push(q);
-            return acc;
-        }, {} as Record<string, EducatedMerchantQuestion[]>);
         
-        const board = generateBoard(questionsByCategory);
+        const availableCategories = await getAvailableCategories();
+        if (availableCategories.length === 0) {
+            throw new Error("لا توجد فئات أسئلة متاحة. يرجى إضافتها من لوحة تحكم الأدمن.");
+        }
+        
+        const board = generateBoard(availableCategories);
         const turnOrder = shuffle(game.players.map(p => p.id));
         const initialBalances = game.players.reduce((acc, p) => ({ ...acc, [p.id]: STARTING_BALANCE }), {});
 
@@ -98,8 +107,9 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
             'educatedMerchantState.board': board,
             'educatedMerchantState.turnOrder': turnOrder,
             'educatedMerchantState.currentTurnIndex': 0,
-            'educatedMerchantState.questionsByCategory': questionsByCategory,
             'educatedMerchantState.activityLog': ["بدأت اللعبة!"],
+            // DO NOT STORE ALL QUESTIONS IN THE GAME DOCUMENT
+            // 'educatedMerchantState.questionsByCategory': questionsByCategory,
             playerScores: initialBalances,
             'players': game.players.map(p => ({ ...p, position: 0, bankruptAt: null })),
         });
@@ -253,12 +263,11 @@ export async function buyPropertyAttempt(gameId: string, playerId: string): Prom
             if (!property || property.ownerId) throw new Error("This property cannot be bought.");
             if ((game.playerScores?.[playerId] || 0) < property.price) throw new Error("You cannot afford this property.");
             
-            const questionsForCategory = game.educatedMerchantState?.questionsByCategory?.[property.category];
-            if (!questionsForCategory || questionsForCategory.length === 0) {
-                 throw new Error("No questions available for this category.");
-            }
+            const randomQuestion = await fetchRandomQuestionForCategory(property.category);
             
-            const randomQuestion = shuffle(questionsForCategory)[0];
+            if (!randomQuestion) {
+                 throw new Error(`No questions available for category "${property.category}". The purchase cannot proceed.`);
+            }
 
             transaction.update(gameRef, {
                 gameState: 'question',
@@ -331,7 +340,7 @@ export async function endTurn(gameId: string, playerId: string, existingTransact
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
         const es = game.educatedMerchantState;
-        if (!es) throw new Error("Game state not initialized.");
+        if (!es) throw new Error("Game state is not initialized.");
 
         const nonBankruptPlayers = game.players.filter(p => p.status !== 'bankrupt');
 
