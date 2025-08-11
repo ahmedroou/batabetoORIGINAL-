@@ -183,8 +183,7 @@ const CategoryManager = ({
 export default function QuestionManagementTab() {
     const { toast } = useToast();
 
-    // States for Management
-    const [selectedGame, setSelectedGame] = useState<Game['gameType'] | ''>('');
+    const [selectedGame, setSelectedGame] = useState<Game['gameType'] | 'trap-answer/educated-merchant' | ''>('');
     const [selectedJsonFile, setSelectedJsonFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -192,15 +191,19 @@ export default function QuestionManagementTab() {
     const [deletionParams, setDeletionParams] = useState<DeletionParams | null>(null);
     const [deletionCount, setDeletionCount] = useState<number | null>(null);
 
-    // Categories state
     const [trapAnswerCategories, setTrapAnswerCategories] = useState<string[]>([]);
     const [merchantCategories, setMerchantCategories] = useState<string[]>([]);
     
-    // Derived state for the current category list and selected category
     const [selectedCategory, setSelectedCategory] = useState('');
-    const currentCategoryList = selectedGame === 'trap-answer' ? trapAnswerCategories : selectedGame === 'educated-merchant' ? merchantCategories : [];
     
     const [activeCategoryManager, setActiveCategoryManager] = useState<'trap-answer' | 'educated-merchant' | null>(null);
+
+    const currentCategoryList = useMemo(() => {
+        if(selectedGame === 'trap-answer/educated-merchant') {
+            return activeCategoryManager === 'trap-answer' ? trapAnswerCategories : merchantCategories;
+        }
+        return [];
+    }, [selectedGame, activeCategoryManager, trapAnswerCategories, merchantCategories]);
 
 
     useEffect(() => {
@@ -219,12 +222,10 @@ export default function QuestionManagementTab() {
         fetchCategories();
     }, []);
     
-    const handleGameSelection = (game: Game['gameType'] | '') => {
+    const handleGameSelection = (game: Game['gameType'] | 'trap-answer/educated-merchant' | '') => {
         setSelectedGame(game);
-        setSelectedCategory(''); // Reset selected category when game changes
-        if(game === 'trap-answer' || game === 'educated-merchant') {
-            setActiveCategoryManager(game);
-        } else {
+        setSelectedCategory('');
+        if(game !== 'trap-answer/educated-merchant') {
             setActiveCategoryManager(null);
         }
     }
@@ -256,8 +257,7 @@ export default function QuestionManagementTab() {
                 let result;
 
                 switch(selectedGame) {
-                    case 'trap-answer':
-                    case 'educated-merchant':
+                    case 'trap-answer/educated-merchant':
                          if (!selectedCategory) {
                             throw new Error('الرجاء اختيار قسم لرفع الأسئلة إليه.');
                         }
@@ -365,31 +365,38 @@ export default function QuestionManagementTab() {
                         <SelectValue placeholder="اختر لعبة لرفع محتوى لها..." />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
-                        <SelectItem value="educated-merchant">التاجر المتعلم</SelectItem>
+                        <SelectItem value="trap-answer/educated-merchant">الجواب المفخخ / التاجر المتعلم</SelectItem>
                         <SelectItem value="word_war">حرب الكلمات</SelectItem>
                         <SelectItem value="prison">السجن</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
             
-             {(selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') && (
+             {selectedGame === 'trap-answer/educated-merchant' && (
                 <div className="space-y-2">
                     <Label htmlFor="category-select-upload">2. اختر القسم</Label>
-                    <Select onValueChange={setSelectedCategory} value={selectedCategory}>
-                        <SelectTrigger id="category-select-upload">
-                            <SelectValue placeholder="اختر قسمًا..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
+                    <div className="flex items-center gap-2">
+                         <div className="flex-grow">
+                             <Select onValueChange={setSelectedCategory} value={selectedCategory}>
+                                <SelectTrigger id="category-select-upload">
+                                    <SelectValue placeholder={activeCategoryManager ? `اختر من أقسام ${activeCategoryManager === 'trap-answer' ? 'الجواب المفخخ' : 'التاجر المتعلم'}` : 'اختر نوع الأقسام أولاً...'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                         </div>
+                         <div className="flex border rounded-md">
+                            <Button variant={activeCategoryManager === 'trap-answer' ? 'default' : 'ghost'} size="sm" onClick={() => setActiveCategoryManager('trap-answer')}>الجواب المفخخ</Button>
+                             <Button variant={activeCategoryManager === 'educated-merchant' ? 'default' : 'ghost'} size="sm" onClick={() => setActiveCategoryManager('educated-merchant')}>التاجر المتعلم</Button>
+                         </div>
+                    </div>
                 </div>
             )}
             
             <div className="space-y-2">
                 <Label htmlFor="json-upload-input">
-                    {(selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') ? '3.' : '2.'} اختر ملف المحتوى (JSON)
+                    {selectedGame === 'trap-answer/educated-merchant' ? '3.' : '2.'} اختر ملف المحتوى (JSON)
                 </Label>
                 <Input id="json-upload-input" type="file" accept=".json" onChange={handleJsonFileChange} />
                 <p className="text-xs text-muted-foreground">{getUploadHelperText()}</p>
@@ -397,16 +404,15 @@ export default function QuestionManagementTab() {
             
             <Button onClick={handleQuestionUpload} disabled={isUploading || !selectedJsonFile || !selectedGame} className="w-full">
                 <Upload className="mr-2 h-4 w-4" />
-                {isUploading ? 'جاري الرفع...' : `رفع ملف "${selectedGame}"`}
+                {isUploading ? 'جاري الرفع...' : `رفع ملف`}
             </Button>
         </div>
     );
     
     const getUploadHelperText = () => {
         switch(selectedGame) {
-            case 'trap-answer':
-            case 'educated-merchant':
-                return "يجب أن يكون الملف مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `question` و `answer` وحقل اختياري `dummyAnswers` (مصفوفة من الإجابات الخاطئة).";
+            case 'trap-answer/educated-merchant':
+                return "يجب أن يكون الملف مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `question` و `answer` وحقل اختياري `dummyAnswers` (مصفوفة من 3 إجابات خاطئة).";
             case 'word_war': return "الملف يجب أن يكون مصفوفة من الكلمات (strings).";
             case 'prison': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `text`.";
             default: return "اختر لعبة لرؤية تعليمات الرفع.";
@@ -423,8 +429,7 @@ export default function QuestionManagementTab() {
                             <SelectValue placeholder="اختر لعبة لحذف محتوى منها..." />
                         </SelectTrigger>
                         <SelectContent>
-                             <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
-                             <SelectItem value="educated-merchant">التاجر المتعلم</SelectItem>
+                             <SelectItem value="trap-answer/educated-merchant">الجواب المفخخ / التاجر المتعلم</SelectItem>
                             <SelectItem value="word_war">حرب الكلمات</SelectItem>
                             <SelectItem value="prison">السجن</SelectItem>
                         </SelectContent>
@@ -433,7 +438,7 @@ export default function QuestionManagementTab() {
              );
          }
         
-         if (selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') {
+         if (selectedGame === 'trap-answer/educated-merchant') {
              return renderTrapAnswerDelete();
          }
          if (selectedGame === 'word_war') {
@@ -449,24 +454,32 @@ export default function QuestionManagementTab() {
         <div className="space-y-4">
             <div className="space-y-2">
                 <Label>حذف حسب القسم</Label>
-                <Select onValueChange={(val) => val && handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: val })} >
-                     <SelectTrigger>
-                        <SelectValue placeholder="اختر قسمًا لحذف جميع أسئلته..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>حذف كل أسئلة "{cat}"</SelectItem>)}
-                    </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                     <div className="flex-grow">
+                        <Select onValueChange={(val) => val && handleDeleteClick({ game: 'trap-answer', category: val })} >
+                             <SelectTrigger>
+                                <SelectValue placeholder={activeCategoryManager ? `اختر قسمًا لحذف كل أسئلته...` : 'اختر نوع الأقسام أولاً...'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>حذف كل أسئلة "{cat}"</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                     </div>
+                      <div className="flex border rounded-md">
+                        <Button variant={activeCategoryManager === 'trap-answer' ? 'default' : 'ghost'} size="sm" onClick={() => setActiveCategoryManager('trap-answer')}>الجواب المفخخ</Button>
+                        <Button variant={activeCategoryManager === 'educated-merchant' ? 'default' : 'ghost'} size="sm" onClick={() => setActiveCategoryManager('educated-merchant')}>التاجر المتعلم</Button>
+                    </div>
+                </div>
             </div>
              <div className="space-y-2 border-t pt-4">
                  <h4 className="font-bold">حذف الأسئلة المكررة</h4>
                  <p className="text-sm text-muted-foreground">سيقوم هذا الإجراء بفحص الأسئلة المتشابهة وحذفها مع الإبقاء على أحدث نسخة.</p>
-                  <Select onValueChange={(val) => val && handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: val, duplicates: { threshold: 0.85 } })} >
+                  <Select onValueChange={(val) => val && handleDeleteClick({ game: 'trap-answer', category: val, duplicates: { threshold: 0.85 } })} >
                      <SelectTrigger>
                         <SelectValue placeholder="اختر قسمًا لفحص التكرارات فيه..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>حذف المكرر من "{cat}"</SelectItem>)}
+                        {trapAnswerCategories.map(cat => <SelectItem key={cat} value={cat}>حذف المكرر من "{cat}"</SelectItem>)}
                     </SelectContent>
                 </Select>
             </div>

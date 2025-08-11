@@ -42,6 +42,8 @@ async function fetchRandomQuestionForCategory(category: string): Promise<Educate
 
     const docData = snapshot.docs[0].data();
     const correctAnswer = docData.answer;
+    
+    // Prioritize dummyAnswers from the document, with a fallback.
     const dummyAnswers = Array.isArray(docData.dummyAnswers) && docData.dummyAnswers.length > 0 
         ? docData.dummyAnswers 
         : ['بديل ١', 'بديل ٢', 'بديل ٣'];
@@ -75,7 +77,7 @@ function generateBoard(categories: string[]): Property[] {
         } else {
              const category = categories[i % categories.length] || 'عام';
              const price = shuffledPrices[i % shuffledPrices.length] || BASE_PROPERTY_PRICE;
-             board.push({ id: i, type: 'property', name: `عقار ${i}`, category, price, rent: Math.floor(price / 4), ownerId: null });
+             board.push({ id: i, type: 'property', name: `عقار ${i}`, category, price, rent: Math.floor(price * 0.25), ownerId: null });
         }
     }
     return board;
@@ -109,7 +111,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
             'educatedMerchantState.currentTurnIndex': 0,
             'educatedMerchantState.activityLog': ["بدأت اللعبة!"],
             playerScores: initialBalances,
-            'players': game.players.map(p => ({ ...p, position: 0, bankruptAt: null })),
+            'players': game.players.map(p => ({ ...p, position: 0, bankruptAt: null, status: 'alive' })),
         });
     });
 }
@@ -180,7 +182,6 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         let newActivityLog = [...(es.activityLog || [])];
         let playerBalance = game.playerScores?.[playerId] || 0;
 
-        // Update player position first, then handle actions
         transaction.update(gameRef, { players: updatedPlayers });
 
         if (!property || property.type === 'start') {
@@ -192,13 +193,13 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
             const fine = property.fineAmount || 0;
             newActivityLog.push(`${updatedPlayers[playerIndex].name} دفع غرامة بقيمة ${fine} د.ع.`);
             if (playerBalance < fine) {
-                // Bankrupt
                 updatedPlayers[playerIndex].status = 'bankrupt';
                 updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
                 newActivityLog.push(`${updatedPlayers[playerIndex].name} أفلس!`);
                 transaction.update(gameRef, { 
                     players: updatedPlayers,
-                    'educatedMerchantState.activityLog': newActivityLog
+                    'educatedMerchantState.activityLog': newActivityLog,
+                    [`playerScores.${playerId}`]: 0,
                 });
             } else {
                  transaction.update(gameRef, { 
@@ -211,7 +212,6 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         }
 
         if (property.ownerId && property.ownerId !== playerId) {
-            // Pay rent
             const rent = property.rent;
             const owner = game.players.find(p => p.id === property.ownerId);
             newActivityLog.push(`${updatedPlayers[playerIndex].name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${owner?.name}.`);
@@ -242,7 +242,8 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
             });
 
         } else {
-            // Landed on their own property
+            newActivityLog.push(`${updatedPlayers[playerIndex].name} وقف على عقاره.`);
+            transaction.update(gameRef, {'educatedMerchantState.activityLog': newActivityLog});
             await endTurn(gameId, playerId, transaction);
         }
     });
@@ -292,7 +293,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             
             const player = game.players.find(p => p.id === playerId);
             const property = game.educatedMerchantState?.board.find(p => p.id === player?.position);
-            if(!property) throw new Error("Player not on a property.");
+            if(!property || property.type !== 'property') throw new Error("Player not on a buyable property.");
 
             const isCorrect = answer === question.correctAnswer;
             
@@ -307,7 +308,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
                     'educatedMerchantState.activityLog': newActivityLog,
                 });
             } else {
-                const penalty = Math.floor(property.price * 0.75); // Lose 75% of the price
+                const penalty = Math.floor(property.price * 0.25);
                 newActivityLog.push(`${player?.name} أجاب بشكل خاطئ وخسر ${penalty} د.ع.`);
                  transaction.update(gameRef, {
                     [`playerScores.${playerId}`]: increment(-penalty),
@@ -316,7 +317,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             }
 
             transaction.update(gameRef, {
-                'educatedMerchantState.currentQuestion': null, // Clear question
+                'educatedMerchantState.currentQuestion': deleteField(),
                 'educatedMerchantState.timerEndsAt': deleteField(),
             });
          });
@@ -354,12 +355,11 @@ export async function endTurn(gameId: string, playerId: string, existingTransact
 
         const currentTurnPlayer = es.turnOrder[es.currentTurnIndex];
         if (currentTurnPlayer !== playerId) {
-            return; // Not this player's turn to end
+            return;
         }
 
         let nextIndex = (es.currentTurnIndex + 1) % es.turnOrder.length;
         let loopGuard = 0;
-        // Find the next player who is not bankrupt
         while(game.players.find(p => p.id === es.turnOrder[nextIndex])?.status === 'bankrupt' && loopGuard < es.turnOrder.length * 2) {
             nextIndex = (nextIndex + 1) % es.turnOrder.length;
             loopGuard++;
