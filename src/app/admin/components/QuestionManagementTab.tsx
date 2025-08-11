@@ -254,11 +254,12 @@ export default function QuestionManagementTab() {
                         <SelectValue placeholder="اختر لعبة لرفع محتوى لها..." />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="trap-answer">الجواب المفخخ</SelectItem>
+                        <SelectItem value="trap-answer">الجواب المفخخ / التاجر المتعلم</SelectItem>
                         <SelectItem value="word_war">حرب الكلمات</SelectItem>
                         <SelectItem value="prison">السجن</SelectItem>
                     </SelectContent>
                 </Select>
+                 {selectedGame === 'trap-answer' && <p className="text-xs text-muted-foreground pt-1">يستخدم "التاجر المتعلم" نفس أسئلة "الجواب المفخخ". ارفع الأسئلة هنا لكلا اللعبتين.</p>}
             </div>
             
              {selectedGame === 'trap-answer' && (
@@ -292,7 +293,7 @@ export default function QuestionManagementTab() {
     
     const getUploadHelperText = () => {
         switch(selectedGame) {
-            case 'trap-answer': return "يجب أن يكون الملف مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `question` و `answer`. حقل `dummyAnswers` اختياري.";
+            case 'trap-answer': return "يجب أن يكون الملف مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `question` و `answer`. حقل `dummyAnswers` اختياري للتاجر المتعلم.";
             case 'word_war': return "الملف يجب أن يكون مصفوفة من الكلمات (strings).";
             case 'prison': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `text`.";
             default: return "اختر لعبة لرؤية تعليمات الرفع.";
@@ -429,7 +430,7 @@ export default function QuestionManagementTab() {
              <Card>
                 <CardHeader>
                     <CardTitle>إدارة الأقسام</CardTitle>
-                    <CardDescription>إدارة أقسام لعبة "الجواب المفخخ".</CardDescription>
+                    <CardDescription>إدارة أقسام لعبة "الجواب المفخخ" و "التاجر المتعلم".</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                      <div className="space-y-2">
