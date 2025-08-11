@@ -305,18 +305,17 @@ export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: n
 
 export async function getTopPunisher(): Promise<UserProfile | null> {
     try {
-        const q = query(collection(db, 'users'), orderBy('punishmentsIssued', 'desc'), limit(1));
+        const q = query(collection(db, 'users'), where('punishmentsIssued', '>', 0), orderBy('punishmentsIssued', 'desc'), limit(1));
         const snapshot = await getDocs(q);
         if (snapshot.empty) {
             return null;
         }
         const userDoc = snapshot.docs[0];
-        if(!userDoc.data().punishmentsIssued || userDoc.data().punishmentsIssued === 0) return null;
         return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
     } catch (error) {
-        // This can happen if the 'punishmentsIssued' index is not created yet.
-        // It's not a critical error, so we just log it and return null.
         console.warn("Could not fetch top punisher, likely due to a missing index:", error);
         return null;
     }
 }
+
+    
