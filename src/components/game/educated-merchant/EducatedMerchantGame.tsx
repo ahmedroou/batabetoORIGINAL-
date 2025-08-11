@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo } from "react";
@@ -10,6 +9,7 @@ import { PropertyCard } from "./PropertyCard";
 import { QuestionModal } from "./QuestionModal";
 import { FinalResults } from "./FinalResults";
 import { Lobby } from "./Lobby";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface EducatedMerchantGameProps {
@@ -53,6 +53,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
             diceRoll={es.lastDiceRoll ?? null}
             isMyTurn={isMyTurn}
             activePlayerId={activePlayerId}
+            gameState={game.gameState}
           />
         
         <AnimatePresence>
@@ -65,7 +66,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
               transition={{ duration: 0.3 }}
               className="absolute z-20"
             >
-              <DiceRoll gameId={game.id} selfId={self.id} />
+              <DiceRoll gameId={game.id} selfId={self.id} onRollComplete={() => {}} />
             </motion.div>
           )}
 
