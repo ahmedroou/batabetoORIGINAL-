@@ -802,7 +802,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             case 'answer-submission': return renderAnswerSubmission();
             case 'guessing': return renderGuessing();
             case 'round-results': return renderRoundResults();
-            case 'final-results': return renderFinalResults();
+            case 'final_results': return renderFinalResults();
             default: return (
                 <Card>
                     <CardHeader><CardTitle>لعبة الجواب المفخخ</CardTitle></CardHeader>

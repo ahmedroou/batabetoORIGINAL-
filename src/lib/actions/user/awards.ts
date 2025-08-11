@@ -51,7 +51,7 @@ export function calculateEndOfGameAwards(game: Game) {
         
         sortedPlayers.forEach((player, index) => {
              const score = finalScores[player.id] || 0;
-             if (score < lastScore) {
+             if (score !== lastScore) {
                 currentRank = index + 1;
             } else if (index === 0) { // First player always gets rank 1
                 currentRank = 1;
