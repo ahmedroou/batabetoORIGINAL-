@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import type { Game, Player } from "@/types";
 import { GameBoard } from "./GameBoard";
 import { PlayerHUD } from "./PlayerHUD";
@@ -55,7 +55,8 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
               board={es.board}
               players={game.players}
               gameId={game.id}
-              diceRoll={game.gameState === "movement" ? es.lastDiceRoll ?? null : null}
+              gameState={game.gameState}
+              diceRoll={es.lastDiceRoll ?? null}
               isMyTurn={isMyTurn}
               activePlayerId={activePlayerId}
             />
@@ -71,7 +72,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
               transition={{ duration: 0.3 }}
-              className="absolute z-20"
+              className="absolute bottom-4"
             >
               <DiceRoll gameId={game.id} selfId={self.id} onRollComplete={() => {}} />
             </motion.div>
@@ -84,7 +85,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.8, opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="absolute z-20"
+              className="absolute bottom-4"
             >
               <PropertyCard game={game} self={self} />
             </motion.div>
@@ -97,7 +98,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 50, opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="absolute z-30"
+              className="absolute bottom-4"
             >
               <QuestionModal game={game} self={self} />
             </motion.div>

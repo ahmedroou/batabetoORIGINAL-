@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import type { Player, Property } from "@/types";
+import type { Player, Property, GameState } from "@/types";
 import { motion, useAnimate } from "framer-motion";
 import { PlayerAvatar } from "../PlayerAvatar";
 import { Home, Building2, Gavel } from "lucide-react";
@@ -12,6 +12,7 @@ interface GameBoardProps {
   board: Property[];
   players: Player[];
   gameId: string;
+  gameState: GameState;
   diceRoll: number | null;
   isMyTurn: boolean;
   activePlayerId: string;
@@ -72,6 +73,7 @@ export function GameBoard({
   board,
   players,
   gameId,
+  gameState,
   diceRoll,
   isMyTurn,
   activePlayerId,
@@ -115,7 +117,7 @@ export function GameBoard({
   // تحريك اللاعبين خطوة بخطوة
   useEffect(() => {
     const movePlayer = async () => {
-      if (diceRoll === null || !isMyTurn || Object.keys(tilePositions).length === 0)
+      if (gameState !== 'movement' || diceRoll === null || !isMyTurn || Object.keys(tilePositions).length === 0)
         return;
 
       const player = players.find((p) => p.id === activePlayerId);
@@ -142,6 +144,7 @@ export function GameBoard({
 
     movePlayer();
   }, [
+    gameState,
     diceRoll,
     isMyTurn,
     tilePositions,
