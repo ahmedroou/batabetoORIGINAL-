@@ -3,7 +3,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, collection, getDocs, query, updateDoc, arrayUnion, increment, FieldValue, deleteField, where, limit, getDoc } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, collection, getDocs, query, updateDoc, arrayUnion, increment, FieldValue, deleteField, where, limit, getDoc, setDoc } from 'firebase/firestore';
 import type { Game, Player, Property, EducatedMerchantQuestion } from '@/types';
 import { shuffle } from './helpers';
 
@@ -339,6 +339,13 @@ export async function endTurn(gameId: string, playerId: string, existingTransact
         const es = game.educatedMerchantState;
         if (!es) throw new Error("Game state is not initialized.");
 
+        // Check if it's the correct player's turn to end
+        const currentTurnPlayerId = es.turnOrder[es.currentTurnIndex];
+        if (currentTurnPlayerId !== playerId) {
+            console.warn(`Player ${playerId} tried to end turn, but it's ${currentTurnPlayerId}'s turn.`);
+            return;
+        }
+
         const nonBankruptPlayers = game.players.filter(p => p.status !== 'bankrupt');
 
         if (nonBankruptPlayers.length <= 1) {
@@ -348,11 +355,6 @@ export async function endTurn(gameId: string, playerId: string, existingTransact
                  gameResult: { winner: winner?.id || 'game_over', message: 'انتهت اللعبة بإفلاس المنافسين!' },
                  'educatedMerchantState.lastDiceRoll': deleteField(),
             });
-            return;
-        }
-
-        const currentTurnPlayer = es.turnOrder[es.currentTurnIndex];
-        if (currentTurnPlayer !== playerId) {
             return;
         }
 

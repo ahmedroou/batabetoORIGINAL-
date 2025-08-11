@@ -55,8 +55,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
               board={es.board}
               players={game.players}
               gameId={game.id}
-              gameState={game.gameState}
-              diceRoll={es.lastDiceRoll ?? null}
+              diceRoll={game.gameState === "movement" ? es.lastDiceRoll ?? null : null}
               isMyTurn={isMyTurn}
               activePlayerId={activePlayerId}
             />

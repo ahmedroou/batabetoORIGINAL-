@@ -12,7 +12,6 @@ interface GameBoardProps {
   board: Property[];
   players: Player[];
   gameId: string;
-  gameState: GameState;
   diceRoll: number | null;
   isMyTurn: boolean;
   activePlayerId: string;
@@ -73,7 +72,6 @@ export function GameBoard({
   board,
   players,
   gameId,
-  gameState,
   diceRoll,
   isMyTurn,
   activePlayerId,
@@ -83,7 +81,16 @@ export function GameBoard({
   const [tilePositions, setTilePositions] = useState<
     Record<number, { x: number; y: number }>
   >({});
-  const [playerScopes, setPlayerScopes] = useState<Record<string, any>>({});
+  
+  // A map to hold animation controls for each player
+  const playerAnimators = useMemo(() => new Map<string, ReturnType<typeof useAnimate>>(), []);
+  players.forEach(p => {
+      if (!playerAnimators.has(p.id)) {
+          // eslint-disable-next-line react-hooks/rules-of-hooks
+          playerAnimators.set(p.id, useAnimate());
+      }
+  });
+
 
   const sideLength = useMemo(
     () => Math.ceil(board.length / 4) + 1,
@@ -110,30 +117,38 @@ export function GameBoard({
     };
 
     calculatePositions();
-    window.addEventListener("resize", calculatePositions);
-    return () => window.removeEventListener("resize", calculatePositions);
+    const resizeObserver = new ResizeObserver(calculatePositions);
+    if(gridRef.current) {
+        resizeObserver.observe(gridRef.current);
+    }
+    
+    return () => resizeObserver.disconnect();
   }, [board]);
 
   // تحريك اللاعبين خطوة بخطوة
   useEffect(() => {
     const movePlayer = async () => {
-      if (gameState !== 'movement' || diceRoll === null || !isMyTurn || Object.keys(tilePositions).length === 0)
+      if (diceRoll === null || !isMyTurn || Object.keys(tilePositions).length === 0)
         return;
 
       const player = players.find((p) => p.id === activePlayerId);
-      const [scope, animate] = playerScopes[activePlayerId] || [];
+      const animator = playerAnimators.get(activePlayerId);
 
-      if (!player || !scope || !animate) return;
+      if (!player || !animator) return;
 
+      const [scope, animate] = animator;
       const startPos = player.position;
 
       for (let i = 1; i <= diceRoll; i++) {
         const nextPosIndex = (startPos + i) % board.length;
         const nextPosCoords = tilePositions[nextPosIndex];
         if (nextPosCoords) {
-          await animate(
-            scope,
-            { x: nextPosCoords.x + 20, y: nextPosCoords.y + 20 },
+           await animate(
+            scope.current,
+            { 
+              x: nextPosCoords.x + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5, 
+              y: nextPosCoords.y + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5 
+            },
             { duration: 0.35, type: "spring", stiffness: 200, damping: 18 }
           );
         }
@@ -144,13 +159,12 @@ export function GameBoard({
 
     movePlayer();
   }, [
-    gameState,
     diceRoll,
     isMyTurn,
     tilePositions,
     players,
     activePlayerId,
-    playerScopes,
+    playerAnimators,
     board.length,
     gameId,
   ]);
@@ -237,26 +251,28 @@ export function GameBoard({
       </div>
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
         {players.map((player) => {
+          const animator = playerAnimators.get(player.id);
+          if (!animator) return null;
+          
           const initialPos = tilePositions[player.position] || { x: 0, y: 0 };
-          const [scope, animate] = useAnimate();
-
-          useEffect(() => {
-            setPlayerScopes((prev) => ({
-              ...prev,
-              [player.id]: [scope, animate],
-            }));
-          }, [scope, animate, player.id]);
-
+          
           return (
             <motion.div
               key={player.id}
-              ref={scope}
+              ref={animator[0]}
               className="absolute z-10"
-              initial={{ x: initialPos.x + 20, y: initialPos.y + 20 }}
+              initial={{ 
+                  x: initialPos.x + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5, 
+                  y: initialPos.y + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5
+              }}
+              animate={{ 
+                  x: initialPos.x + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5, 
+                  y: initialPos.y + 10 + (players.findIndex(p => p.id === player.id) % 4) * 5
+              }}
             >
               <PlayerAvatar
                 avatarId={player.avatarId}
-                className="w-10 h-10 md:w-12 md:h-12 border-2 rounded-full shadow-lg"
+                className="w-8 h-8 md:w-10 md:h-10 border-2 rounded-full shadow-lg"
               />
             </motion.div>
           );
