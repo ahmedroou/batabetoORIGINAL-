@@ -3,13 +3,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import type { Challenge, ChallengePrize, UserProfile, EntryFee } from '@/types';
+import type { Challenge, ChallengePrize, UserProfile, EntryFee, GameKing, SocialRank } from '@/types';
 import { getChallenges, joinChallenge, getChallengeDetails } from '@/lib/actions/challenges';
+import { getGameKings, getKingOfGames } from '@/lib/actions/user';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CircleDollarSign, Diamond, Swords, Calendar, Play, Users, DoorOpen, Trophy, Star, Shield, Flag, Loader2, ListOrdered } from 'lucide-react';
+import { CircleDollarSign, Diamond, Swords, Calendar, Play, Users, DoorOpen, Trophy, Star, Shield, Flag, Loader2, ListOrdered, Crown } from 'lucide-react';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
@@ -21,7 +22,7 @@ import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent as AlertDialogContentAlt, AlertDialogDescription as AlertDialogDescriptionAlt, AlertDialogFooter as AlertDialogFooterAlt, AlertDialogHeader as AlertDialogHeaderAlt, AlertDialogTitle as AlertDialogTitleAlt } from '@/components/ui/alert-dialog';
-
+import { Badge } from '@/components/ui/badge';
 
 const PRIZE_ICONS: Record<ChallengePrize['type'], React.ElementType> = {
     coins: CircleDollarSign,
@@ -53,17 +54,26 @@ const PrizeDisplay = ({ prizes }: { prizes: ChallengePrize[] }) => {
 };
 
 const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challenge, trigger: React.ReactNode }) => {
+    const { getSocialRankForUser, socialRanks } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [participants, setParticipants] = useState<UserProfile[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [gameKings, setGameKings] = useState<Record<string, GameKing>>({});
+    const [kingOfGames, setKingOfGames] = useState<UserProfile | null>(null);
 
     const fetchDetails = useCallback(async () => {
         if (!isOpen) return;
         setIsLoading(true);
-        const details = await getChallengeDetails(challenge.id);
+        const [details, kings, kog] = await Promise.all([
+            getChallengeDetails(challenge.id),
+            getGameKings(),
+            getKingOfGames(),
+        ]);
         if (details) {
             setParticipants(details.participants || []);
         }
+        setGameKings(kings);
+        setKingOfGames(kog);
         setIsLoading(false);
     }, [isOpen, challenge.id]);
     
@@ -88,16 +98,34 @@ const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challen
                         <ScrollArea className="h-96">
                             <div className="space-y-2 pr-4">
                                 {participants.length > 0 ? (
-                                    participants.map((participant, index) => (
+                                    participants.map((participant, index) => {
+                                        const rank = getSocialRankForUser(participant.leaderboardPoints);
+                                        const isKingOfGames = kingOfGames?.uid === participant.uid;
+                                        const gameKingTitle = Object.values(gameKings).find(k => k.kingId === participant.uid);
+                                        const rankIcon = rank?.icon as React.ElementType | undefined;
+
+                                        return (
                                         <div key={participant.uid} className="flex justify-between items-center bg-gray-800 p-2 rounded-lg">
                                             <div className="flex items-center gap-3">
                                                 <span className="font-bold text-lg w-6 text-center text-gray-400">{index + 1}</span>
                                                 <PlayerAvatar avatarId={participant.avatarId} className="w-10 h-10"/>
-                                                <p className="font-semibold">{participant.name}</p>
+                                                <div className="flex flex-col">
+                                                    <p className="font-semibold flex items-center gap-1.5">
+                                                        {participant.name}
+                                                        {isKingOfGames && <Crown className="w-4 h-4 text-yellow-300 fill-yellow-400" />}
+                                                        {gameKingTitle && !isKingOfGames && <Crown className="w-4 h-4 text-amber-400" />}
+                                                    </p>
+                                                     {rank && rankIcon && (
+                                                        <Badge variant="secondary" className="w-fit text-xs">
+                                                            {React.createElement(rankIcon, {className: "w-3 h-3 ml-1"})}
+                                                            {rank.name}
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </div>
                                             <p className="font-bold text-lg text-yellow-400">{challenge.scores[participant.uid] || 0} نقطة</p>
                                         </div>
-                                    ))
+                                    )})
                                 ) : (
                                     <p className="text-center text-gray-500 h-64 flex items-center justify-center">لا يوجد مشاركون بعد.</p>
                                 )}

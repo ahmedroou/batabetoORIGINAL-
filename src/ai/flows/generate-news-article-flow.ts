@@ -37,6 +37,15 @@ const analyzerPrompt = ai.definePrompt({
 
 Today's Date: {{{date}}}
 ---
+**Active Challenges & Tournaments:**
+{{#if active_challenges}}
+{{#each active_challenges}}
+- Challenge '{{title}}' is ongoing. Ends on: {{endsAt}}. Prizes are significant. This is important.
+{{/each}}
+{{else}}
+- No active challenges today. A day of peace.
+{{/if}}
+---
 **Recent Social Events (Last 24 Hours):**
 {{#if events}}
 {{#each events}}
@@ -53,13 +62,6 @@ Today's Date: {{{date}}}
 {{/each}}
 {{else}}
 - The community is peaceful; no one is currently being punished.
-{{/if}}
----
-**Active Challenges:**
-{{#if active_challenges}}
-{{#each active_challenges}}
-- Challenge '{{title}}' is ongoing.
-{{/each}}
 {{/if}}
 ---
 **Top Punisher:**
@@ -151,5 +153,3 @@ const newsGeneratorFlow = ai.defineFlow(
     };
   }
 );
-
-    

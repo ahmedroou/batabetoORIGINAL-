@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -262,7 +263,7 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     const userRef = doc(db, 'users', userId);
     try {
         batch.update(groupRef, { members: arrayRemove(userId) });
-        batch.update(userRef, { audienceGroups: arrayRemove(userId) });
+        batch.update(userRef, { audienceGroups: arrayRemove(groupId) });
         await batch.commit();
         return { success: true };
     } catch (error) {
@@ -376,5 +377,3 @@ export async function deleteOldArticles(): Promise<{success: boolean, deletedCou
         return { success: false, error: "فشل حذف المقالات القديمة." };
     }
 }
-
-    
