@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useMemo } from "react";
@@ -160,7 +161,7 @@ const Tile = React.forwardRef<HTMLDivElement, {
 });
 Tile.displayName = 'Tile';
 
-export default function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId, gameState }: GameBoardProps) {
+export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId, gameState }: GameBoardProps) {
   if (!board || board.length === 0) {
     return <div className="text-center p-6 text-lg">جاري تحميل اللوحة...</div>;
   }
