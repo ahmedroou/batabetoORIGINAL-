@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo } from "react";
@@ -26,6 +27,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
 
   const isMyTurn = es.turnOrder?.[es.currentTurnIndex] === self.id;
   const canRoll = game.gameState === "rolling" && isMyTurn;
+  const showDiceRoll = (game.gameState === 'rolling' || game.gameState === 'movement') && es.lastDiceRoll !== null;
   const showPropertyInteraction = game.gameState === "property_action" && isMyTurn;
   const showQuestion = game.gameState === "question" && isMyTurn;
 
@@ -57,8 +59,8 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
           />
         
         <AnimatePresence>
-          {canRoll && (
-            <motion.div
+          {showDiceRoll && (
+             <motion.div
               key="dice-roll"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -66,7 +68,12 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
               transition={{ duration: 0.3 }}
               className="absolute z-20"
             >
-              <DiceRoll gameId={game.id} selfId={self.id} onRollComplete={() => {}} />
+              <DiceRoll 
+                gameId={game.id} 
+                selfId={self.id} 
+                isMyTurnToRoll={canRoll}
+                diceResult={es.lastDiceRoll ?? null}
+              />
             </motion.div>
           )}
 

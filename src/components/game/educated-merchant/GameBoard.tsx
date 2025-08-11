@@ -1,8 +1,9 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { Player, Property } from "@/types";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { PlayerAvatar } from "../PlayerAvatar";
 import { Home, Building2, Gavel } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -96,7 +97,8 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
     useEffect(() => {
         const movePlayer = async () => {
             if (diceRoll === null || !isMyTurn) return;
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // Delay before calling the server action to let players see the dice
+            await new Promise(resolve => setTimeout(resolve, 3000));
             await handlePropertyAction(gameId, activePlayerId);
         };
 
@@ -131,18 +133,20 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
                     return (
                         <motion.div
                             key={player.id}
-                            layoutId={`player-${player.id}`}
+                            layout
                             className="absolute z-10 flex items-center justify-center p-0.5"
                             style={{
                                 gridRow: pos.gridRow,
                                 gridColumn: pos.gridColumn,
                             }}
-                            transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                             initial={{ opacity: 0, scale: 0.5 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 20 }}
                         >
-                            <div style={{ transform: `translate(${(pIndex % 4) * 8 - 12}px, ${Math.floor(pIndex / 4) * 8 - 12}px)` }}>
+                            <div style={{ transform: `translate(${(pIndex % 4) * 6 - 9}px, ${Math.floor(pIndex / 4) * 6 - 9}px)` }}>
                                 <PlayerAvatar
                                     avatarId={player.avatarId}
-                                    className="w-5 h-5 md:w-6 md:h-6 border-2 rounded-full shadow-lg"
+                                    className="w-4 h-4 md:w-5 md:h-5 border-2 rounded-full shadow-lg"
                                 />
                             </div>
                         </motion.div>
@@ -152,7 +156,9 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
                     className="flex items-center justify-center text-center"
                     style={{ gridArea: `2 / 2 / ${sideLength} / ${sideLength}`}}
                 >
-                    <h2 className="text-xl md:text-3xl font-bold text-gray-700 dark:text-gray-300">التاجر المتعلم</h2>
+                    {gameState === 'rolling' || (gameState === 'movement' && diceRoll !== null) ? null : (
+                         <h2 className="text-xl md:text-3xl font-bold text-gray-700 dark:text-gray-300">التاجر المتعلم</h2>
+                    )}
                 </div>
             </div>
         </div>

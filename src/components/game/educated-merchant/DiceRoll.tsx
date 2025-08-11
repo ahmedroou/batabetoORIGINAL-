@@ -11,50 +11,51 @@ import { useToast } from '@/hooks/use-toast';
 interface DiceRollProps {
     gameId: string;
     selfId: string;
+    isMyTurnToRoll: boolean;
+    diceResult: number | null;
 }
 
 const numbers = [1, 2, 3, 4, 5];
 
-export function DiceRoll({ gameId, selfId }: DiceRollProps) {
+export function DiceRoll({ gameId, selfId, isMyTurnToRoll, diceResult }: DiceRollProps) {
     const { toast } = useToast();
     const [isRolling, setIsRolling] = useState(false);
-    const [result, setResult] = useState<number | null>(null);
     const [rollingDisplay, setRollingDisplay] = useState(1);
+
+    useEffect(() => {
+        // If the diceResult prop is populated (meaning a roll happened),
+        // we show the result animation.
+        if (diceResult !== null) {
+            setIsRolling(true);
+            const fastInterval = setInterval(() => {
+                setRollingDisplay(numbers[Math.floor(Math.random() * numbers.length)]);
+            }, 80);
+
+            // Show the final result after a short delay
+            setTimeout(() => {
+                clearInterval(fastInterval);
+                setRollingDisplay(diceResult);
+            }, 1000); // 1s of spinning
+
+            // Hide the dice component after showing the result for 2 seconds
+            setTimeout(() => {
+                setIsRolling(false);
+            }, 3000); // 1s spin + 2s display
+        }
+    }, [diceResult]);
 
     const handleRoll = async () => {
         setIsRolling(true);
-        setResult(null);
-
-        const rollPromise = rollDice(gameId, selfId);
-
-        // Start slot machine animation immediately
-        const animationDuration = 2000; // 2 seconds
-        const fastInterval = setInterval(() => {
-            setRollingDisplay(numbers[Math.floor(Math.random() * numbers.length)]);
-        }, 80);
-
-        setTimeout(() => {
-            clearInterval(fastInterval);
-        }, animationDuration - 500); // Stop fast spinning before the end
-
-        // Wait for both animation time and API response
+        // We only call the action, the visual update is driven by the diceResult prop
         try {
-            const [rollResult] = await Promise.all([
-                rollPromise,
-                new Promise(resolve => setTimeout(resolve, animationDuration))
-            ]);
-            
-            if (rollResult.success && rollResult.diceResult) {
-                setResult(rollResult.diceResult);
-                // The parent component will now react to gameState changes instead of a callback
-            } else {
-                toast({ title: "خطأ", description: rollResult.error, variant: 'destructive' });
-                setIsRolling(false);
+            const result = await rollDice(gameId, selfId);
+            if (result.error) {
+                toast({ title: "خطأ", description: result.error, variant: 'destructive' });
+                setIsRolling(false); // Reset on error
             }
-
         } catch (error: any) {
             toast({ title: "خطأ فادح", description: error.message, variant: 'destructive' });
-            setIsRolling(false);
+            setIsRolling(false); // Reset on error
         }
     };
     
@@ -82,11 +83,11 @@ export function DiceRoll({ gameId, selfId }: DiceRollProps) {
                                 exit={{ y: 50, opacity: 0 }}
                                 transition={{ duration: 0.1 }}
                             >
-                                {result !== null ? result : rollingDisplay}
+                                {rollingDisplay}
                             </motion.span>
                         </AnimatePresence>
                     </motion.div>
-                ) : (
+                ) : isMyTurnToRoll ? (
                     <motion.div
                         key="button"
                         initial={{ scale: 0.8, opacity: 0 }}
@@ -101,7 +102,7 @@ export function DiceRoll({ gameId, selfId }: DiceRollProps) {
                             <Dices className="ml-4 w-10 h-10"/> ارمِ النرد
                         </Button>
                     </motion.div>
-                )}
+                ) : null}
             </AnimatePresence>
         </motion.div>
     );

@@ -135,18 +135,10 @@ export async function rollDice(gameId: string, playerId: string): Promise<{ succ
             const playerIndex = game.players.findIndex(p => p.id === playerId);
             if(playerIndex === -1) throw new Error("Player not found");
             
-            const oldPosition = game.players[playerIndex].position;
-            let updatedBalances = { ...game.playerScores };
             let newActivityLog = [...(es.activityLog || [])];
             newActivityLog.push(`${game.players[playerIndex].name} رمى النرد وحصل على ${diceResult}.`);
 
-            if ((oldPosition + diceResult) >= BOARD_SIZE) { // Passed start
-                updatedBalances[playerId] = (updatedBalances[playerId] || 0) + PASS_START_BONUS;
-                newActivityLog.push(`${game.players[playerIndex].name} مر بنقطة البداية وحصل على ${PASS_START_BONUS} د.ع.`);
-            }
-
             transaction.update(gameRef, {
-                playerScores: updatedBalances,
                 gameState: 'movement',
                 'educatedMerchantState.lastDiceRoll': diceResult,
                 'educatedMerchantState.activityLog': newActivityLog
@@ -179,8 +171,14 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         
         let newActivityLog = [...(es.activityLog || [])];
         let playerBalance = game.playerScores?.[playerId] || 0;
+        let updatedBalances = { ...game.playerScores };
 
-        transaction.update(gameRef, { players: updatedPlayers });
+        if ((oldPosition + (es.lastDiceRoll || 0)) >= BOARD_SIZE) { // Passed start
+            updatedBalances[playerId] = (updatedBalances[playerId] || 0) + PASS_START_BONUS;
+            newActivityLog.push(`${game.players[playerIndex].name} مر بنقطة البداية وحصل على ${PASS_START_BONUS} د.ع.`);
+        }
+
+        transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances });
 
         if (!property || property.type === 'start') {
             await endTurn(gameId, playerId, transaction);

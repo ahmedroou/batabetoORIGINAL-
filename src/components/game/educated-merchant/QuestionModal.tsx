@@ -136,12 +136,12 @@ export function QuestionModal({ game, self }: QuestionModalProps) {
                                     )}
                                 >
                                     <RadioGroupItem value={option} id={`option-${index}`} className="w-6 h-6 mt-1 shrink-0" />
-                                    <span className="text-base font-medium flex-grow text-right">{option}</span>
+                                    <span className="text-base font-medium flex-grow">{option}</span>
                                      {submittedAnswer && (
-                                        <>
-                                            {option === question.correctAnswer && <Check className="w-6 h-6 text-green-600 shrink-0" />}
-                                            {option === submittedAnswer && option !== question.correctAnswer && <X className="w-6 h-6 text-red-600 shrink-0" />}
-                                        </>
+                                        <div className="shrink-0">
+                                            {option === question.correctAnswer && <Check className="w-6 h-6 text-green-600" />}
+                                            {option === submittedAnswer && option !== question.correctAnswer && <X className="w-6 h-6 text-red-600" />}
+                                        </div>
                                     )}
                                 </Label>
                             ))}
