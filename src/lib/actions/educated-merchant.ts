@@ -43,7 +43,6 @@ async function fetchRandomQuestionForCategory(category: string): Promise<Educate
     const docData = snapshot.docs[0].data();
     const correctAnswer = docData.answer;
     
-    // Prioritize dummyAnswers from the document, with a fallback.
     const dummyAnswers = Array.isArray(docData.dummyAnswers) && docData.dummyAnswers.length > 0 
         ? docData.dummyAnswers 
         : ['بديل ١', 'بديل ٢', 'بديل ٣'];
@@ -136,13 +135,11 @@ export async function rollDice(gameId: string, playerId: string): Promise<{ succ
             if(playerIndex === -1) throw new Error("Player not found");
             
             const oldPosition = game.players[playerIndex].position;
-            const newPosition = (oldPosition + diceResult) % BOARD_SIZE;
-
             let updatedBalances = { ...game.playerScores };
             let newActivityLog = [...(es.activityLog || [])];
             newActivityLog.push(`${game.players[playerIndex].name} رمى النرد وحصل على ${diceResult}.`);
 
-            if (newPosition < oldPosition) { // Passed start
+            if ((oldPosition + diceResult) >= BOARD_SIZE) { // Passed start
                 updatedBalances[playerId] = (updatedBalances[playerId] || 0) + PASS_START_BONUS;
                 newActivityLog.push(`${game.players[playerIndex].name} مر بنقطة البداية وحصل على ${PASS_START_BONUS} د.ع.`);
             }

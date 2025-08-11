@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -40,16 +39,6 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
 
     return (
         <div className="w-full h-screen flex flex-col md:flex-row p-2 gap-4 bg-gray-100 dark:bg-gray-900">
-            {/* Player HUD */}
-            <div className="w-full md:w-[350px] shrink-0">
-                <PlayerHUD 
-                    players={game.players} 
-                    balances={game.playerScores || {}} 
-                    currentTurnPlayerId={es.turnOrder[es.currentTurnIndex]}
-                    activityLog={es.activityLog || []}
-                />
-            </div>
-
             {/* Game Board and Actions */}
             <div className="flex-grow flex flex-col items-center justify-center relative min-h-0">
                  <ScrollArea className="w-full h-full">
@@ -69,6 +58,15 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
                 {showPropertyInteraction && <PropertyCard game={game} self={self} />}
                 {showQuestion && <QuestionModal game={game} self={self} />}
 
+            </div>
+             {/* Player HUD */}
+            <div className="w-full md:w-[350px] shrink-0">
+                <PlayerHUD 
+                    players={game.players} 
+                    balances={game.playerScores || {}} 
+                    currentTurnPlayerId={es.turnOrder[es.currentTurnIndex]}
+                    activityLog={es.activityLog || []}
+                />
             </div>
         </div>
     );

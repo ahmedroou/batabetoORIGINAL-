@@ -1,13 +1,11 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Dices, Loader2 } from 'lucide-react';
+import { Dices } from 'lucide-react';
 import { rollDice } from '@/lib/actions/educated-merchant';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
 
 interface DiceRollProps {
     gameId: string;
@@ -108,4 +106,3 @@ export function DiceRoll({ gameId, selfId, onRollComplete }: DiceRollProps) {
         </motion.div>
     );
 }
-

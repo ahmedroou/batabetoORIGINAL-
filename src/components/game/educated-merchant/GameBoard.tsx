@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -12,13 +11,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 
 const Tile = React.forwardRef<HTMLDivElement, { property: Property }>(({ property }, ref) => {
-    const ownerColor = null; // Owner color logic can be added later if needed
+    const ownerColor = undefined; // No color property on player object yet
 
     return (
         <div 
             ref={ref}
             className={cn(
-                'relative rounded-lg border-2 flex flex-col items-center justify-center text-center p-1 transition-all duration-300',
+                'relative rounded-lg border-2 flex flex-col items-center justify-center text-center p-1 transition-all duration-300 hover:bg-gray-300 dark:hover:bg-gray-700',
                  'aspect-square basis-20 md:basis-24 lg:basis-28 shrink-0', // Use flex-basis for responsive sizing
                 ownerColor ? 'shadow-lg' : 'bg-gray-200 dark:bg-gray-800 border-gray-300 dark:border-gray-700'
             )} 
@@ -48,6 +47,7 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
     const [tilePositions, setTilePositions] = useState<Record<number, {x: number, y: number}>>({});
     const [playerScopes, setPlayerScopes] = useState<Record<string, any>>({});
     const [isAnimating, setIsAnimating] = useState(false);
+    const [scope, animate] = useAnimate();
 
     const sideLength = Math.ceil(board.length / 4) + 1;
     const perimeter = (sideLength - 1) * 4;
@@ -61,9 +61,9 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
     };
 
     const calculatePositions = useCallback(() => {
-        if (!gridRef.current) return;
+        if (!scope.current) return;
         const newPositions: Record<number, { x: number, y: number }> = {};
-        const gridRect = gridRef.current.getBoundingClientRect();
+        const gridRect = scope.current.getBoundingClientRect();
 
         board.forEach(property => {
             const tileEl = tileRefs.current[property.id];
@@ -76,7 +76,7 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
             }
         });
         setTilePositions(newPositions);
-    }, [board]);
+    }, [board, scope]);
 
     useEffect(() => {
         calculatePositions();
@@ -90,31 +90,28 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
             
             setIsAnimating(true);
             const player = players.find(p => p.id === activePlayerId);
-            const [scope, animate] = playerScopes[activePlayerId] || [];
+            const playerScope = playerScopes[activePlayerId];
 
-            if (!player || !scope || !animate) {
+            if (!player || !playerScope) {
                  setIsAnimating(false);
                  return;
             };
             
             const startPos = player.position;
-            const sequence: any[] = [];
+            
             for (let i = 1; i <= diceRoll; i++) {
                 const nextPosIndex = (startPos + i) % board.length;
                 const nextPosCoords = tilePositions[nextPosIndex];
                 if (nextPosCoords) {
                     const tileWidth = tileRefs.current[nextPosIndex]?.offsetWidth || 0;
                     const tileHeight = tileRefs.current[nextPosIndex]?.offsetHeight || 0;
-                    sequence.push(
-                        animate(scope.current, 
-                            { x: nextPosCoords.x + tileWidth / 4, y: nextPosCoords.y + tileHeight / 4 }, 
-                            { duration: 0.4, type: 'spring', stiffness: 200, damping: 15 }
-                        )
+                     await animate(playerScope.current, 
+                        { x: nextPosCoords.x + tileWidth / 4, y: nextPosCoords.y + tileHeight / 4 }, 
+                        { duration: 0.4, type: 'spring', stiffness: 200, damping: 15 }
                     );
                 }
             }
 
-            await Promise.all(sequence);
             await handlePropertyAction(gameId, activePlayerId);
             setIsAnimating(false);
         };
@@ -153,25 +150,25 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
 
     return (
         <div className="w-full h-full flex items-center justify-center">
-            <div ref={gridRef} className="relative inline-flex flex-col gap-1 p-2 bg-gray-300 dark:bg-gray-800/50 rounded-2xl shadow-2xl">
+            <div ref={scope} className="relative inline-flex flex-col gap-1 p-2 bg-gray-300 dark:bg-gray-800/50 rounded-2xl shadow-2xl">
                 {renderGrid()}
 
                 <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
                     {players.map((player) => {
                         const initialPos = tilePositions[player.position] || {x: 0, y: 0};
-                        const scope = useRef(null);
-                        // eslint-disable-next-line react-hooks/rules-of-hooks
-                        const [, animate] = useAnimate();
+                        const playerRef = useRef(null);
                         
                         // eslint-disable-next-line react-hooks/rules-of-hooks
                         useEffect(() => {
-                            setPlayerScopes(prev => ({...prev, [player.id]: [scope, animate]}));
-                        }, [scope, animate, player.id]);
+                            if (playerRef.current) {
+                                setPlayerScopes(prev => ({...prev, [player.id]: playerRef}));
+                            }
+                        }, [player.id]);
 
                         return (
                             <motion.div
                                 key={player.id}
-                                ref={scope}
+                                ref={playerRef}
                                 className="absolute z-10"
                                 initial={{ x: initialPos.x + 20, y: initialPos.y + 20 }}
                                 style={{ x: initialPos.x + 20, y: initialPos.y + 20 }}
