@@ -15,7 +15,7 @@ interface DiceRollProps {
     diceResult: number | null;
 }
 
-const numbers = [1, 2, 3, 4, 5];
+const numbers = [1, 2, 3, 4, 5, 6];
 
 export function DiceRoll({ gameId, selfId, isMyTurnToRoll, diceResult }: DiceRollProps) {
     const { toast } = useToast();

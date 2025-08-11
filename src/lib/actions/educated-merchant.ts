@@ -130,7 +130,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<{ succ
                 throw new Error("ليس دورك لرمي النرد.");
             }
 
-            diceResult = Math.floor(Math.random() * 5) + 1;
+            diceResult = Math.floor(Math.random() * 6) + 1;
             
             const playerIndex = game.players.findIndex(p => p.id === playerId);
             if(playerIndex === -1) throw new Error("Player not found");
@@ -172,12 +172,8 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         if (!property) throw new Error("Property not found on board.");
 
         let ownerDoc: any = null;
-        let ownerData: UserProfile | null = null;
         if (property.type === 'property' && property.ownerId && property.ownerId !== playerId) {
             ownerDoc = await transaction.get(doc(db, 'users', property.ownerId));
-            if (ownerDoc.exists()) {
-                ownerData = ownerDoc.data() as UserProfile;
-            }
         }
         // --- END READ PHASE ---
 
@@ -226,6 +222,7 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         }
 
         if (property.type === 'property') {
+            const ownerData = ownerDoc?.data() as UserProfile | null;
             if (property.ownerId && property.ownerId !== playerId && ownerData) {
                 const rent = property.rent;
                 newActivityLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${ownerData.name}.`);
