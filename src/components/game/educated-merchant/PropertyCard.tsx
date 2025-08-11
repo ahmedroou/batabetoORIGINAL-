@@ -3,7 +3,7 @@
 
 import type { Game, Player, Property } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { buyPropertyAttempt, endTurn } from '@/lib/actions/educated-merchant';
 import { Building2, CircleDollarSign, Tag, Loader2 } from 'lucide-react';
@@ -90,4 +90,3 @@ export function PropertyCard({ game, self }: PropertyCardProps) {
         </div>
     );
 }
-

@@ -70,4 +70,3 @@ export function FinalResults({ game }: FinalResultsProps) {
         </div>
     );
 }
-
