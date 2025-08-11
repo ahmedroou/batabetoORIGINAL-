@@ -166,19 +166,21 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         const player = game.players[playerIndex];
         if (!player) throw new Error("Player not found in game.");
 
-        let ownerDoc: any = null;
-        const property = es.board.find(p => p.id === player.position);
-        if (property?.type === 'property' && property.ownerId && property.ownerId !== playerId) {
-            ownerDoc = await transaction.get(doc(db, 'users', property.ownerId));
-        }
-        // --- END READ PHASE ---
-
-        // --- 2. LOGIC PHASE (PREPARE UPDATES) ---
         const oldPosition = player.position;
         const newPosition = (oldPosition + (es.lastDiceRoll || 0)) % BOARD_SIZE;
         const newProperty = es.board.find(p => p.id === newPosition);
         if (!newProperty) throw new Error("Property not found on board.");
 
+        let ownerData: UserProfile | null = null;
+        if (newProperty.type === 'property' && newProperty.ownerId && newProperty.ownerId !== playerId) {
+            const ownerDoc = await transaction.get(doc(db, 'users', newProperty.ownerId));
+            if (ownerDoc.exists()) {
+                ownerData = ownerDoc.data() as UserProfile;
+            }
+        }
+        // --- END READ PHASE ---
+
+        // --- 2. LOGIC & WRITE PHASE ---
         const updatedPlayers = [...game.players];
         updatedPlayers[playerIndex].position = newPosition;
 
@@ -193,7 +195,12 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         }
 
         if (newProperty.type === 'start') {
-            await endTurn(gameId, playerId, transaction);
+            transaction.update(gameRef, {
+                players: updatedPlayers,
+                playerScores: updatedBalances,
+                'educatedMerchantState.activityLog': newActivityLog
+            });
+            await endTurn(gameRef, game, playerId, transaction);
             return;
         }
 
@@ -209,12 +216,11 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
                  updatedBalances[playerId] -= fine;
             }
             transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
-            await endTurn(gameId, playerId, transaction);
+            await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances }, playerId, transaction);
             return;
         }
 
         if (newProperty.type === 'property') {
-            const ownerData = ownerDoc?.data() as UserProfile | null;
             if (newProperty.ownerId && newProperty.ownerId !== playerId && ownerData) {
                 const rent = newProperty.rent;
                 newActivityLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${ownerData.name}.`);
@@ -230,7 +236,7 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
                      updatedBalances[newProperty.ownerId] += rent;
                 }
                 transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
-                await endTurn(gameId, playerId, transaction);
+                await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances }, playerId, transaction);
             } else if (!newProperty.ownerId) {
                 transaction.update(gameRef, { 
                     gameState: 'property_action',
@@ -241,7 +247,7 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
             } else { // Landed on own property
                 newActivityLog.push(`${player.name} وقف على عقاره.`);
                 transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
-                await endTurn(gameId, playerId, transaction);
+                await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances }, playerId, transaction);
             }
         }
     });
@@ -305,25 +311,34 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             const propertyIndex = game.educatedMerchantState!.board.findIndex(p => p.id === property.id);
             let newActivityLog = [...(game.educatedMerchantState?.activityLog || [])];
             let updates: any = {};
+            let gameDataForNextStep = { ...game };
 
             if (isCorrect) {
                 newActivityLog.push(`${player?.name} أجاب بشكل صحيح وامتلك ${property.name}.`);
                 updates[`educatedMerchantState.board.${propertyIndex}.ownerId`] = playerId;
-                updates['educatedMerchantState.activityLog'] = newActivityLog;
             } else {
                 const refundAmount = Math.floor(property.price * 0.25);
                 newActivityLog.push(`${player?.name} أجاب بشكل خاطئ وخسر جزءًا من ماله! استرد ${refundAmount} د.ع.`);
                 updates[`playerScores.${playerId}`] = increment(refundAmount);
-                updates['educatedMerchantState.activityLog'] = newActivityLog;
             }
 
             updates['educatedMerchantState.currentQuestion'] = deleteField();
             updates['educatedMerchantState.timerEndsAt'] = deleteField();
+            updates['educatedMerchantState.activityLog'] = newActivityLog;
 
+            // Apply updates to the game object for the next function call
+            gameDataForNextStep.educatedMerchantState!.activityLog = newActivityLog;
+            if(updates[`playerScores.${playerId}`]) {
+                gameDataForNextStep.playerScores![playerId] += (updates[`playerScores.${playerId}`] as any).operand; // Manually apply increment for next step
+            }
+             if(isCorrect) {
+                 gameDataForNextStep.educatedMerchantState!.board[propertyIndex].ownerId = playerId;
+             }
+            
             transaction.update(gameRef, updates);
             
-            // Now, immediately end the turn in the same transaction
-            await endTurn(gameId, playerId, transaction);
+            // Now, immediately end the turn in the same transaction, passing the already-read game state
+            await endTurn(gameRef, gameDataForNextStep, playerId, transaction);
          });
 
          return { success: true };
@@ -332,77 +347,58 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     }
 }
 
-export async function endTurn(gameId: string, playerId: string, existingTransaction?: Transaction) {
-    const gameRef = doc(db, 'games', gameId);
+export async function endTurn(gameRef: any, game: Game, playerId: string, transaction: Transaction) {
+    const es = game.educatedMerchantState;
+    if (!es) throw new Error("Game state is not initialized.");
 
-    const logic = async (transaction: Transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
-        const game = gameDoc.data() as Game;
-        const es = game.educatedMerchantState;
-        if (!es) throw new Error("Game state is not initialized.");
-
-        // Check if it's the correct player's turn to end
-        const currentTurnPlayerId = es.turnOrder[es.currentTurnIndex];
-        if (currentTurnPlayerId !== playerId) {
-            console.warn(`Player ${playerId} tried to end turn, but it's ${currentTurnPlayerId}'s turn.`);
-            return;
-        }
-
-        const nonBankruptPlayers = game.players.filter(p => p.status !== 'bankrupt');
-
-        if (nonBankruptPlayers.length <= 1) {
-            const winner = nonBankruptPlayers[0];
-            transaction.update(gameRef, { 
-                 gameState: 'final_results',
-                 gameResult: { winner: winner?.id || 'game_over', message: 'انتهت اللعبة بإفلاس المنافسين!' },
-                 'educatedMerchantState.lastDiceRoll': deleteField(),
-            });
-            return;
-        }
-
-        let nextIndex = (es.currentTurnIndex + 1) % es.turnOrder.length;
-        let loopGuard = 0;
-        while(game.players.find(p => p.id === es.turnOrder[nextIndex])?.status === 'bankrupt' && loopGuard < es.turnOrder.length * 2) {
-            nextIndex = (nextIndex + 1) % es.turnOrder.length;
-            loopGuard++;
-        }
-        
-        let newRound = game.round || 1;
-        if (nextIndex < es.currentTurnIndex) {
-            newRound++;
-        }
-        
-        const maxRounds = es.settings?.maxRounds || 20;
-        
-        if (newRound > maxRounds) {
-             const finalWinner = game.players
-                .filter(p => p.status !== 'bankrupt')
-                .sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0))[0];
-             transaction.update(gameRef, { 
-                 gameState: 'final_results',
-                 gameResult: { winner: finalWinner?.id || 'game_over', message: 'انتهت الجولات!' },
-                 'educatedMerchantState.lastDiceRoll': deleteField(),
-             });
-             return;
-        }
-
-        transaction.update(gameRef, {
-            gameState: 'rolling',
-            round: newRound,
-            'educatedMerchantState.currentTurnIndex': nextIndex,
-            'educatedMerchantState.lastDiceRoll': deleteField(),
-        });
-    };
-
-    try {
-        if (existingTransaction) {
-            await logic(existingTransaction);
-        } else {
-            await runTransaction(db, logic);
-        }
-        return { success: true };
-    } catch (error: any) {
-        return { success: false, error: error.message };
+    const currentTurnPlayerId = es.turnOrder[es.currentTurnIndex];
+    if (currentTurnPlayerId !== playerId) {
+        console.warn(`Player ${playerId} tried to end turn, but it's ${currentTurnPlayerId}'s turn.`);
+        return;
     }
+
+    const nonBankruptPlayers = game.players.filter(p => p.status !== 'bankrupt');
+
+    if (nonBankruptPlayers.length <= 1) {
+        const winner = nonBankruptPlayers[0];
+        transaction.update(gameRef, { 
+             gameState: 'final_results',
+             gameResult: { winner: winner?.id || 'game_over', message: 'انتهت اللعبة بإفلاس المنافسين!' },
+             'educatedMerchantState.lastDiceRoll': deleteField(),
+        });
+        return;
+    }
+
+    let nextIndex = (es.currentTurnIndex + 1) % es.turnOrder.length;
+    let loopGuard = 0;
+    while(game.players.find(p => p.id === es.turnOrder[nextIndex])?.status === 'bankrupt' && loopGuard < es.turnOrder.length * 2) {
+        nextIndex = (nextIndex + 1) % es.turnOrder.length;
+        loopGuard++;
+    }
+    
+    let newRound = game.round || 1;
+    if (nextIndex < es.currentTurnIndex) {
+        newRound++;
+    }
+    
+    const maxRounds = es.settings?.maxRounds || 20;
+    
+    if (newRound > maxRounds) {
+         const finalWinner = game.players
+            .filter(p => p.status !== 'bankrupt')
+            .sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0))[0];
+         transaction.update(gameRef, { 
+             gameState: 'final_results',
+             gameResult: { winner: finalWinner?.id || 'game_over', message: 'انتهت الجولات!' },
+             'educatedMerchantState.lastDiceRoll': deleteField(),
+         });
+         return;
+    }
+
+    transaction.update(gameRef, {
+        gameState: 'rolling',
+        round: newRound,
+        'educatedMerchantState.currentTurnIndex': nextIndex,
+        'educatedMerchantState.lastDiceRoll': deleteField(),
+    });
 }
