@@ -72,6 +72,11 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     const [hintNumber, setHintNumber] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
+    // State for Lobby
+    const [isCopying, setIsCopying] = useState(false);
+    const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+    const [turnTime, setTurnTime] = useState(game.wordWarState?.settings?.turnTime || 60);
+    
     const wwState = game.wordWarState;
 
     const isMyTurn = useMemo(() => wwState?.turn === self.team, [wwState?.turn, self.team]);
@@ -252,10 +257,6 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
     };
 
     const renderLobby = () => {
-        const [isCopying, setIsCopying] = useState(false);
-        const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-        const [turnTime, setTurnTime] = useState(game.wordWarState?.settings?.turnTime || 60);
-
         const handleCopyId = () => {
             setIsCopying(true);
             navigator.clipboard.writeText(game.id);
