@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Actions specific to the "Word War" game.
  */
@@ -124,19 +125,20 @@ export async function startGame(gameId: string, hostId: string) {
         if (game.hostId !== hostId) throw new Error("Only the host can start the game.");
         
         const activePlayers = game.players.filter(p => p.status !== 'left');
-        if (activePlayers.length < 2) throw new Error("تحتاج إلى لاعبين على الأقل لبدء اللعبة.");
-        if (game.players.some(p => !p.team)) throw new Error("All players must be assigned to a team.");
+        if (activePlayers.some(p => !p.team)) throw new Error("All players must be assigned to a team.");
         
+        const teamRedPlayers = game.players.filter(p => p.team === 'red');
+        const teamBluePlayers = game.players.filter(p => p.team === 'blue');
+        
+        if (teamRedPlayers.length < 2 || teamBluePlayers.length < 2) {
+            throw new Error("يجب أن يكون لدى كل فريق لاعبان على الأقل لبدء اللعبة.");
+        }
+
         const cards = await generateCards();
         const turnTime = game.wordWarState?.settings?.turnTime || 60;
 
-        const redTeam = game.players.filter(p => p.team === 'red');
-        const blueTeam = game.players.filter(p => p.team === 'blue');
-        
-        if (redTeam.length === 0 || blueTeam.length === 0) throw new Error("يجب أن يكون لدى كل فريق لاعب واحد على الأقل.");
-
-        const shuffledRedTeam = shuffle(redTeam);
-        const shuffledBlueTeam = shuffle(blueTeam);
+        const shuffledRedTeam = shuffle(teamRedPlayers);
+        const shuffledBlueTeam = shuffle(teamBluePlayers);
         const redGuideId = shuffledRedTeam[0].id;
         const blueGuideId = shuffledBlueTeam[0].id;
         

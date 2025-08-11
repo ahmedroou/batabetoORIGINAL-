@@ -321,10 +321,13 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         };
         
         const getStartButtonState = () => {
-            const activePlayers = game.players.filter(p => p.status !== 'left');
-            if (activePlayers.length < 2) return { disabled: true, text: "تحتاج إلى لاعبين على الأقل" };
-            if (unassigned.length > 0) return { disabled: true, text: `في انتظار ${unassigned.length} لاعبين` };
-            if (teamRedPlayers.length === 0 || teamBluePlayers.length === 0) return { disabled: true, text: "يجب أن يكون كلا الفريقين بهما لاعبون" };
+            if (isSubmitting) return { disabled: true, text: "جاري البدء..." };
+            if (teamRedPlayers.length < 2 || teamBluePlayers.length < 2) {
+                return { disabled: true, text: "كل فريق يحتاج لاعبين على الأقل" };
+            }
+            if (unassigned.length > 0) {
+                 return { disabled: true, text: `في انتظار ${unassigned.length} لاعبين` };
+            }
             return { disabled: false, text: "بدء اللعبة" };
         }
         const startButtonState = getStartButtonState();
@@ -508,7 +511,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                 <main className="w-full flex-grow grid grid-cols-5 md:grid-cols-8 gap-2 p-2 max-w-7xl mx-auto">
                     {wwState.cards.map((card, index) => {
                         const canPlayerClick = isGuesserTurn && !card.revealed;
-                        const cardSuspicions = wwState.suspicions?.[index] || [];
+                        const cardSuspicions = wwState.suspicions?.[card.text] || [];
                         const isSuspectedByAnyTeam = cardSuspicions.length > 0;
                         const isSuspectedByMyTeam = cardSuspicions.some(playerId => game.players.find(p => p.id === playerId)?.team === self.team);
                         
@@ -546,7 +549,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                                             className='h-7 w-7 bg-black/30 text-white hover:bg-black/50'
                                             onClick={(e) => {
                                                 e.stopPropagation(); // Prevent card click
-                                                wordWarActions.toggleSuspicion(game.id, self.id, index)
+                                                wordWarActions.toggleSuspicion(game.id, self.id, card.text)
                                             }}
                                         >
                                             <HelpCircle className={cn("h-5 w-5", isSuspectedByMyTeam && "text-yellow-400")} />
