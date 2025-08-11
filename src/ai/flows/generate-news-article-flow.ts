@@ -32,7 +32,7 @@ const analyzerPrompt = ai.definePrompt({
   name: 'newsEventAnalyzer',
   input: { schema: NewsArticleInputSchema },
   output: { schema: EventSummarySchema },
-  model: 'googleai/gemini-1.5-flash-latest',
+  model: 'googleai/gemini-1.5-pro-latest',
   prompt: `You are a news analyst for a social deduction and strategy game. Your job is to identify the most dramatic, important, and interesting events from a raw list of daily occurrences. Focus on betrayals, major victories, significant punishments, ongoing rivalries, and surprising outcomes.
 
 Today's Date: {{{date}}}
