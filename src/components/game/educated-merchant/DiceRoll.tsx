@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -10,12 +11,11 @@ import { useToast } from '@/hooks/use-toast';
 interface DiceRollProps {
     gameId: string;
     selfId: string;
-    onRollComplete: (diceResult: number) => void;
 }
 
 const numbers = [1, 2, 3, 4, 5];
 
-export function DiceRoll({ gameId, selfId, onRollComplete }: DiceRollProps) {
+export function DiceRoll({ gameId, selfId }: DiceRollProps) {
     const { toast } = useToast();
     const [isRolling, setIsRolling] = useState(false);
     const [result, setResult] = useState<number | null>(null);
@@ -46,7 +46,7 @@ export function DiceRoll({ gameId, selfId, onRollComplete }: DiceRollProps) {
             
             if (rollResult.success && rollResult.diceResult) {
                 setResult(rollResult.diceResult);
-                setTimeout(() => onRollComplete(rollResult.diceResult!), 1000); // Wait 1s after showing result
+                // The parent component will now react to gameState changes instead of a callback
             } else {
                 toast({ title: "خطأ", description: rollResult.error, variant: 'destructive' });
                 setIsRolling(false);
@@ -71,7 +71,7 @@ export function DiceRoll({ gameId, selfId, onRollComplete }: DiceRollProps) {
                         key="rolling"
                         className="w-40 h-40 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex items-center justify-center font-mono text-8xl font-bold text-primary"
                         initial={{ scale: 0.5, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
+                        animate={{ scale: 1, opacity: 1, transition: { type: 'spring', stiffness: 200, damping: 15 } }}
                         exit={{ scale: 0.5, opacity: 0 }}
                     >
                         <AnimatePresence mode="wait">

@@ -131,16 +131,16 @@ export function QuestionModal({ game, self }: QuestionModalProps) {
                             {question.options.map((option, index) => (
                                 <Label key={index} htmlFor={`option-${index}`} 
                                     className={cn(
-                                        "flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all duration-300",
+                                        "flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all duration-300",
                                         getOptionStyle(option)
                                     )}
                                 >
-                                    <RadioGroupItem value={option} id={`option-${index}`} className="w-6 h-6" />
-                                    <span className="text-base font-medium flex-grow">{option}</span>
+                                    <RadioGroupItem value={option} id={`option-${index}`} className="w-6 h-6 mt-1 shrink-0" />
+                                    <span className="text-base font-medium flex-grow text-right">{option}</span>
                                      {submittedAnswer && (
                                         <>
-                                            {option === question.correctAnswer && <Check className="w-6 h-6 text-green-600" />}
-                                            {option === submittedAnswer && option !== question.correctAnswer && <X className="w-6 h-6 text-red-600" />}
+                                            {option === question.correctAnswer && <Check className="w-6 h-6 text-green-600 shrink-0" />}
+                                            {option === submittedAnswer && option !== question.correctAnswer && <X className="w-6 h-6 text-red-600 shrink-0" />}
                                         </>
                                     )}
                                 </Label>
