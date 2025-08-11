@@ -38,9 +38,9 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
     }
 
     return (
-        <div className="w-full h-screen flex flex-col md:flex-row items-center justify-center p-2 gap-4 bg-gray-100 dark:bg-gray-900">
+        <div className="w-full h-screen flex flex-col md:flex-row-reverse items-stretch p-2 gap-4 bg-gray-100 dark:bg-gray-900">
             {/* Player HUD */}
-            <div className="w-full md:w-1/4 h-full">
+            <div className="w-full md:w-[350px] shrink-0">
                 <PlayerHUD 
                     players={game.players} 
                     balances={game.playerScores || {}} 
@@ -50,7 +50,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
             </div>
 
             {/* Game Board and Actions */}
-            <div className="w-full md:w-3/4 h-full flex flex-col items-center justify-center relative">
+            <div className="flex-grow flex flex-col items-center justify-center relative min-h-0">
                 <GameBoard 
                     board={es.board || []} 
                     players={game.players}

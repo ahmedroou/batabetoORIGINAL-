@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -137,8 +138,8 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
         return grid.map((row, rowIndex) => (
             row.map((property, colIndex) => {
                 if (property === null) {
-                    if (rowIndex > 0 && rowIndex < sideLength - 1 && colIndex > 0 && colIndex < sideLength - 1) {
-                        return <div key={`${rowIndex}-${colIndex}`} className="w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28" />;
+                     if (rowIndex > 0 && rowIndex < sideLength - 1 && colIndex > 0 && colIndex < sideLength - 1) {
+                         return <div key={`${rowIndex}-${colIndex}`} className="w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28" />;
                     }
                     return null;
                 }
@@ -154,7 +155,7 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
     };
 
     return (
-        <div className="p-2 md:p-4 bg-gray-300 dark:bg-gray-800/50 rounded-2xl shadow-2xl relative">
+        <div className="p-1 md:p-2 bg-gray-300 dark:bg-gray-800/50 rounded-2xl shadow-2xl relative self-center">
             <div ref={gridRef} className="grid gap-1" style={{gridTemplateColumns: `repeat(${sideLength}, min-content)`}}>
                 {renderGrid()}
             </div>
@@ -184,4 +185,3 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
         </div>
     );
 }
-
