@@ -37,7 +37,7 @@ type DeletionParams = {
     game: 'trap-answer' | 'word_war' | 'prison' | 'educated-merchant'; 
     category?: string; 
     all?: boolean; 
-    duplicates?: 'word_war_duplicates' | { threshold: number };
+    duplicates?: { threshold: number };
     searchTerm?: string;
     answerSearchTerm?: string;
 };
@@ -197,13 +197,20 @@ export default function QuestionManagementTab() {
     const [selectedCategory, setSelectedCategory] = useState('');
     
     const [activeCategoryManager, setActiveCategoryManager] = useState<'trap-answer' | 'educated-merchant' | null>(null);
+    
+    // State for delete forms
+    const [deleteCategory, setDeleteCategory] = useState('');
+    const [deleteSearchTerm, setDeleteSearchTerm] = useState('');
+    const [deleteAnswerSearchTerm, setDeleteAnswerSearchTerm] = useState('');
+    const [deleteSimilarityCategory, setDeleteSimilarityCategory] = useState('');
+
 
     const currentCategoryList = useMemo(() => {
         if(selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') {
-            return activeCategoryManager === 'trap-answer' ? trapAnswerCategories : merchantCategories;
+            return selectedGame === 'trap-answer' ? trapAnswerCategories : merchantCategories;
         }
         return [];
-    }, [selectedGame, activeCategoryManager, trapAnswerCategories, merchantCategories]);
+    }, [selectedGame, trapAnswerCategories, merchantCategories]);
 
 
     useEffect(() => {
@@ -225,6 +232,10 @@ export default function QuestionManagementTab() {
     const handleGameSelection = (game: 'trap-answer' | 'educated-merchant' | 'word_war' | 'prison' | '') => {
         setSelectedGame(game);
         setSelectedCategory('');
+        setDeleteCategory('');
+        setDeleteSearchTerm('');
+        setDeleteAnswerSearchTerm('');
+        setDeleteSimilarityCategory('');
         if(game === 'trap-answer') {
             setActiveCategoryManager('trap-answer');
         } else if (game === 'educated-merchant') {
@@ -385,7 +396,7 @@ export default function QuestionManagementTab() {
                          <div className="flex-grow">
                              <Select onValueChange={setSelectedCategory} value={selectedCategory}>
                                 <SelectTrigger id="category-select-upload">
-                                    <SelectValue placeholder={activeCategoryManager ? `اختر من أقسام ${activeCategoryManager === 'trap-answer' ? 'الجواب المفخخ' : 'التاجر المتعلم'}` : 'اختر نوع الأقسام أولاً...'} />
+                                    <SelectValue placeholder={`اختر من أقسام ${selectedGame === 'trap-answer' ? 'الجواب المفخخ' : 'التاجر المتعلم'}`} />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
@@ -457,32 +468,47 @@ export default function QuestionManagementTab() {
     
     const renderTrapAnswerDelete = () => (
         <div className="space-y-4">
-            <div className="space-y-2">
-                <Label>حذف حسب القسم</Label>
-                <div className="flex items-center gap-2">
-                     <div className="flex-grow">
-                        <Select onValueChange={(val) => val && handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: val })} >
-                             <SelectTrigger>
-                                <SelectValue placeholder={activeCategoryManager ? `اختر قسمًا لحذف كل أسئلته...` : 'اختر نوع الأقسام أولاً...'} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>حذف كل أسئلة "{cat}"</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                     </div>
+             <div className="p-3 border rounded-lg space-y-2">
+                <Label>حذف حسب النص</Label>
+                <div className="flex gap-2">
+                    <Input placeholder="نص السؤال..." value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} />
+                    <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting} variant="destructive">حذف</Button>
+                </div>
+                <div className="flex gap-2">
+                    <Input placeholder="نص الجواب..." value={deleteAnswerSearchTerm} onChange={(e) => setDeleteAnswerSearchTerm(e.target.value)} />
+                    <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer', answerSearchTerm: deleteAnswerSearchTerm })} disabled={!deleteAnswerSearchTerm.trim() || isDeleting} variant="destructive">حذف</Button>
                 </div>
             </div>
-             <div className="space-y-2 border-t pt-4">
+            <div className="p-3 border rounded-lg space-y-2">
+                <Label>حذف حسب القسم</Label>
+                <div className="flex items-center gap-2">
+                     <Select onValueChange={setDeleteCategory} value={deleteCategory}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="اختر قسمًا لحذف كل أسئلته..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                     <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer', category: deleteCategory })} disabled={!deleteCategory || isDeleting} variant="destructive">حذف</Button>
+                </div>
+            </div>
+             <div className="p-3 border rounded-lg space-y-2">
                  <h4 className="font-bold">حذف الأسئلة المكررة</h4>
                  <p className="text-sm text-muted-foreground">سيقوم هذا الإجراء بفحص الأسئلة المتشابهة وحذفها مع الإبقاء على أحدث نسخة.</p>
-                  <Select onValueChange={(val) => val && handleDeleteClick({ game: 'trap-answer', category: val, duplicates: { threshold: 0.85 } })} >
+                 <div className="flex items-center gap-2">
+                  <Select onValueChange={setDeleteSimilarityCategory} value={deleteSimilarityCategory}>
                      <SelectTrigger>
                         <SelectValue placeholder="اختر قسمًا لفحص التكرارات فيه..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {trapAnswerCategories.map(cat => <SelectItem key={cat} value={cat}>حذف المكرر من "{cat}"</SelectItem>)}
+                        {trapAnswerCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                     </SelectContent>
                 </Select>
+                <Button onClick={() => handleDeleteClick({ game: 'trap-answer', category: deleteSimilarityCategory, duplicates: { threshold: 0.85 } })} disabled={!deleteSimilarityCategory || isDeleting} variant="destructive">
+                    <Sparkles className="ml-2 h-4 w-4" /> فحص وحذف
+                </Button>
+                </div>
             </div>
         </div>
     );
@@ -531,6 +557,12 @@ export default function QuestionManagementTab() {
         }
         if (deletionParams.category) {
             return `سيقوم هذا الإجراء بحذف جميع الأسئلة (${deletionCount}) من قسم "${deletionParams.category}" بشكل دائم.`;
+        }
+         if (deletionParams.searchTerm) {
+            return `سيتم حذف كل الأسئلة التي تحتوي على "${deletionParams.searchTerm}" (${deletionCount} سؤال). هل أنت متأكد؟`;
+        }
+        if (deletionParams.answerSearchTerm) {
+            return `سيتم حذف كل الأسئلة التي جوابها يحتوي على "${deletionParams.answerSearchTerm}" (${deletionCount} سؤال). هل أنت متأكد؟`;
         }
         return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} عنصر بشكل دائم بناءً على المعيار الذي حددته.`
     };
