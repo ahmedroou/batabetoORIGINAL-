@@ -373,6 +373,31 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
     const questionDoc = qs.docs[0];
     const questionData = { id: questionDoc.id, ...questionDoc.data() } as EducatedMerchantQuestion;
 
+    if (!questionData.dummyAnswers || questionData.dummyAnswers.length === 0) {
+        // If no dummy answers are provided, the player automatically gets the property.
+        const updatedPlayers = [...game.players];
+        updatedPlayers[playerIndex] = {
+            ...updatedPlayers[playerIndex],
+            money: (updatedPlayers[playerIndex].money || 0) - propertyInTx.price,
+        };
+        
+        let board = [...ensure(game.educatedMerchantState?.board, 'اللوح مفقود.')];
+        const propertyIndex = board.findIndex((p) => p.id === propertyInTx.id);
+        if (propertyIndex !== -1) {
+            board[propertyIndex] = { ...board[propertyIndex], ownerId: playerId, color: playerInTx.color } as Property;
+        }
+
+        const activityMessage = `${playerInTx.name} اشترى "${propertyInTx.name}" (سؤال غير مكتمل).`;
+        const extraUpdates = {
+            players: updatedPlayers,
+            'educatedMerchantState.board': board,
+            'educatedMerchantState.newlyBoughtPropertyId': propertyInTx.id,
+        };
+        const { updates } = endTurnInternal(game, playerId, activityMessage, extraUpdates);
+        tx.update(gameRef, updates);
+        return;
+    }
+
     const options = shuffle([...(questionData.dummyAnswers || []), questionData.answer]);
     questionData.options = options;
 
@@ -463,9 +488,6 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
 
 export async function handleTimeout(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
-  let gameEnded = false;
-  let finalGameDataForLeagueUpdate: Game | null = null;
-  
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
@@ -475,49 +497,22 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
     if (!game.educatedMerchantState?.timerEndsAt || Date.now() < game.educatedMerchantState.timerEndsAt.toMillis()) {
       return; 
     }
-
+    
     const turnOrder = ensure(game.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود.');
     const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
     const currentPlayerId = turnOrder[currentTurnIndex];
     const currentPlayer = game.players.find((p) => p.id === currentPlayerId);
-    let finalUpdates: any = {};
-    
+
+    const updates: any = {};
+
     switch (game.gameState) {
       case 'rolling': {
-        // Since rollDiceInternal performs its own transaction, we can't call it here.
-        // Instead, we replicate its logic inside this transaction.
-        const diceRoll = randomDiceRoll();
-        const playerIndex = getPlayerIndexById(game.players, currentPlayerId);
-        if (playerIndex === -1) return;
-
-        const oldPosition = game.players[playerIndex].position || 0;
-        const newPosition = (oldPosition + diceRoll) % BOARD_SIZE;
-
-        const updatedPlayers = [...game.players];
-        updatedPlayers[playerIndex] = { ...updatedPlayers[playerIndex], position: newPosition };
-
-        let activityMessage = `${updatedPlayers[playerIndex].name} رمى ${diceRoll} (تلقائيًا).`;
-
-        if (newPosition < oldPosition) {
-            updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + PASS_GO_REWARD;
-            activityMessage += ` وحصل على ${PASS_GO_REWARD} دينار للمرور بنقطة البداية.`;
-        }
-
-        finalUpdates = {
-            players: updatedPlayers,
-            gameState: 'movement',
-            'educatedMerchantState.lastDiceRoll': diceRoll,
-            'educatedMerchantState.rollAnimationNonce': Date.now(),
-            'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: nowTimestamp() }),
-            'educatedMerchantState.timerEndsAt': deleteField(),
-        };
+        Object.assign(updates, await _handleRollTimeout(game, currentPlayerId));
         break;
       }
       case 'property_action': {
         const activityMessage = `انتهى وقت اللاعب ${currentPlayer?.name} وتخطى شراء العقار.`;
-        const { updates, isGameOver } = endTurnInternal(game, currentPlayerId, activityMessage);
-        finalUpdates = updates;
-        gameEnded = isGameOver;
+        Object.assign(updates, endTurnInternal(game, currentPlayerId, activityMessage).updates);
         break;
       }
       case 'question': {
@@ -537,9 +532,7 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
             'educatedMerchantState.timerEndsAt': deleteField(),
           };
 
-          const { updates, isGameOver } = endTurnInternal(game, currentPlayerId, activityMessage, baseUpdates);
-          finalUpdates = updates;
-          gameEnded = isGameOver;
+          Object.assign(updates, endTurnInternal(game, currentPlayerId, activityMessage, baseUpdates).updates);
         }
         break;
       }
@@ -547,18 +540,39 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
         return;
     }
     
-    if (Object.keys(finalUpdates).length > 0) {
-      if (gameEnded) {
-        finalGameDataForLeagueUpdate = { ...game, ...finalUpdates };
-      }
-      tx.update(gameRef, finalUpdates);
+    if (Object.keys(updates).length > 0) {
+      tx.update(gameRef, updates);
     }
   });
-
-  if (gameEnded && finalGameDataForLeagueUpdate) {
-    await updateLeagueScoresForGameEnd(finalGameDataForLeagueUpdate);
-  }
 }
+
+// Helper for handleTimeout to avoid nested transactions
+async function _handleRollTimeout(game: Game, currentPlayerId: string) {
+    const diceRoll = randomDiceRoll();
+    const playerIndex = getPlayerIndexById(game.players, currentPlayerId);
+    if (playerIndex === -1) return {};
+
+    const updatedPlayers = [...game.players];
+    const oldPosition = updatedPlayers[playerIndex].position || 0;
+    const newPosition = (oldPosition + diceRoll) % BOARD_SIZE;
+
+    updatedPlayers[playerIndex].position = newPosition;
+    if (newPosition < oldPosition) {
+        updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + PASS_GO_REWARD;
+    }
+
+    const activityMessage = `${updatedPlayers[playerIndex].name} رمى ${diceRoll} (تلقائيًا).`;
+
+    return {
+        players: updatedPlayers,
+        gameState: 'movement',
+        'educatedMerchantState.lastDiceRoll': diceRoll,
+        'educatedMerchantState.rollAnimationNonce': Date.now(),
+        'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: nowTimestamp() }),
+        'educatedMerchantState.timerEndsAt': deleteField(),
+    };
+}
+
 
 function endTurnInternal(
   game: Game,
