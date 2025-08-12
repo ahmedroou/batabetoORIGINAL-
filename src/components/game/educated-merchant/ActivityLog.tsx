@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,50 +6,88 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import type { Timestamp } from 'firebase/firestore';
+import { useEffect, useRef } from 'react';
 
 interface ActivityLogProps {
   log: { message: string; timestamp: Date | Timestamp }[];
 }
 
 export function ActivityLog({ log }: ActivityLogProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   const toValidDate = (timestamp: Date | Timestamp): Date => {
-      if(timestamp instanceof Date) {
-          return timestamp;
-      }
-      // Check if it's a Firestore Timestamp-like object
-      if (timestamp && typeof (timestamp as any).toDate === 'function') {
-          return (timestamp as Timestamp).toDate();
-      }
-      // Fallback for potentially invalid values, preventing a crash.
-      return new Date();
-  }
-  
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+    if (timestamp && typeof (timestamp as any).toDate === 'function') {
+      return (timestamp as Timestamp).toDate();
+    }
+    return new Date();
+  };
+
+  // Auto-scroll to bottom on new log entry
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [log]);
+
+  // Animation variants for staggered children
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: 10, transition: { duration: 0.15 } },
+  };
+
   return (
     <Card className="h-full">
-        <CardHeader>
-            <CardTitle>سجل الأحداث</CardTitle>
-        </CardHeader>
+      <CardHeader>
+        <CardTitle>سجل الأحداث</CardTitle>
+      </CardHeader>
       <CardContent>
-        <ScrollArea className="h-[45vh]">
-          <div className="space-y-2 pr-4">
-            <AnimatePresence initial={false}>
-            {log.slice().reverse().map((entry, index) => (
-                <motion.div
-                    key={new Date(toValidDate(entry.timestamp)).toISOString() + index}
-                    layout
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, transition: { duration: 0.1 } }}
-                    className="text-sm p-2 bg-muted rounded-md"
-                >
-                    <p>{entry.message}</p>
-                    <p className="text-xs text-muted-foreground text-left">
+        <ScrollArea className="h-[45vh]" ref={scrollRef}>
+          {log.length === 0 ? (
+            <div className="text-center text-muted-foreground mt-4">لا توجد أحداث حالياً</div>
+          ) : (
+            <motion.div
+              className="space-y-2 pr-4"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              exit="hidden"
+            >
+              <AnimatePresence initial={false}>
+                {[...log].reverse().map((entry, index) => {
+                  const dateKey = toValidDate(entry.timestamp).getTime();
+                  return (
+                    <motion.div
+                      key={`${dateKey}-${index}`}
+                      variants={itemVariants}
+                      layout
+                      whileHover={{ scale: 1.02, boxShadow: '0 0 8px rgba(255,255,255,0.2)' }}
+                      className="text-sm p-2 bg-muted rounded-md cursor-default select-text"
+                      title={toValidDate(entry.timestamp).toLocaleString('ar-EG')}
+                    >
+                      <p>{entry.message}</p>
+                      <p className="text-xs text-muted-foreground text-left mt-1 font-mono">
                         {formatDistanceToNow(toValidDate(entry.timestamp), { addSuffix: true, locale: ar })}
-                    </p>
-                </motion.div>
-            ))}
-            </AnimatePresence>
-          </div>
+                      </p>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </motion.div>
+          )}
         </ScrollArea>
       </CardContent>
     </Card>

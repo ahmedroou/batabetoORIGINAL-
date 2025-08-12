@@ -111,8 +111,8 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
 }
 
 export async function rollDice(gameId: string, playerId: string): Promise<void> {
-    const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
@@ -140,7 +140,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             activityMessage += ` وحصل على ${PASS_GO_REWARD} دينار للمرور بنقطة البداية.`;
         }
         
-        const gameRef = doc(db, 'games', game.id);
         transaction.update(gameRef, {
             players: updatedPlayers,
             gameState: 'movement',
