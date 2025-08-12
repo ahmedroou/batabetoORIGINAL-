@@ -2,6 +2,7 @@
 
 "use client";
 
+import * as React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import type { Challenge, ChallengePrize, UserProfile, EntryFee, GameKing, SocialRank } from '@/types';
 import { getChallenges, joinChallenge, getChallengeDetails } from '@/lib/actions/challenges';
