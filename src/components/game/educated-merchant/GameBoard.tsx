@@ -236,8 +236,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
         const allowActions = currentPlayerId === self.id;
         return <PropertyCard game={game} self={self} property={property} allowActions={allowActions} />;
       }
-      case 'question':
-        return <QuestionModal game={game} self={self} />;
       case 'turn_end': {
         const turnEndingPlayer = game.players.find((p) => p.id === currentPlayerId);
         const nextPlayerIndex = (currentTurnIndex + 1) % (game.educatedMerchantState?.turnOrder?.length ?? 1);
@@ -250,6 +248,24 @@ export function GameBoard({ game, self }: GameBoardProps) {
               <Button onClick={() => endTurn(game.id, self.id)}>إنهاء الدور</Button>
             )}
           </div>
+        );
+      }
+      // The question state is now handled by the modal, so we render the DiceRoll/ActionPanel underneath.
+      case 'question': {
+        const player = game.players.find((p) => p.id === currentPlayerId);
+        if (!player) return <div />;
+        const property = board[player.position];
+        // We show PropertyCard if it is there, otherwise show a generic message
+        if (property && property.type === 'property') {
+            return <PropertyCard game={game} self={self} property={property} allowActions={false} />;
+        }
+        return (
+            <div className="text-center text-white space-y-4 p-4 bg-slate-800 rounded-lg">
+                <HelpCircle className="w-16 h-16 mx-auto mb-4 text-primary" />
+                <h2 className="text-2xl font-bold animate-pulse">
+                    في انتظار إجابة {game.players.find(p => p.id === game.educatedMerchantState?.pendingPurchase?.playerId)?.name}...
+                </h2>
+            </div>
         );
       }
       default:
