@@ -35,7 +35,7 @@ async function generateBoard(categories: string[]): Promise<Property[]> {
 
     const finePositions = new Set<number>();
     while(finePositions.size < 3) {
-        const pos = Math.floor(Math.random() * (BOARD_SIZE - 1)) + 1;
+        const pos = Math.floor(Math.random() * (BOARD_SIZE - 2)) + 1; // Avoid position 0 and ensure it's not the last tile
         finePositions.add(pos);
     }
     
@@ -84,12 +84,15 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
 
         const board = await generateBoard(categoriesResult.categories);
         const turnOrder = shuffle(game.players.map(p => p.id));
+        
+        const colors = shuffle(['#F44336', '#2196F3', '#4CAF50', '#FFC107', '#9C27B0', '#009688', '#E91E63', '#607D8B']);
 
-        const updatedPlayers = game.players.map(p => ({
+        const updatedPlayers = game.players.map((p, index) => ({
             ...p,
             money: START_MONEY,
             position: 0,
             status: 'alive' as const,
+            color: colors[index % colors.length]
         }));
         
         transaction.update(gameRef, {
@@ -127,7 +130,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         let moneyUpdate = 0;
         let activityMessage = `${updatedPlayers[playerIndex].name} رمى ${diceRoll} وانتقل إلى "${game.educatedMerchantState!.board[newPosition].name}".`;
 
-        if (newPosition < oldPosition && oldPosition + diceRoll >= BOARD_SIZE) { 
+        if (newPosition < oldPosition) { 
             moneyUpdate = PASS_GO_REWARD;
             updatedPlayers[playerIndex].money! += moneyUpdate;
             activityMessage += ` وحصل على ${PASS_GO_REWARD} دينار للمرور بنقطة البداية.`;
@@ -167,7 +170,9 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
                     
                     const updatedPlayers = [...game.players];
                     
-                    if (updatedPlayers[payerIndex].money! < rent) {
+                    if ((updatedPlayers[payerIndex].money || 0) < rent) {
+                        updatedPlayers[ownerIndex].money! += updatedPlayers[payerIndex].money || 0;
+                        updatedPlayers[payerIndex].money = 0;
                         updatedPlayers[payerIndex].status = 'bankrupt';
                         updatedPlayers[payerIndex].bankruptAt = Timestamp.now();
                         activityMessage = `${player.name} أفلس لأنه لم يستطع دفع الإيجار لـ ${owner.name}.`;
@@ -183,7 +188,8 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
             const fine = property.fineAmount || 100;
             const playerIndex = game.players.findIndex(p => p.id === playerId);
             const updatedPlayers = [...game.players];
-             if (updatedPlayers[playerIndex].money! < fine) {
+             if ((updatedPlayers[playerIndex].money || 0) < fine) {
+                updatedPlayers[playerIndex].money = 0;
                 updatedPlayers[playerIndex].status = 'bankrupt';
                 updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
                 activityMessage = `${player.name} أفلس لأنه لم يستطع دفع الغرامة.`;
@@ -301,8 +307,6 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
 }
 
 export async function handleTimeout(gameId: string, playerId: string) {
-    // This function will be called by the timer on the client side.
-    // It should handle both question timeouts and potentially others in the future.
     const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -342,20 +346,30 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
         if (turnOrder[currentTurnIndex] !== playerId && game.hostId !== playerId) {
              throw new Error("ليس دورك لإنهاء الجولة.");
         }
+        
+        const updatedBoard = game.educatedMerchantState!.board.map(prop => {
+            const owner = game.players.find(p => p.id === prop.ownerId);
+            if (owner && owner.status === 'bankrupt') {
+                return { ...prop, ownerId: null, color: undefined };
+            }
+            return prop;
+        });
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
         if (activePlayers.length <= 1) {
             const winner = activePlayers[0];
             transaction.update(gameRef, {
                 gameState: 'final_results',
-                gameResult: { winner: winner?.id || 'none', message: `اللاعب ${winner?.name} هو الناجي الأخير!` }
+                gameResult: { winner: winner?.id || 'none', message: `اللاعب ${winner?.name || ''} هو الناجي الأخير!` }
             });
             return;
         }
 
         let nextTurnIndex = (currentTurnIndex + 1) % turnOrder.length;
-        while(game.players.find(p => p.id === turnOrder[nextTurnIndex])?.status === 'bankrupt') {
+        let loopCount = 0;
+        while(game.players.find(p => p.id === turnOrder[nextTurnIndex])?.status === 'bankrupt' && loopCount < turnOrder.length) {
             nextTurnIndex = (nextTurnIndex + 1) % turnOrder.length;
+            loopCount++;
         }
         
         const newRound = nextTurnIndex < currentTurnIndex ? (game.round || 1) + 1 : game.round || 1;
@@ -364,15 +378,19 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
             const winner = game.players.filter(p=>p.status !== 'bankrupt').reduce((prev, current) => ((prev.money || 0) > (current.money || 0)) ? prev : current);
             transaction.update(gameRef, {
                 gameState: 'final_results',
-                gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name} بأعلى رصيد.` }
+                gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.` }
             });
         } else {
              transaction.update(gameRef, {
                 gameState: 'rolling',
+                'educatedMerchantState.board': updatedBoard,
                 'educatedMerchantState.currentTurnIndex': nextTurnIndex,
+                'educatedMerchantState.lastDiceRoll': deleteField(),
                 'educatedMerchantState.newlyBoughtPropertyId': deleteField(),
                 round: newRound
             });
         }
     });
 }
+
+    
