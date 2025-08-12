@@ -18,57 +18,57 @@ const numbers = [1, 2, 3, 4, 5, 6];
 
 export function DiceRoll({ gameId, selfId, isMyTurnToRoll, diceResult }: DiceRollProps) {
   const { toast } = useToast();
-  const [isRolling, setIsRolling] = useState(false);
+  const [isClientRolling, setIsClientRolling] = useState(false);
   const [displayNumber, setDisplayNumber] = useState<number | null>(null);
   const rollingInterval = useRef<NodeJS.Timer | null>(null);
-  const hideTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // عند وصول نتيجة النرد من السيرفر
     if (diceResult !== null) {
-      setIsRolling(true);
-      // ابدأ عرض النرد يتغير بسرعة مع أرقام عشوائية
+      setIsClientRolling(true);
+      
       rollingInterval.current = setInterval(() => {
         setDisplayNumber(numbers[Math.floor(Math.random() * numbers.length)]);
       }, 80);
 
-      // بعد ثانية نوقف التغيير ونثبت الرقم النهائي
       const showFinalResultTimeout = setTimeout(() => {
         if (rollingInterval.current) {
           clearInterval(rollingInterval.current);
           rollingInterval.current = null;
         }
         setDisplayNumber(diceResult);
-      }, 1000);
+        
+        const hideTimeout = setTimeout(() => {
+          setIsClientRolling(false);
+          setDisplayNumber(null);
+        }, 2000); // Hide after 2 seconds
+        
+        return () => clearTimeout(hideTimeout);
+      }, 1000); // Stop rolling after 1 second
 
-      // بعد عرض الرقم النهائي لـ 2 ثانية نخفي المكون
-      hideTimeout.current = setTimeout(() => {
-        setIsRolling(false);
-        setDisplayNumber(null);
-      }, 3000);
-
-      // تنظيف التايمرات عند تغير props أو unmount
       return () => {
         clearTimeout(showFinalResultTimeout);
         if (rollingInterval.current) clearInterval(rollingInterval.current);
-        if (hideTimeout.current) clearTimeout(hideTimeout.current);
       };
+    } else {
+      // If diceResult becomes null (e.g., end of turn), reset the view
+      setIsClientRolling(false);
+      setDisplayNumber(null);
     }
   }, [diceResult]);
 
   const handleRoll = async () => {
-    if (isRolling) return; // منع التكرار أثناء الرمية
-
-    setIsRolling(true);
+    if (isClientRolling) return;
+    setIsClientRolling(true);
     try {
       const result = await rollDice(gameId, selfId);
       if (result.error) {
         toast({ title: "خطأ", description: result.error, variant: 'destructive' });
-        setIsRolling(false);
+        setIsClientRolling(false);
       }
+      // The diceResult prop will trigger the rest of the animation
     } catch (error: any) {
       toast({ title: "خطأ غير متوقع", description: error?.message || "حدث خطأ أثناء رمي النرد.", variant: 'destructive' });
-      setIsRolling(false);
+      setIsClientRolling(false);
     }
   };
 
@@ -81,7 +81,7 @@ export function DiceRoll({ gameId, selfId, isMyTurnToRoll, diceResult }: DiceRol
       exit={{ opacity: 0, scale: 0.8 }}
     >
       <AnimatePresence mode="wait">
-        {isRolling ? (
+        {isClientRolling ? (
           <motion.div
             key="rolling"
             className="w-44 h-44 bg-white dark:bg-gray-800 rounded-3xl shadow-2xl flex items-center justify-center font-mono text-9xl font-extrabold text-primary select-none"
@@ -114,7 +114,7 @@ export function DiceRoll({ gameId, selfId, isMyTurnToRoll, diceResult }: DiceRol
               size="lg"
               className="h-24 w-56 text-2xl rounded-3xl shadow-lg flex items-center justify-center gap-3"
               aria-label="ارمِ النرد"
-              disabled={isRolling}
+              disabled={isClientRolling}
               type="button"
             >
               <Dices className="w-10 h-10" />

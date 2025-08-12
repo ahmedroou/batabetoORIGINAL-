@@ -18,7 +18,7 @@ interface PlayerHUDProps {
   board: Property[];
   currentTurnPlayerId?: string;
   activityLog?: string[];
-  compact?: boolean; // initial compact mode
+  compact?: boolean; 
   onPlayerClick?: (player: Player) => void;
   onInspectProperty?: (prop: Property) => void;
 }
@@ -31,7 +31,6 @@ export function PlayerHUD({ players = [], balances = {}, board = [], currentTurn
   const [isCompact, setIsCompact] = useState(compact);
   const [sortMode, setSortMode] = useState<'default' | 'balance' | 'properties'>('default');
 
-  // derive owned properties map
   const ownedMap = useMemo(() => {
     const map = new Map<string, Property[]>();
     for (const p of board) {
@@ -43,7 +42,6 @@ export function PlayerHUD({ players = [], balances = {}, board = [], currentTurn
     return map;
   }, [board]);
 
-  // filtered and sorted players list
   const visiblePlayers = useMemo(() => {
     let list = players.slice();
     if (!showBankrupt) list = list.filter(p => p.status !== 'bankrupt');
@@ -71,12 +69,7 @@ export function PlayerHUD({ players = [], balances = {}, board = [], currentTurn
             <div className="text-xs text-gray-500">({players.length})</div>
           </div>
 
-          {/* controls */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث باسم اللاعب..." className="w-40" rightIcon={<Search className="w-4 h-4" />} />
-            </div>
-
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -85,7 +78,7 @@ export function PlayerHUD({ players = [], balances = {}, board = [], currentTurn
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  تبديل وضع العرض المضغوط
+                  <p>تبديل وضع العرض المضغوط</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -97,11 +90,13 @@ export function PlayerHUD({ players = [], balances = {}, board = [], currentTurn
           </div>
         </div>
 
-        {/* quick sorts */}
-        <div className="mt-2 flex items-center gap-2">
-          <button className={cn('px-2 py-1 rounded-md', sortMode === 'default' ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800')} onClick={() => setSortMode('default')}>الافتراضي</button>
-          <button className={cn('px-2 py-1 rounded-md', sortMode === 'balance' ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800')} onClick={() => setSortMode('balance')}>حسب الرصيد</button>
-          <button className={cn('px-2 py-1 rounded-md', sortMode === 'properties' ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800')} onClick={() => setSortMode('properties')}>حسب الممتلكات</button>
+        <div className="mt-2 flex items-center justify-between gap-2">
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث..." className="h-8" />
+            <div className="flex items-center gap-1 shrink-0">
+                <button className={cn('px-2 py-1 text-xs rounded-md', sortMode === 'default' ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800')} onClick={() => setSortMode('default')}>الترتيب الأصلي</button>
+                <button className={cn('px-2 py-1 text-xs rounded-md', sortMode === 'balance' ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800')} onClick={() => setSortMode('balance')}>الأغنى</button>
+                <button className={cn('px-2 py-1 text-xs rounded-md', sortMode === 'properties' ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800')} onClick={() => setSortMode('properties')}>الأكثر أملاكًا</button>
+            </div>
         </div>
       </CardHeader>
 
@@ -122,7 +117,7 @@ export function PlayerHUD({ players = [], balances = {}, board = [], currentTurn
                       onClick={() => onPlayerClick?.(player)}
                       tabIndex={0}
                       onKeyDown={(e) => { if (e.key === 'Enter') onPlayerClick?.(player); }}
-                      className={cn('p-3 rounded-lg border-2 transition-all duration-200 flex flex-col gap-2', isBankrupt ? 'bg-red-900/30 border-red-700/40 opacity-75' : 'bg-white dark:bg-gray-900/50', isCurrentTurn ? 'ring-2 ring-offset-2 ring-violet-300' : 'border-transparent')}
+                      className={cn('p-3 rounded-lg border-2 transition-all duration-200 flex flex-col gap-2', isBankrupt ? 'bg-red-900/30 border-red-700/40 opacity-75' : 'bg-white dark:bg-gray-900/50', isCurrentTurn ? 'ring-2 ring-offset-2 ring-violet-500' : 'border-transparent')}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -141,11 +136,10 @@ export function PlayerHUD({ players = [], balances = {}, board = [], currentTurn
 
                         <div className="text-right">
                           <div className="font-bold text-green-600 dark:text-green-400">{nf.format(balance)} د.ع</div>
-                          <div className="text-xs text-gray-500">{isBankrupt ? 'مفلس' : `${owned.length} ممتلك/ات`}</div>
+                          <div className="text-xs text-gray-500">{isBankrupt ? 'مفلس' : `${owned.length} ممتلكات`}</div>
                         </div>
                       </div>
 
-                      {/* owned properties preview */}
                       <div className="mt-2 flex items-center gap-2 flex-wrap">
                         {owned.length > 0 ? (
                           owned.slice(0, 6).map(prop => (
@@ -166,7 +160,7 @@ export function PlayerHUD({ players = [], balances = {}, board = [], currentTurn
                             </TooltipProvider>
                           ))
                         ) : (
-                          <div className="text-xs text-muted-foreground">لا ممتلكات</div>
+                          !isBankrupt && <div className="text-xs text-muted-foreground">لا ممتلكات</div>
                         )}
 
                         {owned.length > 6 && <div className="text-xs text-gray-500">+{owned.length - 6}</div>}
@@ -182,14 +176,13 @@ export function PlayerHUD({ players = [], balances = {}, board = [], currentTurn
             )}
           </div>
         </ScrollArea>
-
-        {/* activity log */}
+        
         <div className="mt-3 shrink-0">
           <h3 className="text-center font-bold text-sm mb-2 flex items-center justify-center gap-2"><Activity className="w-4 h-4" /> آخر الأحداث</h3>
-          <ScrollArea className="h-40 p-2 bg-gray-100 dark:bg-gray-900/40 rounded-md">
+          <ScrollArea className="h-32 p-2 bg-gray-100 dark:bg-gray-900/40 rounded-md">
             <div className="space-y-1.5 text-xs text-right">
               {activityLog.length > 0 ? (
-                activityLog.slice(-20).reverse().map((log, i) => (
+                activityLog.slice().reverse().map((log, i) => (
                   <div key={i} className="flex items-start gap-2">
                     <div className="w-6 mt-0.5 text-gray-400">•</div>
                     <div className="flex-1 break-words">{log}</div>
