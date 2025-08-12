@@ -15,13 +15,15 @@ import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { handlePropertyLanding, endTurn } from '@/lib/actions/educated-merchant';
 import { Button } from '@/components/ui/button';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+
 
 interface GameBoardProps {
   game: Game;
   self: Player;
 }
 
-const BOARD_SIZE = 28;
+const BOARD_SIZE = 28; 
 const GRID_SIZE = 8;
 
 // Visual tuning constants
@@ -53,23 +55,30 @@ const Tile = ({ property, isNewlyBought, isHighlighted }: { property: Property, 
     }
     
     return (
-        <motion.div 
-            className={cn(
-                "w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500",
-                baseBgColor,
-                borderColor,
-                isNewlyBought && 'animate-pulse-glow',
-                isHighlighted && 'tile-highlight'
-            )}
-            style={tileStyle}
-            animate={isHighlighted ? { scale: 1.02 } : { scale: 1 }}
-            transition={{ duration: 0.28 }}
-        >
-            <Icon className="w-5 h-5 mb-1 flex-shrink-0"/>
-            <p className="text-[10px] font-bold leading-tight line-clamp-2">{property.name}</p>
-            {property.type === 'property' && <p className="text-[10px] font-mono mt-1">{property.price} دينار</p>}
-            {property.type === 'fine' && <p className="text-[10px] font-mono mt-1">{property.fineAmount} دينار</p>}
-        </motion.div>
+         <Popover>
+            <PopoverTrigger asChild>
+                <motion.div 
+                    className={cn(
+                        "w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500 cursor-pointer",
+                        baseBgColor,
+                        borderColor,
+                        isNewlyBought && 'animate-pulse-glow',
+                        isHighlighted && 'tile-highlight'
+                    )}
+                    style={tileStyle}
+                    animate={isHighlighted ? { scale: 1.02 } : { scale: 1 }}
+                    transition={{ duration: 0.28 }}
+                >
+                    <Icon className="w-5 h-5 mb-1 flex-shrink-0"/>
+                    <p className="text-[10px] font-bold leading-tight line-clamp-2">{property.name}</p>
+                    {property.type === 'property' && <p className="text-[10px] font-mono mt-1">{property.price} دينار</p>}
+                    {property.type === 'fine' && <p className="text-[10px] font-mono mt-1">{property.fineAmount} دينار</p>}
+                </motion.div>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" side="bottom" align="center">
+                 <PropertyCard game={null} self={null} property={property} isPopover={true} />
+            </PopoverContent>
+        </Popover>
     );
 };
 
@@ -261,17 +270,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
 
     return (
         <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
-            {game.educatedMerchantState?.timerEndsAt && game.gameState !== 'question' && (
-                 <div className="absolute top-4 left-4 z-20">
-                    <CountdownTimer
-                        gameId={game.id}
-                        gameType='educated-merchant'
-                        expiryTimestamp={game.educatedMerchantState.timerEndsAt.toMillis()}
-                        selfId={self.id}
-                        isHost={game.hostId === self.id}
-                     />
-                 </div>
-            )}
            
             <QuestionModal game={game} self={self} />
 
@@ -283,7 +281,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
             <div ref={containerRef} className="flex-grow flex items-center justify-center relative min-h-0 min-w-0">
                  <div className="relative" style={{ width: boardWidth, height: boardHeight }}>
                     <div 
-                        className="absolute bg-gray-900/50 rounded-2xl flex items-center justify-center p-2 md:p-8 shadow-inner"
+                        className="absolute bg-gray-900/50 rounded-2xl flex flex-col items-center justify-center p-2 md:p-8 shadow-inner"
                         style={{
                             top: tileSize + gapSize,
                             left: tileSize + gapSize,
@@ -291,6 +289,17 @@ export function GameBoard({ game, self }: GameBoardProps) {
                             bottom: tileSize + gapSize,
                         }}
                     >
+                         {game.educatedMerchantState?.timerEndsAt && game.gameState !== 'question' && (
+                            <div className="mb-4 z-20">
+                                <CountdownTimer
+                                    gameId={game.id}
+                                    gameType='educated-merchant'
+                                    expiryTimestamp={game.educatedMerchantState.timerEndsAt.toMillis()}
+                                    selfId={self.id}
+                                    isHost={game.hostId === self.id}
+                                />
+                            </div>
+                        )}
                          <AnimatePresence mode="wait">
                             <motion.div
                                 key={game.gameState}
