@@ -161,6 +161,18 @@ export function GameBoard({ game, self }: GameBoardProps) {
         }
     }
 
+    // Group players by position
+    const playersByPosition = game.players
+        .filter(p => p.status !== 'bankrupt')
+        .reduce((acc, player) => {
+            if (!acc[player.position]) {
+                acc[player.position] = [];
+            }
+            acc[player.position].push(player);
+            return acc;
+        }, {} as Record<number, Player[]>);
+
+
     return (
         <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
             {game.educatedMerchantState?.timerEndsAt && game.gameState !== 'question' && (
@@ -210,35 +222,63 @@ export function GameBoard({ game, self }: GameBoardProps) {
                             <Tile property={property} isNewlyBought={game.educatedMerchantState?.newlyBoughtPropertyId === property.id}/>
                         </div>
                     ))}
-                    {game.players.filter(p => p.status !== 'bankrupt').map(p => {
-                        const style = getPositionStyles(p.position);
+                    {Object.entries(playersByPosition).map(([positionStr, playersOnTile]) => {
+                        const position = parseInt(positionStr, 10);
+                        const mainStyle = getPositionStyles(position);
+                        const playerCount = playersOnTile.length;
+
                         return (
-                             <motion.div
-                                key={p.id}
-                                layoutId={`player-piece-${p.id}`}
-                                className="absolute z-10"
+                            <motion.div
+                                key={`tile-${position}`}
+                                className="absolute"
                                 initial={false}
-                                animate={style}
-                                onAnimationComplete={() => {
-                                    if(game.gameState === 'movement' && p.id === currentPlayerId) {
-                                        handlePropertyLanding(game.id, p.id);
-                                    }
-                                }}
+                                animate={mainStyle}
                                 transition={{ type: "spring", stiffness: 200, damping: 30 }}
                                 style={{width: tileSize, height: tileSize}}
                             >
-                                <motion.div 
-                                     className={cn("absolute bottom-1 right-1 transition-all duration-300", p.id === currentPlayerId && 'animate-pulse-glow')}
-                                     style={{ width: `${tileSize * 0.4}px`, height: `${tileSize * 0.4}px` }}
-                                     whileHover={{ scale: 1.2 }}
-                                >
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
-                                </motion.div>
+                                {playersOnTile.map((p, playerIndex) => {
+                                    const pieceSize = playerCount > 1 ? tileSize * 0.35 : tileSize * 0.4;
+                                    let offsetX = '55%'; 
+                                    let offsetY = '55%';
+
+                                    if (playerCount === 2) {
+                                        offsetX = playerIndex === 0 ? '10%' : '55%';
+                                    } else if (playerCount === 3) {
+                                        if (playerIndex === 0) { offsetX = '30%'; offsetY = '10%'; }
+                                        if (playerIndex === 1) { offsetX = '10%'; offsetY = '55%'; }
+                                        if (playerIndex === 2) { offsetX = '55%'; offsetY = '55%'; }
+                                    } else if (playerCount >= 4) {
+                                        if (playerIndex === 0) { offsetX = '10%'; offsetY = '10%'; }
+                                        if (playerIndex === 1) { offsetX = '55%'; offsetY = '10%'; }
+                                        if (playerIndex === 2) { offsetX = '10%'; offsetY = '55%'; }
+                                        if (playerIndex === 3) { offsetX = '55%'; offsetY = '55%'; }
+                                    }
+
+                                    return (
+                                        <motion.div
+                                            key={p.id}
+                                            layoutId={`player-piece-${p.id}`}
+                                            className={cn("absolute z-10 transition-all duration-300", p.id === currentPlayerId && 'animate-pulse-glow')}
+                                            initial={{ bottom: '55%', right: '55%' }}
+                                            animate={{ bottom: offsetY, right: offsetX }}
+                                            onAnimationComplete={() => {
+                                                if (game.gameState === 'movement' && p.id === currentPlayerId) {
+                                                    handlePropertyLanding(game.id, p.id);
+                                                }
+                                            }}
+                                            whileHover={{ scale: 1.2, zIndex: 20 }}
+                                            style={{ width: pieceSize, height: pieceSize }}
+                                        >
+                                            <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
+                                        </motion.div>
+                                    );
+                                })}
                             </motion.div>
-                        )
+                        );
                     })}
                 </div>
             </div>
         </div>
     );
 }
+
