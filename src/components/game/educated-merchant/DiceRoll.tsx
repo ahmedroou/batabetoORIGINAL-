@@ -15,6 +15,25 @@ interface DiceRollProps {
     self: Player;
 }
 
+const RollingNumber = ({ number }: { number: number }) => {
+    return (
+        <div className="h-20 overflow-hidden rounded-lg bg-gray-900/50 p-2">
+            <motion.div
+              initial={{ y: 0 }}
+              animate={{ y: -(number - 1) * 80 }} 
+              transition={{ duration: 0.8, ease: "circOut" }}
+            >
+              {[1, 2, 3, 4, 5].map(n => (
+                <div key={n} style={{ height: 80 }} className="flex items-center justify-center text-6xl font-bold text-yellow-300">
+                    {n}
+                </div>
+              ))}
+            </motion.div>
+        </div>
+    );
+};
+
+
 export function DiceRoll({ game, self }: DiceRollProps) {
     const [isRolling, setIsRolling] = useState(false);
     
@@ -29,23 +48,19 @@ export function DiceRoll({ game, self }: DiceRollProps) {
             await rollDice(game.id, self.id);
         } catch (error: any) {
             console.error("Error rolling dice:", error);
-            // The isRolling state will be reset by the game state change,
-            // but we can set it back here as a fallback in case of an error that doesn't change state.
             setIsRolling(false);
         }
     };
 
     if (lastRoll) {
         return (
-             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring' }}>
-                <Card className="text-center bg-slate-800 border-primary text-white">
+             <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
+                <Card className="text-center bg-slate-800 border-primary text-white shadow-lg">
                      <CardHeader>
-                        <CardTitle>نتيجة النرد</CardTitle>
+                        <CardTitle className="text-primary">نتيجة النرد</CardTitle>
                     </CardHeader>
                     <CardContent>
-                         <div className="text-7xl font-bold text-yellow-400">
-                           {lastRoll}
-                        </div>
+                         <RollingNumber number={lastRoll} />
                     </CardContent>
                 </Card>
             </motion.div>
