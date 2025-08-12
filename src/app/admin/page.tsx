@@ -13,7 +13,7 @@ import { Timestamp } from 'firebase/firestore';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Store, ArrowLeft, Loader2, Users, Puzzle, Gavel, Newspaper, TestTube2, MessageSquareWarning, MessageSquarePlus } from 'lucide-react';
+import { Store, ArrowLeft, Loader2, Users, Puzzle, Gavel, Newspaper, TestTube2, MessageSquarePlus } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 // Admin Page Components
@@ -163,7 +163,7 @@ export default function AdminPage() {
                     </DialogHeader>
                     <div className="flex items-center justify-center p-4 min-h-[60vh] bg-slate-100 rounded-md">
                        {testGame?.gameType === 'king-of-genius' && testingChallenge && (
-                            <ChallengeHost game={testGame} player={testGame.players[0]} self={testGame.players[0]} challenge={testingChallenge} />
+                            <ChallengeHost game={testGame} player={testGame.players[0]} self={testGame.players[0]} challenge={challenge} />
                         )}
                     </div>
                 </DialogContent>
