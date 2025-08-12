@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -29,6 +30,7 @@ import {
   deleteDuplicateWords,
   uploadPrisonQuestionsFromJson,
   deleteSimilarQuestions,
+  uploadEducatedMerchantQuestionsFromJson,
 } from '@/lib/actions/admin';
 import type { Game } from '@/types';
 
@@ -270,15 +272,20 @@ export default function QuestionManagementTab() {
                 if (typeof text !== 'string') throw new Error("Failed to read file.");
                 const json = JSON.parse(text);
                 let result;
+                const questions: { question: string, answer: string, dummyAnswers?: string[] }[] = Array.isArray(json) ? json : json.questions;
 
                 switch(selectedGame) {
                     case 'trap-answer':
+                         if (!selectedCategory) {
+                            throw new Error('الرجاء اختيار قسم لرفع الأسئلة إليه.');
+                        }
+                        result = await uploadTrapAnswerQuestionsFromJson(questions, selectedCategory);
+                        break;
                     case 'educated-merchant':
                          if (!selectedCategory) {
                             throw new Error('الرجاء اختيار قسم لرفع الأسئلة إليه.');
                         }
-                        const trapQuestions: { question: string, answer: string, dummyAnswers: string[] }[] = Array.isArray(json) ? json : json.questions;
-                        result = await uploadTrapAnswerQuestionsFromJson(trapQuestions, selectedCategory);
+                        result = await uploadEducatedMerchantQuestionsFromJson(questions, selectedCategory);
                         break;
                     case 'word_war': {
                         const words: string[] = Array.isArray(json) ? json : json.words;
@@ -286,8 +293,8 @@ export default function QuestionManagementTab() {
                         break;
                     }
                      case 'prison': {
-                        const questions: { text: string }[] = Array.isArray(json) ? json : json.questions;
-                        result = await uploadPrisonQuestionsFromJson(questions);
+                        const prisonQuestions: { text: string }[] = Array.isArray(json) ? json : json.questions;
+                        result = await uploadPrisonQuestionsFromJson(prisonQuestions);
                         break;
                     }
                     default:
@@ -472,11 +479,11 @@ export default function QuestionManagementTab() {
                 <Label>حذف حسب النص</Label>
                 <div className="flex gap-2">
                     <Input placeholder="نص السؤال..." value={deleteSearchTerm} onChange={(e) => setDeleteSearchTerm(e.target.value)} />
-                    <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting} variant="destructive">حذف</Button>
+                    <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', searchTerm: deleteSearchTerm })} disabled={!deleteSearchTerm.trim() || isDeleting} variant="destructive">حذف</Button>
                 </div>
                 <div className="flex gap-2">
                     <Input placeholder="نص الجواب..." value={deleteAnswerSearchTerm} onChange={(e) => setDeleteAnswerSearchTerm(e.target.value)} />
-                    <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer', answerSearchTerm: deleteAnswerSearchTerm })} disabled={!deleteAnswerSearchTerm.trim() || isDeleting} variant="destructive">حذف</Button>
+                    <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', answerSearchTerm: deleteAnswerSearchTerm })} disabled={!deleteAnswerSearchTerm.trim() || isDeleting} variant="destructive">حذف</Button>
                 </div>
             </div>
             <div className="p-3 border rounded-lg space-y-2">
@@ -490,9 +497,10 @@ export default function QuestionManagementTab() {
                             {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                     <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer', category: deleteCategory })} disabled={!deleteCategory || isDeleting} variant="destructive">حذف</Button>
+                     <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: deleteCategory })} disabled={!deleteCategory || isDeleting} variant="destructive">حذف</Button>
                 </div>
             </div>
+             {selectedGame === 'trap-answer' && (
              <div className="p-3 border rounded-lg space-y-2">
                  <h4 className="font-bold">حذف الأسئلة المكررة</h4>
                  <p className="text-sm text-muted-foreground">سيقوم هذا الإجراء بفحص الأسئلة المتشابهة وحذفها مع الإبقاء على أحدث نسخة.</p>
@@ -510,6 +518,7 @@ export default function QuestionManagementTab() {
                 </Button>
                 </div>
             </div>
+            )}
         </div>
     );
 

@@ -339,18 +339,17 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
 export async function purchaseProperty(gameId: string, playerId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
 
-    // First, fetch necessary data outside the transaction
     const gameDocForData = await getDoc(gameRef);
     if (!gameDocForData.exists()) throw new Error('اللعبة غير موجودة.');
     const gameData = gameDocForData.data() as Game;
 
     const player = gameData.players.find((p) => p.id === playerId);
-    if (!player) return; // Player not in game
+    if (!player) return; 
 
     const property = gameData.educatedMerchantState?.board?.[player.position];
     if (!property || property.type !== 'property') throw new Error('لا يوجد عقار في هذه الخانة.');
 
-    const questionsCol = collection(db, 'trap_answer_questions');
+    const questionsCol = collection(db, 'educated_merchant_questions');
     const randomKey = Math.random();
     let q = query(questionsCol, where('category', '==', property.category), where('randomKey', '>=', randomKey), limit(1));
     let qs = await getDocs(q);
@@ -368,7 +367,6 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
     const options = shuffle([...(questionData.dummyAnswers || []), questionData.answer]);
     questionData.options = options;
 
-    // Now, run the transaction with the fetched data
     await runTransaction(db, async (tx) => {
         const snap = await tx.get(gameRef);
         if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
@@ -407,7 +405,6 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
   let gameEnded = false;
 
   await runTransaction(db, async (tx) => {
-    // --- READ PHASE ---
     const snap = await tx.get(gameRef);
     if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
     const game = snap.data() as Game;
@@ -420,13 +417,11 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     const question = ensure(game.educatedMerchantState?.currentQuestion, 'السؤال الحالي مفقود.');
     const isCorrect = answer === question.answer;
 
-    // --- PREPARE WRITES ---
     let board = [...ensure(game.educatedMerchantState?.board, 'اللوح مفقود.')];
     let players = [...game.players];
     const playerIndex = getPlayerIndexById(players, playerId);
     let activityMessage = '';
     let finalUpdates: any = {
-      // These will be deleted regardless of outcome
       'educatedMerchantState.pendingPurchase': deleteField(),
       'educatedMerchantState.currentQuestion': deleteField(),
       'educatedMerchantState.timerEndsAt': deleteField(),
@@ -446,18 +441,15 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
       finalUpdates['educatedMerchantState.newlyBoughtPropertyId'] = deleteField();
     }
     
-    // Merge the player and board updates into the final update object.
     finalUpdates.players = players;
     finalUpdates['educatedMerchantState.board'] = board;
     
-    // `endTurnInternal` no longer reads; it just processes the prepared updates.
-    // It returns a boolean indicating if the game has ended.
-    const { isGameOver, updates } = endTurnInternal(game, playerId, activityMessage, finalUpdates);
-    tx.update(gameRef, updates);
-    gameEnded = isGameOver;
+    const endTurnResult = endTurnInternal(game, playerId, activityMessage, finalUpdates);
+    tx.update(gameRef, endTurnResult.updates);
+    gameEnded = endTurnResult.isGameOver;
 
     if (isGameOver) {
-      finalGameDataForLeagueUpdate = { ...game, ...updates };
+      finalGameDataForLeagueUpdate = { ...game, ...endTurnResult.updates };
     }
   });
 
@@ -472,52 +464,25 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
   let gameEnded = false;
 
   await runTransaction(db, async (tx) => {
-    // --- READ PHASE ---
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
     const game = snap.data() as Game;
 
-    // Only the host should trigger timeouts, to prevent multiple triggers.
     if (game.hostId !== hostId) return;
-
     if (!game.educatedMerchantState?.timerEndsAt || Date.now() < game.educatedMerchantState.timerEndsAt.toMillis()) {
-      return; // Timer hasn't expired server-side.
+      return; 
     }
 
     const turnOrder = ensure(game.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود.');
     const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
     const currentPlayerId = turnOrder[currentTurnIndex];
     const currentPlayer = game.players.find((p) => p.id === currentPlayerId);
-
-    // --- PREPARE WRITES based on game state ---
     let updates: any = {};
     let activityMessage = '';
     
     switch (game.gameState) {
       case 'rolling': {
-        const diceRoll = randomDiceRoll();
-        const playerIndex = getPlayerIndexById(game.players, currentPlayerId);
-        if (playerIndex === -1) return;
-
-        const updatedPlayers = [...game.players];
-        const oldPosition = updatedPlayers[playerIndex].position || 0;
-        const newPosition = (oldPosition + diceRoll) % BOARD_SIZE;
-        updatedPlayers[playerIndex].position = newPosition;
-        
-        activityMessage = `انتهى وقت اللاعب ${currentPlayer?.name}، تم رمي النرد تلقائياً: ${diceRoll}.`;
-        if (newPosition < oldPosition) {
-          updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + PASS_GO_REWARD;
-          activityMessage += ` وحصل على ${PASS_GO_REWARD} دينار للمرور بنقطة البداية.`;
-        }
-
-        updates = {
-          players: updatedPlayers,
-          gameState: 'movement',
-          'educatedMerchantState.lastDiceRoll': diceRoll,
-          'educatedMerchantState.rollAnimationNonce': Date.now(),
-          'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: nowTimestamp() }),
-          'educatedMerchantState.timerEndsAt': deleteField(),
-        };
+        await rollDiceInternal(gameRef, tx, currentPlayerId);
         break;
       }
       case 'property_action': {
@@ -553,11 +518,9 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
         break;
       }
       default:
-        // No action needed for other states on timeout
         return;
     }
     
-    // --- WRITE PHASE ---
     if (Object.keys(updates).length > 0) {
       tx.update(gameRef, updates);
     }
@@ -568,9 +531,6 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
   }
 }
 
-// -----------------------------
-// Central end-turn logic
-// -----------------------------
 function endTurnInternal(
   game: Game,
   playerId: string,
@@ -578,13 +538,10 @@ function endTurnInternal(
   extraUpdates: any = {}
 ): { isGameOver: boolean, updates: any } {
   
-  // Create a merged game state from base and pending updates *before* processing logic.
   let mergedGameData = { ...game, ...extraUpdates };
-  // Deep merge for players and board if they exist in extraUpdates
   if (extraUpdates.players) mergedGameData.players = [...extraUpdates.players];
   if (extraUpdates['educatedMerchantState.board']) mergedGameData.educatedMerchantState!.board = [...extraUpdates['educatedMerchantState.board']];
   
-  // Clean up properties owned by bankrupt players based on the *merged* state.
   const updatedBoard = (mergedGameData.educatedMerchantState?.board || []).map((prop) => {
     const owner = mergedGameData.players.find((p) => p.id === prop.ownerId);
     if (owner && owner.status === 'bankrupt') return { ...prop, ownerId: null, color: undefined } as Property;
@@ -598,7 +555,6 @@ function endTurnInternal(
 
   const activePlayers = updatedPlayers.filter((p) => p.status === 'alive');
 
-  // If <= 1 active player => game over
   if (activePlayers.length <= 1) {
     const winner = activePlayers[0];
     const ranking = updatedPlayers
@@ -619,9 +575,8 @@ function endTurnInternal(
     return { isGameOver: true, updates: finalGameData };
   }
 
-  // Normal flow: find next alive player's index
   const turnOrder = ensure(mergedGameData.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود أثناء إنهاء الدور.');
-  const currentTurnIndex = ensure(mergedGameData.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود أثناء إنهاء الدور.');
+  const currentTurnIndex = ensure(mergedGameData.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
 
   let nextTurnIndex = findNextAliveIndex(turnOrder, updatedPlayers, currentTurnIndex);
 

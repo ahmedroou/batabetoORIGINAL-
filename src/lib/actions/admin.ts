@@ -97,6 +97,50 @@ export async function adminSendMail(recipientIds: string[], subject: string, bod
   }
 };
 
+export async function uploadEducatedMerchantQuestionsFromJson(questions: { question: string, answer: string, dummyAnswers?: string[] }[], category: string) {
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+        return { error: 'ملف JSON غير صالح أو فارغ.' };
+    }
+    if (!category || typeof category !== 'string' || category.trim() === '') {
+        return { error: 'يجب تحديد قسم صالح.' };
+    }
+
+    try {
+        const batch = writeBatch(db);
+        const questionsCol = collection(db, 'educated_merchant_questions');
+        let validQuestionsCount = 0;
+
+        questions.forEach(q => {
+            if (q && typeof q.question === 'string' && q.question.trim() !== '' && 
+                typeof q.answer === 'string' && q.answer.trim() !== '') {
+                
+                const hasDummyAnswers = Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '');
+
+                const docRef = doc(questionsCol);
+                const questionData: Partial<TrapQuestion> = {
+                    question: q.question.trim(),
+                    answer: q.answer.trim(),
+                    category: category.trim(),
+                    randomKey: Math.random(),
+                    ...(hasDummyAnswers && { dummyAnswers: q.dummyAnswers!.map(da => da.trim()) }),
+                };
+                
+                batch.set(docRef, questionData);
+                validQuestionsCount++;
+            }
+        });
+
+        if (validQuestionsCount === 0) {
+            return { error: 'لم يتم العثور على أسئلة صالحة في الملف. تأكد من أن كل سؤال يحتوي على `question` و `answer`.' };
+        }
+
+        await batch.commit();
+        return { success: true, count: validQuestionsCount };
+    } catch (error) {
+        console.error("Error uploading educated merchant questions:", error);
+        return { error: 'حدث خطأ أثناء رفع أسئلة التاجر المتعلم.' };
+    }
+};
 
 export async function uploadTrapAnswerQuestionsFromJson(questions: { question: string, answer: string, dummyAnswers?: string[] }[], category: string) {
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
@@ -122,8 +166,7 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
                     question: q.question.trim(),
                     answer: q.answer.trim(),
                     category: category.trim(),
-                    randomKey: Math.random(), // Add random key for efficient fetching
-                    // Only add dummyAnswers if they exist and are valid
+                    randomKey: Math.random(),
                     ...(hasDummyAnswers && { dummyAnswers: q.dummyAnswers!.map(da => da.trim()) }),
                 };
                 
@@ -216,10 +259,8 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
 
     let collectionName: string;
     switch(criteria.game) {
-        case 'trap-answer':
-        case 'educated-merchant':
-            collectionName = 'trap_answer_questions'; 
-            break;
+        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
+        case 'educated-merchant': collectionName = 'educated_merchant_questions'; break;
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
         default: return { error: "نوع لعبة غير مدعوم." };
@@ -278,10 +319,8 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
 
      let collectionName: string;
     switch(criteria.game) {
-        case 'trap-answer':
-        case 'educated-merchant':
-            collectionName = 'trap_answer_questions'; 
-            break;
+        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
+        case 'educated-merchant': collectionName = 'educated_merchant_questions'; break;
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
         default: return { error: "نوع لعبة غير مدعوم." };
