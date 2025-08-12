@@ -12,6 +12,7 @@ import { ActivityLog } from './ActivityLog';
 import { cn } from '@/lib/utils';
 import { Banknote, Building, HelpCircle, LandPlot, Trophy } from 'lucide-react';
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { handlePropertyLanding } from '@/lib/actions/educated-merchant';
 
 interface GameBoardProps {
   game: Game;
@@ -21,7 +22,7 @@ interface GameBoardProps {
 const BOARD_SIZE = 28; 
 const GRID_SIZE = 8; // 8x8 grid for a 28-tile board
 
-const Tile = ({ property, playersOnTile, isNewlyBought }: { property: Property, playersOnTile: Player[], isNewlyBought: boolean }) => {
+const Tile = ({ property, isNewlyBought }: { property: Property, isNewlyBought: boolean }) => {
     let Icon = Building;
     let baseBgColor = 'bg-slate-700';
     let borderColor = 'border-slate-500';
@@ -110,14 +111,15 @@ export function GameBoard({ game, self }: GameBoardProps) {
     const renderCenterContent = () => {
         switch(game.gameState) {
             case 'rolling':
-                return <DiceRoll game={game} self={self} />;
             case 'movement':
-                 return <DiceRoll game={game} self={self} />;
+                return <DiceRoll game={game} self={self} />;
             case 'property_action':
                 const player = game.players.find(p => p.id === currentPlayerId);
                 if (player) {
                      const property = memoizedBoard[player.position];
-                     return <PropertyCard game={game} self={self} property={property} />;
+                     if (property) {
+                        return <PropertyCard game={game} self={self} property={property} />;
+                     }
                 }
                 return null;
             default:
@@ -159,7 +161,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
                     </div>
                     {memoizedBoard.map((property, index) => (
                         <div key={index} style={{...getPositionStyles(index), width: tileSize, height: tileSize}}>
-                            <Tile property={property} playersOnTile={[]} isNewlyBought={game.educatedMerchantState?.newlyBoughtPropertyId === property.id}/>
+                            <Tile property={property} isNewlyBought={game.educatedMerchantState?.newlyBoughtPropertyId === property.id}/>
                         </div>
                     ))}
                     {game.players.filter(p => p.status !== 'bankrupt').map(p => {
@@ -169,17 +171,23 @@ export function GameBoard({ game, self }: GameBoardProps) {
                                 key={p.id}
                                 layoutId={`player-piece-${p.id}`}
                                 className="absolute z-10"
-                                initial={style}
+                                initial={false}
                                 animate={style}
+                                onAnimationComplete={() => {
+                                    if(game.gameState === 'movement' && p.id === currentPlayerId) {
+                                        handlePropertyLanding(game.id, p.id);
+                                    }
+                                }}
                                 transition={{ type: "spring", stiffness: 200, damping: 30 }}
                                 style={{width: tileSize, height: tileSize}}
                             >
-                                <div 
+                                <motion.div 
                                      className={cn("absolute bottom-1 right-1 transition-all duration-300", p.id === currentPlayerId && 'animate-pulse-glow')}
                                      style={{ width: `${tileSize * 0.4}px`, height: `${tileSize * 0.4}px` }}
+                                     whileHover={{ scale: 1.2 }}
                                 >
                                     <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
-                                </div>
+                                </motion.div>
                             </motion.div>
                         )
                     })}

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -22,6 +23,7 @@ import type { Game, Player, Property, EducatedMerchantQuestion, UserProfile } fr
 import { shuffle } from './helpers';
 import { PROPERTY_NAMES } from '@/data/properties';
 import { getEducatedMerchantCategories } from './admin';
+import { updateLeagueScoresForGameEnd } from './user';
 
 const BOARD_SIZE = 28;
 const START_MONEY = 1500;
@@ -336,6 +338,7 @@ export async function handleTimeout(gameId: string, playerId: string) {
 
 export async function endTurn(gameId: string, playerId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
+    let gameDataForLeagueUpdate: Game | null = null;
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
@@ -354,32 +357,38 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
             }
             return prop;
         });
+        
+        const updatedPlayers = game.players.map(p => {
+             if(p.status === 'bankrupt' && p.money! > 0) {
+                 return {...p, money: 0};
+             }
+             return p;
+        });
 
-        const activePlayers = game.players.filter(p => p.status === 'alive');
+        const activePlayers = updatedPlayers.filter(p => p.status === 'alive');
         if (activePlayers.length <= 1) {
             const winner = activePlayers[0];
-            transaction.update(gameRef, {
-                gameState: 'final_results',
-                gameResult: { winner: winner?.id || 'none', message: `اللاعب ${winner?.name || ''} هو الناجي الأخير!` }
-            });
+            const finalGameData = { ...game, players: updatedPlayers, gameState: 'final_results' as const, gameResult: { winner: winner?.id || 'none', message: `اللاعب ${winner?.name || ''} هو الناجي الأخير!` } };
+            gameDataForLeagueUpdate = finalGameData;
+            transaction.update(gameRef, finalGameData);
             return;
         }
 
         let nextTurnIndex = (currentTurnIndex + 1) % turnOrder.length;
         let loopCount = 0;
-        while(game.players.find(p => p.id === turnOrder[nextTurnIndex])?.status === 'bankrupt' && loopCount < turnOrder.length) {
+        while(updatedPlayers.find(p => p.id === turnOrder[nextTurnIndex])?.status === 'bankrupt' && loopCount < turnOrder.length) {
             nextTurnIndex = (nextTurnIndex + 1) % turnOrder.length;
             loopCount++;
         }
         
         const newRound = nextTurnIndex < currentTurnIndex ? (game.round || 1) + 1 : game.round || 1;
         
-        if (newRound > (game.educatedMerchantState!.settings.maxRounds || 20)) {
-            const winner = game.players.filter(p=>p.status !== 'bankrupt').reduce((prev, current) => ((prev.money || 0) > (current.money || 0)) ? prev : current);
-            transaction.update(gameRef, {
-                gameState: 'final_results',
-                gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.` }
-            });
+        const maxRounds = game.educatedMerchantState?.settings?.maxRounds || 20;
+        if (newRound > maxRounds) {
+            const winner = updatedPlayers.filter(p=>p.status !== 'bankrupt').reduce((prev, current) => ((prev.money || 0) > (current.money || 0)) ? prev : current);
+            const finalGameData = { ...game, players: updatedPlayers, gameState: 'final_results' as const, gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.` } };
+            gameDataForLeagueUpdate = finalGameData;
+            transaction.update(gameRef, finalGameData);
         } else {
              transaction.update(gameRef, {
                 gameState: 'rolling',
@@ -387,10 +396,13 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
                 'educatedMerchantState.currentTurnIndex': nextTurnIndex,
                 'educatedMerchantState.lastDiceRoll': deleteField(),
                 'educatedMerchantState.newlyBoughtPropertyId': deleteField(),
-                round: newRound
+                round: newRound,
+                players: updatedPlayers,
             });
         }
     });
-}
 
-    
+     if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
+}
