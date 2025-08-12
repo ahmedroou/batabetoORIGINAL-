@@ -1,4 +1,4 @@
-
+// .
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -29,6 +29,8 @@ import type {
 } from '@/types';
 import { shuffle } from './helpers';
 import { updateLeagueScoresForGameEnd } from './user';
+import { PROPERTY_NAMES } from '@/data/properties';
+
 
 const BOARD_SIZE = 28;
 const STARTING_BALANCE = 1000;
@@ -81,11 +83,14 @@ function generateBoard(categories: string[]): Property[] {
   const board: Property[] = [];
   if (categories.length === 0) return [];
 
+  const shuffledPropertyNames = shuffle([...PROPERTY_NAMES]);
+
   const priceCount = Math.floor((MAX_PROPERTY_PRICE - BASE_PROPERTY_PRICE) / PRICE_INCREMENT) + 1;
   const propertyPrices = Array.from({ length: priceCount }, (_, i) => BASE_PROPERTY_PRICE + i * PRICE_INCREMENT);
   const shuffledPrices = shuffle(propertyPrices);
 
   for (let i = 0; i < BOARD_SIZE; i++) {
+    const propertyName = shuffledPropertyNames[i % shuffledPropertyNames.length] || `عقار ${i}`;
     if (i === 0) {
       board.push({ id: i, type: 'start', name: 'نقطة البداية', category: 'special', price: 0, rent: 0, ownerId: null });
     } else if (i === 7) {
@@ -95,7 +100,7 @@ function generateBoard(categories: string[]): Property[] {
     } else {
       const category = categories[i % categories.length] || 'عام';
       const price = shuffledPrices[i % shuffledPrices.length] || BASE_PROPERTY_PRICE;
-      board.push({ id: i, type: 'property', name: `عقار ${i}`, category, price, rent: Math.floor(price * 0.25), ownerId: null });
+      board.push({ id: i, type: 'property', name: propertyName, category, price, rent: Math.floor(price * 0.25), ownerId: null });
     }
   }
   return board;

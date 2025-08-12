@@ -1,12 +1,12 @@
+// .
 "use client";
 
-import React, { useEffect, useMemo } from "react";
-import type { Player, Property } from "@/types";
+import React, { useMemo } from "react";
 import { motion } from "framer-motion";
-import { PlayerAvatar } from "../PlayerAvatar";
-import { Home, Building2, Gavel } from "lucide-react";
+import { Home, Building2, Gavel, ArrowRight, ArrowLeft, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { handlePropertyAction } from "@/lib/actions/educated-merchant";
+import type { Player, Property } from "@/types";
+import { PlayerAvatar } from "../PlayerAvatar";
 import {
   Tooltip,
   TooltipContent,
@@ -15,342 +15,190 @@ import {
 } from "@/components/ui/tooltip";
 
 interface GameBoardProps {
-  gameId: string;
   players: Player[];
-  board: Property[];
-  diceRoll: number | null;
-  isMyTurn: boolean;
-  activePlayerId: string;
-  gameState: string;
-  currentRound: number;
-  maxRounds: number;
+  properties: Property[];
+  className?: string;
 }
 
-const TILE_GAP = 6; // px - kept as constant for easy tuning
+const TILE_MIN_SIZE = 64; 
 
-function hexToRgb(hex: string | undefined | null) {
-  if (!hex) return null;
-  const h = hex.replace("#", "");
-  if (h.length === 3) {
-    return {
-      r: parseInt(h[0] + h[0], 16),
-      g: parseInt(h[1] + h[1], 16),
-      b: parseInt(h[2] + h[2], 16),
-    };
-  }
-  if (h.length === 6) {
-    return {
-      r: parseInt(h.slice(0, 2), 16),
-      g: parseInt(h.slice(2, 4), 16),
-      b: parseInt(h.slice(4, 6), 16),
-    };
-  }
-  return null;
-}
+export function GameBoard({ players, properties, className }: GameBoardProps) {
+  if (!properties || properties.length === 0) return null;
 
-function hexToRgba(hex: string | undefined | null, alpha = 1) {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return `rgba(0,0,0,${alpha})`;
-  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
-}
+  const size = useMemo(() => {
+    const m = properties.length;
+    return Math.max(3, Math.ceil((m + 4) / 4));
+  }, [properties.length]);
 
-function getContrastColor(hex?: string | null) {
-  if (!hex) return "#000";
-  const rgb = hexToRgb(hex);
-  if (!rgb) return "#000";
-  const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
-  return lum > 0.5 ? "#000000" : "#ffffff";
-}
+  const perimeterLen = 4 * size - 4;
 
-function categoryHue(category?: string) {
-  const s = (category || "generic").toString();
-  let hash = 0;
-  for (let i = 0; i < s.length; i++) hash = (hash << 5) - hash + s.charCodeAt(i);
-  const hue = Math.abs(hash) % 360;
-  return hue;
-}
+  const tileSlots = useMemo(() => {
+    const slots: Array<Property | null> = Array.from({ length: perimeterLen }, (_, i) => properties[i] ?? null);
+    return slots;
+  }, [properties, perimeterLen]);
 
-function categoryGradientStyle(category?: string) {
-  const hue = categoryHue(category);
-  return {
-    background: `linear-gradient(135deg, hsla(${hue},70%,96%,0.95), hsla(${hue},70%,70%,0.95))`,
-    borderColor: `hsl(${hue} 55% 45%)`,
-  } as React.CSSProperties;
-}
-
-// Small animated token used to visually represent players on tiles.
-function PlayerToken({ player }: { player: Player }) {
-  return (
-    <motion.div
-      layoutId={`token-${player.id}`}
-      initial={{ scale: 0.9, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0.8, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 400, damping: 28 }}
-      className="w-5 h-5 md:w-6 md:h-6 rounded-full overflow-hidden border-2 border-white shadow-sm"
-      title={player.name}
-      aria-hidden={false}
-      role="img"
-    >
-      <PlayerAvatar avatarId={player.avatarId} className="w-full h-full" />
-    </motion.div>
-  );
-}
-
-const Tile = React.forwardRef<HTMLDivElement, {
-  property: Property;
-  ownerColor?: string | undefined;
-  playersOnTile?: Player[];
-  isActive?: boolean;
-  onActivate?: () => void;
-}>(({ property, ownerColor, playersOnTile = [], isActive = false, onActivate }, ref) => {
-  const catStyle = property.type === "property" ? categoryGradientStyle(property.category) : undefined;
-
-  const ownerOverlayStyle: React.CSSProperties | undefined = ownerColor
-    ? {
-        background: `linear-gradient(135deg, ${hexToRgba(ownerColor, 0.12)}, ${hexToRgba(ownerColor, 0.22)}), ${catStyle?.background || "transparent"}`,
-        borderColor: ownerColor,
-      }
-    : undefined;
-
-  // Determine text color: prefer owner color contrast, otherwise use dark on light backgrounds
-  const textColor = ownerColor ? getContrastColor(ownerColor) : (property.type === 'property' ? '#111827' : '#0f172a');
-
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onActivate?.();
-    }
-  };
-
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <motion.div
-            ref={ref}
-            layout
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            whileHover={{ scale: 1.02 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-            className={cn(
-              'relative rounded-lg border p-2 flex flex-col items-center justify-center text-center select-none focus:outline-none focus:ring-4',
-              property.type === 'start' ? 'shadow-inner' : 'shadow',
-              isActive ? 'ring-offset-2 ring-opacity-60' : '',
-              ownerColor ? 'ring-2' : ''
-            )}
-            style={{
-              ...(ownerOverlayStyle || catStyle || {}),
-              borderWidth: 2,
-              borderStyle: 'solid',
-              borderColor: isActive ? (ownerColor || 'hsl(var(--primary))') : (ownerColor || (catStyle?.borderColor || 'hsl(var(--border))')),
-              boxShadow: ownerColor ? `0 8px 22px ${hexToRgba(ownerColor, 0.14)}` : undefined,
-              minHeight: 56,
-              padding: 8,
-            }}
-            role="button"
-            tabIndex={0}
-            onKeyDown={handleKey}
-            onClick={() => onActivate?.()}
-            aria-label={property.name}
-            aria-current={isActive}
-          >
-            <div className="flex-grow flex flex-col items-center justify-center min-h-[36px]">
-              {property.type === 'start' && <Home className="w-5 h-5 md:w-6 md:h-6 text-green-700" />}
-              {property.type === 'property' && <Building2 className="w-5 h-5 md:w-6 md:h-6 text-gray-700" />}
-              {property.type === 'fine' && <Gavel className="w-5 h-5 md:w-6 md:h-6 text-red-700" />}
-
-              <p className="text-[10px] md:text-xs font-extrabold truncate w-full mt-1" style={{ color: textColor }}>{property.name}</p>
-
-              {property.type === 'property' && property.price > 0 && (
-                <p className="text-[10px] md:text-xs font-semibold mt-0.5" style={{ color: textColor }}>{property.price} د.ع</p>
-              )}
-
-              {property.type === 'fine' && property.fineAmount && (
-                <p className="text-[10px] md:text-xs font-semibold mt-0.5" style={{ color: textColor }}>{property.fineAmount} د.ع</p>
-              )}
-            </div>
-
-            {ownerColor && (
-              <div className="absolute left-0 bottom-0 w-full h-1.5 rounded-b-md" style={{ background: ownerColor }} />
-            )}
-
-            {playersOnTile.length > 0 && (
-              <div className="absolute left-1 bottom-1 flex gap-0.5 items-center">
-                {playersOnTile.slice(0, 4).map((pl, i) => (
-                  <div
-                    key={pl.id}
-                    className="-ml-1"
-                    style={{ zIndex: 20 + i }}
-                    title={pl.name}
-                    aria-hidden={false}
-                  >
-                    <PlayerToken player={pl} />
-                  </div>
-                ))}
-                {playersOnTile.length > 4 && (
-                  <div className="flex items-center justify-center text-[10px] w-4 h-4 rounded-full bg-gray-800 text-white ml-1">+{playersOnTile.length - 4}</div>
-                )}
-              </div>
-            )}
-          </motion.div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p className='font-bold'>{property.name}</p>
-          {property.type === 'property' && (
-            <>
-              <p>السعر: {property.price} د.ع</p>
-              <p>الإيجار: {property.rent} د.ع</p>
-            </>
-          )}
-          {property.type === 'fine' && (
-            <p>غرامة: {property.fineAmount} د.ع</p>
-          )}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-});
-Tile.displayName = 'Tile';
-
-export default function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId, gameState, currentRound, maxRounds }: GameBoardProps) {
-  // Defensive fallback
-  if (!board || board.length === 0) {
-    return <div className="text-center p-6 text-lg">جاري تحميل اللوحة...</div>;
+  function indexToGridPos(i: number) {
+    const n = size;
+    if (i < n) return { col: i + 1, row: n };
+    if (i < n + (n - 1)) return { col: n, row: n - 1 - (i - n) };
+    if (i < n + 2 * (n - 1)) return { col: n - 1 - (i - (n + n - 2)), row: 1 };
+    return { col: 1, row: 2 + i - (n + 2 * (n-1)) };
   }
 
-  // Compute board geometry once (memoized)
-  const { sideLength, totalCells, boardCells } = useMemo(() => {
-    const side = Math.floor((board.length + 3) / 4);
-    const total = (side + 1) * 4 - 4;
-    const cells: Array<Property | null> = Array(total).fill(null);
+  function indexToDirection(i: number) {
+    const n = size;
+    if (i < n) return 'right';
+    if (i < n + (n - 1)) return 'up';
+    if (i < n + 2 * (n - 1)) return 'left';
+    return 'down';
+  }
 
-    for (let i = 0; i < board.length && i < total; i++) {
-      let x = 0, y = 0;
-      const n = side; // number of "inner steps" per side
-      if (i <= n) {
-        // bottom row: left -> right
-        x = i;
-        y = n;
-      } else if (i <= n * 2) {
-        // right col: bottom-1 -> top
-        x = n;
-        y = n - (i - n);
-      } else if (i <= n * 3) {
-        // top row: right-1 -> left
-        x = n - (i - n * 2);
-        y = 0;
-      } else {
-        // left col: top+1 -> bottom-1
-        x = 0;
-        y = i - n * 3;
-      }
-      const index = y * (n + 1) + x;
-      if (index >= 0 && index < cells.length) cells[index] = board[i];
-    }
+  function playersOnTileByIndex(idx: number, prop: Property | null) {
+    return players.filter(pl => {
+      if (pl == null || pl.status === 'bankrupt') return false;
+      if (prop && String(pl.position) === String(prop.id)) return true;
+      if (typeof pl.position === 'number' && pl.position === idx) return true;
+      return false;
+    });
+  }
 
-    return { sideLength: side, totalCells: total, boardCells: cells };
-  }, [board]);
+  function getComputedContrast(hex?: string | null) {
+    if (!hex) return true;
+    const rgb = hexToRgb(hex);
+    if (!rgb) return true;
+    const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+    return lum > 0.5;
+  }
+  
+  function hexToRgb(hex?: string | null) {
+    if (!hex) return null;
+    const h = hex.replace('#', '');
+    if (h.length === 3) return { r: parseInt(h[0] + h[0], 16), g: parseInt(h[1] + h[1], 16), b: parseInt(h[2] + h[2], 16) };
+    if (h.length === 6) return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+    return null;
+  }
+  
+  function hexToRgba(hex?: string | null, alpha = 1) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return `rgba(0,0,0,${alpha})`;
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+  }
 
-  // Fast lookup map: propertyId -> players on that tile
-  const playersByPosition = useMemo(() => {
-    const map = new Map<string | number, Player[]>();
-    for (const p of players) {
-      if (!p || p.status === 'bankrupt') continue;
-      if (!map.has(p.position)) map.set(p.position, []);
-      map.get(p.position)!.push(p);
-    }
-    return map;
-  }, [players]);
-
-  const activePlayer = players.find(p => p.id === activePlayerId);
-  const activePosition = activePlayer?.position;
-
-  useEffect(() => {
-    // Automatic server-side action when movement phase occurs and dice rolled
-    const movePlayer = async () => {
-      if (diceRoll === null || !isMyTurn) return;
-      // small delay to let frontend animations start
-      await new Promise(resolve => setTimeout(resolve, 700));
-      try {
-        await handlePropertyAction(gameId, activePlayerId);
-      } catch (e) {
-        console.error('handlePropertyAction failed', e);
-      }
-    };
-
-    if (gameState === 'movement') movePlayer();
-  }, [diceRoll, isMyTurn, gameId, activePlayerId, gameState]);
-
-  // click handler: offer a manual activation for tile (helpful for debugging / accessibility)
-  const handleTileActivate = async (prop: Property) => {
-    if (!isMyTurn) return;
-    if (activePosition !== prop.id) return;
-    try {
-      await handlePropertyAction(gameId, activePlayerId);
-    } catch (e) {
-      console.error('manual handlePropertyAction failed', e);
-    }
-  };
-
-  // Determine grid template sizes (responsive)
-  const minTile = 52; // px
-  const template = `repeat(${sideLength + 1}, minmax(${minTile}px, 1fr))`;
+  const gridTemplate = `repeat(${size}, minmax(${TILE_MIN_SIZE}px, 1fr))`;
 
   return (
-    <div className="p-3 rounded-3xl shadow-2xl bg-gradient-to-br from-violet-50 to-violet-100 dark:from-zinc-900 dark:to-zinc-800 w-full max-w-[92vh] mx-auto">
+    <div className={cn('p-3 rounded-3xl shadow-2xl bg-gradient-to-br from-violet-50 to-violet-100 dark:from-zinc-900 dark:to-zinc-800 w-full max-w-[92vh] mx-auto', className)}>
       <div
         className="relative w-full h-full grid"
-        style={{
-          gridTemplateColumns: template,
-          gridTemplateRows: template,
-          gap: `${TILE_GAP}px`,
-        }}
+        style={{ gridTemplateColumns: gridTemplate, gridTemplateRows: gridTemplate, gap: '10px' }}
       >
-        {boardCells.map((property: Property | null, index: number) => {
-          if (!property) return <div key={index} />;
-
-          const ownerColor = property.ownerId ? players.find(p => p.id === property.ownerId)?.color : undefined;
-          const playersOnTile = playersByPosition.get(property.id) || [];
-          const isActive = activePosition === property.id;
-
-          const gridRow = Math.floor(index / (sideLength + 1)) + 1;
-          const gridColumn = (index % (sideLength + 1)) + 1;
+        {tileSlots.map((prop, idx) => {
+          const { row, col } = indexToGridPos(idx);
+          const dir = indexToDirection(idx);
+          const isStart = idx === 0;
+          const owner = prop?.ownerId ? players.find(p => p.id === prop.ownerId) : undefined;
+          const ownerColor = owner?.color ?? undefined;
+          const textColor = ownerColor ? (getComputedContrast(ownerColor) ? '#000' : '#fff') : undefined;
+          const playersOnTile = playersOnTileByIndex(idx, prop);
 
           return (
-            <div key={property.id} className="p-0" style={{ gridRow, gridColumn }}>
-              <Tile property={property} ownerColor={ownerColor} playersOnTile={playersOnTile} isActive={isActive} onActivate={() => handleTileActivate(property)} />
+            <div key={`slot-${idx}`} style={{ gridRow: row, gridColumn: col }} className="p-0">
+               <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <motion.div
+                      layout
+                      initial={{ opacity: 0, scale: 0.97 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      whileHover={{ scale: 1.03 }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+                      className={cn('relative rounded-md border p-2 flex flex-col items-center justify-center text-center select-none bg-white', isStart ? 'shadow-lg' : 'shadow')}
+                      style={{
+                        minWidth: TILE_MIN_SIZE,
+                        minHeight: TILE_MIN_SIZE,
+                        borderWidth: 2,
+                        borderStyle: 'solid',
+                        borderColor: ownerColor ?? (isStart ? '#7c3aed' : 'rgba(15,23,42,0.06)'),
+                        background: ownerColor ? `linear-gradient(180deg, ${hexToRgba(ownerColor, 0.06)}, ${hexToRgba(ownerColor, 0.12)})` : undefined,
+                        padding: 8,
+                      }}
+                      role={prop ? 'button' : 'group'}
+                      tabIndex={0}
+                      aria-label={prop ? prop.name : `خانة ${idx}`}
+                    >
+                      <div className="absolute right-1 top-1 text-[10px] font-mono text-gray-500">{idx}</div>
+                      {isStart ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <Home className="w-6 h-6 text-purple-700" />
+                          <div className="text-xs font-bold text-purple-800">{"بداية"}</div>
+                          <div className="text-[10px] text-gray-500">اتجاه</div>
+                          <div className="mt-1">
+                            {dir === 'right' && <ArrowRight className="w-4 h-4 text-purple-600" />}
+                          </div>
+                        </div>
+                      ) : prop ? (
+                        <>
+                          <div className="flex items-center gap-2">
+                            {prop.type === 'property' && <Building2 className="w-5 h-5 text-gray-700" />}
+                            {prop.type === 'fine' && <Gavel className="w-5 h-5 text-red-600" />}
+                            <div className="flex flex-col items-start">
+                              <div className="text-[12px] font-semibold truncate max-w-[100px]" style={{ color: ownerColor ? textColor : undefined }}>{prop.name}</div>
+                              {prop.type === 'property' && <div className="text-[11px] text-gray-600">{prop.price} د.ع</div>}
+                            </div>
+                          </div>
+                          <div className="absolute left-1 top-1">
+                            {dir === 'right' && <ArrowRight className="w-4 h-4 text-gray-300" />}
+                            {dir === 'up' && <ArrowUp className="w-4 h-4 text-gray-300" />}
+                            {dir === 'left' && <ArrowLeft className="w-4 h-4 text-gray-300" />}
+                            {dir === 'down' && <ArrowDown className="w-4 h-4 text-gray-300" />}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-sm text-gray-400">فارغ</div>
+                      )}
+                      {ownerColor && <div className="absolute left-0 bottom-0 w-full h-1.5 rounded-b-md" style={{ background: ownerColor }} />}
+                      {playersOnTile.length > 0 && (
+                        <div className="absolute left-1 bottom-1 flex items-center -space-x-1">
+                          {playersOnTile.slice(0, 4).map(pl => (
+                            <div key={pl.id} className="w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden" title={pl.name}>
+                              <PlayerAvatar avatarId={pl.avatarId} className="w-full h-full" />
+                            </div>
+                          ))}
+                          {playersOnTile.length > 4 && (
+                            <div className="w-6 h-6 rounded-full bg-gray-800 text-white flex items-center justify-center text-xs">+{playersOnTile.length - 4}</div>
+                          )}
+                        </div>
+                      )}
+                    </motion.div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {prop ? (
+                      <div className="text-sm">
+                        <div className="font-bold">{prop.name}</div>
+                        {prop.type === 'property' && (
+                          <>
+                            <div>السعر: {prop.price} د.ع</div>
+                            <div>الإيجار: {prop.rent} د.ع</div>
+                          </>
+                        )}
+                        {prop.type === 'fine' && <div>غرامة: {prop.fineAmount} د.ع</div>}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-500">خانة غير مخصصة</div>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           );
         })}
-
-        {/* Center hub */}
         <div
-          className="flex items-center justify-center flex-col p-3 rounded-xl bg-gradient-to-tl from-white/60 to-transparent dark:from-black/40"
-          style={{ gridArea: `2 / 2 / ${sideLength + 1} / ${sideLength + 1}`, minHeight: 120 }}
+          className="flex items-center justify-center flex-col p-4 rounded-xl bg-white/70 dark:bg-black/40"
+          style={{ gridArea: `2 / 2 / ${size} / ${size}`, minHeight: Math.max(140, TILE_MIN_SIZE * (size - 2)) }}
         >
           <h2 className="text-lg md:text-2xl font-extrabold text-violet-700 dark:text-violet-300">التاجر المتعلّم</h2>
-
-          <div className="text-center my-2 bg-black/10 dark:bg-white/10 p-2 rounded-lg w-full max-w-[220px]">
-            <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">الجولة</p>
-            <p className="text-xl font-bold font-mono text-gray-800 dark:text-gray-100">{currentRound}/{maxRounds}</p>
-          </div>
-
-          <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">
-            <div className={cn("px-3 py-1 rounded-full text-sm font-semibold shadow-sm flex items-center gap-2", isMyTurn ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-800 dark:bg-zinc-700 dark:text-zinc-200') }>
-              <span>{isMyTurn ? 'دورك الآن' : 'انتظر دورك'}</span>
-            </div>
-
-            <div className="ml-2 text-sm">
-              {diceRoll !== null && (
-                <div className="px-2 py-1 bg-white/80 dark:bg-black/40 rounded-md shadow">نرد: <strong>{diceRoll}</strong></div>
-              )}
-            </div>
-          </div>
-
-          {/* quick players preview */}
-          <div className="mt-3 flex items-center gap-2 flex-wrap justify-center">
+          <p className="text-sm text-gray-600">مركز التحكم — هنا يمكن إضافة أزرار رمية النرد، ملخص الجولات، تفاصيل سريعة.</p>
+          <div className="mt-4 w-full flex flex-wrap justify-center gap-2">
             {players.map(pl => (
               <div key={pl.id} className="flex items-center gap-2 px-2 py-1 rounded-md bg-white/60 dark:bg-black/30">
                 <PlayerAvatar avatarId={pl.avatarId} className="w-6 h-6 rounded-full" />
@@ -362,4 +210,4 @@ export default function GameBoard({ board, players, gameId, diceRoll, isMyTurn, 
       </div>
     </div>
   );
-}
+};

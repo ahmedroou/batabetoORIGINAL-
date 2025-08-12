@@ -1,4 +1,4 @@
-
+// .
 "use client";
 
 import { useMemo } from "react";
@@ -41,15 +41,9 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
     <div className="w-full h-screen flex flex-col md:flex-row p-2 gap-4 bg-gray-100 dark:bg-gray-900">
       <div className="flex-grow flex flex-col items-center justify-center relative min-h-0">
           <GameBoard
-            gameId={game.id}
+            properties={es.board}
             players={game.players}
-            board={es.board}
-            diceRoll={es.lastDiceRoll ?? null}
-            isMyTurn={isMyTurn}
-            activePlayerId={activePlayerId}
-            gameState={game.gameState}
-            currentRound={game.round || 1}
-            maxRounds={es.settings?.maxRounds || 20}
+            className="w-full h-full"
           />
         
         <AnimatePresence>
