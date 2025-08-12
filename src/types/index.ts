@@ -508,7 +508,7 @@ export interface Property {
     rent: number;
     ownerId: string | null;
     fineAmount?: number;
-    color?: string;
+    color?: string; // e.g. '#8B5CF6'
 }
 
 export interface EducatedMerchantQuestion {
