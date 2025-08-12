@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { Game, Player, Property } from '@/types';
@@ -361,35 +362,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
                     })}
                 </div>
             </div>
-
-            <style jsx>{`
-                @keyframes pulseGlow {
-                  0% { box-shadow: 0 0 6px rgba(255,255,255,0.06); }
-                  50% { box-shadow: 0 0 18px rgba(255,255,255,0.14); }
-                  100% { box-shadow: 0 0 6px rgba(255,255,255,0.06); }
-                }
-
-                .animate-pulse-glow {
-                  animation: pulseGlow 1.8s infinite;
-                }
-                
-                /* tile highlight for temporary landing feedback */
-                .tile-highlight {
-                  box-shadow: 0 0 18px rgba(99,102,241,0.18), inset 0 0 18px rgba(99,102,241,0.05);
-                  border-color: rgba(99,102,241,0.9) !important;
-                }
-
-                /* small glow for newly bought property */
-                @keyframes boughtPulse {
-                  0% { box-shadow: 0 0 0 rgba(255,215,0,0.0); }
-                  40% { box-shadow: 0 0 22px rgba(255,215,0,0.28); }
-                  100% { box-shadow: 0 0 0 rgba(255,215,0,0.0); }
-                }
-
-                .animate-pulse-glow {
-                  animation: boughtPulse 1.2s ease-out;
-                }
-            `}</style>
         </div>
     );
 }
