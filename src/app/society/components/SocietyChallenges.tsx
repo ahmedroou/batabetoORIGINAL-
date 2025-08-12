@@ -171,8 +171,9 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
         }
         const calculateProgress = () => {
             if (!challenge.createdAt || !challenge.endsAt) return;
-            const createdAt = (challenge.createdAt instanceof Timestamp) ? challenge.createdAt.toDate() : new Date(challenge.createdAt);
-            const endsAt = (challenge.endsAt instanceof Timestamp) ? challenge.endsAt.toDate() : new Date(challenge.endsAt);
+            // Safe conversion for both Timestamp and Date objects
+            const createdAt = challenge.createdAt instanceof Timestamp ? challenge.createdAt.toDate() : new Date(challenge.createdAt);
+            const endsAt = challenge.endsAt instanceof Timestamp ? challenge.endsAt.toDate() : new Date(challenge.endsAt);
             if (!createdAt || !endsAt) return;
             const totalDuration = endsAt.getTime() - createdAt.getTime();
             const elapsed = Date.now() - createdAt.getTime();
@@ -323,7 +324,7 @@ export default function SocietyChallenges({ filter = 'active' }: { filter?: 'act
     useEffect(() => {
         const fetchChallenges = async () => {
             setIsLoading(true);
-            const fetchedChallenges = await getAllChallengesForAdmin(); // Fetch all and filter client-side
+            const fetchedChallenges = await getAllChallengesForAdmin();
             setChallenges(fetchedChallenges);
             setIsLoading(false);
         };

@@ -27,8 +27,6 @@ const LoadingState = ({ text }: { text: string }) => (
 
 export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) {
     const renderContent = () => {
-        // The main game logic is now within GameBoard.
-        // We only switch out for lobby and final results.
         switch (game.gameState) {
             case 'lobby':
                 return (
@@ -62,8 +60,10 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
             case 'question':
             case 'turn_end':
                  return (
+                    // We now use a consistent key here to prevent the GameBoard from unmounting and remounting
+                    // between active game states. The logic inside GameBoard will handle showing/hiding modals.
                      <motion.div
-                        key="game_board" // Use a consistent key for the active game states
+                        key="game_board"
                         initial={{ opacity: 0, scale: 1 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 1 }}

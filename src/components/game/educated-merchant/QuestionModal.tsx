@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -26,7 +25,6 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
     const isHost = game.hostId === self.id;
 
     useEffect(() => {
-        // Reset state when a new question appears for the same player.
         if (isOpen && isMyTurnToAnswer) {
             setSelectedAnswer(null);
             setIsSubmitting(false);
@@ -42,7 +40,6 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
 
         setTimeout(async () => {
             await answerQuestion(game.id, self.id, selectedAnswer);
-            // The modal will close automatically when the game state changes.
         }, 1500); 
     };
 
@@ -106,7 +103,7 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
                                 ))}
                             </RadioGroup>
                         </div>
-                        <Button onClick={handleSubmit} disabled={!selectedAnswer || isSubmitting || answerState !== 'pending'}>
+                        <Button onClick={handleSubmit} disabled={!selectedAnswer || isSubmitting || answerState !== 'pending'} className="w-full">
                             {isSubmitting ? <Loader2 className="animate-spin" /> : 'تأكيد الإجابة'}
                         </Button>
                     </motion.div>

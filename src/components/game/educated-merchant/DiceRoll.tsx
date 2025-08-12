@@ -11,19 +11,14 @@ import { useToast } from '@/hooks/use-toast';
 
 interface DiceRollProps { game: Game; self: Player }
 
-// Default dice configuration (server uses 1..5 by default in our backend refactor)
 const DEFAULT_DICE_MAX = 5;
-const MIN_FACE_RENDER = 6; // always render at least 6 faces so animation looks natural
-const FACE_HEIGHT = 80; // px height used by RollingNumber for layout/animation
+const MIN_FACE_RENDER = 6;
+const FACE_HEIGHT = 80;
 
-// Small helpers for timers
 const setRafTimeout = (fn: () => void, ms: number) => window.setTimeout(fn, ms);
 const clearRafTimeout = (id: number | null) => { if (id) window.clearTimeout(id); };
 
-/** RollingNumber visual: scrolls a column of numeric faces to land on `number`.
- *  - `maxFace` controls how many faces are rendered (>= MIN_FACE_RENDER)
- *  - `isAnimating` affects transition duration
- */
+
 function RollingNumber({ number, maxFace = MIN_FACE_RENDER, isAnimating = false }: { number: number; maxFace?: number; isAnimating?: boolean }) {
   const facesCount = Math.max(MIN_FACE_RENDER, maxFace);
   const faces = Array.from({ length: facesCount }, (_, i) => i + 1);
@@ -50,8 +45,6 @@ function RollingNumber({ number, maxFace = MIN_FACE_RENDER, isAnimating = false 
 export function DiceRoll({ game, self }: DiceRollProps) {
   const { toast } = useToast();
   const [isRolling, setIsRolling] = useState(false);
-
-  // optimistic local number updated frequently while waiting for server
   const [optimisticNumber, setOptimisticNumber] = useState<number | null>(null);
   const [localHistory, setLocalHistory] = useState<number[]>([]);
 
@@ -64,8 +57,8 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const lastRoll = game.educatedMerchantState?.lastDiceRoll;
   const rollNonce = game.educatedMerchantState?.rollAnimationNonce ?? null;
   const diceMax = game.educatedMerchantState?.diceMax ?? DEFAULT_DICE_MAX;
+  const lastNonceRef = useRef<number | null>(null);
 
-  // Start a local spinning animation (updates optimisticNumber rapidly)
   const startLocalSpin = useCallback(() => {
     if (animIntervalRef.current) return;
     setIsRolling(true);
@@ -73,7 +66,6 @@ export function DiceRoll({ game, self }: DiceRollProps) {
       setOptimisticNumber(Math.floor(Math.random() * Math.max(6, diceMax)) + 1);
     }, 80);
 
-    // fallback stop after 8s to avoid infinite spin
     fallbackTimeoutRef.current = setRafTimeout(() => {
       if (animIntervalRef.current) {
         window.clearInterval(animIntervalRef.current!);
@@ -92,16 +84,13 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     setOptimisticNumber(null);
   }, []);
 
-  // When the server indicates a roll started (nonce change), ensure we spin locally
-  const lastNonceRef = useRef<number | null>(null);
   useEffect(() => {
     if (rollNonce === null) return;
-    if (lastNonceRef.current === rollNonce) return; // already handled
+    if (lastNonceRef.current === rollNonce) return; 
     lastNonceRef.current = rollNonce;
     startLocalSpin();
   }, [rollNonce, startLocalSpin]);
 
-  // When authoritative lastRoll arrives, stop local animation and show result
   useEffect(() => {
     if (typeof lastRoll === 'number') {
       stopLocalSpin();
@@ -109,7 +98,6 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     }
   }, [lastRoll, stopLocalSpin]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (animIntervalRef.current) window.clearInterval(animIntervalRef.current);
@@ -117,23 +105,17 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     };
   }, []);
 
-  // user action: request a roll
   const handleRoll = useCallback(async () => {
-    if (!isMyTurn) return;
-    if (isRolling) return;
-
+    if (!isMyTurn || isRolling) return;
     startLocalSpin();
-
     try {
       await rollDice(game.id, self.id);
-      // server will update lastRoll and nonce — our effects will pick those up
     } catch (err: any) {
       stopLocalSpin();
       toast({ title: 'فشل رمي النرد', description: err?.message || 'حدث خطأ أثناء الاتصال بالخادم', variant: 'destructive' });
     }
   }, [game.id, isMyTurn, isRolling, self.id, startLocalSpin, stopLocalSpin, toast]);
 
-  // keyboard accessibility
   const onKeyDown = useCallback((e: React.KeyboardEvent) => {
     if ((e.key === 'Enter' || e.key === ' ') && isMyTurn && !isRolling) {
       e.preventDefault();
@@ -141,7 +123,6 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     }
   }, [handleRoll, isMyTurn, isRolling]);
 
-  // choose which number to display: authoritative lastRoll > optimistic > null
   const displayedNumber = typeof lastRoll === 'number' ? lastRoll : optimisticNumber;
 
   return (
@@ -151,19 +132,15 @@ export function DiceRoll({ game, self }: DiceRollProps) {
           <CardTitle className="text-primary">نتيجة النرد</CardTitle>
           <CardDescription className="text-slate-400">{isMyTurn ? 'دورك — اضغط لرمي النرد' : `دور: ${game.players.find(p => p.id === currentTurnPlayerId)?.name || 'لاعب'}`}</CardDescription>
         </CardHeader>
-
         <CardContent>
           <div className="flex flex-col items-center gap-3">
             <RollingNumber number={displayedNumber ?? 1} maxFace={Math.max(MIN_FACE_RENDER, diceMax)} isAnimating={isRolling} />
-
             <div className="flex w-full gap-2">
               <Button onClick={handleRoll} disabled={!isMyTurn || isRolling} className="flex-1" aria-disabled={!isMyTurn || isRolling} aria-label={isMyTurn ? (isRolling ? 'جارٍ رمي النرد' : 'ارمِ النرد') : 'ليس دورك'}>
                 {isRolling ? <Loader2 className="animate-spin" /> : (isMyTurn ? 'ارمِ النرد' : 'انتظر')}
               </Button>
             </div>
-
             <div className="text-xs text-slate-400">هناك تأخير بسيط أثناء انتظار نتيجة الخادم — يتم تشغيل رسوم متحركة محلية لراحة العرض.</div>
-
             <div className="w-full mt-2 text-left">
               <div className="text-sm text-slate-200 mb-1">سجل الرميات (محلي):</div>
               <div className="flex gap-2">

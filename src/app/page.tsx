@@ -10,7 +10,6 @@ import { Megaphone, Swords } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-// Import newly created components
 import HomeHeader from "./components/home/HomeHeader";
 import UserProfileCard from "./components/home/UserProfileCard";
 import GameGrid from "./components/home/GameGrid";
@@ -18,7 +17,6 @@ import LobbySection from "./components/home/LobbySection";
 import HomeDialogs from "./components/home/Dialogs";
 import WelcomeGuest from "./components/home/WelcomeGuest";
 import MainLoadingSkeleton from "./components/home/MainLoadingSkeleton";
-import SocietyChallenges from "./society/components/SocietyChallenges";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CompactChallengeList } from "./components/home/CompactChallengeList";
 
