@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -279,6 +278,7 @@ export interface Player {
   temporaryTitle?: string | null;
   bankruptAt?: Timestamp;
   color?: string; // e.g. '#8B5CF6'
+  money?: number;
 }
 
 export interface Humiliation {
@@ -501,7 +501,7 @@ export interface Property {
     id: number; // Index on the board
     type: 'property' | 'start' | 'fine';
     name: string;
-    category: string; // Question category
+    category: string;
     price: number;
     rent: number;
     ownerId: string | null;
@@ -692,8 +692,9 @@ export interface Game {
 
   // "Educated Merchant" specific state
   educatedMerchantState?: {
-    settings?: {
-        maxRounds: number;
+    settings: { 
+        maxRounds: number,
+        categories: string[],
     };
     board: Property[];
     questionsByCategory?: Record<string, EducatedMerchantQuestion[]>;
@@ -702,13 +703,14 @@ export interface Game {
     lastDiceRoll?: number | null;
     currentQuestion?: EducatedMerchantQuestion | null;
     timerEndsAt?: Timestamp | null;
-    activityLog?: string[];
+    activityLog?: { message: string, timestamp: Date }[];
     pendingPurchase?: {
         playerId: string;
         propertyId: number;
         price: number;
         questionId: string;
     };
+    bankruptPlayers?: string[];
   };
 }
 
@@ -765,4 +767,3 @@ export interface PrivateChat {
     participants: string[];
     messages: PrivateChatMessage[];
 }
-    

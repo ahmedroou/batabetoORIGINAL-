@@ -26,7 +26,7 @@ import type { Player, Game, GameState, ChallengeResult, DuelChallenge, Challenge
 import { 
     generateGameId
 } from '@/lib/actions/helpers';
-import { getTrapAnswerCategories } from './admin';
+import { getTrapAnswerCategories, getEducatedMerchantCategories } from './admin';
 import { getPlayerFromUserId } from './user/queries';
 
 
@@ -139,7 +139,6 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                     categories: categoriesResult.categories || [],
                     rounds: 10,
                     answerTime: 60,
-                    guessTime: 60,
                 },
                 trickStats: { trickedBy: {}, trickedOthers: {} },
             };
@@ -175,8 +174,12 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
                 turn: 'red',
             };
         } else if (gameType === 'educated-merchant') {
+             const categoriesResult = await getEducatedMerchantCategories();
             newGame.educatedMerchantState = {
-                settings: { maxRounds: 20 },
+                settings: { 
+                    maxRounds: 20,
+                    categories: categoriesResult.categories || [],
+                 },
                 board: [],
                 turnOrder: [],
                 currentTurnIndex: 0,
