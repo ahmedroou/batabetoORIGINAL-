@@ -13,6 +13,7 @@ export const ALL_PERMISSIONS: Permission[] = [
     { id: 'has_bodyguard', name: 'حارس شخصي', description: 'لديه حارس شخصي يمنع أول محاولة إذلال ضده.', category: 'social' },
     { id: 'can_issue_bounty', name: 'إصدار مكافأة', description: 'يمكنه وضع مكافأة على رأس لاعب آخر. أول لاعب يتسبب في هزيمته يحصل على المكافأة.', category: 'social' },
     { id: 'can_view_player_stats', name: 'عرض الإحصائيات', description: 'يمكنه عرض إحصائيات مفصلة لأي لاعب (نسبة الفوز، إلخ).', category: 'social' },
+    { id: 'can_write_article', name: 'كتابة مقال', description: 'يمكنه كتابة مقال في الجريدة بتكلفة مخفضة أو مجانًا.', category: 'social' },
     { id: 'has_golden_name', name: 'اسم ذهبي', description: 'يظهر اسمه باللون الذهبي في جميع أنحاء اللعبة.', category: 'meta' },
     { id: 'has_special_avatar_aura', name: 'هالة مميزة', description: 'تظهر هالة متوهجة حول صورته الرمزية (Avatar).', category: 'meta' },
     { id: 'can_access_exclusive_avatars', name: 'شخصيات حصرية', description: 'يحصل على إمكانية الوصول إلى مجموعة من الشخصيات الحصرية.', category: 'meta' },

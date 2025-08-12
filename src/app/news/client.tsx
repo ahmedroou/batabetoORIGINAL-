@@ -195,7 +195,7 @@ export default function NewsClient() {
                             <Link href="/admin">لوحة تحكم الأخبار</Link>
                         </Button>
                     )}
-                    {userProfile && (
+                    {userProfile && userProfile?.permissions?.includes('can_write_article') && (
                        <CreateArticleDialog onArticleCreated={fetchArticles} />
                     )}
                 </div>
@@ -263,5 +263,3 @@ export default function NewsClient() {
         </div>
     );
 }
-
-    

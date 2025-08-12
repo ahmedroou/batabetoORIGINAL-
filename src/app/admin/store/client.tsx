@@ -18,8 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { setAvatarPrices, setPunishmentAvatarPrices, setDefaultAvatar, setSocialRanks, addPermissionToRank, removePermissionFromRank, getAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar, getTopUsers } from '@/lib/actions/admin';
-import { getRanks, getTopUsers as queryTopUsers } from '@/lib/actions/user/queries';
+import { setAvatarPrices, setPunishmentAvatarPrices, setDefaultAvatar, setSocialRanks, addPermissionToRank, removePermissionFromRank, getAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar } from '@/lib/actions/admin';
+import { getRanks, getTopUsers as queryTopUsers } from '@/lib/actions/user';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
