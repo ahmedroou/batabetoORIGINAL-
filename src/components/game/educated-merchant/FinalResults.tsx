@@ -12,10 +12,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface FinalResultsProps {
   game: Game;
-  onPlayAgain?: () => void; // optional callback hook
 }
 
-export function FinalResults({ game, onPlayAgain }: FinalResultsProps) {
+export function FinalResults({ game }: FinalResultsProps) {
   const router = useRouter();
   const [showConfetti, setShowConfetti] = useState(false);
   const confettiCount = 22;
@@ -205,10 +204,7 @@ export function FinalResults({ game, onPlayAgain }: FinalResultsProps) {
 
           <CardFooter className="flex gap-2">
             <Button
-              onClick={() => {
-                if (onPlayAgain) return onPlayAgain();
-                router.push('/');
-              }}
+              onClick={() => router.push('/')}
               className="flex-1"
             >
               العب مرة أخرى

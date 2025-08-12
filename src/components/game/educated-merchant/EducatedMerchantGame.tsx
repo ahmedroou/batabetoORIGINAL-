@@ -16,9 +16,6 @@ import { resolveExpiredQuestion } from '@/lib/actions/educated-merchant';
 interface EducatedMerchantGameProps {
   game: Game;
   self: Player;
-  // parent is responsible for providing a realtime-updated `game` object
-  // these handlers are optional - component will call API routes if not provided
-  onRefresh?: () => Promise<void>;
 }
 
 // Inner component to hold the main game view and its hooks
@@ -93,11 +90,10 @@ const EducatedMerchantGameView = ({ game, self }: EducatedMerchantGameProps) => 
     );
 }
 
-export function EducatedMerchantGame({ game, self, onRefresh }: EducatedMerchantGameProps) {
+export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) {
     const es = game.educatedMerchantState;
 
-    // Render based on game state, ensuring hooks are not called conditionally.
-    if (!es || !es.board?.length || game.gameState === "lobby") {
+    if (game.gameState === 'lobby' || !es?.board || es.board.length === 0) {
         return <Lobby game={game} self={self} />;
     }
 
@@ -105,6 +101,5 @@ export function EducatedMerchantGame({ game, self, onRefresh }: EducatedMerchant
         return <FinalResults game={game} />;
     }
 
-    // Pass props to the main game view which contains all the hooks.
-    return <EducatedMerchantGameView game={game} self={self} onRefresh={onRefresh} />;
+    return <EducatedMerchantGameView game={game} self={self} />;
 }

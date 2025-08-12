@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -18,7 +19,7 @@ interface QuestionModalProps {
   onAnswered?: (answer: string | null, correct: boolean | null) => void; // optional callback
 }
 
-const QUESTION_TIME_LIMIT = 25; // seconds (UI fallback)
+const QUESTION_TIME_SECONDS = 25; // seconds (UI fallback)
 
 function TimerRing({ ratio }: { ratio: number }) {
   // ratio: 0..1 (1 = full time remaining)
@@ -47,7 +48,7 @@ export function QuestionModal({ game, self, onAnswered }: QuestionModalProps) {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [submittedAnswer, setSubmittedAnswer] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<number | null>(QUESTION_TIME_LIMIT);
+  const [timeLeft, setTimeLeft] = useState<number | null>(QUESTION_TIME_SECONDS);
   const submitRef = useRef(false);
 
   const question: EducatedMerchantQuestion | undefined = game.educatedMerchantState?.currentQuestion as any;
@@ -77,7 +78,7 @@ export function QuestionModal({ game, self, onAnswered }: QuestionModalProps) {
       if (!mounted) return;
       const now = Date.now();
       if (!endTimestamp) {
-        setTimeLeft(QUESTION_TIME_LIMIT);
+        setTimeLeft(QUESTION_TIME_SECONDS);
         return;
       }
       const remaining = Math.max(0, Math.round((endTimestamp - now) / 1000));
@@ -207,8 +208,8 @@ export function QuestionModal({ game, self, onAnswered }: QuestionModalProps) {
   }
 
   // active player view
-  const remaining = timeLeft ?? QUESTION_TIME_LIMIT;
-  const ratio = Math.max(0, Math.min(1, remaining / QUESTION_TIME_LIMIT));
+  const remaining = timeLeft ?? QUESTION_TIME_SECONDS;
+  const ratio = Math.max(0, Math.min(1, remaining / QUESTION_TIME_SECONDS));
 
   const answerIsCorrect = (ans: string | null) => ans != null && ans === question.correctAnswer;
 

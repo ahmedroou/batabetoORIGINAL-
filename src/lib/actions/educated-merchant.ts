@@ -351,7 +351,6 @@ export async function buyPropertyAttempt(gameId: string, playerId: string): Prom
       for (const [k, v] of pool.entries()) newQuestionsObj[k] = v;
 
       transaction.update(gameRef, {
-        [`playerScores.${playerId}`]: increment(-property.price),
         'gameState': 'question',
         'educatedMerchantState.currentQuestion': randomQuestion,
         'educatedMerchantState.timerEndsAt': Timestamp.fromMillis(Date.now() + QUESTION_TIME_SECONDS * 1000),
@@ -384,19 +383,25 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
 
       const propIdx = (es.board || []).findIndex((b: Property) => Number(b.id) === Number(pending.propertyId));
       if (propIdx === -1) throw new Error('العقار غير موجود.');
+      
+      const playerBalance = game.playerScores?.[playerId] || 0;
+      if (playerBalance < pending.price) throw new Error('رصيدك لم يعد كافياً لإتمام الشراء.');
+
 
       const boardCopy = [...(es.board || [])];
       let activityLog = [...(es.activityLog || [])];
       let playerScoresCopy = { ...(game.playerScores || {}) };
 
       const isCorrect = (answer === question.correctAnswer);
+      
+      playerScoresCopy[playerId] -= pending.price;
 
       if (isCorrect) {
         boardCopy[propIdx] = { ...boardCopy[propIdx], ownerId: playerId };
         activityLog.push(`${game.players.find(p => p.id === playerId)?.name || 'لاعب'} أجاب بشكل صحيح وامتلك ${boardCopy[propIdx].name}.`);
       } else {
         const refund = Math.floor(pending.price / 4);
-        playerScoresCopy[playerId] = (playerScoresCopy[playerId] || 0) + refund;
+        playerScoresCopy[playerId] += refund;
         activityLog.push(`${game.players.find(p => p.id === playerId)?.name || 'لاعب'} أجاب بشكل خاطئ، استرد ${refund} د.ع.`);
       }
 

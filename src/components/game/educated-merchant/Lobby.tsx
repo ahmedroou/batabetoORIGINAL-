@@ -1,4 +1,4 @@
-// .
+
 "use client";
 
 import { useState } from 'react';
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { LogOut, Copy, Check, UserX, Loader2, ArrowRight, Settings, Save } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
+import { leaveGame } from '@/lib/actions/room';
 import { startGame, updateEducatedMerchantSettings } from '@/lib/actions/educated-merchant';
 import { Label } from '@/components/ui/label';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -154,7 +154,7 @@ export function Lobby({ game, self }: LobbyProps) {
                         {isSubmitting ? "..." : activePlayers.length < 2 ? `تحتاج لاعبين على الأقل` : "ابدأ اللعبة"}
                     </Button>
                 )}
-                <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
+                <Button onClick={handleLeaveGame} variant="destructive" className="w-full" disabled={isSubmitting}>
                     <LogOut className="mr-2 h-4 w-4" /> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
                 </Button>
             </CardFooter>

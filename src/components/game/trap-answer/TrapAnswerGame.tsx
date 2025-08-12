@@ -1,8 +1,7 @@
 
-
 'use client';
 
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { Game, Player, EmojiReaction, EmojiReactionType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,8 +14,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
-import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, updateGameSettings as updateTrapAnswerSettings, setAwayStatus } from '@/lib/actions/trap-answer';
-import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
+import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, updateGameSettings as updateTrapAnswerSettings } from '@/lib/actions/trap-answer';
+import { kickPlayerFromLobby } from '@/lib/actions/room';
 import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings, EyeOff, AlertTriangle } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -32,52 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { usePageVisibility } from '@/hooks/usePageVisibility';
-
-
-const CountdownTimer = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) => {
-    const calculateTimeLeft = useCallback(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000), [expiryTimestamp]);
-    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
-    const onExpireRef = useRef(onExpire);
-    onExpireRef.current = onExpire;
-
-    useEffect(() => {
-        const remaining = calculateTimeLeft();
-        if (remaining <= 0) {
-            onExpireRef.current();
-            return;
-        }
-        
-        const interval = setInterval(() => {
-            const newRemaining = calculateTimeLeft();
-            if (newRemaining > 0) {
-                setTimeLeft(newRemaining);
-            } else {
-                setTimeLeft(0);
-                clearInterval(interval);
-                onExpireRef.current();
-            }
-        }, 1000);
-
-        return () => clearInterval(interval);
-    }, [expiryTimestamp, calculateTimeLeft]);
-
-    if (timeLeft <= 0) {
-        return <div className="text-lg font-bold text-destructive">انتهى الوقت!</div>;
-    }
-
-    const isLowTime = timeLeft <= 10;
-
-    return (
-        <div className={cn("flex items-center gap-2 p-2 rounded-full transition-all duration-300", 
-            isLowTime ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-muted')}>
-            <TimerIcon className="h-6 w-6" />
-            <div className="text-lg font-bold font-mono">
-               {String(timeLeft).padStart(2, '0')}
-            </div>
-        </div>
-    );
-};
+import { CountdownTimer } from '@/components/game/CountdownTimer';
 
 
 interface TrapAnswerGameProps {
@@ -112,14 +66,10 @@ const EmojiDisplay = ({ reaction }: { reaction: EmojiReaction | null }) => {
 
 export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const { toast } = useToast();
-    const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [settings, setSettings] = useState(game.trapAnswerState?.settings || { categories: [], rounds: 10, answerTime: 60 });
-    const [isCopying, setIsCopying] = useState(false);
     
     const [trapAnswer, setTrapAnswer] = useState('');
     const [chosenGuess, setChosenGuess] = useState<string | null>(null);
-    const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
     
     const [visibleReactions, setVisibleReactions] = useState<Record<string, EmojiReaction | null>>({});
 
@@ -132,14 +82,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             handleTimeout(game.id, self.id);
         }
     }, [game.id, self.id, isHost]);
-
-    const isVisible = usePageVisibility();
-
-    useEffect(() => {
-        if(self.status === 'alive') {
-            setAwayStatus(game.id, self.id, !isVisible);
-        }
-    }, [isVisible, game.id, self.id, self.status]);
 
     useEffect(() => {
         if (game.gameState === 'guessing') {
@@ -169,29 +111,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         setVisibleReactions(newVisibleReactions);
     }, [game.trapAnswerState?.reactions]);
     
-    const handleSettingsChange = (newSettings: Partial<typeof settings>) => {
-        const updatedSettings = { ...settings, ...newSettings };
-        setSettings(updatedSettings);
-    };
-
-    const handleCopyId = () => {
-        setIsCopying(true);
-        navigator.clipboard.writeText(game.id);
-        setTimeout(() => setIsCopying(false), 2000);
-    }
-    
-    const handleStartGame = async () => {
-        if (!isHost) return;
-        setIsSubmitting(true);
-        try {
-            await startTrapAnswerGame(game.id, self.id);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-    
     const handleCategorySelect = useCallback(async (category: string) => {
         if (isSubmitting) return;
         setIsSubmitting(true);
@@ -213,7 +132,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             if (result.error) {
                 toast({ title: "خطأ", description: result.error, variant: "destructive" });
             }
-        } catch (error: any) {
+        } catch (error: any) => {
             toast({ title: "خطأ فادح", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
@@ -253,148 +172,11 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const handleSendReaction = (emoji: EmojiReactionType) => {
         sendReaction(game.id, self.id, emoji);
     };
-    
-    const handleLeaveGame = async () => {
-        if (!self) return;
-        setIsSubmitting(true);
-        const result = await leaveGame(game.id, self.id);
-        if (result.success) {
-          sessionStorage.removeItem(`player-id-${game.id}`);
-          router.push('/');
-          toast({ title: "لقد غادرت الغرفة." })
-        } else {
-          toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        }
-        setIsSubmitting(false);
-    };
 
-    const handleKickPlayer = async () => {
-        if (!playerToKick || !isHost) return;
-        setIsSubmitting(true);
-        const result = await kickPlayerFromLobby(game.id, self.id, playerToKick.id);
-        if (result.error) {
-            toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
-        } else {
-            toast({ title: "نجاح", description: `تم طرد اللاعب ${playerToKick.name}.` });
-        }
-        setPlayerToKick(null);
-        setIsSubmitting(false);
-    };
-    
-    const handleSaveSettings = async () => {
-        if (!isHost) return;
-        setIsSubmitting(true);
-         try {
-            await updateTrapAnswerSettings(game.id, self.id, settings);
-            toast({ title: "تم حفظ الإعدادات بنجاح" });
-        } catch (error: any) {
-            toast({ title: "خطأ في حفظ الإعدادات", description: error.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-
-    const renderLobby = () => (
-        <Card className="w-full max-w-2xl">
-            <CardHeader className="text-center">
-                <CardTitle className="text-2xl">غرفة لعبة: الجواب المفخخ</CardTitle>
-                <CardDescription>ادعُ أصدقاءك للانضمام باستخدام معرف الغرفة</CardDescription>
-                 <div 
-                    className="flex items-center justify-center gap-2 mt-2 p-2 bg-muted rounded-md cursor-pointer hover:bg-muted/80"
-                    onClick={handleCopyId}
-                >
-                    <span className="font-mono text-lg tracking-widest">{game.id}</span>
-                     <TooltipProvider>
-                        <Tooltip open={isCopying}>
-                            <TooltipTrigger asChild>
-                                <button>{isCopying ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}</button>
-                            </TooltipTrigger>
-                             <TooltipContent><p>تم النسخ!</p></TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                </div>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                    <h3 className="font-bold text-center">اللاعبون ({activePlayers.length})</h3>
-                    <div className="space-y-2 p-2 border rounded-lg min-h-[200px]">
-                        {activePlayers.map(p => (
-                            <div key={p.id} className="flex items-center justify-between p-2 bg-background rounded-md">
-                                <div className="flex items-center gap-3">
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
-                                    <span className="font-bold">{p.name}</span>
-                                    {p.id === game.hostId && <span className="text-xs font-bold text-amber-500">(المضيف)</span>}
-                                </div>
-                                {isHost && p.id !== self.id && (
-                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
-                                        <UserX className="w-4 h-4" />
-                                    </Button>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {isHost ? (
-                    <div className="space-y-3">
-                        <h3 className="font-bold text-center flex items-center justify-center gap-2"><Settings/> إعدادات اللعبة</h3>
-                        <div className="space-y-4 p-3 border rounded-lg">
-                             <div className="space-y-2">
-                                <Label>الأقسام</Label>
-                                <ScrollArea className="h-40 border rounded-md p-2">
-                                    {DEFAULT_TRAP_ANSWER_CATEGORIES.map(cat => (
-                                        <div key={cat} className="flex items-center space-x-2 space-x-reverse mb-1">
-                                            <Checkbox
-                                                id={`cat-${cat}`}
-                                                checked={settings.categories.includes(cat)}
-                                                onCheckedChange={(checked) => {
-                                                    const newCategories = checked
-                                                        ? [...settings.categories, cat]
-                                                        : settings.categories.filter(c => c !== cat);
-                                                    handleSettingsChange({ categories: newCategories });
-                                                }}
-                                            />
-                                            <label htmlFor={`cat-${cat}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                                {cat}
-                                            </label>
-                                        </div>
-                                    ))}
-                                </ScrollArea>
-                            </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="rounds">عدد الجولات</Label>
-                                <Input id="rounds" type="number" value={settings.rounds} onChange={(e) => handleSettingsChange({ rounds: parseInt(e.target.value, 10) || 1 })} />
-                            </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="answer-time">وقت الإجابة والتخمين (ثواني)</Label>
-                                <Input id="answer-time" type="number" value={settings.answerTime} onChange={(e) => handleSettingsChange({ answerTime: parseInt(e.target.value, 10) || 60 })} />
-                            </div>
-                            <Button onClick={handleSaveSettings} disabled={isSubmitting} className="w-full">
-                                <Save className="ml-2"/> {isSubmitting ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
-                            </Button>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="text-center text-muted-foreground p-8 flex flex-col items-center justify-center bg-muted/50 rounded-lg">
-                        <Loader2 className="w-8 h-8 animate-spin mb-4" />
-                        <p>في انتظار المضيف لبدء اللعبة...</p>
-                    </div>
-                )}
-            </CardContent>
-            <CardFooter className="flex-col gap-2">
-                 {isHost && (
-                    <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full">
-                        <ArrowRight className="mr-2 h-4 w-4" />
-                        {isSubmitting ? '...' : activePlayers.length < 2 ? `تحتاج لاعبين على الأقل` : 'ابدأ اللعبة'}
-                    </Button>
-                )}
-                <Button onClick={handleLeaveGame} variant="destructive" className="w-full">
-                    <LogOut className="ml-2 h-4 w-4" /> مغادرة
-                </Button>
-            </CardFooter>
-        </Card>
-    );
+    const renderLobby = () => {
+        // This is now handled by GameClient, but we can have a fallback
+        return <p>Lobby view is not available in this context.</p>
+    }
 
     const renderCategorySelection = () => {
         const turnOrder = game.trapAnswerState?.turnOrder || [];
@@ -451,7 +233,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         const pendingPlayers = activePlayers.filter(p => !answeredPlayers.includes(p.id));
 
         return (
-            <Card className="w-full max-w-lg animate-pop-in">
+            <Card className="w-full max-w-lg animate-pop-in relative">
                  {game.trapAnswerState?.timerEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
@@ -506,7 +288,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         const pendingPlayers = activePlayers.filter(p => !answeredPlayers.includes(p.id));
         
         return (
-             <Card className="w-full max-w-lg animate-pop-in">
+             <Card className="w-full max-w-lg animate-pop-in relative">
                  {game.trapAnswerState?.timerEndsAt && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
@@ -726,7 +508,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                 const player = game.players.find(p => p.id === playerId);
                 return { ...player, afkCount: count };
             })
-            .filter(p => p.id) // Filter out any potential undefined players
+            .filter((p): p is Player & { afkCount: number } => !!p.id)
             .sort((a, b) => (b.afkCount || 0) - (a.afkCount || 0))
             .slice(0, 3);
         
@@ -795,42 +577,205 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         )
     };
     
-    const renderGameContent = () => {
-        switch (game.gameState) {
-            case 'lobby': return renderLobby();
-            case 'category-selection': return renderCategorySelection();
-            case 'answer-submission': return renderAnswerSubmission();
-            case 'guessing': return renderGuessing();
-            case 'round-results': return renderRoundResults();
-            case 'final_results': return renderFinalResults();
-            default: return (
-                <Card>
-                    <CardHeader><CardTitle>لعبة الجواب المفخخ</CardTitle></CardHeader>
-                    <CardContent>
-                        <p>حالة غير معروفة: {game.gameState}</p>
-                        <Loader2 className="animate-spin" />
-                    </CardContent>
-                </Card>
-            );
+    if (game.gameState === 'lobby') {
+        return <TrapAnswerLobby game={game} self={self} />;
+    }
+
+    switch (game.gameState) {
+        case 'category-selection': return renderCategorySelection();
+        case 'answer-submission': return renderAnswerSubmission();
+        case 'guessing': return renderGuessing();
+        case 'round-results': return renderRoundResults();
+        case 'final_results': return renderFinalResults();
+        default: return (
+            <Card>
+                <CardHeader><CardTitle>لعبة الجواب المفخخ</CardTitle></CardHeader>
+                <CardContent>
+                    <p>حالة غير معروفة: {game.gameState}</p>
+                    <Loader2 className="animate-spin" />
+                </CardContent>
+            </Card>
+        );
+    }
+}
+
+
+function TrapAnswerLobby({ game, self }: { game: Game, self: Player }) {
+    const { toast } = useToast();
+    const router = useRouter();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [settings, setSettings] = useState(game.trapAnswerState?.settings || { categories: [], rounds: 10, answerTime: 60 });
+    const [isCopying, setIsCopying] = useState(false);
+    const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
+
+    const isHost = game.hostId === self.id;
+    const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
+
+    const handleSettingsChange = (newSettings: Partial<typeof settings>) => {
+        const updatedSettings = { ...settings, ...newSettings };
+        setSettings(updatedSettings);
+    };
+
+    const handleCopyId = () => {
+        setIsCopying(true);
+        navigator.clipboard.writeText(game.id);
+        setTimeout(() => setIsCopying(false), 2000);
+    }
+    
+    const handleStartGame = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await startTrapAnswerGame(game.id, self.id);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
+    const handleLeaveGame = async () => {
+        if (!self) return;
+        setIsSubmitting(true);
+        const result = await leaveGame(game.id, self.id);
+        if (result.success) {
+          sessionStorage.removeItem(`player-id-${game.id}`);
+          router.push('/');
+          toast({ title: "لقد غادرت الغرفة." })
+        } else {
+          toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsSubmitting(false);
+    };
+
+    const handleKickPlayer = async () => {
+        if (!playerToKick || !isHost) return;
+        setIsSubmitting(true);
+        const result = await kickPlayerFromLobby(game.id, self.id, playerToKick.id);
+        if (result.error) {
+            toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
+        } else {
+            toast({ title: "نجاح", description: `تم طرد اللاعب ${playerToKick.name}.` });
+        }
+        setPlayerToKick(null);
+        setIsSubmitting(false);
+    };
+    
+    const handleSaveSettings = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+         try {
+            await updateTrapAnswerSettings(game.id, self.id, settings);
+            toast({ title: "تم حفظ الإعدادات بنجاح" });
+        } catch (error: any) {
+            toast({ title: "خطأ في حفظ الإعدادات", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+    
     return (
         <>
-            <AnimatePresence mode="wait">
-                <motion.div
-                    key={game.gameState + (game.round || 0)}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.4 }}
-                    className="w-full flex items-center justify-center"
-                >
-                    {renderGameContent()}
-                </motion.div>
-            </AnimatePresence>
+            <Card className="w-full max-w-2xl">
+                <CardHeader className="text-center">
+                    <CardTitle className="text-2xl">غرفة لعبة: الجواب المفخخ</CardTitle>
+                    <CardDescription>ادعُ أصدقاءك للانضمام باستخدام معرف الغرفة</CardDescription>
+                     <div 
+                        className="flex items-center justify-center gap-2 mt-2 p-2 bg-muted rounded-md cursor-pointer hover:bg-muted/80"
+                        onClick={handleCopyId}
+                    >
+                        <span className="font-mono text-lg tracking-widest">{game.id}</span>
+                         <TooltipProvider>
+                            <Tooltip open={isCopying}>
+                                <TooltipTrigger asChild>
+                                    <button>{isCopying ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}</button>
+                                </TooltipTrigger>
+                                 <TooltipContent><p>تم النسخ!</p></TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                        <h3 className="font-bold text-center">اللاعبون ({activePlayers.length})</h3>
+                        <div className="space-y-2 p-2 border rounded-lg min-h-[200px]">
+                            {activePlayers.map(p => (
+                                <div key={p.id} className="flex items-center justify-between p-2 bg-background rounded-md">
+                                    <div className="flex items-center gap-3">
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
+                                        <span className="font-bold">{p.name}</span>
+                                        {p.id === game.hostId && <span className="text-xs font-bold text-amber-500">(المضيف)</span>}
+                                    </div>
+                                    {isHost && p.id !== self.id && (
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
+                                            <UserX className="w-4 h-4" />
+                                        </Button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
 
-            <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
+                    {isHost ? (
+                        <div className="space-y-3">
+                            <h3 className="font-bold text-center flex items-center justify-center gap-2"><Settings/> إعدادات اللعبة</h3>
+                            <div className="space-y-4 p-3 border rounded-lg">
+                                 <div className="space-y-2">
+                                    <Label>الأقسام</Label>
+                                    <ScrollArea className="h-40 border rounded-md p-2">
+                                        {DEFAULT_TRAP_ANSWER_CATEGORIES.map(cat => (
+                                            <div key={cat} className="flex items-center space-x-2 space-x-reverse mb-1">
+                                                <Checkbox
+                                                    id={`cat-${cat}`}
+                                                    checked={settings.categories.includes(cat)}
+                                                    onCheckedChange={(checked) => {
+                                                        const newCategories = checked
+                                                            ? [...settings.categories, cat]
+                                                            : settings.categories.filter(c => c !== cat);
+                                                        handleSettingsChange({ categories: newCategories });
+                                                    }}
+                                                />
+                                                <label htmlFor={`cat-${cat}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                                    {cat}
+                                                </label>
+                                            </div>
+                                        ))}
+                                    </ScrollArea>
+                                </div>
+                                 <div className="space-y-2">
+                                    <Label htmlFor="rounds">عدد الجولات</Label>
+                                    <Input id="rounds" type="number" value={settings.rounds} onChange={(e) => handleSettingsChange({ rounds: parseInt(e.target.value, 10) || 1 })} />
+                                </div>
+                                 <div className="space-y-2">
+                                    <Label htmlFor="answer-time">وقت الإجابة والتخمين (ثواني)</Label>
+                                    <Input id="answer-time" type="number" value={settings.answerTime} onChange={(e) => handleSettingsChange({ answerTime: parseInt(e.target.value, 10) || 60 })} />
+                                </div>
+                                <Button onClick={handleSaveSettings} disabled={isSubmitting} className="w-full">
+                                    <Save className="ml-2"/> {isSubmitting ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center text-muted-foreground p-8 flex flex-col items-center justify-center bg-muted/50 rounded-lg">
+                            <Loader2 className="w-8 h-8 animate-spin mb-4" />
+                            <p>في انتظار المضيف لبدء اللعبة...</p>
+                        </div>
+                    )}
+                </CardContent>
+                <CardFooter className="flex-col gap-2">
+                     {isHost && (
+                        <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full">
+                            <ArrowRight className="mr-2 h-4 w-4" />
+                            {isSubmitting ? '...' : activePlayers.length < 2 ? `تحتاج لاعبين على الأقل` : 'ابدأ اللعبة'}
+                        </Button>
+                    )}
+                    <Button onClick={handleLeaveGame} variant="destructive" className="w-full">
+                        <LogOut className="ml-2 h-4 w-4" /> مغادرة
+                    </Button>
+                </CardFooter>
+            </Card>
+
+             <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
                 <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
@@ -849,3 +794,4 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         </>
     );
 }
+
