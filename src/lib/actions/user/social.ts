@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db, auth } from '@/lib/firebase';
@@ -181,18 +180,8 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
         
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
-
-        const getRank = (points: number, ranks: SocialRank[]) => {
-            const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
-            for (const rank of sortedRanks) {
-                if (points >= rank.threshold) return rank;
-            }
-            return sortedRanks[sortedRanks.length - 1] || null;
-        };
         
-        const actorRank = getRank(actor.leaderboardPoints, allRanks);
-        
-        if (!actorRank?.permissions?.includes('can_force_name_change')) {
+        if (!actor.permissions?.includes('can_force_name_change')) {
             throw new Error("ليس لديك صلاحية إصدار المراسيم.");
         }
         if ((actor.honorPoints || 0) < honorCost) throw new Error(`لا تملك نقاط شرف كافية لإصدار مرسوم (التكلفة ${honorCost}).`);
@@ -208,9 +197,17 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
              const protectorDoc = await transaction.get(protectorRef);
              if (protectorDoc.exists()) {
                 const protector = protectorDoc.data() as UserProfile;
+                const getRank = (points: number, ranks: SocialRank[]) => {
+                    const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
+                    for (const rank of sortedRanks) {
+                        if (points >= rank.threshold) return rank;
+                    }
+                    return sortedRanks[sortedRanks.length - 1] || null;
+                };
                 const protectorRank = getRank(protector.leaderboardPoints, allRanks);
+                const actorRank = getRank(actor.leaderboardPoints, allRanks);
 
-                if (protectorRank && actorRank!.threshold <= protectorRank.threshold) {
+                if (protectorRank && actorRank && actorRank!.threshold <= protectorRank.threshold) {
                      if ((protector.honorPoints || 0) >= 2) {
                         transaction.update(protectorRef, { honorPoints: increment(-2) });
                         transaction.update(actorRef, { honorPoints: increment(-honorCost) }); // Attacker still loses honor
@@ -470,7 +467,6 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
 }
 
 export async function forceAvatarChange(actorId: string, targetId: string, avatarId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean; error?: string }> {
-     const allRanks = await getRanks();
      const honorCost = durationInDays * 2;
      return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
@@ -481,17 +477,8 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
 
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
-
-        const getRank = (points: number, ranks: SocialRank[]) => {
-            const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
-            for (const rank of sortedRanks) {
-                if (points >= rank.threshold) return rank;
-            }
-            return sortedRanks[sortedRanks.length - 1] || null;
-        };
-        const actorRank = getRank(actor.leaderboardPoints, allRanks);
         
-        if (!actorRank?.permissions?.includes('can_force_avatar_change')) {
+        if (!actor.permissions?.includes('can_force_avatar_change')) {
             throw new Error("ليس لديك صلاحية فرض تغيير الصورة.");
         }
         if (!actor.unlockedPunishmentAvatars?.includes(avatarId)) {
@@ -511,9 +498,18 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
              const protectorDoc = await transaction.get(protectorRef);
              if (protectorDoc.exists()) {
                 const protector = protectorDoc.data() as UserProfile;
+                const allRanks = await getRanks();
+                const getRank = (points: number, ranks: SocialRank[]) => {
+                    const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
+                    for (const rank of sortedRanks) {
+                        if (points >= rank.threshold) return rank;
+                    }
+                    return sortedRanks[sortedRanks.length - 1] || null;
+                };
                 const protectorRank = getRank(protector.leaderboardPoints, allRanks);
+                const actorRank = getRank(actor.leaderboardPoints, allRanks);
 
-                if (protectorRank && actorRank!.threshold <= protectorRank.threshold) {
+                if (protectorRank && actorRank && actorRank!.threshold <= protectorRank.threshold) {
                      if ((protector.honorPoints || 0) >= 2) {
                         transaction.update(protectorRef, { honorPoints: increment(-2) });
                         transaction.update(actorRef, { honorPoints: increment(-honorCost) }); // Attacker still loses honor
@@ -614,3 +610,5 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
         return { success: false, error: error.message };
     });
 }
+
+    

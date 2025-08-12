@@ -1,13 +1,15 @@
 
+import type { Game, SocialRank } from '@/types';
+import { getRanks } from './queries';
 
-import type { Game } from '@/types';
 
 /**
  * A pure function for testability. It calculates the updates needed for players at the end of a game.
  * @param game The final game state object.
+ * @param allRanks All social ranks available in the game, to avoid re-fetching.
  * @returns An object containing the necessary updates.
  */
-export function calculateEndOfGameAwards(game: Game) {
+export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     const finalScores = game.playerScores || {};
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     
@@ -21,7 +23,7 @@ export function calculateEndOfGameAwards(game: Game) {
         { leaderboardPoints: 1, coins: 0 }, // 3rd place
     ];
 
-    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: number, challengePoints?: number }> = {};
+    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: number, challengePoints?: number, permissions?: string[] }> = {};
     let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
     let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
     
@@ -41,8 +43,6 @@ export function calculateEndOfGameAwards(game: Game) {
                 challengePoints: points,
             };
         });
-        // Win count for team games is handled separately in the `distributeEndOfGameAwards` function.
-        // So `winUpdate` remains null here.
     } else {
         // Individual awards
         const playerRanks: { id: string, rank: number }[] = [];
@@ -63,7 +63,6 @@ export function calculateEndOfGameAwards(game: Game) {
         playerRanks.forEach(({ id, rank }) => {
             let playerAwards = { leaderboardPoints: 0, coins: 0, challengePoints: 0 };
             
-            // Only give standard awards if it's not a short trap-answer game
             if (!isShortTrapAnswerGame) {
                  const tier = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
                  playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
@@ -71,7 +70,6 @@ export function calculateEndOfGameAwards(game: Game) {
             updates[id] = { ...playerAwards, gamesPlayed: 1 };
         });
 
-        // The winner is determined regardless of game length
         if (playerRanks.length > 0 && playerRanks[0].rank === 1) {
             const firstPlaceScore = finalScores[playerRanks[0].id] || 0;
             const winners = sortedPlayers.filter(p => (finalScores[p.id] || 0) === firstPlaceScore);
@@ -81,14 +79,12 @@ export function calculateEndOfGameAwards(game: Game) {
         }
     }
 
-    // Handle special awards for Trap Answer game
     if (game.gameType === 'trap-answer') {
         let deceivedFool: Game['trapAnswerState']['finalAwards']['deceivedFool'] = null;
         let cunningDeceiver: Game['trapAnswerState']['finalAwards']['cunningDeceiver'] = null;
 
         const trickStats = game.trapAnswerState?.trickStats || { trickedBy: {}, trickedOthers: {} };
 
-        // Cunning Deceiver
         if (Object.keys(trickStats.trickedOthers).length > 0) {
             const deceiverCandidates = Object.entries(trickStats.trickedOthers).sort((a, b) => b[1].length - a[1].length);
             if (deceiverCandidates.length > 0) {
@@ -106,7 +102,6 @@ export function calculateEndOfGameAwards(game: Game) {
             }
         }
         
-        // Deceived Fool
         if (Object.keys(trickStats.trickedBy).length > 0) {
             const foolCandidates = Object.entries(trickStats.trickedBy).sort((a, b) => b[1].length - a[1].length);
             if (foolCandidates.length > 0) {
@@ -121,6 +116,30 @@ export function calculateEndOfGameAwards(game: Game) {
         specialAwards = { cunningDeceiver, deceivedFool };
     }
 
+    // --- New Permissions Calculation ---
+    // This part is crucial for the optimization.
+    const getRank = (points: number) => {
+        const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
+        for (const rank of sortedRanks) {
+            if (points >= rank.threshold) return rank;
+        }
+        return sortedRanks[sortedRanks.length - 1] || null;
+    };
+
+    Object.keys(updates).forEach(playerId => {
+        const player = playersToUpdate.find(p => p.id === playerId);
+        if (player) {
+            const currentPoints = finalScores[playerId] || 0;
+            const awardedPoints = updates[playerId].leaderboardPoints || 0;
+            const newTotalPoints = currentPoints + awardedPoints;
+            const newRank = getRank(newTotalPoints);
+            if (newRank) {
+                updates[playerId].permissions = newRank.permissions;
+            }
+        }
+    });
 
     return { updates, winUpdate, specialAwards };
 }
+
+    

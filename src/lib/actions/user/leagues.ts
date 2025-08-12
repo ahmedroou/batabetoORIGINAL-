@@ -4,10 +4,11 @@
 import { db } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, getDoc, where, increment, runTransaction, arrayUnion, arrayRemove, deleteField, Timestamp, writeBatch, type Transaction } from 'firebase/firestore';
 import { generateLeagueId } from '../helpers';
-import type { UserProfile, League, Game, Challenge } from '@/types';
+import type { UserProfile, League, Game, Challenge, SocialRank } from '@/types';
 import { updateUserWinCount } from './queries';
 import { calculateEndOfGameAwards } from './awards';
 import { sendSystemMail } from './mail';
+import { getRanks } from './queries';
 
 
 export async function getLeagueData(leagueId: string): Promise<{ league: League | null, members: UserProfile[] }> {
@@ -301,11 +302,12 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
 export async function distributeEndOfGameAwards(game: Game) {
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     if (playersToUpdate.length === 0) return;
+    
+    const allRanks = await getRanks();
 
-    const { updates, winUpdate, specialAwards } = calculateEndOfGameAwards(game);
+    const { updates, winUpdate, specialAwards } = calculateEndOfGameAwards(game, allRanks);
     const batch = writeBatch(db);
 
-    // Optimization: Check if any player needs challenge points before querying challenges.
     const shouldUpdateChallenges = Object.values(updates).some(upd => (upd.challengePoints || 0) > 0);
     let activeChallenges: Challenge[] = [];
 
@@ -325,9 +327,12 @@ export async function distributeEndOfGameAwards(game: Game) {
         if (playerUpdates.coins > 0) {
             firestoreUpdates.coins = increment(playerUpdates.coins);
         }
+        if (playerUpdates.permissions) {
+            firestoreUpdates.permissions = playerUpdates.permissions;
+        }
+
         batch.update(userRef, firestoreUpdates);
         
-        // Update scores in active challenges if applicable
         if (playerUpdates.challengePoints && playerUpdates.challengePoints > 0 && activeChallenges.length > 0) {
             const player = game.players.find(p => p.id === playerId);
             if (player) {
@@ -347,7 +352,6 @@ export async function distributeEndOfGameAwards(game: Game) {
         await updateUserWinCount(winUpdate.gameType, winUpdate.userId, batch);
     }
     
-    // Handle team-based wins
     if (['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '')) {
         const winningTeam = game.gameResult!.winner;
         playersToUpdate.forEach(player => {
@@ -369,3 +373,5 @@ export async function distributeEndOfGameAwards(game: Game) {
 export async function updateLeagueScoresForGameEnd(game: Game) {
     await distributeEndOfGameAwards(game);
 }
+
+    

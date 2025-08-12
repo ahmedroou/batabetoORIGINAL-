@@ -395,6 +395,7 @@ export interface UserProfile {
   } | null;
   permissions?: PermissionId[]; // All permissions granted by the user's current rank
   isPunished?: boolean;
+  punishmentsIssued?: number;
 }
 
 export interface GameKing {
@@ -696,11 +697,17 @@ export interface Game {
     board: Property[];
     turnOrder: string[];
     currentTurnIndex: number;
-    lastDiceRoll?: number;
+    lastDiceRoll?: number | null;
     currentQuestion?: EducatedMerchantQuestion | null;
     questionsByCategory?: Record<string, EducatedMerchantQuestion[]>;
     timerEndsAt?: Timestamp | null;
     activityLog?: string[];
+    pendingPurchase?: {
+        playerId: string;
+        propertyId: number;
+        price: number;
+        questionId: string;
+    };
   };
 }
 
