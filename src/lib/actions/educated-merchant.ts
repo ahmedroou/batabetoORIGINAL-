@@ -14,6 +14,10 @@ import {
     deleteField,
     increment,
     type Transaction,
+    arrayUnion,
+    limit,
+    setDoc,
+    updateDoc
 } from 'firebase/firestore';
 import type { Game, Player, Property, EducatedMerchantQuestion, UserProfile } from '@/types';
 import { shuffle } from './helpers';
@@ -26,38 +30,47 @@ const PASS_GO_REWARD = 150;
 const QUESTION_TIME_SECONDS = 25;
 
 async function generateBoard(categories: string[]): Promise<Property[]> {
-    const board: Property[] = [];
-    const shuffledPropertyNames = shuffle([...PROPERTY_NAMES]);
+    const board: Property[] = new Array(BOARD_SIZE);
 
-    // Add Start tile
-    board.push({ id: 0, type: 'start', name: 'نقطة البداية', category: '', price: 0, rent: 0, ownerId: null });
+    // Place Start at index 0
+    board[0] = { id: 0, type: 'start', name: 'نقطة البداية', category: '', price: 0, rent: 0, ownerId: null };
 
-    // Add properties
-    for (let i = 1; i < BOARD_SIZE - 3; i++) { // Leave space for fines
-        const name = shuffledPropertyNames[i-1] || `عقار ${i}`;
-        const price = Math.round((100 + Math.random() * 400) / 10) * 10; // 100 to 500, in steps of 10
-        const category = categories[Math.floor(Math.random() * categories.length)];
-        board.push({
-            id: i,
-            type: 'property',
-            name: name,
-            category: category,
-            price: price,
-            rent: Math.round(price / 4), // Rent is 1/4th of price
-            ownerId: null,
-        });
+    // Place 3 Fine tiles at random positions, avoiding start
+    const finePositions = new Set<number>();
+    while(finePositions.size < 3) {
+        const pos = Math.floor(Math.random() * (BOARD_SIZE - 1)) + 1;
+        finePositions.add(pos);
     }
-
-    // Add Fine tiles
-    board.push({ id: board.length, type: 'fine', name: 'غرامة', category: '', price: 0, rent: 0, ownerId: null, fineAmount: 100 });
-    board.push({ id: board.length, type: 'fine', name: 'غرامة', category: '', price: 0, rent: 0, ownerId: null, fineAmount: 150 });
-    board.push({ id: board.length, type: 'fine', name: 'غرامة', category: '', price: 0, rent: 0, ownerId: null, fineAmount: 200 });
     
-    return shuffle(board.slice(1)).reduce((acc, val, i) => {
-        acc[i+1] = {...val, id: i+1};
-        return acc;
-    }, [board[0]] as Property[]);
+    let fineAmount = 100;
+    finePositions.forEach(pos => {
+        board[pos] = { id: pos, type: 'fine', name: 'غرامة', category: '', price: 0, rent: 0, ownerId: null, fineAmount: fineAmount };
+        fineAmount += 50;
+    });
+
+    const availablePropertyNames = shuffle([...PROPERTY_NAMES]);
+
+    // Fill the rest with properties
+    for (let i = 1; i < BOARD_SIZE; i++) {
+        if (!board[i]) { // If the spot is empty
+            const name = availablePropertyNames.pop() || `عقار ${i}`;
+            const price = (Math.floor(Math.random() * ( (500 - 100) / 10 + 1)) + (100 / 10) ) * 10;
+            const category = categories[Math.floor(Math.random() * categories.length)];
+            board[i] = {
+                id: i,
+                type: 'property',
+                name: name,
+                category: category,
+                price: price,
+                rent: Math.round(price / 4), // Rent is 1/4th of price
+                ownerId: null,
+            };
+        }
+    }
+    
+    return board;
 }
+
 
 export async function startGame(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
@@ -116,12 +129,13 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         updatedPlayers[playerIndex].position = newPosition;
         
         let moneyUpdate = 0;
-        if (newPosition < oldPosition) { // Player passed GO
+        let activityMessage = `${updatedPlayers[playerIndex].name} رمى ${diceRoll} وانتقل إلى "${game.educatedMerchantState!.board[newPosition].name}".`;
+
+        if (newPosition < oldPosition && oldPosition + diceRoll >= BOARD_SIZE) { // Player passed GO
             moneyUpdate = PASS_GO_REWARD;
             updatedPlayers[playerIndex].money! += moneyUpdate;
+            activityMessage += ` وحصل على ${PASS_GO_REWARD} دينار للمرور بنقطة البداية.`;
         }
-
-        const activityMessage = `${updatedPlayers[playerIndex].name} رمى ${diceRoll} وانتقل إلى "${game.educatedMerchantState!.board[newPosition].name}".` + (moneyUpdate > 0 ? ` وحصل على ${moneyUpdate} دينار.` : '');
         
         transaction.update(gameRef, {
             players: updatedPlayers,
@@ -143,12 +157,12 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
 
         const property = game.educatedMerchantState!.board[player.position];
         let activityMessage = '';
-        let updates: any = { gameState: 'turn_end' }; // Default to ending turn
+        let updates: any = { gameState: 'turn_end' };
 
         if (property.type === 'property') {
-            if (!property.ownerId) { // Property is unowned
+            if (!property.ownerId) { 
                 updates.gameState = 'property_action';
-            } else if (property.ownerId !== playerId) { // Pay rent
+            } else if (property.ownerId !== playerId) {
                 const owner = game.players.find(p => p.id === property.ownerId);
                 if (owner) {
                     const rent = property.rent;
@@ -157,8 +171,9 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
                     
                     const updatedPlayers = [...game.players];
                     
-                    if (updatedPlayers[payerIndex].money! < rent) { // Bankruptcy
+                    if (updatedPlayers[payerIndex].money! < rent) {
                         updatedPlayers[payerIndex].status = 'bankrupt';
+                        updatedPlayers[payerIndex].bankruptAt = Timestamp.now();
                         activityMessage = `${player.name} أفلس لأنه لم يستطع دفع الإيجار لـ ${owner.name}.`;
                     } else {
                         updatedPlayers[payerIndex].money! -= rent;
@@ -174,6 +189,7 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
             const updatedPlayers = [...game.players];
              if (updatedPlayers[playerIndex].money! < fine) {
                 updatedPlayers[playerIndex].status = 'bankrupt';
+                updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
                 activityMessage = `${player.name} أفلس لأنه لم يستطع دفع الغرامة.`;
             } else {
                 updatedPlayers[playerIndex].money! -= fine;
@@ -190,7 +206,6 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
 }
 
 export async function purchaseProperty(gameId: string, playerId: string): Promise<void> {
-    // This action will now only deduct money and set up the question phase
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
@@ -201,20 +216,28 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
         if (!player) return;
 
         const property = game.educatedMerchantState!.board[player.position];
-        if (property.ownerId || player.money! < property.price) {
+        if (property.ownerId || (player.money || 0) < property.price) {
             throw new Error("لا يمكنك شراء هذا العقار.");
         }
 
         const questionsCol = collection(db, "trap_answer_questions");
         const q = query(questionsCol, where("category", "==", property.category), limit(1));
-        const questionSnapshot = await getDocs(q);
+        let questionSnapshot = await getDocs(q);
+
         if (questionSnapshot.empty) {
-            throw new Error(`لا توجد أسئلة متاحة في قسم "${property.category}".`);
+            const randomKeyQuery = query(questionsCol, where("category", "==", property.category), where("randomKey", ">=", Math.random()), limit(1));
+            questionSnapshot = await getDocs(randomKeyQuery);
+            if(questionSnapshot.empty) {
+                 const wrapAroundQuery = query(questionsCol, where("category", "==", property.category), limit(1));
+                 questionSnapshot = await getDocs(wrapAroundQuery);
+                 if(questionSnapshot.empty) throw new Error(`لا توجد أسئلة متاحة في قسم "${property.category}".`);
+            }
         }
+        
         const questionDoc = questionSnapshot.docs[0];
         const questionData = { id: questionDoc.id, ...questionDoc.data() } as EducatedMerchantQuestion;
-
-        const options = shuffle([...(questionData.dummyAnswers || []), questionData.correctAnswer]);
+        
+        const options = shuffle([...(questionData.dummyAnswers || []), questionData.answer]);
         questionData.options = options;
 
         const playerIndex = game.players.findIndex(p => p.id === playerId);
@@ -250,7 +273,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         }
 
         const question = game.educatedMerchantState!.currentQuestion!;
-        const isCorrect = answer === question.correctAnswer;
+        const isCorrect = answer === question.answer;
         const propertyIndex = game.educatedMerchantState!.board.findIndex(p => p.id === pendingPurchase.propertyId);
         const playerIndex = game.players.findIndex(p => p.id === playerId);
         
@@ -260,6 +283,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
 
         if (isCorrect) {
             updatedBoard[propertyIndex].ownerId = playerId;
+            updatedBoard[propertyIndex].color = updatedPlayers[playerIndex].color;
             activityMessage = `${updatedPlayers[playerIndex].name} أجاب بشكل صحيح وامتلك "${updatedBoard[propertyIndex].name}"!`;
         } else {
             const refund = Math.round(pendingPurchase.price / 4);
@@ -289,13 +313,12 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
         
         const turnOrder = game.educatedMerchantState!.turnOrder;
         const currentTurnIndex = game.educatedMerchantState!.currentTurnIndex;
-        if (turnOrder[currentTurnIndex] !== playerId && game.hostId !== playerId) { // Allow host to force end turn
+        if (turnOrder[currentTurnIndex] !== playerId && game.hostId !== playerId) {
              throw new Error("ليس دورك لإنهاء الجولة.");
         }
 
         const activePlayers = game.players.filter(p => p.status === 'alive');
         if (activePlayers.length <= 1) {
-            // End the game
             const winner = activePlayers[0];
             transaction.update(gameRef, {
                 gameState: 'final_results',
@@ -305,16 +328,14 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
         }
 
         let nextTurnIndex = (currentTurnIndex + 1) % turnOrder.length;
-        // Skip bankrupt players
         while(game.players.find(p => p.id === turnOrder[nextTurnIndex])?.status === 'bankrupt') {
             nextTurnIndex = (nextTurnIndex + 1) % turnOrder.length;
         }
         
         const newRound = nextTurnIndex < currentTurnIndex ? (game.round || 1) + 1 : game.round || 1;
         
-        if (newRound > game.educatedMerchantState!.settings.maxRounds) {
-             // End the game by rounds
-             const winner = game.players.reduce((prev, current) => ((prev.money || 0) > (current.money || 0)) ? prev : current);
+        if (newRound > (game.educatedMerchantState!.settings.maxRounds || 20)) {
+             const winner = game.players.filter(p=>p.status !== 'bankrupt').reduce((prev, current) => ((prev.money || 0) > (current.money || 0)) ? prev : current);
              transaction.update(gameRef, {
                 gameState: 'final_results',
                 gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name} بأعلى رصيد.` }

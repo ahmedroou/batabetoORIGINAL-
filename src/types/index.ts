@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -506,14 +507,16 @@ export interface Property {
     rent: number;
     ownerId: string | null;
     fineAmount?: number;
+    color?: string;
 }
 
 export interface EducatedMerchantQuestion {
     id: string;
     question: string;
     options: string[];
-    correctAnswer: string;
+    answer: string;
     category: string;
+    dummyAnswers?: string[];
 }
 
 export interface Game {
@@ -697,20 +700,18 @@ export interface Game {
         categories: string[],
     };
     board: Property[];
-    questionsByCategory?: Record<string, EducatedMerchantQuestion[]>;
     turnOrder: string[];
     currentTurnIndex: number;
     lastDiceRoll?: number | null;
     currentQuestion?: EducatedMerchantQuestion | null;
     timerEndsAt?: Timestamp | null;
-    activityLog?: { message: string, timestamp: Date }[];
+    activityLog: { message: string, timestamp: Date }[];
     pendingPurchase?: {
         playerId: string;
         propertyId: number;
         price: number;
         questionId: string;
     };
-    bankruptPlayers?: string[];
   };
 }
 
