@@ -232,7 +232,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<{ succ
       }
 
       // 1..5
-      diceResult = Math.floor(Math.random() * 5) + 1;
+      diceResult = Math.floor(Math.random() * 6) + 1;
 
       const playerIdx = game.players.findIndex(p => p.id === playerId);
       if (playerIdx === -1) throw new Error('Player not found.');
