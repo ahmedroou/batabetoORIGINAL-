@@ -1,3 +1,4 @@
+
 // .
 "use client";
 
@@ -15,6 +16,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+
 
 // ----- CONFIG -----
 const TILE_MIN_SIZE = 64; // minimum pixel size for each tile
