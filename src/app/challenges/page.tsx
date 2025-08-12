@@ -1,3 +1,4 @@
+
 "use client";
 
 import SocietyChallenges from "../society/components/SocietyChallenges";
@@ -12,7 +13,10 @@ export default function ChallengesPage() {
 
     useEffect(() => {
         if (markChallengeAsSeen && activeChallenges.length > 0) {
-            markChallengeAsSeen(activeChallenges[0].createdAt);
+            const latestChallengeTimestamp = activeChallenges[0].createdAt;
+            if (latestChallengeTimestamp) {
+                markChallengeAsSeen(latestChallengeTimestamp);
+            }
         }
     }, [markChallengeAsSeen, activeChallenges]);
 

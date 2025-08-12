@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from 'react';
@@ -23,6 +24,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent as AlertDialogContentAlt, AlertDialogDescription as AlertDialogDescriptionAlt, AlertDialogFooter as AlertDialogFooterAlt, AlertDialogHeader as AlertDialogHeaderAlt, AlertDialogTitle as AlertDialogTitleAlt } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Timestamp } from 'firebase/firestore';
 
 const PRIZE_ICONS: Record<ChallengePrize['type'], React.ElementType> = {
     coins: CircleDollarSign,

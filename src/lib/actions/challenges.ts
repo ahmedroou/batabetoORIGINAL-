@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -329,7 +328,7 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
 
             for (const prize of prizes) {
                 updates[prize.type] = increment(prize.value);
-                mailBody += `- ${prize.value} ${prize.type}\n`;
+                mailBody += `- ${prize.value} ${prize.type === 'coins' ? 'كوينز' : prize.type === 'diamonds' ? 'ألماس' : 'نقاط شرف'}\n`;
             }
             
             transaction.update(userRef, updates);
