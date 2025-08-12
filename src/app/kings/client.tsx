@@ -17,6 +17,7 @@ const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'behind-the-mask': 'خلف القناع',
     'word_war': 'حرب الكلمات',
     'prison': 'السجن',
+    'educated-merchant': 'التاجر المتعلم',
 };
 
 export default function KingsClient() {
@@ -124,7 +125,7 @@ export default function KingsClient() {
                                 key={gameType}
                                 initial={{ opacity: 0, y: 50 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.5, delay: index * 0.1 }}
+                                transition={{ duration: 0.5, delay: 0.2 + index * 0.1 }}
                             >
                                 <Card className="text-center p-4 h-full flex flex-col justify-between bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20 hover:shadow-purple-500/30 hover:-translate-y-1 transition-all duration-300">
                                     <div>
