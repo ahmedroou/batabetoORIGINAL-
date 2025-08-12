@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { Trophy } from 'lucide-react';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 interface FinalResultsProps {
   game: Game;
@@ -46,10 +47,17 @@ export function FinalResults({ game, self }: FinalResultsProps) {
         <CardContent className="space-y-4 px-4">
             <h3 className="font-bold text-lg mb-2 text-center">الترتيب النهائي</h3>
             <div className="space-y-2">
-                {sortedPlayers.map((p, index) => (
+                {sortedPlayers.map((p, index) => {
+                     const rank = index + 1;
+                     const rankColor =
+                         rank === 1 ? 'bg-yellow-500/20 border-yellow-400 text-yellow-800' :
+                         rank === 2 ? 'bg-slate-500/20 border-slate-400 text-slate-800' :
+                         rank === 3 ? 'bg-orange-500/20 border-orange-400 text-orange-800' :
+                         'bg-slate-100 border-slate-300';
+                    return (
                      <motion.div
                         key={p.id}
-                        className="flex justify-between items-center p-3 rounded-lg text-lg bg-muted"
+                        className={cn("flex justify-between items-center p-3 rounded-lg text-lg border-l-4", rankColor)}
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0, transition: { delay: 0.5 + index * 0.1 } }}
                     >
@@ -58,9 +66,9 @@ export function FinalResults({ game, self }: FinalResultsProps) {
                             <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10"/>
                             <span>{p.name}</span>
                         </div>
-                        <span className="font-bold">{p.money} دينار</span>
+                        <span className="font-bold">{p.status === 'bankrupt' ? 'مفلس' : `${p.money} دينار`}</span>
                     </motion.div>
-                ))}
+                )})}
             </div>
         </CardContent>
         <CardFooter>

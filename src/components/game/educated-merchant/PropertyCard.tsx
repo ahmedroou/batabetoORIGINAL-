@@ -45,7 +45,12 @@ export function PropertyCard({ game, self, property }: PropertyCardProps) {
     }
 
     return (
-        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring" }}>
+        <motion.div 
+            initial={{ opacity: 0, scale: 0.8 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            transition={{ type: "spring" }}
+            className="transform-style-3d"
+        >
         <Card className="w-full max-w-sm text-center bg-slate-800 border-primary text-white">
             <CardHeader>
                  <Building className="w-12 h-12 mx-auto text-primary" />
@@ -59,6 +64,7 @@ export function PropertyCard({ game, self, property }: PropertyCardProps) {
                     <Banknote />
                     {property.price}
                 </div>
+                 <p className="text-sm text-slate-500 mt-1">الإيجار: {property.rent} دينار</p>
             </CardContent>
             <CardFooter className="flex gap-2">
                 <Button className="flex-1" onClick={handlePurchase} disabled={isSubmitting || !canAfford}>

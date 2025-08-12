@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { motion } from 'framer-motion';
 import { PlayerAvatar } from '../PlayerAvatar';
-import { HandCoins, Home, Building } from 'lucide-react';
+import { HandCoins, Home, Building, Crown } from 'lucide-react';
 import type { Player } from '@/types';
 import { cn } from '@/lib/utils';
 

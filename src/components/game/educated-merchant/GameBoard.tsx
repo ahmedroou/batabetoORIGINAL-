@@ -18,39 +18,36 @@ interface GameBoardProps {
   self: Player;
 }
 
-const BOARD_SIZE = 28;
-const CORNER_INDICES = [0, 7, 14, 21];
+const BOARD_SIZE = 28; 
+const GRID_SIZE = 8; // 8x8 grid for a 28-tile board
 
-const getPositionStyles = (index: number, gridSize: number): React.CSSProperties => {
-  const sideLength = gridSize - 1;
-  
-  const TILE_WIDTH = 112; 
-  const TILE_HEIGHT = 112; 
-  const GAP_SIZE = 4;
-  
-  const totalBoardWidth = gridSize * TILE_WIDTH + (gridSize - 1) * GAP_SIZE;
-  const totalBoardHeight = gridSize * TILE_HEIGHT + (gridSize - 1) * GAP_SIZE;
-  
-  let top = '0px', left = '0px';
+// Adjust tile size for better fit on screen
+const TILE_WIDTH = 100;
+const TILE_HEIGHT = 100; 
+const GAP_SIZE = 4;
+
+const getPositionStyles = (index: number): React.CSSProperties => {
+  const sideLength = GRID_SIZE - 1;
+  let top = 0, left = 0;
 
   if (index >= 0 && index < sideLength) { // Top row
-    top = '0px';
-    left = `${index * (TILE_WIDTH + GAP_SIZE)}px`;
+    top = 0;
+    left = index * (TILE_WIDTH + GAP_SIZE);
   } else if (index >= sideLength && index < sideLength * 2) { // Right col
-    top = `${(index - sideLength) * (TILE_HEIGHT + GAP_SIZE)}px`;
-    left = `${(sideLength) * (TILE_WIDTH + GAP_SIZE)}px`;
+    top = (index - sideLength) * (TILE_HEIGHT + GAP_SIZE);
+    left = (sideLength) * (TILE_WIDTH + GAP_SIZE);
   } else if (index >= sideLength * 2 && index < sideLength * 3) { // Bottom row
-    top = `${(sideLength) * (TILE_HEIGHT + GAP_SIZE)}px`;
-    left = `${(sideLength - (index - sideLength * 2)) * (TILE_WIDTH + GAP_SIZE)}px`;
+    top = (sideLength) * (TILE_HEIGHT + GAP_SIZE);
+    left = (sideLength - (index - sideLength * 2)) * (TILE_WIDTH + GAP_SIZE);
   } else { // Left col
-    top = `${(sideLength - (index - sideLength * 3)) * (TILE_HEIGHT + GAP_SIZE)}px`;
-    left = '0px';
+    top = (sideLength - (index - sideLength * 3)) * (TILE_HEIGHT + GAP_SIZE);
+    left = 0;
   }
-  return { top, left, position: 'absolute' };
+  return { top: `${top}px`, left: `${left}px`, position: 'absolute' };
 };
 
 
-const Tile = ({ property, playersOnTile }: { property: Property, playersOnTile: Player[] }) => {
+const Tile = ({ property, playersOnTile, isNewlyBought }: { property: Property, playersOnTile: Player[], isNewlyBought: boolean }) => {
     let Icon = Building;
     let baseBgColor = 'bg-slate-700';
     let borderColor = 'border-slate-500';
@@ -63,19 +60,16 @@ const Tile = ({ property, playersOnTile }: { property: Property, playersOnTile: 
         Icon = Banknote;
         baseBgColor = 'bg-red-700';
         borderColor = 'border-red-500';
-    } else if (property.ownerId && property.color) {
-        borderColor = property.color;
     }
-    
-    const tileStyle = property.ownerId && property.color ? { backgroundColor: property.color } : {};
-    const isNewlyBought = false; // This logic needs to be passed down if needed
 
+    const tileStyle = property.ownerId && property.color ? { backgroundColor: property.color } : {};
+    
     return (
-        <div className={cn("w-28 h-28 rounded-lg border-2 flex flex-col items-center justify-center p-2 text-center text-white shadow-lg transition-all duration-500", baseBgColor, borderColor, isNewlyBought && 'animate-pulse-glow')} style={tileStyle}>
-            <Icon className="w-6 h-6 mb-1"/>
-            <p className="text-xs font-bold leading-tight line-clamp-2">{property.name}</p>
-            {property.type === 'property' && <p className="text-xs font-mono mt-1">{property.price} دينار</p>}
-            {property.type === 'fine' && <p className="text-xs font-mono mt-1">{property.fineAmount} دينار</p>}
+        <div className={cn("w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500", baseBgColor, borderColor, isNewlyBought && 'animate-pulse-glow')} style={tileStyle}>
+            <Icon className="w-5 h-5 mb-1 flex-shrink-0"/>
+            <p className="text-[10px] font-bold leading-tight line-clamp-2">{property.name}</p>
+            {property.type === 'property' && <p className="text-[10px] font-mono mt-1">{property.price} دينار</p>}
+            {property.type === 'fine' && <p className="text-[10px] font-mono mt-1">{property.fineAmount} دينار</p>}
         </div>
     );
 };
@@ -88,9 +82,9 @@ export function GameBoard({ game, self }: GameBoardProps) {
         return <div>جاري تحميل لوحة اللعب...</div>;
     }
     
-    const gridSize = 8;
     const turnOrder = game.educatedMerchantState?.turnOrder || [];
-    const currentTurnPlayerId = turnOrder[game.educatedMerchantState?.currentTurnIndex || 0];
+    const currentTurnIndex = game.educatedMerchantState?.currentTurnIndex || 0;
+    const currentPlayerId = turnOrder[currentTurnIndex];
 
     const renderCenterContent = () => {
         switch(game.gameState) {
@@ -99,7 +93,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
             case 'movement':
                  return <DiceRoll game={game} self={self} />;
             case 'property_action':
-                const player = game.players.find(p => p.id === currentTurnPlayerId);
+                const player = game.players.find(p => p.id === currentPlayerId);
                 if (player) {
                      const property = memoizedBoard[player.position];
                      return <PropertyCard game={game} self={self} property={property} />;
@@ -130,36 +124,32 @@ export function GameBoard({ game, self }: GameBoardProps) {
             </div>
 
             <div className="flex-grow flex items-center justify-center">
-                 <div className="relative w-[950px] h-[950px]">
+                 <div className="relative" style={{ width: `${GRID_SIZE * TILE_WIDTH + (GRID_SIZE - 1) * GAP_SIZE}px`, height: `${GRID_SIZE * TILE_HEIGHT + (GRID_SIZE - 1) * GAP_SIZE}px`}}>
                     <div className="absolute inset-28 bg-gray-900/50 rounded-2xl flex items-center justify-center p-8 shadow-inner">
                         {renderCenterContent()}
                     </div>
-                    {memoizedBoard.map((property, index) => {
-                         const playersOnTile = game.players.filter(p => p.position === index && p.status !== 'bankrupt');
-                         return (
-                            <div key={index} style={getPositionStyles(index, gridSize)} className="w-28 h-28">
-                                <Tile property={property} playersOnTile={[]} />
-                                <AnimatePresence>
-                                    {playersOnTile.length > 0 && (
-                                        <div className="absolute inset-0 flex items-center justify-center -space-x-2 pointer-events-none">
-                                            {playersOnTile.map((p, i) => (
-                                                <motion.div
-                                                    key={p.id}
-                                                    layoutId={`player-piece-${p.id}`}
-                                                    className="z-10"
-                                                    initial={{ scale: 0 }}
-                                                    animate={{ scale: 1 }}
-                                                    exit={{ scale: 0 }}
-                                                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                                                >
-                                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full border-2 border-white shadow-lg" />
-                                                </motion.div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-                         )
+                    {memoizedBoard.map((property, index) => (
+                        <div key={index} style={{...getPositionStyles(index), width: TILE_WIDTH, height: TILE_HEIGHT}}>
+                            <Tile property={property} playersOnTile={[]} isNewlyBought={game.educatedMerchantState?.newlyBoughtPropertyId === property.id}/>
+                        </div>
+                    ))}
+                    {game.players.filter(p => p.status !== 'bankrupt').map(p => {
+                        const style = getPositionStyles(p.position);
+                        return (
+                             <motion.div
+                                key={p.id}
+                                layoutId={`player-piece-${p.id}`}
+                                className="absolute z-10"
+                                initial={style}
+                                animate={style}
+                                transition={{ type: "spring", stiffness: 200, damping: 30 }}
+                                style={{width: TILE_WIDTH, height: TILE_HEIGHT}}
+                            >
+                                <div className={cn("absolute bottom-1 right-1 w-10 h-10 transition-all duration-300", p.id === currentPlayerId && 'animate-pulse-glow')}>
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
+                                </div>
+                            </motion.div>
+                        )
                     })}
                 </div>
             </div>

@@ -17,14 +17,15 @@ interface DiceRollProps {
 
 const RollingNumber = ({ number }: { number: number }) => {
     return (
-        <div className="h-20 overflow-hidden rounded-lg bg-gray-900/50 p-2">
+        <div className="h-20 overflow-hidden rounded-lg bg-gray-900/50 p-2 border-2 border-primary/30">
             <motion.div
               initial={{ y: 0 }}
               animate={{ y: -(number - 1) * 80 }} 
               transition={{ duration: 0.8, ease: "circOut" }}
+              className="font-mono text-6xl font-bold text-yellow-300"
             >
               {[1, 2, 3, 4, 5].map(n => (
-                <div key={n} style={{ height: 80 }} className="flex items-center justify-center text-6xl font-bold text-yellow-300">
+                <div key={n} style={{ height: 80 }} className="flex items-center justify-center">
                     {n}
                 </div>
               ))}
@@ -46,6 +47,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
         setIsRolling(true);
         try {
             await rollDice(game.id, self.id);
+            // The state will update automatically via listener, no need to setIsRolling(false) here
         } catch (error: any) {
             console.error("Error rolling dice:", error);
             setIsRolling(false);
@@ -56,7 +58,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
         return (
              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
                 <Card className="text-center bg-slate-800 border-primary text-white shadow-lg">
-                     <CardHeader>
+                     <CardHeader className='pb-2'>
                         <CardTitle className="text-primary">نتيجة النرد</CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -68,12 +70,12 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     }
 
     return (
-        <Card className="text-center">
+        <Card className="text-center bg-slate-800 text-white border-slate-700 shadow-lg">
             <CardHeader>
                 <CardTitle>
                     دور {isMyTurn ? "أنت" : game.players.find(p => p.id === currentTurnPlayerId)?.name}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-slate-400">
                     {isMyTurn ? "اضغط لرمي النرد!" : "في انتظار اللاعب لرمي النرد."}
                 </CardDescription>
             </CardHeader>
