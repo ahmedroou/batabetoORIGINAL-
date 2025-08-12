@@ -615,11 +615,13 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
 
 export async function liftPunishment(actorId: string, targetId: string): Promise<{ success: boolean; error?: string }> {
   return runTransaction(db, async (transaction) => {
+    const actorRef = doc(db, "users", actorId);
     const targetRef = doc(db, "users", targetId);
-    const targetDoc = await transaction.get(targetRef);
 
-    if (!targetDoc.exists()) {
-      throw new Error("لم يتم العثور على اللاعب المستهدف.");
+    const [actorDoc, targetDoc] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
+
+    if (!actorDoc.exists() || !targetDoc.exists()) {
+      throw new Error("لم يتم العثور على أحد اللاعبين.");
     }
 
     const targetData = targetDoc.data() as UserProfile;
