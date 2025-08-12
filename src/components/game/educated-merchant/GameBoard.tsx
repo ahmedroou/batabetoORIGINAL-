@@ -340,7 +340,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
                                 if (playerIndex === 3) { offsetX = (tileSize * 0.9 - pieceSize); offsetY = (tileSize * 0.9 - pieceSize); }
                             }
 
-                            // convert numeric top/left from baseStyle which are strings like '12px'
                             const numericTop = parseFloat(String(baseStyle.top).replace('px','')) || 0;
                             const numericLeft = parseFloat(String(baseStyle.left).replace('px','')) || 0;
 

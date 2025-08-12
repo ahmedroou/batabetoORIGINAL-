@@ -22,18 +22,18 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
     const pendingPurchase = game.educatedMerchantState?.pendingPurchase;
     const isMyTurnToAnswer = pendingPurchase?.playerId === self.id;
     const questionAsker = game.players.find(p => p.id === pendingPurchase?.playerId);
+    const isOpen = game.gameState === 'question';
 
     const isHost = game.hostId === self.id;
 
     useEffect(() => {
         // Reset state when a new question appears for the same player.
-        // This handles cases where a player buys multiple properties in a row.
-        if (isMyTurnToAnswer) {
+        if (isOpen && isMyTurnToAnswer) {
             setSelectedAnswer(null);
             setIsSubmitting(false);
             setAnswerState('pending');
         }
-    }, [question?.id, isMyTurnToAnswer]);
+    }, [isOpen, isMyTurnToAnswer, question?.id]);
 
     const handleSubmit = async () => {
         if (!selectedAnswer || !question || !isMyTurnToAnswer) return;
@@ -43,23 +43,23 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
 
         setTimeout(async () => {
             await answerQuestion(game.id, self.id, selectedAnswer);
-            // No need to reset state here, the useEffect above will handle it when the modal closes/question changes.
+            // The modal will close automatically when the game state changes.
         }, 1500); 
     };
 
-    if (!pendingPurchase || !question) return null;
+    if (!isOpen || !pendingPurchase || !question) return null;
     
     return (
-        <Dialog open={true}>
+        <Dialog open={isOpen}>
             <DialogContent className="max-w-xl bg-gray-900/80 backdrop-blur-md border-primary/30 text-white" onInteractOutside={(e) => e.preventDefault()}>
                 <AnimatePresence>
                     {answerState === 'correct' && isMyTurnToAnswer && (
-                         <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1.2 }} className="absolute inset-0 flex items-center justify-center z-20">
+                         <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1.2 }} className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
                            <Check className="w-48 h-48 text-green-500/50" />
                         </motion.div>
                     )}
                      {answerState === 'incorrect' && isMyTurnToAnswer && (
-                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 flex items-center justify-center z-20">
+                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
                            <X className="w-48 h-48 text-red-500/50" />
                         </motion.div>
                     )}

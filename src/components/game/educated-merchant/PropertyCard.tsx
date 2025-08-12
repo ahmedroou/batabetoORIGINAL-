@@ -69,13 +69,13 @@ export function PropertyCard({ game, self, property, isPopover = false }: Proper
                         <PlayerAvatar avatarId={owner.avatarId} className="w-12 h-12" />
                         <p className="font-bold">{owner.name}</p>
                     </div>
-                ) : (
+                ) : property.type === 'property' ? (
                     <div className="text-3xl font-bold text-yellow-400 flex items-center justify-center gap-2">
                         <Banknote />
                         {property.price}
                     </div>
-                )}
-                 <p className="text-sm text-slate-500 mt-1">الإيجار: {property.rent} دينار</p>
+                ) : null}
+                 {property.type === 'property' && <p className="text-sm text-slate-500 mt-1">الإيجار: {property.rent} دينار</p>}
             </CardContent>
         </Card>
     );

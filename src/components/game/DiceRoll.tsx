@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Button } from '@/components/ui/button';
@@ -88,7 +89,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
 
         // generate an optimistic rolling animation number sequence
         const animationLengthMs = 1200; // length of local animation before awaiting server
-        const randomIntermediate = Math.floor(Math.random() * 6) + 1; // 1..6
+        const randomIntermediate = Math.floor(Math.random() * 5) + 1; // 1..6
         setOptimisticNumber(randomIntermediate);
 
         // Keep the animation going locally until server responds (but avoid infinite spin)
