@@ -1,3 +1,4 @@
+// .
 "use client";
 
 import React, { useMemo, useEffect, useState } from "react";
@@ -5,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Home, Building2, Gavel, ArrowRight, ArrowLeft, ArrowUp, ArrowDown, Dice } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Player, Property } from "@/types";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { PlayerAvatar } from "../PlayerAvatar";
 import {
   Tooltip,
   TooltipContent,
@@ -66,7 +67,7 @@ function rgba(hex?: string | null, a = 1) {
   return `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`;
 }
 
-export default function GameBoard({
+export function GameBoard({
   players,
   properties,
   className,
