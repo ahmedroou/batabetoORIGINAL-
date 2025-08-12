@@ -303,6 +303,7 @@ export async function distributeEndOfGameAwards(game: Game) {
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     if (playersToUpdate.length === 0) return;
     
+    // This is a READ operation, which is why it was causing transaction errors.
     const allRanks = await getRanks();
 
     const { updates, winUpdate, specialAwards } = calculateEndOfGameAwards(game, allRanks);
@@ -368,9 +369,11 @@ export async function distributeEndOfGameAwards(game: Game) {
 
 /**
  * Updates player scores in all associated leagues after a game has ended.
+ * This is now the primary entry point for all end-of-game score processing.
  * @param game The final game state object containing player scores.
  */
 export async function updateLeagueScoresForGameEnd(game: Game) {
+    // This is the only place we call distributeEndOfGameAwards, ensuring it's outside any transaction.
     await distributeEndOfGameAwards(game);
 }
 

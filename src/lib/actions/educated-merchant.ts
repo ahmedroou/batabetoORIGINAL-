@@ -395,6 +395,8 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
 
 export async function answerQuestion(gameId: string, playerId: string, answer: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
+  let finalGameDataForLeagueUpdate: Game | null = null;
+  let gameEnded = false;
 
   await runTransaction(db, async (tx) => {
     // --- READ PHASE ---
@@ -441,21 +443,38 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     finalUpdates['educatedMerchantState.board'] = board;
     
     // `endTurnInternal` no longer reads; it just processes the prepared updates.
-    await endTurnInternal(gameRef, tx, playerId, activityMessage, finalUpdates);
+    // It returns a boolean indicating if the game has ended.
+    const { isGameOver, updates } = endTurnInternal(game, playerId, activityMessage, finalUpdates);
+    tx.update(gameRef, updates);
+    gameEnded = isGameOver;
+
+    if (isGameOver) {
+      finalGameDataForLeagueUpdate = { ...game, ...updates };
+    }
   });
+
+  if (gameEnded && finalGameDataForLeagueUpdate) {
+    await updateLeagueScoresForGameEnd(finalGameDataForLeagueUpdate);
+  }
 }
 
 export async function handleTimeout(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
+  let finalGameDataForLeagueUpdate: Game | null = null;
+  let gameEnded = false;
+
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
     const game = snap.data() as Game;
 
-    if (game.hostId !== hostId) return; // only host triggers
-
-    const timerEndsAt = game.educatedMerchantState?.timerEndsAt;
-    if (!timerEndsAt || timerEndsAt.toMillis() > Date.now()) return; // not timed out yet
+    // Only the host should trigger timeouts, to prevent multiple triggers.
+    if (game.hostId !== hostId) {
+      return;
+    }
+    if (!game.educatedMerchantState?.timerEndsAt || Date.now() < game.educatedMerchantState.timerEndsAt.toMillis()) {
+      return; // Timer hasn't expired server-side.
+    }
 
     const turnOrder = ensure(game.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود.');
     const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
@@ -477,7 +496,10 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
           'educatedMerchantState.timerEndsAt': deleteField(),
         };
 
-        await endTurnInternal(gameRef, tx, currentPlayerId, activityMessage, updates);
+        const { isGameOver: ended, updates: finalUpdates } = endTurnInternal(game, currentPlayerId, activityMessage, updates);
+        tx.update(gameRef, finalUpdates);
+        gameEnded = ended;
+        if (ended) finalGameDataForLeagueUpdate = { ...game, ...finalUpdates };
         return;
       }
     }
@@ -493,29 +515,31 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
 
     if (game.gameState === 'property_action') {
       const activityMessage = `انتهى وقت اللاعب ${game.players.find((p) => p.id === currentPlayerId)?.name} وتخطى شراء العقار.`;
-      await endTurnInternal(gameRef, tx, currentPlayerId, activityMessage);
+      const { isGameOver: ended, updates } = endTurnInternal(game, currentPlayerId, activityMessage);
+      tx.update(gameRef, updates);
+      gameEnded = ended;
+      if (ended) finalGameDataForLeagueUpdate = { ...game, ...updates };
       return;
     }
   });
+
+  if (gameEnded && finalGameDataForLeagueUpdate) {
+    await updateLeagueScoresForGameEnd(finalGameDataForLeagueUpdate);
+  }
 }
 
 // -----------------------------
 // Central end-turn logic
 // -----------------------------
-async function endTurnInternal(
-  gameRef: ReturnType<typeof doc>,
-  tx: Transaction,
+function endTurnInternal(
+  game: Game,
   playerId: string,
   extraMessage = '',
   extraUpdates: any = {}
-): Promise<void> {
-  const snap = await tx.get(gameRef);
-  if (!snap.exists()) throw new Error('اللعبة غير موجودة أثناء إنهاء الدور.');
-
-  const baseGame = snap.data() as Game;
+): { isGameOver: boolean, updates: any } {
   
   // Create a merged game state from base and pending updates *before* processing logic.
-  let mergedGameData = { ...baseGame, ...extraUpdates };
+  let mergedGameData = { ...game, ...extraUpdates };
   // Deep merge for players and board if they exist in extraUpdates
   if (extraUpdates.players) mergedGameData.players = [...extraUpdates.players];
   if (extraUpdates['educatedMerchantState.board']) mergedGameData.educatedMerchantState!.board = [...extraUpdates['educatedMerchantState.board']];
@@ -541,7 +565,7 @@ async function endTurnInternal(
       .sort((a, b) => {
           if (a.status === 'alive' && b.status !== 'alive') return -1;
           if (b.status === 'alive' && a.status !== 'alive') return 1;
-          if (a.status === 'bankrupt' && b.status === 'bankrupt') return (b.bankruptAt?.toMillis() || 0) - (a.bankruptAt?.toMillis() || 0);
+          if (a.status === 'bankrupt' && b.status === 'bankrupt') return ((b.bankruptAt as Timestamp)?.toMillis() || 0) - ((a.bankruptAt as Timestamp)?.toMillis() || 0);
           return (b.money || 0) - (a.money || 0);
       })
       .map((p, i) => ({ playerId: p.id, name: p.name, rank: i + 1, bankruptAt: p.bankruptAt || null }));
@@ -552,9 +576,7 @@ async function endTurnInternal(
       'educatedMerchantState.timerEndsAt': deleteField(),
       players: updatedPlayers,
     };
-    tx.update(gameRef, finalGameData);
-    await updateLeagueScoresForGameEnd({ ...baseGame, ...finalGameData });
-    return;
+    return { isGameOver: true, updates: finalGameData };
   }
 
   // Normal flow: find next alive player's index
@@ -570,9 +592,7 @@ async function endTurnInternal(
       const finalGameData: any = {
         gameState: 'final_results', gameResult: { winner: 'none', message: 'انتهت اللعبة: لا يوجد فائز.' }, players: updatedPlayers
       };
-      tx.update(gameRef, finalGameData);
-      await updateLeagueScoresForGameEnd({ ...baseGame, ...finalGameData });
-      return;
+      return { isGameOver: true, updates: finalGameData };
     }
     nextTurnIndex = altIndex;
   }
@@ -593,9 +613,7 @@ async function endTurnInternal(
     const winner = contenders.reduce((a, b) => ((a.money || 0) > (b.money || 0) ? a : b));
     const ranking = updatedPlayers.slice().sort((a, b) => (b.money || 0) - (a.money || 0)).map((p, i) => ({ playerId: p.id, name: p.name, rank: i + 1, bankruptAt: p.bankruptAt || null }));
     const finalGameData: any = { gameState: 'final_results', gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.`, ranking }, players: updatedPlayers };
-    tx.update(gameRef, finalGameData);
-    await updateLeagueScoresForGameEnd({ ...baseGame, ...finalGameData });
-    return;
+    return { isGameOver: true, updates: finalGameData };
   }
   
   const finalUpdates: any = {
@@ -614,7 +632,7 @@ async function endTurnInternal(
     finalUpdates['educatedMerchantState.activityLog'] = arrayUnion({ message: extraMessage, timestamp: nowTimestamp() });
   }
 
-  tx.update(gameRef, finalUpdates);
+  return { isGameOver: false, updates: finalUpdates };
 }
 
 
@@ -629,6 +647,7 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
     const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
     if (turnOrder[currentTurnIndex] !== playerId) throw new Error('ليس دورك لإنهاء الجولة.');
 
-    await endTurnInternal(gameRef, tx, playerId, `${game.players.find((p) => p.id === playerId)?.name} أنهى دوره.`);
+    const { updates } = endTurnInternal(game, playerId, `${game.players.find((p) => p.id === playerId)?.name} أنهى دوره.`);
+    tx.update(gameRef, updates);
   });
 }
