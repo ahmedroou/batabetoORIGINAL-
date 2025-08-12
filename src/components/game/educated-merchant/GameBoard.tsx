@@ -11,6 +11,7 @@ import { PlayerHUD } from './PlayerHUD';
 import { ActivityLog } from './ActivityLog';
 import { cn } from '@/lib/utils';
 import { Banknote, Building, HelpCircle, LandPlot, Trophy } from 'lucide-react';
+import { useMemo } from 'react';
 
 interface GameBoardProps {
   game: Game;
@@ -22,29 +23,34 @@ const CORNER_INDICES = [0, 7, 14, 21];
 
 const getPositionStyles = (index: number, gridSize: number): React.CSSProperties => {
   const sideLength = gridSize - 1;
-  let top = '0px', left = '0px', transform = '';
-
-  const TILE_SIZE = 112; // 28rem
-  const GAP_SIZE = 4; // 1rem
+  
+  const TILE_WIDTH = 112; 
+  const TILE_HEIGHT = 112; 
+  const GAP_SIZE = 4;
+  
+  const totalBoardWidth = gridSize * TILE_WIDTH + (gridSize - 1) * GAP_SIZE;
+  const totalBoardHeight = gridSize * TILE_HEIGHT + (gridSize - 1) * GAP_SIZE;
+  
+  let top = '0px', left = '0px';
 
   if (index >= 0 && index < sideLength) { // Top row
     top = '0px';
-    left = `${index * (TILE_SIZE + GAP_SIZE)}px`;
+    left = `${index * (TILE_WIDTH + GAP_SIZE)}px`;
   } else if (index >= sideLength && index < sideLength * 2) { // Right col
-    top = `${(index - sideLength) * (TILE_SIZE + GAP_SIZE)}px`;
-    left = `${sideLength * (TILE_SIZE + GAP_SIZE)}px`;
+    top = `${(index - sideLength) * (TILE_HEIGHT + GAP_SIZE)}px`;
+    left = `${(sideLength) * (TILE_WIDTH + GAP_SIZE)}px`;
   } else if (index >= sideLength * 2 && index < sideLength * 3) { // Bottom row
-    top = `${sideLength * (TILE_SIZE + GAP_SIZE)}px`;
-    left = `${(sideLength - (index - sideLength * 2)) * (TILE_SIZE + GAP_SIZE)}px`;
+    top = `${(sideLength) * (TILE_HEIGHT + GAP_SIZE)}px`;
+    left = `${(sideLength - (index - sideLength * 2)) * (TILE_WIDTH + GAP_SIZE)}px`;
   } else { // Left col
-    top = `${(sideLength - (index - sideLength * 3)) * (TILE_SIZE + GAP_SIZE)}px`;
+    top = `${(sideLength - (index - sideLength * 3)) * (TILE_HEIGHT + GAP_SIZE)}px`;
     left = '0px';
   }
-  return { top, left, transform, position: 'absolute' };
+  return { top, left, position: 'absolute' };
 };
 
 
-const Tile = ({ property, playersOnTile, isNewlyBought }: { property: Property, playersOnTile: Player[], isNewlyBought: boolean }) => {
+const Tile = ({ property, playersOnTile }: { property: Property, playersOnTile: Player[] }) => {
     let Icon = Building;
     let baseBgColor = 'bg-slate-700';
     let borderColor = 'border-slate-500';
@@ -57,13 +63,12 @@ const Tile = ({ property, playersOnTile, isNewlyBought }: { property: Property, 
         Icon = Banknote;
         baseBgColor = 'bg-red-700';
         borderColor = 'border-red-500';
-    } else if (property.ownerId) {
-        // If there's an owner, we use inline style for dynamic color
-        borderColor = property.color || 'border-gray-400';
+    } else if (property.ownerId && property.color) {
+        borderColor = property.color;
     }
     
-    // Style for dynamically colored background
-    const tileStyle = property.ownerId ? { backgroundColor: property.color } : {};
+    const tileStyle = property.ownerId && property.color ? { backgroundColor: property.color } : {};
+    const isNewlyBought = false; // This logic needs to be passed down if needed
 
     return (
         <div className={cn("w-28 h-28 rounded-lg border-2 flex flex-col items-center justify-center p-2 text-center text-white shadow-lg transition-all duration-500", baseBgColor, borderColor, isNewlyBought && 'animate-pulse-glow')} style={tileStyle}>
@@ -77,27 +82,26 @@ const Tile = ({ property, playersOnTile, isNewlyBought }: { property: Property, 
 
 export function GameBoard({ game, self }: GameBoardProps) {
     const board = game.educatedMerchantState?.board;
+    const memoizedBoard = useMemo(() => board, [board]);
     
-    if (!board || board.length === 0) {
+    if (!memoizedBoard || memoizedBoard.length === 0) {
         return <div>جاري تحميل لوحة اللعب...</div>;
     }
     
     const gridSize = 8;
     const turnOrder = game.educatedMerchantState?.turnOrder || [];
     const currentTurnPlayerId = turnOrder[game.educatedMerchantState?.currentTurnIndex || 0];
-    const newlyBoughtPropertyId = game.educatedMerchantState?.newlyBoughtPropertyId;
-
 
     const renderCenterContent = () => {
         switch(game.gameState) {
             case 'rolling':
                 return <DiceRoll game={game} self={self} />;
             case 'movement':
-                 return <p className="text-2xl text-white animate-pulse">يتحرك اللاعب...</p>;
+                 return <DiceRoll game={game} self={self} />;
             case 'property_action':
                 const player = game.players.find(p => p.id === currentTurnPlayerId);
                 if (player) {
-                     const property = board[player.position];
+                     const property = memoizedBoard[player.position];
                      return <PropertyCard game={game} self={self} property={property} />;
                 }
                 return null;
@@ -130,27 +134,30 @@ export function GameBoard({ game, self }: GameBoardProps) {
                     <div className="absolute inset-28 bg-gray-900/50 rounded-2xl flex items-center justify-center p-8 shadow-inner">
                         {renderCenterContent()}
                     </div>
-                    {board.map((property, index) => {
+                    {memoizedBoard.map((property, index) => {
                          const playersOnTile = game.players.filter(p => p.position === index && p.status !== 'bankrupt');
-                         const isNewlyBought = property.id === newlyBoughtPropertyId;
                          return (
                             <div key={index} style={getPositionStyles(index, gridSize)} className="w-28 h-28">
-                                <Tile property={property} playersOnTile={[]} isNewlyBought={isNewlyBought} />
-                                {playersOnTile.length > 0 && (
-                                     <div className="absolute inset-0 flex items-center justify-center -space-x-2 pointer-events-none">
-                                        {playersOnTile.map((p, i) => (
-                                            <motion.div
-                                                key={p.id}
-                                                layoutId={`player-piece-${p.id}`}
-                                                className="z-10"
-                                                initial={false}
-                                                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                                            >
-                                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full border-2 border-white shadow-lg" />
-                                            </motion.div>
-                                        ))}
-                                    </div>
-                                )}
+                                <Tile property={property} playersOnTile={[]} />
+                                <AnimatePresence>
+                                    {playersOnTile.length > 0 && (
+                                        <div className="absolute inset-0 flex items-center justify-center -space-x-2 pointer-events-none">
+                                            {playersOnTile.map((p, i) => (
+                                                <motion.div
+                                                    key={p.id}
+                                                    layoutId={`player-piece-${p.id}`}
+                                                    className="z-10"
+                                                    initial={{ scale: 0 }}
+                                                    animate={{ scale: 1 }}
+                                                    exit={{ scale: 0 }}
+                                                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                                                >
+                                                    <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full border-2 border-white shadow-lg" />
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </AnimatePresence>
                             </div>
                          )
                     })}
