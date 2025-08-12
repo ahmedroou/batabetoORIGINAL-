@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -286,7 +285,7 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
 
         await batch.commit();
 
-        return { success: true, count: snapshot.size };
+        return { success: true, count: leagueSnapshot.size };
 
     } catch (error: any) {
         console.error("Error resetting all league stats:", error);
@@ -303,18 +302,19 @@ export async function distributeEndOfGameAwards(game: Game) {
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     if (playersToUpdate.length === 0) return;
 
-    // Fetch active challenges
-    const now = Timestamp.now();
-    const challengesQuery = query(
-        collection(db, 'challenges'),
-        where('endsAt', '>', now)
-    );
-    const challengesSnapshot = await getDocs(challengesQuery);
-    const activeChallenges = challengesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Challenge));
-
-
     const { updates, winUpdate, specialAwards } = calculateEndOfGameAwards(game);
     const batch = writeBatch(db);
+
+    // Optimization: Check if any player needs challenge points before querying challenges.
+    const shouldUpdateChallenges = Object.values(updates).some(upd => (upd.challengePoints || 0) > 0);
+    let activeChallenges: Challenge[] = [];
+
+    if (shouldUpdateChallenges) {
+        const now = Timestamp.now();
+        const challengesQuery = query(collection(db, 'challenges'), where('endsAt', '>', now));
+        const challengesSnapshot = await getDocs(challengesQuery);
+        activeChallenges = challengesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Challenge));
+    }
 
     Object.entries(updates).forEach(([playerId, playerUpdates]) => {
         const userRef = doc(db, "users", playerId);
@@ -327,8 +327,8 @@ export async function distributeEndOfGameAwards(game: Game) {
         }
         batch.update(userRef, firestoreUpdates);
         
-        // Update scores in active challenges
-        if (playerUpdates.challengePoints && playerUpdates.challengePoints > 0) {
+        // Update scores in active challenges if applicable
+        if (playerUpdates.challengePoints && playerUpdates.challengePoints > 0 && activeChallenges.length > 0) {
             const player = game.players.find(p => p.id === playerId);
             if (player) {
                 for (const challenge of activeChallenges) {
@@ -369,4 +369,3 @@ export async function distributeEndOfGameAwards(game: Game) {
 export async function updateLeagueScoresForGameEnd(game: Game) {
     await distributeEndOfGameAwards(game);
 }
-
