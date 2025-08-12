@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import type { Game, SocialRank, UserProfile, Challenge } from '@/types';
 import { motion } from "framer-motion";
-import { Megaphone } from "lucide-react";
+import { Megaphone, Swords } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -19,6 +19,8 @@ import HomeDialogs from "./components/home/Dialogs";
 import WelcomeGuest from "./components/home/WelcomeGuest";
 import MainLoadingSkeleton from "./components/home/MainLoadingSkeleton";
 import SocietyChallenges from "./society/components/SocietyChallenges";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CompactChallengeList } from "./components/home/CompactChallengeList";
 
 export default function Home() {
     const { user, userProfile, loading, socialRanks, getSocialRankForUser, activeChallenges, newChallengeAvailable, markChallengeAsSeen } = useAuth();
@@ -74,14 +76,16 @@ export default function Home() {
                         socialRanks={socialRanks}
                     />
                     
-                    {activeChallenges.length > 0 && (
-                        <div className="space-y-4">
-                            <div className="text-center">
-                                <h2 className="text-3xl font-bold">تحديات نشطة</h2>
-                                <p className="text-muted-foreground">انضم إلى التحديات الحالية واربح جوائز قيمة!</p>
-                            </div>
-                            <SocietyChallenges filter="active" />
-                        </div>
+                     {activeChallenges.length > 0 && (
+                        <Card>
+                             <CardHeader className="pb-2">
+                                <CardTitle className="flex items-center gap-2"><Swords /> التحديات النشطة</CardTitle>
+                                <CardDescription>انضم إلى التحديات الحالية واربح جوائز قيمة!</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                               <CompactChallengeList challenges={activeChallenges} />
+                            </CardContent>
+                        </Card>
                     )}
                     
                     <GameGrid />

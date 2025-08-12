@@ -83,6 +83,14 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                         )}
                     </div>
                 </div>
+                 <div className="flex md:flex-col gap-2">
+                     <Button asChild>
+                         <Link href="/society">المجتمع</Link>
+                     </Button>
+                      <Button variant="outline" asChild>
+                         <Link href="/clan-wars">حروب الفرق</Link>
+                     </Button>
+                </div>
             </CardContent>
         </Card>
     );
