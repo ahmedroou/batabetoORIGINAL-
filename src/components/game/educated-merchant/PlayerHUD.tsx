@@ -1,10 +1,11 @@
+
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { motion, AnimatePresence } from 'framer-motion';
-import { PlayerAvatar } from '@/components/PlayerAvatar';
+import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { HandCoins, Crown, Home, Building } from 'lucide-react';
 import type { Player } from '@/types';
 import { cn } from '@/lib/utils';

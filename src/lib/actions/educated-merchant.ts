@@ -32,6 +32,7 @@ import {
   arrayUnion,
   limit,
   type Transaction,
+  setDoc,
 } from 'firebase/firestore';
 import type { Game, Player, Property, EducatedMerchantQuestion } from '@/types';
 import { shuffle } from './helpers';
@@ -330,6 +331,36 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
 export async function purchaseProperty(gameId: string, playerId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
 
+  // First, fetch necessary data outside the transaction
+  const gameDocForData = await getDoc(gameRef);
+  if (!gameDocForData.exists()) throw new Error('اللعبة غير موجودة.');
+  const gameData = gameDocForData.data() as Game;
+
+  const player = gameData.players.find((p) => p.id === playerId);
+  if (!player) return; // Player not in game
+
+  const property = gameData.educatedMerchantState?.board?.[player.position];
+  if (!property || property.type !== 'property') throw new Error('لا يوجد عقار في هذه الخانة.');
+
+  const questionsCol = collection(db, 'trap_answer_questions');
+  const randomKey = Math.random();
+  let q = query(questionsCol, where('category', '==', property.category), where('randomKey', '>=', randomKey), limit(1));
+  let qs = await getDocs(q);
+
+  if (qs.empty) {
+    const fallback = query(questionsCol, where('category', '==', property.category), limit(1));
+    qs = await getDocs(fallback);
+  }
+
+  if (qs.empty) throw new Error(`لا توجد أسئلة متاحة في قسم "${property.category}".`);
+
+  const questionDoc = qs.docs[0];
+  const questionData = { id: questionDoc.id, ...questionDoc.data() } as EducatedMerchantQuestion;
+
+  const options = shuffle([...(questionData.dummyAnswers || []), questionData.answer]);
+  questionData.options = options;
+
+  // Now, run the transaction with the fetched data
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
@@ -337,35 +368,15 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
 
     const playerIndex = getPlayerIndexById(game.players, playerId);
     if (playerIndex === -1) return;
-    const player = game.players[playerIndex];
+    const playerInTx = game.players[playerIndex];
 
-    const property = game.educatedMerchantState?.board?.[player.position];
-    if (!property) throw new Error('لا يوجد عقار في هذه الخانة.');
-    if (property.ownerId) throw new Error('هذا العقار مملوك بالفعل.');
-    if ((player.money || 0) < property.price) throw new Error('رصيدك لا يكفي لشراء هذا العقار.');
-
-    const questionsCol = collection(db, 'trap_answer_questions');
-    const randomKey = Math.random();
-
-    let q = query(questionsCol, where('category', '==', property.category), where('randomKey', '>=', randomKey), limit(1));
-    let qs = await getDocs(q);
-
-    if (qs.empty) {
-      // fallback
-      const fallback = query(questionsCol, where('category', '==', property.category), limit(1));
-      qs = await getDocs(fallback);
-    }
-
-    if (qs.empty) throw new Error(`لا توجد أسئلة متاحة في قسم "${property.category}".`);
-
-    const questionDoc = qs.docs[0];
-    const questionData = { id: questionDoc.id, ...questionDoc.data() } as EducatedMerchantQuestion;
-
-    const options = shuffle([...(questionData.dummyAnswers || []), questionData.answer]);
-    questionData.options = options;
-
+    const propertyInTx = game.educatedMerchantState?.board?.[playerInTx.position];
+    if (!propertyInTx) throw new Error('لا يوجد عقار في هذه الخانة.');
+    if (propertyInTx.ownerId) throw new Error('هذا العقار مملوك بالفعل.');
+    if ((playerInTx.money || 0) < propertyInTx.price) throw new Error('رصيدك لا يكفي لشراء هذا العقار.');
+    
     const updatedPlayers = [...game.players];
-    updatedPlayers[playerIndex] = { ...updatedPlayers[playerIndex], money: (updatedPlayers[playerIndex].money || 0) - property.price };
+    updatedPlayers[playerIndex] = { ...updatedPlayers[playerIndex], money: (updatedPlayers[playerIndex].money || 0) - propertyInTx.price };
 
     tx.update(gameRef, {
       players: updatedPlayers,
@@ -374,8 +385,8 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
       'educatedMerchantState.timerEndsAt': addActionTimer(),
       'educatedMerchantState.pendingPurchase': {
         playerId,
-        propertyId: property.id,
-        price: property.price,
+        propertyId: propertyInTx.id,
+        price: propertyInTx.price,
         questionId: questionData.id,
       },
     });
