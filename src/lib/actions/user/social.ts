@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db, auth } from '@/lib/firebase';
@@ -611,4 +612,56 @@ export async function payPunishmentTax(actorId: string): Promise<{ success: bool
     });
 }
 
+
+export async function liftPunishment(actorId: string, targetId: string): Promise<{ success: boolean; error?: string }> {
+  return runTransaction(db, async (transaction) => {
+    const targetRef = doc(db, "users", targetId);
+    const targetDoc = await transaction.get(targetRef);
+
+    if (!targetDoc.exists()) {
+      throw new Error("لم يتم العثور على اللاعب المستهدف.");
+    }
+
+    const targetData = targetDoc.data() as UserProfile;
+    const now = new Date();
+    
+    const humiliation = targetData.humiliation;
+    const avatarRevert = targetData.originalAvatarToRevert;
+    
+    let wasPunishmentLifted = false;
+    const updates: any = {};
+
+    if (humiliation && new Date(humiliation.until) > now && humiliation.by === actorId) {
+      updates.humiliation = deleteField();
+      wasPunishmentLifted = true;
+    }
+    
+    if (avatarRevert && new Date(avatarRevert.until) > now && avatarRevert.by === actorId) {
+      updates.avatarId = avatarRevert.id;
+      updates.originalAvatarToRevert = deleteField();
+      wasPunishmentLifted = true;
+    }
+    
+    if (!wasPunishmentLifted) {
+      throw new Error("أنت لم تفرض أي عقوبة سارية على هذا اللاعب.");
+    }
+    
+    // Check if other punishments are still active before changing isPunished flag
+    const remainingDecrees = (targetData.decrees || []).filter(d => d.until && new Date(d.until) > now);
+    const otherHumiliationActive = humiliation && updates.humiliation && new Date(humiliation.until) > now;
+    const otherAvatarPunishmentActive = avatarRevert && updates.originalAvatarToRevert && new Date(avatarRevert.until) > now;
+
+    if (remainingDecrees.length === 0 && !otherHumiliationActive && !otherAvatarPunishmentActive) {
+      updates.isPunished = false;
+    }
+
+    transaction.update(targetRef, updates);
+    await sendSystemMail(targetId, { subject: "بشرى سارة!", body: `قام اللاعب ${targetData.name} برفع العقوبة عنك.` }, transaction);
+    
+    return { success: true };
+  }).catch((error: any) => {
+    return { success: false, error: error.message };
+  });
+}
+    
     

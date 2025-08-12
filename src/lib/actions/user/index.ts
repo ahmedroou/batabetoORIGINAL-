@@ -22,7 +22,7 @@ import {
     updateLeagueScoresForGameEnd,
 } from './leagues';
 import { calculateEndOfGameAwards } from './awards';
-import { giveReward, applyPunishment, humiliatePlayer, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax } from './social';
+import { giveReward, applyPunishment, humiliatePlayer, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax, liftPunishment } from './social';
 import { requestAllegiance, respondToAllegianceRequest } from './allegiance';
 import { joinChallenge } from '../challenges';
 
@@ -76,4 +76,8 @@ export {
     joinChallenge,
     requestAllegiance, 
     respondToAllegianceRequest,
+    liftPunishment,
 };
+
+
+    

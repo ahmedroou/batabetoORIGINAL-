@@ -2,7 +2,7 @@
 
 import type { Game, Player, Property } from '@/types';
 import { PlayerAvatar } from '../PlayerAvatar';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { PropertyCard } from './PropertyCard';
 import { QuestionModal } from './QuestionModal';
 import { DiceRoll } from './DiceRoll';
@@ -20,10 +20,16 @@ interface GameBoardProps {
   self: Player;
 }
 
-const BOARD_SIZE = 28; 
+const BOARD_SIZE = 28;
 const GRID_SIZE = 8;
 
-const Tile = ({ property, isNewlyBought }: { property: Property, isNewlyBought: boolean }) => {
+// Visual tuning constants
+const JUMP_HEIGHT = 14; // px translateY
+const STEP_BASE_DELAY = 220; // ms
+const STEP_EXTRA_FINAL = 180; // extra ms on final step for anticipation
+const TRAIL_LIFETIME = 420; // ms for trail/flash
+
+const Tile = ({ property, isNewlyBought, isHighlighted }: { property: Property, isNewlyBought: boolean, isHighlighted?: boolean }) => {
     let Icon = Building;
     let baseBgColor = 'bg-slate-700';
     let borderColor = 'border-slate-500';
@@ -39,7 +45,7 @@ const Tile = ({ property, isNewlyBought }: { property: Property, isNewlyBought: 
     }
 
     const tileStyle: React.CSSProperties = {
-        transition: 'background-color 0.5s ease, box-shadow 0.5s ease',
+        transition: 'background-color 0.45s ease, box-shadow 0.45s ease, transform 0.25s ease',
     };
     if (property.ownerId && property.color) {
         tileStyle.backgroundColor = property.color;
@@ -47,8 +53,16 @@ const Tile = ({ property, isNewlyBought }: { property: Property, isNewlyBought: 
     
     return (
         <motion.div 
-            className={cn("w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500", baseBgColor, borderColor, isNewlyBought && 'animate-pulse-glow')} 
+            className={cn(
+                "w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500",
+                baseBgColor,
+                borderColor,
+                isNewlyBought && 'animate-pulse-glow',
+                isHighlighted && 'tile-highlight'
+            )}
             style={tileStyle}
+            animate={isHighlighted ? { scale: 1.02 } : { scale: 1 }}
+            transition={{ duration: 0.28 }}
         >
             <Icon className="w-5 h-5 mb-1 flex-shrink-0"/>
             <p className="text-[10px] font-bold leading-tight line-clamp-2">{property.name}</p>
@@ -67,6 +81,9 @@ export function GameBoard({ game, self }: GameBoardProps) {
 
     const [playerPositions, setPlayerPositions] = useState<Record<string, number>>({});
     const [isJumping, setIsJumping] = useState<Record<string, boolean>>({});
+    const [tileHighlight, setTileHighlight] = useState<Record<number, boolean>>({});
+
+    const shouldReduceMotion = useReducedMotion();
 
     useEffect(() => {
         const initialPositions: Record<string, number> = {};
@@ -97,7 +114,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
       return { top: `${top}px`, left: `${left}px`, position: 'absolute' };
     }, [tileSize, gapSize]);
 
-
     useEffect(() => {
         const calculateSize = () => {
             if (containerRef.current) {
@@ -117,19 +133,47 @@ export function GameBoard({ game, self }: GameBoardProps) {
 
     const movePlayerPiece = useCallback(async (playerId: string, steps: number, oldPos: number) => {
         let currentPos = oldPos;
+
+        // If user prefers reduced motion, skip long animations/delays
         for (let i = 0; i < steps; i++) {
+            const isLast = i === steps - 1;
+
+            // start visual jump
             setIsJumping(prev => ({ ...prev, [playerId]: true }));
+
+            // advance position
             currentPos = (currentPos + 1) % BOARD_SIZE;
             setPlayerPositions(prev => ({ ...prev, [playerId]: currentPos }));
-            await new Promise(res => setTimeout(res, 250)); // Wait for jump animation
+
+            // temporary highlight on the tile we just landed on
+            setTileHighlight(prev => ({ ...prev, [currentPos]: true }));
+            setTimeout(() => setTileHighlight(prev => ({ ...prev, [currentPos]: false })), TRAIL_LIFETIME);
+
+            // wait while jumping (shorter if reduced motion is requested)
+            if (!shouldReduceMotion) {
+                const delay = STEP_BASE_DELAY + (isLast ? STEP_EXTRA_FINAL : Math.min(120, i * 30));
+                await new Promise(res => setTimeout(res, delay));
+            }
+
+            // end visual jump for this step
             setIsJumping(prev => ({ ...prev, [playerId]: false }));
-            await new Promise(res => setTimeout(res, 50)); // Small delay between jumps
+
+            // tiny gap between steps to make movement feel rhythmic
+            if (!shouldReduceMotion) await new Promise(res => setTimeout(res, 50));
         }
+
+        // final landing small bounce for feel
+        if (!shouldReduceMotion) {
+            setIsJumping(prev => ({ ...prev, [playerId]: true }));
+            await new Promise(res => setTimeout(res, 140));
+            setIsJumping(prev => ({ ...prev, [playerId]: false }));
+        }
+
         // After movement animation finishes, call the server action
         if (self.id === playerId) {
             handlePropertyLanding(game.id, playerId);
         }
-    }, [game.id, self.id]);
+    }, [game.id, self.id, shouldReduceMotion]);
 
     useEffect(() => {
         if (game.gameState === 'movement') {
@@ -260,7 +304,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
                     </div>
                     {memoizedBoard.map((property, index) => (
                         <div key={index} style={{...getPositionStyles(index), width: tileSize, height: tileSize}}>
-                            <Tile property={property} isNewlyBought={game.educatedMerchantState?.newlyBoughtPropertyId === property.id}/>
+                            <Tile property={property} isNewlyBought={game.educatedMerchantState?.newlyBoughtPropertyId === property.id} isHighlighted={!!tileHighlight[index]} />
                         </div>
                     ))}
                      {Object.entries(playersGroupedByPosition).map(([positionStr, playersOnTile]) => {
@@ -286,31 +330,116 @@ export function GameBoard({ game, self }: GameBoardProps) {
                                 if (playerIndex === 3) { offsetX = (tileSize * 0.9 - pieceSize); offsetY = (tileSize * 0.9 - pieceSize); }
                             }
 
+                            // convert numeric top/left from baseStyle which are strings like '12px'
+                            const numericTop = parseFloat(String(baseStyle.top).replace('px','')) || 0;
+                            const numericLeft = parseFloat(String(baseStyle.left).replace('px','')) || 0;
+
                             const finalStyle = {
-                                ...baseStyle,
-                                top: `${(baseStyle.top as number) + offsetY}px`,
-                                left: `${(baseStyle.left as number) + offsetX}px`,
+                                top: `${numericTop + offsetY}px`,
+                                left: `${numericLeft + offsetX}px`,
                                 width: pieceSize,
                                 height: pieceSize,
+                                position: 'absolute',
                             };
                             
                             return (
                                 <motion.div
                                     key={p.id}
                                     layoutId={`player-piece-${p.id}`}
-                                    className={cn("absolute z-10", p.id === currentPlayerId && 'animate-pulse-glow', isJumping[p.id] && 'player-jumping')}
+                                    className={cn("absolute z-10", p.id === currentPlayerId && 'animate-pulse-glow')}
                                     initial={false}
-                                    animate={finalStyle}
-                                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                                    whileHover={{ scale: 1.2, zIndex: 20 }}
+                                    animate={{ ...finalStyle, y: isJumping[p.id] ? -JUMP_HEIGHT : 0 }}
+                                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                    whileHover={{ scale: 1.08, zIndex: 30 }}
                                 >
-                                    <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
+                                    <div className="relative w-full h-full">
+                                        {/* soft shadow under avatar that scales when jumping */}
+                                        <span className={cn("player-shadow absolute left-1/2 -translate-x-1/2 bottom-1 rounded-full", isJumping[p.id] && 'shadow-jump')} style={{ width: pieceSize * 0.72, height: Math.max(6, pieceSize * 0.16) }} />
+
+                                        {/* small expanding trail effect on jump */}
+                                        <span className={cn("player-trail absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 rounded-full pointer-events-none", isJumping[p.id] && 'player-trail-active')} style={{ width: pieceSize * 0.45, height: pieceSize * 0.45 }} />
+
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
+                                    </div>
                                 </motion.div>
                             );
                         });
                     })}
                 </div>
             </div>
+
+            <style jsx>{`
+                /* Player jump + shadow + trail */
+                @keyframes pulseGlow {
+                  0% { box-shadow: 0 0 6px rgba(255,255,255,0.06); }
+                  50% { box-shadow: 0 0 18px rgba(255,255,255,0.14); }
+                  100% { box-shadow: 0 0 6px rgba(255,255,255,0.06); }
+                }
+
+                .animate-pulse-glow {
+                  animation: pulseGlow 1.8s infinite;
+                }
+
+                .player-shadow {
+                  background: rgba(0,0,0,0.45);
+                  filter: blur(6px);
+                  transform-origin: center;
+                  transition: transform 220ms ease, opacity 220ms ease;
+                  opacity: 0.9;
+                }
+
+                .shadow-jump {
+                  transform: translateY(6px) scale(0.72);
+                  opacity: 0.6;
+                }
+
+                .player-trail {
+                  background: radial-gradient(circle at center, rgba(255,255,255,0.18), rgba(255,255,255,0.02));
+                  opacity: 0;
+                  transform: scale(0.6);
+                  transition: opacity 180ms ease, transform 260ms ease;
+                  z-index: 5;
+                }
+
+                .player-trail-active {
+                  opacity: 0.75;
+                  transform: scale(1.15);
+                  animation: trailFade ${TRAIL_LIFETIME}ms ease-out forwards;
+                }
+
+                @keyframes trailFade {
+                  0% { opacity: 0.9; transform: scale(1.05); }
+                  70% { opacity: 0.5; transform: scale(1.35); }
+                  100% { opacity: 0; transform: scale(1.6); }
+                }
+
+                /* tile highlight for temporary landing feedback */
+                .tile-highlight {
+                  box-shadow: 0 0 18px rgba(99,102,241,0.18), inset 0 0 18px rgba(99,102,241,0.05);
+                  border-color: rgba(99,102,241,0.9) !important;
+                }
+
+                /* small glow for newly bought property */
+                @keyframes boughtPulse {
+                  0% { box-shadow: 0 0 0 rgba(255,215,0,0.0); }
+                  40% { box-shadow: 0 0 22px rgba(255,215,0,0.28); }
+                  100% { box-shadow: 0 0 0 rgba(255,215,0,0.0); }
+                }
+
+                .animate-pulse-glow {
+                  animation: boughtPulse 1.2s ease-out;
+                }
+
+                /* small helpers for readability */
+                .tile-highlight, .animate-pulse-glow {
+                  transition: box-shadow 300ms ease, transform 200ms ease;
+                }
+
+                /* reduce motion preference override */
+                @media (prefers-reduced-motion: reduce) {
+                  .player-trail, .animate-pulse-glow, .tile-highlight { animation: none !important; transition: none !important; }
+                }
+            `}</style>
         </div>
     );
 }

@@ -1,10 +1,11 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserProfile, SocialRank, Decree, AvatarPrice, AllegianceRequest } from '@/types';
-import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank, searchUsers } from '@/lib/actions/user';
+import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank, searchUsers, liftPunishment } from '@/lib/actions/user';
 import { Loader2, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -31,6 +32,7 @@ const InteractionModal = ({
     onHumiliate,
     onIssueDecree,
     onForceAvatar,
+    onLiftPunishment,
 }: {
     isOpen: boolean;
     onClose: () => void;
@@ -41,6 +43,7 @@ const InteractionModal = ({
     onHumiliate: (targetId: string, durationInDays: number, taxToLift: number) => Promise<void>;
     onIssueDecree: (targetId: string, title: string, durationInDays: number) => Promise<void>;
     onForceAvatar: (targetId: string, avatarId: string, durationInDays: number, taxToLift: number) => Promise<void>;
+    onLiftPunishment: (targetId: string) => Promise<void>;
 }) => {
     
     // States for Punishments
@@ -66,6 +69,7 @@ const InteractionModal = ({
     const canPunish = actorRank.threshold > targetRank.threshold;
     const isAlreadyHumiliated = target.humiliation?.until && new Date(target.humiliation.until) > new Date();
     const isAlreadyPunishedWithAvatar = target.originalAvatarToRevert?.until && new Date(target.originalAvatarToRevert.until) > new Date();
+    const isPunishedByMe = (target.humiliation?.by === actor.uid && isAlreadyHumiliated) || (target.originalAvatarToRevert?.by === actor.uid && isAlreadyPunishedWithAvatar);
 
     const getHonorCost = (duration: number) => duration * 3;
     const getAvatarHonorCost = (duration: number) => duration * 2;
@@ -116,6 +120,15 @@ const InteractionModal = ({
                 </DialogHeader>
                  <ScrollArea className="h-[50vh] p-1">
                     <div className="space-y-3 pr-2">
+                         {isPunishedByMe && (
+                            <div className="p-3 border border-green-500/50 rounded-lg space-y-2 bg-green-900/30">
+                                <h4 className="font-bold text-center text-green-400">رفع العقوبة</h4>
+                                <p className="text-xs text-center text-slate-400">أنت من عاقبت هذا اللاعب. يمكنك رفع العقوبة عنه.</p>
+                                <Button className="w-full" variant="secondary" onClick={() => onLiftPunishment(target.uid)}>
+                                    العفو عند المقدرة
+                                </Button>
+                            </div>
+                        )}
                         {renderPunishmentCard('إذلال عام', 'can_send_global_taunt', getHonorCost, humiliationDuration, setHumiliationDuration, isAlreadyHumiliated, (
                             <>
                                 <Input type="number" value={humiliationTax} onChange={e => setHumiliationTax(e.target.value)} placeholder="ضريبة الخلاص (كوينز)..." className="bg-slate-800 border-slate-600"/>
@@ -296,6 +309,17 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         }
     }
     
+    const handleLiftPunishment = async (targetId: string) => {
+        if (!userProfile) return;
+        const result = await liftPunishment(userProfile.uid, targetId);
+        if (result.success) {
+            toast({ title: "تم رفع العقوبة بنجاح!" });
+            await refreshAllData();
+        } else {
+             toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+    }
+
     const handleSearch = useCallback(async () => {
         if (searchTerm.trim().length < 2) {
             setSearchedPlayers([]);
@@ -420,8 +444,12 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                     onHumiliate={handleHumiliate}
                     onIssueDecree={handleIssueDecree}
                     onForceAvatar={handleForceAvatar}
+                    onLiftPunishment={handleLiftPunishment}
                 />
             )}
         </>
     );
 }
+
+
+    
