@@ -3,7 +3,7 @@
 'use server';
 
 import { db, auth } from '@/lib/firebase';
-import { doc, serverTimestamp, updateDoc, collection, getDoc, increment, runTransaction, arrayUnion, setDoc, deleteField } from 'firebase/firestore';
+import { doc, serverTimestamp, updateDoc, collection, getDoc, increment, runTransaction, arrayUnion, setDoc, deleteField, Timestamp } from 'firebase/firestore';
 import type { UserProfile, SocialRank, Humiliation, AllegianceRequest, ActiveAllegiance, TaxDemand, Alliance, Decree, DuelChallenge, SocialEvent } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { sendSystemMail } from './mail';
@@ -136,7 +136,7 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         }
 
 
-        if (target.humiliation && new Date(target.humiliation.until) > new Date()) {
+        if (target.humiliation && new Date((target.humiliation.until as any).toDate()) > new Date()) {
             throw new Error("هذا اللاعب مُذل بالفعل.");
         }
         
@@ -625,38 +625,60 @@ export async function liftPunishment(actorId: string, targetId: string): Promise
     const targetData = targetDoc.data() as UserProfile;
     const now = new Date();
     
+    // Safely convert Timestamps to Dates for comparison
     const humiliation = targetData.humiliation;
+    const isHumiliationActive = humiliation && humiliation.until && (humiliation.until as Timestamp).toDate() > now;
+
     const avatarRevert = targetData.originalAvatarToRevert;
+    const isAvatarRevertActive = avatarRevert && avatarRevert.until && (avatarRevert.until as Timestamp).toDate() > now;
+
+    const decrees = targetData.decrees || [];
     
     let wasPunishmentLifted = false;
     const updates: any = {};
 
-    if (humiliation && new Date(humiliation.until) > now && humiliation.by === actorId) {
+    // Lift humiliation
+    if (isHumiliationActive && humiliation.by === actorId) {
       updates.humiliation = deleteField();
       wasPunishmentLifted = true;
     }
     
-    if (avatarRevert && new Date(avatarRevert.until) > now && avatarRevert.by === actorId) {
+    // Lift avatar punishment
+    if (isAvatarRevertActive && avatarRevert.by === actorId) {
       updates.avatarId = avatarRevert.id;
       updates.originalAvatarToRevert = deleteField();
       wasPunishmentLifted = true;
     }
     
+    // Lift decrees
+    const decreesToKeep = decrees.filter(d => d.issuedBy !== actorId || (d.until && (d.until as Timestamp).toDate() <= now));
+    const decreesWereLifted = decrees.length !== decreesToKeep.length;
+    if (decreesWereLifted) {
+        updates.decrees = decreesToKeep;
+        wasPunishmentLifted = true;
+    }
+
     if (!wasPunishmentLifted) {
       throw new Error("أنت لم تفرض أي عقوبة سارية على هذا اللاعب.");
     }
     
-    // Check if other punishments are still active before changing isPunished flag
-    const remainingDecrees = (targetData.decrees || []).filter(d => d.until && new Date(d.until) > now);
-    const otherHumiliationActive = humiliation && updates.humiliation && new Date(humiliation.until) > now;
-    const otherAvatarPunishmentActive = avatarRevert && updates.originalAvatarToRevert && new Date(avatarRevert.until) > now;
+    // Check if any other punishments are still active from OTHER players
+    const otherHumiliationActive = humiliation && humiliation.by !== actorId && (humiliation.until as Timestamp).toDate() > now;
+    const otherAvatarPunishmentActive = avatarRevert && avatarRevert.by !== actorId && (avatarRevert.until as Timestamp).toDate() > now;
+    const otherDecreesActive = decreesToKeep.some(d => d.until && (d.until as Timestamp).toDate() > now);
 
-    if (remainingDecrees.length === 0 && !otherHumiliationActive && !otherAvatarPunishmentActive) {
+    if (!otherHumiliationActive && !otherAvatarPunishmentActive && !otherDecreesActive) {
       updates.isPunished = false;
     }
 
     transaction.update(targetRef, updates);
-    await sendSystemMail(targetId, { subject: "بشرى سارة!", body: `قام اللاعب ${targetData.name} برفع العقوبة عنك.` }, transaction);
+
+    // Send a single generic mail that a punishment was lifted
+    await sendSystemMail(
+        targetId, 
+        { subject: "بشرى سارة!", body: `قام اللاعب ${actorDoc.data()?.name || 'لاعب'} برفع العقوبة عنك.` }, 
+        transaction
+    );
     
     return { success: true };
   }).catch((error: any) => {
