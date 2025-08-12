@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -307,7 +308,11 @@ export function GameBoard({ game, self }: GameBoardProps) {
       }
 
       const dynamicStyle: React.CSSProperties = {};
-      if (property.ownerId && property.color) dynamicStyle.backgroundColor = property.color;
+      if (property.ownerId && property.color) {
+        dynamicStyle.backgroundColor = property.color;
+        borderColor = 'border-white/50';
+      }
+
 
       return (
         <Popover>
@@ -449,7 +454,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
                   <div className="relative w-full h-full">
                     <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
                     {p.status === 'bankrupt' && (
-                      <div className="absolute -right-1 -top-1 bg-red-600 text-white text-[10px] px-1 rounded">ب
+                      <div className="absolute -right-1 -top-1 bg-red-600 text-white text-[10px] px-1 rounded">
                       </div>
                     )}
                   </div>

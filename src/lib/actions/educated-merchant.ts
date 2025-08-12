@@ -1,3 +1,4 @@
+
 /* Educated Merchant — Full Refactor & Feature Upgrade
    - Fully updated to match the user's game rules (التاجر المتعلم)
    - Improvements:
@@ -228,7 +229,7 @@ async function rollDiceInternal(gameRef: ReturnType<typeof doc>, tx: Transaction
     activityMessage += ` وحصل على ${PASS_GO_REWARD} دينار للمرور بنقطة البداية.`;
   }
 
-  // nonce helps frontend trigger the roll animation even إذا كانت القيمة نفسها مكررة
+  // nonce helps frontend trigger the roll animation even if the value is a repeat
   const rollNonce = Date.now();
 
   tx.update(gameRef, {
@@ -254,14 +255,14 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
 
     const property = game.educatedMerchantState?.board?.[player.position];
     if (!property) {
-      // مجرد خانة فارغة — أنهِ الجولة
+      // Just an empty tile - end the turn
       await endTurnInternal(gameRef, tx, playerId);
       return;
     }
 
     if (property.type === 'property') {
       if (!property.ownerId) {
-        // عرض خيار الشراء
+        // Show purchase option
         tx.update(gameRef, {
           gameState: 'property_action',
           'educatedMerchantState.timerEndsAt': addActionTimer(),
@@ -276,7 +277,7 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
         const rent = property.rent || 0;
 
         if ((updatedPlayers[payerIndex].money || 0) < rent) {
-          // إفلاس الدافع
+          // Payer goes bankrupt
           updatedPlayers[ownerIndex].money = (updatedPlayers[ownerIndex].money || 0) + (updatedPlayers[payerIndex].money || 0);
           updatedPlayers[payerIndex].money = 0;
           updatedPlayers[payerIndex].status = 'bankrupt';
@@ -296,7 +297,7 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
         }
       }
 
-      // ملكيته لنفس اللاعب — تنتهي الجولة
+      // Own property, end turn
       await endTurnInternal(gameRef, tx, playerId);
       return;
     }
@@ -323,7 +324,7 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
       }
     }
 
-    // افتراضي: أنهِ الجولة
+    // Default: end turn
     await endTurnInternal(gameRef, tx, playerId);
   });
 }

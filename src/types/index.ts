@@ -609,7 +609,7 @@ export interface Game {
     };
     awayPlayerIds?: string[]; 
     awayPlayerIdsInAnsweringPhase?: string[];
-    afkStats?: Record<string, number>; // { [playerId]: count }
+    afkStats?: Record<string, number>;
   };
 
   // "خلف القناع" (Mafia) specific state

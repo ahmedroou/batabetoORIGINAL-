@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { Game, Player, Property } from '@/types';
@@ -113,7 +114,7 @@ export function PropertyCard({ game, self, property, isPopover = false, allowAct
                             {isSubmitting ? <Loader2 className="animate-spin" /> : 'تخطي'}
                         </Button>
                     </CardFooter>
-                ) : (
+                ) : owner ? null : (
                     <CardFooter>
                         <p className="text-center w-full text-muted-foreground animate-pulse">في انتظار قرار {currentPlayer?.name}...</p>
                     </CardFooter>
