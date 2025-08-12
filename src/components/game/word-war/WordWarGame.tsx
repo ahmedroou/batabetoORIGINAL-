@@ -188,7 +188,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
         }
 
         if (isGuideTurn) {
-            const handleSubmitHint = async (e: React.FormEvent) => {
+            const handleSubmitHint = (e: React.FormEvent) => {
                 e.preventDefault();
                 const trimmedHint = hintWord.trim();
                 if (!trimmedHint || hintNumber < 1) {
@@ -196,15 +196,13 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                     return;
                 }
                 setIsSubmitting(true);
-                try {
-                    await wordWarActions.submitHint(game.id, self.id, trimmedHint, hintNumber);
+                wordWarActions.submitHint(game.id, self.id, trimmedHint, hintNumber).catch((error) => {
+                     toast({ title: "خطأ", description: error.message, variant: "destructive" });
+                }).finally(() => {
                     setHintWord('');
                     setHintNumber(1);
-                } catch (error: any) {
-                    toast({ title: "خطأ", description: error.message, variant: "destructive" });
-                } finally {
                     setIsSubmitting(false);
-                }
+                });
             };
 
             return (
