@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Game, Player } from '@/types';
@@ -48,18 +47,22 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
 
     return (
         <div className="w-full h-screen flex items-center justify-center relative bg-gray-100 dark:bg-gray-900">
-            <AnimatePresence mode="wait">
-                <motion.div
-                    key={game.gameState}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.4 }}
-                    className="w-full h-full flex items-center justify-center"
-                >
-                    {renderContent()}
-                </motion.div>
-            </AnimatePresence>
+            {/* The AnimatePresence component is now wrapping a div that will always be present,
+                and the content inside it will change. This prevents the whole screen from exiting. */}
+            <div className="w-full h-full flex items-center justify-center">
+                 <AnimatePresence mode="wait">
+                    <motion.div
+                        key={game.gameState}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.4 }}
+                        className="w-full h-full flex items-center justify-center"
+                    >
+                        {renderContent()}
+                    </motion.div>
+                </AnimatePresence>
+            </div>
         </div>
     );
 }

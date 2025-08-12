@@ -209,6 +209,15 @@
   animation: shake 0.4s ease-in-out;
 }
 
+@keyframes jump {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%  { transform: translateY(-8px) scale(1.1); }
+}
+
+.player-jumping {
+  animation: jump 0.25s ease-out;
+}
+
 
 /* Society Card Backgrounds */
 .bg-top-rank-card {

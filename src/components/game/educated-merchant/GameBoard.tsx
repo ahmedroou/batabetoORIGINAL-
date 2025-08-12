@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { Game, Player, Property } from '@/types';
@@ -22,7 +21,7 @@ interface GameBoardProps {
 }
 
 const BOARD_SIZE = 28; 
-const GRID_SIZE = 8; // 8x8 grid for a 28-tile board
+const GRID_SIZE = 8;
 
 const Tile = ({ property, isNewlyBought }: { property: Property, isNewlyBought: boolean }) => {
     let Icon = Building;
@@ -39,14 +38,17 @@ const Tile = ({ property, isNewlyBought }: { property: Property, isNewlyBought: 
         borderColor = 'border-red-500';
     }
 
-    const tileStyle = property.ownerId && property.color ? { backgroundColor: property.color, transition: 'background-color 0.5s ease' } : {};
+    const tileStyle: React.CSSProperties = {
+        transition: 'background-color 0.5s ease, box-shadow 0.5s ease',
+    };
+    if (property.ownerId && property.color) {
+        tileStyle.backgroundColor = property.color;
+    }
     
     return (
         <motion.div 
-            className={cn("w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500", baseBgColor, borderColor)} 
+            className={cn("w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500", baseBgColor, borderColor, isNewlyBought && 'animate-pulse-glow')} 
             style={tileStyle}
-            animate={{ boxShadow: isNewlyBought ? ['0 0 0px #fff', '0 0 20px #ffd700', '0 0 0px #fff'] : 'none' }}
-            transition={{ duration: 0.5, repeat: 4, ease: "easeInOut" }}
         >
             <Icon className="w-5 h-5 mb-1 flex-shrink-0"/>
             <p className="text-[10px] font-bold leading-tight line-clamp-2">{property.name}</p>
@@ -62,7 +64,18 @@ export function GameBoard({ game, self }: GameBoardProps) {
     const [tileSize, setTileSize] = useState(100);
     const [gapSize, setGapSize] = useState(4);
     const containerRef = useRef<HTMLDivElement>(null);
-    
+
+    const [playerPositions, setPlayerPositions] = useState<Record<string, number>>({});
+    const [isJumping, setIsJumping] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        const initialPositions: Record<string, number> = {};
+        game.players.forEach(p => {
+            initialPositions[p.id] = p.position;
+        });
+        setPlayerPositions(initialPositions);
+    }, []); // Only on initial mount
+
     const getPositionStyles = useCallback((index: number): React.CSSProperties => {
       const sideLength = GRID_SIZE - 1;
       let top = 0, left = 0;
@@ -91,7 +104,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
                 const containerWidth = containerRef.current.offsetWidth;
                 const containerHeight = containerRef.current.offsetHeight;
                 const minDim = Math.min(containerWidth, containerHeight);
-                const newTileSize = Math.floor(minDim / (GRID_SIZE + 1)); // +1 for padding
+                const newTileSize = Math.floor(minDim / (GRID_SIZE + 1));
                 setTileSize(newTileSize);
                 setGapSize(Math.max(2, Math.floor(newTileSize * 0.04)));
             }
@@ -102,6 +115,32 @@ export function GameBoard({ game, self }: GameBoardProps) {
         return () => window.removeEventListener('resize', calculateSize);
     }, []);
 
+    const movePlayerPiece = useCallback(async (playerId: string, steps: number, oldPos: number) => {
+        let currentPos = oldPos;
+        for (let i = 0; i < steps; i++) {
+            setIsJumping(prev => ({ ...prev, [playerId]: true }));
+            currentPos = (currentPos + 1) % BOARD_SIZE;
+            setPlayerPositions(prev => ({ ...prev, [playerId]: currentPos }));
+            await new Promise(res => setTimeout(res, 250)); // Wait for jump animation
+            setIsJumping(prev => ({ ...prev, [playerId]: false }));
+            await new Promise(res => setTimeout(res, 50)); // Small delay between jumps
+        }
+        // After movement animation finishes, call the server action
+        if (self.id === playerId) {
+            handlePropertyLanding(game.id, playerId);
+        }
+    }, [game.id, self.id]);
+
+    useEffect(() => {
+        if (game.gameState === 'movement') {
+            const movingPlayer = game.players.find(p => p.id === game.educatedMerchantState?.turnOrder[game.educatedMerchantState.currentTurnIndex]);
+            if (movingPlayer) {
+                const lastRoll = game.educatedMerchantState.lastDiceRoll || 0;
+                const oldPosition = (movingPlayer.position - lastRoll + BOARD_SIZE) % BOARD_SIZE;
+                movePlayerPiece(movingPlayer.id, lastRoll, oldPosition);
+            }
+        }
+    }, [game.gameState, game.educatedMerchantState?.lastDiceRoll, movePlayerPiece]);
     
     if (!memoizedBoard || memoizedBoard.length === 0) {
         return <div>جاري تحميل لوحة اللعب...</div>;
@@ -161,16 +200,18 @@ export function GameBoard({ game, self }: GameBoardProps) {
         }
     }
 
-    // Group players by position
-    const playersByPosition = game.players
-        .filter(p => p.status !== 'bankrupt')
-        .reduce((acc, player) => {
-            if (!acc[player.position]) {
-                acc[player.position] = [];
-            }
-            acc[player.position].push(player);
-            return acc;
-        }, {} as Record<number, Player[]>);
+    const playersGroupedByPosition = useMemo(() => {
+        return game.players
+            .filter(p => p.status !== 'bankrupt')
+            .reduce((acc, player) => {
+                const pos = playerPositions[player.id] ?? player.position;
+                if (!acc[pos]) {
+                    acc[pos] = [];
+                }
+                acc[pos].push(player);
+                return acc;
+            }, {} as Record<number, Player[]>);
+    }, [game.players, playerPositions]);
 
 
     return (
@@ -222,63 +263,54 @@ export function GameBoard({ game, self }: GameBoardProps) {
                             <Tile property={property} isNewlyBought={game.educatedMerchantState?.newlyBoughtPropertyId === property.id}/>
                         </div>
                     ))}
-                    {Object.entries(playersByPosition).map(([positionStr, playersOnTile]) => {
+                     {Object.entries(playersGroupedByPosition).map(([positionStr, playersOnTile]) => {
                         const position = parseInt(positionStr, 10);
-                        const mainStyle = getPositionStyles(position);
+                        const baseStyle = getPositionStyles(position);
                         const playerCount = playersOnTile.length;
 
-                        return (
-                            <motion.div
-                                key={`tile-${position}`}
-                                className="absolute"
-                                initial={false}
-                                animate={mainStyle}
-                                transition={{ type: "spring", stiffness: 200, damping: 30 }}
-                                style={{width: tileSize, height: tileSize}}
-                            >
-                                {playersOnTile.map((p, playerIndex) => {
-                                    const pieceSize = playerCount > 1 ? tileSize * 0.35 : tileSize * 0.4;
-                                    let offsetX = '55%'; 
-                                    let offsetY = '55%';
+                        return playersOnTile.map((p, playerIndex) => {
+                            const pieceSize = playerCount > 1 ? tileSize * 0.35 : tileSize * 0.4;
+                            let offsetX = (tileSize - pieceSize) / 2;
+                            let offsetY = (tileSize - pieceSize) / 2;
 
-                                    if (playerCount === 2) {
-                                        offsetX = playerIndex === 0 ? '10%' : '55%';
-                                    } else if (playerCount === 3) {
-                                        if (playerIndex === 0) { offsetX = '30%'; offsetY = '10%'; }
-                                        if (playerIndex === 1) { offsetX = '10%'; offsetY = '55%'; }
-                                        if (playerIndex === 2) { offsetX = '55%'; offsetY = '55%'; }
-                                    } else if (playerCount >= 4) {
-                                        if (playerIndex === 0) { offsetX = '10%'; offsetY = '10%'; }
-                                        if (playerIndex === 1) { offsetX = '55%'; offsetY = '10%'; }
-                                        if (playerIndex === 2) { offsetX = '10%'; offsetY = '55%'; }
-                                        if (playerIndex === 3) { offsetX = '55%'; offsetY = '55%'; }
-                                    }
+                            if (playerCount === 2) {
+                                offsetX = playerIndex === 0 ? (tileSize * 0.1) : (tileSize * 0.9 - pieceSize);
+                            } else if (playerCount === 3) {
+                                if (playerIndex === 0) { offsetX = (tileSize - pieceSize) / 2; offsetY = (tileSize * 0.1); }
+                                if (playerIndex === 1) { offsetX = (tileSize * 0.1); offsetY = (tileSize * 0.9 - pieceSize); }
+                                if (playerIndex === 2) { offsetX = (tileSize * 0.9 - pieceSize); offsetY = (tileSize * 0.9 - pieceSize); }
+                            } else if (playerCount >= 4) {
+                                if (playerIndex === 0) { offsetX = (tileSize * 0.1); offsetY = (tileSize * 0.1); }
+                                if (playerIndex === 1) { offsetX = (tileSize * 0.9 - pieceSize); offsetY = (tileSize * 0.1); }
+                                if (playerIndex === 2) { offsetX = (tileSize * 0.1); offsetY = (tileSize * 0.9 - pieceSize); }
+                                if (playerIndex === 3) { offsetX = (tileSize * 0.9 - pieceSize); offsetY = (tileSize * 0.9 - pieceSize); }
+                            }
 
-                                    return (
-                                        <motion.div
-                                            key={p.id}
-                                            layoutId={`player-piece-${p.id}`}
-                                            className={cn("absolute z-10 transition-all duration-300", p.id === currentPlayerId && 'animate-pulse-glow')}
-                                            initial={{ bottom: '55%', right: '55%' }}
-                                            animate={{ bottom: offsetY, right: offsetX }}
-                                            onAnimationComplete={() => {
-                                                if (game.gameState === 'movement' && p.id === currentPlayerId) {
-                                                    handlePropertyLanding(game.id, p.id);
-                                                }
-                                            }}
-                                            whileHover={{ scale: 1.2, zIndex: 20 }}
-                                            style={{ width: pieceSize, height: pieceSize }}
-                                        >
-                                            <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
-                                        </motion.div>
-                                    );
-                                })}
-                            </motion.div>
-                        );
+                            const finalStyle = {
+                                ...baseStyle,
+                                top: `${(baseStyle.top as number) + offsetY}px`,
+                                left: `${(baseStyle.left as number) + offsetX}px`,
+                                width: pieceSize,
+                                height: pieceSize,
+                            };
+                            
+                            return (
+                                <motion.div
+                                    key={p.id}
+                                    layoutId={`player-piece-${p.id}`}
+                                    className={cn("absolute z-10", p.id === currentPlayerId && 'animate-pulse-glow', isJumping[p.id] && 'player-jumping')}
+                                    initial={false}
+                                    animate={finalStyle}
+                                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                    whileHover={{ scale: 1.2, zIndex: 20 }}
+                                >
+                                    <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
+                                </motion.div>
+                            );
+                        });
                     })}
                 </div>
             </div>
         </div>
     );
 }
-
