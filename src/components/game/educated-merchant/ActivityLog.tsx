@@ -13,12 +13,12 @@ interface ActivityLogProps {
 
 export function ActivityLog({ log }: ActivityLogProps) {
   return (
-    <Card>
+    <Card className="h-full">
         <CardHeader>
             <CardTitle>سجل الأحداث</CardTitle>
         </CardHeader>
       <CardContent>
-        <ScrollArea className="h-48">
+        <ScrollArea className="h-[45vh]">
           <div className="space-y-2 pr-4">
             <AnimatePresence initial={false}>
             {log.slice().reverse().map((entry, index) => (
@@ -31,7 +31,7 @@ export function ActivityLog({ log }: ActivityLogProps) {
                     className="text-sm p-2 bg-muted rounded-md"
                 >
                     <p>{entry.message}</p>
-                    <p className="text-xs text-muted-foreground text-right">
+                    <p className="text-xs text-muted-foreground text-left">
                         {formatDistanceToNow(new Date(entry.timestamp), { addSuffix: true, locale: ar })}
                     </p>
                 </motion.div>
