@@ -111,8 +111,8 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
 }
 
 export async function rollDice(gameId: string, playerId: string): Promise<void> {
+    const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
@@ -122,7 +122,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         const currentTurnIndex = game.educatedMerchantState!.currentTurnIndex;
         if (turnOrder[currentTurnIndex] !== playerId) throw new Error("ليس دورك.");
 
-        const diceRoll = Math.floor(Math.random() * 5) + 1;
+        const diceRoll = Math.floor(Math.random() * 6) + 1; // Roll a 6-sided die
         const playerIndex = game.players.findIndex(p => p.id === playerId);
         if(playerIndex === -1) return;
 
@@ -249,7 +249,7 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
 
         if (questionSnapshot.empty) {
             const wrapAroundQuery = query(questionsCol, where("category", "==", property.category), limit(1));
-            querySnapshot = await getDocs(wrapAroundQuery);
+            questionSnapshot = await getDocs(wrapAroundQuery);
             if(questionSnapshot.empty) throw new Error(`لا توجد أسئلة متاحة في قسم "${property.category}".`);
         }
         
@@ -359,7 +359,24 @@ export async function handleTimeout(gameId: string, hostId: string) {
         } else if (game.gameState === 'rolling') {
              const activityMessage = `انتهى وقت اللاعب ${game.players.find(p=>p.id === currentPlayerId)?.name}، سيتم رمي النرد تلقائياً.`;
              transaction.update(gameRef, {'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }) });
-             await rollDice(gameId, currentPlayerId);
+             // Since we are already in a transaction, we cannot call another transactional function.
+             // We need to inline the logic of rollDice here.
+             const diceRoll = Math.floor(Math.random() * 6) + 1;
+             const playerIndex = game.players.findIndex(p => p.id === currentPlayerId);
+             const oldPosition = game.players[playerIndex].position;
+             const newPosition = (oldPosition + diceRoll) % BOARD_SIZE;
+             const updatedPlayers = [...game.players];
+             updatedPlayers[playerIndex].position = newPosition;
+             let rollActivityMessage = `${updatedPlayers[playerIndex].name} رمى ${diceRoll}.`;
+             if (newPosition < oldPosition) { updatedPlayers[playerIndex].money! += PASS_GO_REWARD; rollActivityMessage += ` ومر بنقطة البداية.`; }
+             transaction.update(gameRef, {
+                 players: updatedPlayers,
+                 gameState: 'movement',
+                 'educatedMerchantState.lastDiceRoll': diceRoll,
+                 'educatedMerchantState.activityLog': arrayUnion({ message: rollActivityMessage, timestamp: new Date() }),
+                 'educatedMerchantState.timerEndsAt': deleteField(),
+             });
+
         } else if (game.gameState === 'property_action') {
              const activityMessage = `انتهى وقت اللاعب ${game.players.find(p=>p.id === currentPlayerId)?.name} وتخطى شراء العقار.`;
              await endTurnInternal(gameId, currentPlayerId, transaction, activityMessage);
@@ -369,15 +386,20 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
 async function endTurnInternal(gameId: string, playerId: string, transaction: Transaction, extraMessage: string = "", extraUpdates: any = {}) {
     const gameRef = doc(db, 'games', gameId);
-    // Re-fetch the game doc within the transaction to ensure we have the latest state, especially if updates happened before calling this.
+    // Re-fetch the game doc within the transaction to ensure we have the latest state,
+    // as it might have been modified by the calling function before passing `extraUpdates`.
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error("Game not found in endTurnInternal.");
     
-    // Merge the current game data with any pending updates passed to the function
-    const game = { ...gameDoc.data(), ...extraUpdates } as Game;
+    // Create a new game state by merging the current state with any pending updates
+    let game: Game = { ...gameDoc.data() } as Game;
+    if (extraUpdates.players) game.players = extraUpdates.players;
+    if (extraUpdates['educatedMerchantState.board']) game.educatedMerchantState!.board = extraUpdates['educatedMerchantState.board'];
+
 
     const updatedBoard = game.educatedMerchantState!.board.map(prop => {
         const owner = game.players.find(p => p.id === prop.ownerId);
+        // If owner is now bankrupt, reset property
         if (owner && owner.status === 'bankrupt') {
             return { ...prop, ownerId: null, color: undefined };
         }
@@ -397,6 +419,7 @@ async function endTurnInternal(gameId: string, playerId: string, transaction: Tr
         const finalGameData = {
             ...game,
             players: updatedPlayers,
+            'educatedMerchantState.board': updatedBoard,
             gameState: 'final_results' as const,
             gameResult: { winner: winner?.id || 'none', message: `اللاعب ${winner?.name || ''} هو الناجي الأخير!` }
         };
@@ -419,6 +442,7 @@ async function endTurnInternal(gameId: string, playerId: string, transaction: Tr
         const finalGameData = {
             ...game,
             players: updatedPlayers,
+            'educatedMerchantState.board': updatedBoard,
             gameState: 'final_results' as const,
             gameResult: { winner: finalWinner?.id || 'none', message: `اللاعب ${finalWinner?.name || ''} هو الناجي الأخير!` }
         };
@@ -433,7 +457,7 @@ async function endTurnInternal(gameId: string, playerId: string, transaction: Tr
 
     if (newRound > maxRounds) {
         const winner = updatedPlayers.filter(p => p.status !== 'bankrupt').reduce((prev, current) => ((prev.money || 0) > (current.money || 0)) ? prev : current);
-        const finalGameData = { ...game, players: updatedPlayers, gameState: 'final_results' as const, gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.` } };
+        const finalGameData = { ...game, players: updatedPlayers, 'educatedMerchantState.board': updatedBoard, gameState: 'final_results' as const, gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.` } };
         transaction.update(gameRef, finalGameData);
         await updateLeagueScoresForGameEnd(finalGameData);
     } else {
