@@ -18,6 +18,7 @@ import LobbySection from "./components/home/LobbySection";
 import HomeDialogs from "./components/home/Dialogs";
 import WelcomeGuest from "./components/home/WelcomeGuest";
 import MainLoadingSkeleton from "./components/home/MainLoadingSkeleton";
+import SocietyChallenges from "./society/components/SocietyChallenges";
 
 export default function Home() {
     const { user, userProfile, loading, socialRanks, getSocialRankForUser, activeChallenges, newChallengeAvailable, markChallengeAsSeen } = useAuth();
@@ -74,9 +75,12 @@ export default function Home() {
                     />
                     
                     {activeChallenges.length > 0 && (
-                        <div className="text-center">
-                            <h2 className="text-3xl font-bold">تحديات نشطة</h2>
-                            <p className="text-muted-foreground">انضم إلى التحديات الحالية واربح جوائز قيمة!</p>
+                        <div className="space-y-4">
+                            <div className="text-center">
+                                <h2 className="text-3xl font-bold">تحديات نشطة</h2>
+                                <p className="text-muted-foreground">انضم إلى التحديات الحالية واربح جوائز قيمة!</p>
+                            </div>
+                            <SocietyChallenges filter="active" />
                         </div>
                     )}
                     
