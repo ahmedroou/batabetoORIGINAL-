@@ -131,10 +131,18 @@ export function GameBoard({ game, self }: GameBoardProps) {
                 }
                 return null;
             case 'turn_end':
+                 const turnEndingPlayer = game.players.find(p => p.id === currentPlayerId);
+                 const nextPlayerIndex = (currentTurnIndex + 1) % turnOrder.length;
+                 const nextPlayer = game.players.find(p => p.id === turnOrder[nextPlayerIndex]);
                 return (
                     <div className="text-center text-white space-y-4">
-                        <h2 className="text-2xl font-bold">انتهى دور {game.players.find(p=>p.id === currentPlayerId)?.name}</h2>
-                        <p className="text-muted-foreground mt-2 animate-pulse">في انتظار اللاعب التالي...</p>
+                        <h2 className="text-2xl font-bold">انتهى دور {turnEndingPlayer?.name}</h2>
+                        <p className="text-muted-foreground mt-2 animate-pulse">الدور على: {nextPlayer?.name}</p>
+                        {isHost && (
+                            <Button onClick={() => endTurn(game.id, self.id)}>
+                                بدء الدور التالي
+                            </Button>
+                        )}
                     </div>
                 )
             default:
@@ -184,7 +192,17 @@ export function GameBoard({ game, self }: GameBoardProps) {
                             bottom: tileSize + gapSize,
                         }}
                     >
-                        {renderCenterContent()}
+                         <AnimatePresence mode="wait">
+                            <motion.div
+                                key={game.gameState}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                transition={{ duration: 0.3 }}
+                            >
+                                {renderCenterContent()}
+                            </motion.div>
+                        </AnimatePresence>
                     </div>
                     {memoizedBoard.map((property, index) => (
                         <div key={index} style={{...getPositionStyles(index), width: tileSize, height: tileSize}}>
