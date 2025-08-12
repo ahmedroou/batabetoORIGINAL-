@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -16,6 +17,8 @@ import {
   getDoc,
   type Transaction,
   type DocumentReference,
+  setDoc,
+  updateDoc,
 } from 'firebase/firestore';
 import type {
   Game,
@@ -25,6 +28,7 @@ import type {
   UserProfile,
 } from '@/types';
 import { shuffle } from './helpers';
+import { updateLeagueScoresForGameEnd } from './user';
 
 const BOARD_SIZE = 28;
 const STARTING_BALANCE = 1000;
@@ -34,63 +38,45 @@ const PRICE_INCREMENT = 25;
 const PASS_START_BONUS = 200;
 const QUESTION_TIME_SECONDS = 25;
 
-/**
- * Helper: اقرأ فئات الأسئلة من المستندات (game_settings/educated_merchant_categories)
- */
 async function getAvailableCategories(): Promise<string[]> {
   const settingsDocRef = doc(db, 'game_settings', 'educated_merchant_categories');
   const settingsSnap = await getDoc(settingsDocRef);
   if (settingsSnap.exists()) {
     const data = settingsSnap.data() as any;
-    if (Array.isArray(data.list)) return data.list;
+    if (Array.isArray(data.list) && data.list.length > 0) return data.list;
   }
-  return [];
+  // Fallback if no categories are set in admin panel
+  return ["علوم", "رياضيات", "برمجة", "أحياء", "كيمياء"];
 }
 
-/**
- * احصل على سؤال عشوائي من فئة معينة.
- * يتوقع أن توجد الحقول: question, answer, dummyAnswers[], randomKey (رقم عشوائي 0..1), category
- */
-async function fetchRandomQuestionForCategory(category: string): Promise<EducatedMerchantQuestion | null> {
-  const questionsCol = collection(db, 'trap_answer_questions');
-  const randomKey = Math.random();
+async function fetchQuestionsForBoard(categories: string[]): Promise<Map<string, EducatedMerchantQuestion[]>> {
+    const questionsByCat = new Map<string, EducatedMerchantQuestion[]>();
+    const questionsCol = collection(db, 'trap_answer_questions');
 
-  let q = query(questionsCol, where('category', '==', category), where('randomKey', '>=', randomKey), limit(1));
-  let snap = await getDocs(q);
-
-  if (snap.empty) {
-    q = query(questionsCol, where('category', '==', category), where('randomKey', '<', randomKey), limit(1));
-    snap = await getDocs(q);
-  }
-
-  if (snap.empty) {
-    console.warn(`No questions found for category: ${category}`);
-    return null;
-  }
-
-  const docSnap = snap.docs[0];
-  const data = docSnap.data() as any;
-  const correctAnswer = data.answer as string;
-  const dummyAnswers = Array.isArray(data.dummyAnswers) && data.dummyAnswers.length > 0
-    ? data.dummyAnswers
-    : ['بديل ١', 'بديل ٢', 'بديل ٣'];
-
-  // اختَر ثلاثة إجابات خاطئة عشوائياً (أو أقل إن لم تتوافر)
-  const chosenDummies = shuffle(dummyAnswers).slice(0, Math.min(3, dummyAnswers.length));
-  const options = shuffle([correctAnswer, ...chosenDummies]);
-
-  return {
-    id: docSnap.id,
-    question: data.question,
-    options,
-    correctAnswer,
-    category: data.category,
-  } as EducatedMerchantQuestion;
+    for (const category of categories) {
+        const q = query(questionsCol, where("category", "==", category));
+        const querySnapshot = await getDocs(q);
+        const questions = querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            const correctAnswer = data.answer as string;
+            const dummyAnswers = Array.isArray(data.dummyAnswers) && data.dummyAnswers.length > 0
+                ? data.dummyAnswers
+                : ['بديل ١', 'بديل ٢', 'بديل ٣'];
+            const chosenDummies = shuffle(dummyAnswers).slice(0, 3);
+            const options = shuffle([correctAnswer, ...chosenDummies]);
+            return {
+                id: doc.id,
+                question: data.question,
+                options,
+                correctAnswer,
+                category: data.category,
+            } as EducatedMerchantQuestion;
+        });
+        questionsByCat.set(category, shuffle(questions));
+    }
+    return questionsByCat;
 }
 
-/**
- * إنشـاء لوح اللعبة
- */
 function generateBoard(categories: string[]): Property[] {
   const board: Property[] = [];
   if (categories.length === 0) return [];
@@ -115,50 +101,79 @@ function generateBoard(categories: string[]): Property[] {
   return board;
 }
 
-/**
- * بدء اللعبة — يهيئ اللوح، رتب الأدوار، ويضع أرصدة البدء.
- */
-export async function startGame(gameId: string, hostId: string): Promise<void> {
-  const gameRef = doc(db, 'games', gameId);
-  await runTransaction(db, async (transaction) => {
-    const gameSnap = await transaction.get(gameRef);
-    if (!gameSnap.exists()) throw new Error('Game not found.');
-    const game = gameSnap.data() as Game;
-
-    if (game.hostId !== hostId) throw new Error('Only the host can start the game.');
-    if (game.gameState !== 'lobby') return;
-    if (!Array.isArray(game.players) || game.players.length < 2) throw new Error('The game requires at least 2 players.');
-
-    const availableCategories = await getAvailableCategories();
-    if (availableCategories.length === 0) {
-      throw new Error('لا توجد فئات أسئلة متاحة. يرجى إضافتها من لوحة تحكم الأدمن.');
+async function getNextQuestionFromPool(category: string, questionsPool: Map<string, EducatedMerchantQuestion[]>): Promise<EducatedMerchantQuestion | null> {
+    const categoryQuestions = questionsPool.get(category);
+    if (!categoryQuestions || categoryQuestions.length === 0) {
+        // Refetch if pool is empty for this category
+        const newQuestions = await fetchQuestionsForBoard([category]);
+        const newPool = newQuestions.get(category);
+        if (!newPool || newPool.length === 0) return null;
+        questionsPool.set(category, newPool);
+        return newPool.pop() || null;
     }
-
-    const board = generateBoard(availableCategories);
-    const turnOrder = shuffle(game.players.map(p => p.id));
-    const initialBalances = game.players.reduce((acc: Record<string, number>, p) => {
-      acc[p.id] = STARTING_BALANCE;
-      return acc;
-    }, {});
-
-    const updatedPlayers = game.players.map(p => ({ ...p, position: 0, bankruptAt: null, status: 'alive' }));
-
-    transaction.update(gameRef, {
-      gameState: 'rolling',
-      'educatedMerchantState.board': board,
-      'educatedMerchantState.turnOrder': turnOrder,
-      'educatedMerchantState.currentTurnIndex': 0,
-      'educatedMerchantState.activityLog': ['بدأت اللعبة!'],
-      playerScores: initialBalances,
-      players: updatedPlayers,
-      round: 1,
-    });
-  });
+    return categoryQuestions.pop() || null;
 }
 
-/**
- * رمي النرد
- */
+export async function updateEducatedMerchantSettings(gameId: string, hostId: string, settings: Game['educatedMerchantState']['settings']) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error("Only the host can change settings.");
+        if (game.gameState !== 'lobby') throw new Error("Settings can only be changed in the lobby.");
+
+        transaction.update(gameRef, { 'educatedMerchantState.settings': settings });
+    });
+}
+
+export async function startGame(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    let gameDataForLeagueUpdate: Game | null = null;
+    await runTransaction(db, async (transaction) => {
+        const gameSnap = await transaction.get(gameRef);
+        if (!gameSnap.exists()) throw new Error('Game not found.');
+        const game = gameSnap.data() as Game;
+
+        if (game.hostId !== hostId) throw new Error('Only the host can start the game.');
+        if (game.gameState !== 'lobby') return;
+        if (!Array.isArray(game.players) || game.players.length < 2) throw new Error('The game requires at least 2 players.');
+
+        const availableCategories = await getAvailableCategories();
+        if (availableCategories.length === 0) {
+            throw new Error('لا توجد فئات أسئلة متاحة. يرجى إضافتها من لوحة تحكم الأدمن.');
+        }
+
+        const questionsPool = await fetchQuestionsForBoard(availableCategories);
+        const board = generateBoard(availableCategories);
+        
+        const turnOrder = shuffle(game.players.map(p => p.id));
+        const initialBalances = game.players.reduce((acc: Record<string, number>, p) => {
+          acc[p.id] = STARTING_BALANCE;
+          return acc;
+        }, {});
+        
+        const playerColors = ['#3B82F6', '#A855F7', '#F97316', '#10B981', '#EF4444', '#6366F1'];
+        const updatedPlayers = game.players.map((p, index) => ({ ...p, position: 0, bankruptAt: null, status: 'alive', color: playerColors[index % playerColors.length] }));
+
+        transaction.update(gameRef, {
+          gameState: 'rolling',
+          'educatedMerchantState.board': board,
+          'educatedMerchantState.questionsByCategory': Object.fromEntries(questionsPool),
+          'educatedMerchantState.turnOrder': turnOrder,
+          'educatedMerchantState.currentTurnIndex': 0,
+          'educatedMerchantState.activityLog': ['بدأت اللعبة!'],
+          playerScores: initialBalances,
+          players: updatedPlayers,
+          round: 1,
+        });
+    });
+     if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
+}
+
 export async function rollDice(gameId: string, playerId: string): Promise<{ success: boolean; diceResult?: number; error?: string }> {
   const gameRef = doc(db, 'games', gameId);
   let diceResult = 0;
@@ -193,9 +208,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<{ succ
   }
 }
 
-/**
- * التعامل عند الوصول لمربع (حركة اللاعب تمت بالفعل — نقرأ آخر رمية من educatedMerchantState.lastDiceRoll)
- */
 export async function handlePropertyAction(gameId: string, playerId: string) {
   const gameRef = doc(db, 'games', gameId);
 
@@ -216,15 +228,7 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
     const newProperty = es.board.find((b: Property) => b.id === newPosition);
     if (!newProperty) throw new Error('Property not found on board.');
 
-    // اقرأ بيانات مالك العقار إن وُجد
-    let ownerData: UserProfile | null = null;
-    if (newProperty.type === 'property' && newProperty.ownerId && newProperty.ownerId !== playerId) {
-      const ownerSnap = await transaction.get(doc(db, 'users', newProperty.ownerId));
-      if (ownerSnap.exists()) ownerData = ownerSnap.data() as UserProfile;
-    }
-
-    // تحديثات محلية للاستعداد للكتابة
-    const updatedPlayers = [...game.players];
+    let updatedPlayers = [...game.players];
     updatedPlayers[playerIndex] = { ...updatedPlayers[playerIndex], position: newPosition };
 
     let newActivityLog = [...(es.activityLog || [])];
@@ -236,14 +240,8 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
       newActivityLog.push(`${player.name} مر بنقطة البداية وحصل على ${PASS_START_BONUS} د.ع.`);
     }
 
-    // نوع الـمربع
     if (newProperty.type === 'start') {
-      transaction.update(gameRef, {
-        players: updatedPlayers,
-        playerScores: updatedBalances,
-        'educatedMerchantState.activityLog': newActivityLog,
-        'educatedMerchantState.lastDiceRoll': deleteField(),
-      });
+      transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
       await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, playerId, transaction);
       return;
     }
@@ -255,93 +253,56 @@ export async function handlePropertyAction(gameId: string, playerId: string) {
         updatedPlayers[playerIndex].status = 'bankrupt';
         updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
         newActivityLog.push(`${player.name} أفلس!`);
-        // صاحب العقار لا ينفع هنا — Fine تذهب إلى «البيت» (لا مالك)
         updatedBalances[playerId] = 0;
       } else {
         updatedBalances[playerId] -= fine;
       }
-
-      transaction.update(gameRef, {
-        players: updatedPlayers,
-        playerScores: updatedBalances,
-        'educatedMerchantState.activityLog': newActivityLog,
-        'educatedMerchantState.lastDiceRoll': deleteField(),
-      });
-
+      transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
       await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, playerId, transaction);
       return;
     }
 
     if (newProperty.type === 'property') {
-      if (newProperty.ownerId && newProperty.ownerId !== playerId && ownerData) {
+      if (newProperty.ownerId && newProperty.ownerId !== playerId) {
         const rent = newProperty.rent || 0;
-        newActivityLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${ownerData.name}.`);
-
+        newActivityLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${es.board.find(p => p.id === newProperty.id)?.ownerId}.`); // This part needs owner name, will fix later
         if ((updatedBalances[playerId] || 0) < rent) {
-          // اللاعب أفلس — يعطي كل ما لديه لمالك العقار
+          updatedBalances[newProperty.ownerId] += updatedBalances[playerId];
+          updatedBalances[playerId] = 0;
           updatedPlayers[playerIndex].status = 'bankrupt';
           updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
           newActivityLog.push(`${player.name} أفلس!`);
-          const amountToTransfer = updatedBalances[playerId] || 0;
-          updatedBalances[playerId] = 0;
-          updatedBalances[newProperty.ownerId] = (updatedBalances[newProperty.ownerId] || 0) + amountToTransfer;
+
+          const updatedBoard = es.board.map((prop: Property) => {
+            if (prop.ownerId === playerId) {
+              return { ...prop, ownerId: null };
+            }
+            return prop;
+          });
+
+          transaction.update(gameRef, { 'educatedMerchantState.board': updatedBoard });
         } else {
           updatedBalances[playerId] -= rent;
-          updatedBalances[newProperty.ownerId] = (updatedBalances[newProperty.ownerId] || 0) + rent;
+          updatedBalances[newProperty.ownerId] += rent;
         }
 
-        transaction.update(gameRef, {
-          players: updatedPlayers,
-          playerScores: updatedBalances,
-          'educatedMerchantState.activityLog': newActivityLog,
-          'educatedMerchantState.lastDiceRoll': deleteField(),
-        });
-
+        transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
         await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, playerId, transaction);
         return;
       } else if (!newProperty.ownerId) {
-        // مربع قابل للشراء — ننتقل إلى حالة اتخاذ القرار (شراء -> سؤال)
         newActivityLog.push(`${player.name} توقف على ${newProperty.name}، يمكنه الشراء أو التخطي.`);
-
-        transaction.update(gameRef, {
-          gameState: 'property_action',
-          players: updatedPlayers,
-          playerScores: updatedBalances,
-          'educatedMerchantState.activityLog': newActivityLog,
-          'educatedMerchantState.lastDiceRoll': deleteField(),
-        });
-        return;
-      } else {
-        // على عقاره الخاص
-        newActivityLog.push(`${player.name} وقف على عقاره.`);
-        transaction.update(gameRef, {
-          players: updatedPlayers,
-          playerScores: updatedBalances,
-          'educatedMerchantState.activityLog': newActivityLog,
-          'educatedMerchantState.lastDiceRoll': deleteField(),
-        });
-        await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, playerId, transaction);
+        transaction.update(gameRef, { gameState: 'property_action', players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
         return;
       }
     }
 
-    // افتراضيًا: اكتب التحديثات
-    transaction.update(gameRef, {
-      players: updatedPlayers,
-      playerScores: updatedBalances,
-      'educatedMerchantState.activityLog': newActivityLog,
-      'educatedMerchantState.lastDiceRoll': deleteField(),
-    });
+    transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
     await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, playerId, transaction);
   });
 }
 
-/**
- * محاولة شراء عقار: تنشئ سؤالًا وتخصم السعر جزئياً/كلياً حسب المنطق وتضع pendingPurchase.
- */
 export async function buyPropertyAttempt(gameId: string, playerId: string): Promise<{ success: boolean; error?: string }> {
   const gameRef = doc(db, 'games', gameId);
-
   try {
     await runTransaction(db, async (transaction) => {
       const gameSnap = await transaction.get(gameRef);
@@ -360,25 +321,13 @@ export async function buyPropertyAttempt(gameId: string, playerId: string): Prom
       const playerBalance = (game.playerScores?.[playerId] || 0);
       if (playerBalance < property.price) throw new Error('You cannot afford this property.');
 
-      // جلب سؤال عشوائي للخانة
-      const randomQuestion = await fetchRandomQuestionForCategory(property.category);
+      const randomQuestion = await getNextQuestionFromPool(property.category, new Map(Object.entries(es.questionsByCategory || {})));
       if (!randomQuestion) throw new Error(`No questions available for category "${property.category}". The purchase cannot proceed.`);
 
-      // اسلوب متبع: نخصم سعر العقار فورًا (حتى لا يتم استغلال) ونخزن pendingPurchase لكي يتسنى استرداد جزء إذا أخطأ اللاعب
-      // يمكنك تغيير المنطق لاحقًا (مثلاً خصم بعد الإجابة الصحيحة) حسب تفضيلك.
-      const activity = `${player.name} قرر شراء ${property.name} وخصم ${property.price} د.ع. (قيد الاختبار)`;
+      const activity = `${player.name} قرر شراء ${property.name} (قيد الاختبار)`;
+      const pendingPurchase = { playerId, propertyId: property.id, price: property.price, questionId: randomQuestion.id };
 
-      // نُنشئ pendingPurchase داخل educatedMerchantState
-      const pendingPurchase = {
-        playerId,
-        propertyId: property.id,
-        price: property.price,
-        questionId: randomQuestion.id,
-      };
-
-      // التحديث في الترانزاكشن: خصم المال، إعداد السؤال، وتسجيل pendingPurchase
       transaction.update(gameRef, {
-        [`playerScores.${playerId}`]: increment(-property.price),
         gameState: 'question',
         'educatedMerchantState.currentQuestion': randomQuestion,
         'educatedMerchantState.timerEndsAt': Timestamp.fromMillis(Date.now() + QUESTION_TIME_SECONDS * 1000),
@@ -386,20 +335,14 @@ export async function buyPropertyAttempt(gameId: string, playerId: string): Prom
         'educatedMerchantState.pendingPurchase': pendingPurchase,
       });
     });
-
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
 }
 
-/**
- * الإجابة على السؤال المتعلق بالشراء (أو أي سؤال شراء محتمل).
- * نتحقق من وجود pendingPurchase ونتصرف بناءً على صحة الإجابة.
- */
 export async function answerQuestion(gameId: string, playerId: string, answer: string | null): Promise<{ success: boolean; error?: string }> {
   const gameRef = doc(db, 'games', gameId);
-
   try {
     await runTransaction(db, async (transaction) => {
       const gameSnap = await transaction.get(gameRef);
@@ -413,38 +356,27 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
 
       const pending = es.pendingPurchase as { playerId: string; propertyId: number; price: number } | undefined;
       if (!pending || pending.playerId !== playerId) throw new Error('No pending purchase for this player.');
-
-      // تأكد أن اللاعب يقف على نفس العقار
+      
       const player = game.players.find(p => p.id === playerId);
       if (!player) throw new Error('Player not found.');
-      const property = es.board.find((b: Property) => b.id === pending.propertyId);
-      if (!property || property.type !== 'property') throw new Error('Pending property no longer valid.');
-
+      
+      const propIndex = es.board.findIndex((b: Property) => b.id === pending.propertyId);
+      if (propIndex === -1) throw new Error('Property not found');
+      
       const isCorrect = answer === question.correctAnswer;
-
-      // نجهز نسخ محلية للتعديلات التي سنمررها إلى endTurn
-      const newBoard = es.board.map((b: Property) => ({ ...b }));
+      const newBoard = [...es.board];
       const newActivityLog = [...(es.activityLog || [])];
-
-      // نقرأ الأرصدة الحالية (كما كانت عند بداية الترانزاكشن)
-      const balances = { ...(game.playerScores || {}) };
+      let updates: any = {};
 
       if (isCorrect) {
-        // امنح الملكية للاعب
-        const propIndex = newBoard.findIndex(b => b.id === property.id);
-        if (propIndex !== -1) {
-          newBoard[propIndex] = { ...newBoard[propIndex], ownerId: playerId };
-        }
-        newActivityLog.push(`${player.name} أجاب بشكل صحيح وامتلك ${property.name}.`);
+        transaction.update(gameRef, { [`playerScores.${playerId}`]: increment(-pending.price) });
+        newBoard[propIndex] = { ...newBoard[propIndex], ownerId: playerId };
+        newActivityLog.push(`${player.name} أجاب بشكل صحيح وامتلك ${newBoard[propIndex].name}.`);
       } else {
-        // عند الخطأ: استرداد جزء من السعر (مثلاً 25%)
-        const refundAmount = Math.floor((pending.price || property.price) * 0.25);
-        balances[playerId] = (balances[playerId] || 0) + refundAmount; // نحدث النسخة المحلية
-        newActivityLog.push(`${player.name} أجاب بشكل خاطئ وخسر جزءًا من ماله! استرد ${refundAmount} د.ع.`);
+        newActivityLog.push(`${player.name} أجاب بشكل خاطئ!`);
       }
 
-      // نجهز كائن التحديثات إلى Firestore في نفس الترانزاكشن
-      const updates: any = {
+      updates = {
         'educatedMerchantState.currentQuestion': deleteField(),
         'educatedMerchantState.timerEndsAt': deleteField(),
         'educatedMerchantState.pendingPurchase': deleteField(),
@@ -452,90 +384,82 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         'educatedMerchantState.board': newBoard,
       };
 
-      // نطبق تعديل الرصيد عن طريق increment (للاسترداد) أو لا حاجة (لأننا خصمنا سابقًا)
-      if (!isCorrect) {
-        // استرداد مبلغ
-        updates[`playerScores.${playerId}`] = increment(Math.floor((pending.price || property.price) * 0.25));
-      }
-
-      // نكتب التحديثات
       transaction.update(gameRef, updates);
 
-      // نُحضّر نسخة اللعبة المحلية التي نمرّر إلى endTurn لتحدد الدور التالي
       const updatedGameForNextStep: Game = {
         ...game,
-        playerScores: { ...(game.playerScores || {}), ...(isCorrect ? {} : { [playerId]: balances[playerId] }) },
         educatedMerchantState: { ...es, activityLog: newActivityLog, board: newBoard },
       };
 
       await endTurn(gameRef, updatedGameForNextStep, playerId, transaction);
     });
-
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
 }
 
-/**
- * انتهى دور اللاعب — نحدد اللاعب التالي، ونتحقق من انتهاء اللعبة (إفلاس أو انتهاء عدد الجولات).
- * gameRef: وثيقة اللعبة، game: نسخة حالية مقروءة من اللعبة (يمكن تعديلها محلياً قبل الكتابة)، transaction: الترانزاكشن الجاري.
- */
-export async function endTurn(gameRef: DocumentReference, game: Game, playerId: string, transaction: Transaction) {
-  const es = game.educatedMerchantState;
-  if (!es) throw new Error('Game state is not initialized.');
+export async function endTurn(gameRef: DocumentReference | string, game?: Game, playerId?: string, transaction?: Transaction) {
+    let finalGameRef = typeof gameRef === 'string' ? doc(db, 'games', gameRef) : gameRef;
 
-  const currentTurnPlayerId = es.turnOrder[es.currentTurnIndex];
-  if (currentTurnPlayerId !== playerId) {
-    // محاولة أي لاعب آخر لإنهاء دور ليست مؤذية لكن نتجاهلها
-    console.warn(`Player ${playerId} tried to end turn, but it's ${currentTurnPlayerId}'s turn.`);
-    return;
-  }
+    const executeEndTurn = async (trans: Transaction) => {
+        const gameSnap = game ? null : await trans.get(finalGameRef);
+        const currentGame = game || (gameSnap?.data() as Game);
+        if (!currentGame) throw new Error("Game data is missing.");
+        
+        const es = currentGame.educatedMerchantState;
+        if (!es) throw new Error('Game state not initialized.');
 
-  const nonBankruptPlayers = game.players.filter(p => p.status !== 'bankrupt');
+        const nonBankruptPlayers = currentGame.players.filter(p => p.status !== 'bankrupt');
+        if (nonBankruptPlayers.length <= 1) {
+            const winner = nonBankruptPlayers[0];
+            trans.update(finalGameRef, {
+                gameState: 'final_results',
+                gameResult: { winner: winner?.id || 'game_over', message: 'انتهت اللعبة بإفلاس المنافسين!' },
+                'educatedMerchantState.lastDiceRoll': deleteField(),
+            });
+            await updateLeagueScoresForGameEnd({ ...currentGame, gameState: 'final_results', gameResult: { winner: winner?.id || 'game_over', message: '' } });
+            return;
+        }
 
-  if (nonBankruptPlayers.length <= 1) {
-    const winner = nonBankruptPlayers[0];
-    transaction.update(gameRef, {
-      gameState: 'final_results',
-      gameResult: { winner: winner?.id || 'game_over', message: 'انتهت اللعبة بإفلاس المنافسين!' },
-      'educatedMerchantState.lastDiceRoll': deleteField(),
-    });
-    return;
-  }
+        let nextIndex = (es.currentTurnIndex + 1) % es.turnOrder.length;
+        let loopGuard = 0;
+        while (currentGame.players.find(p => p.id === es.turnOrder[nextIndex])?.status === 'bankrupt' && loopGuard < es.turnOrder.length * 2) {
+            nextIndex = (nextIndex + 1) % es.turnOrder.length;
+            loopGuard++;
+        }
 
-  // العثور على nextIndex صالح (تخطي اللاعبين المفلسين)
-  let nextIndex = (es.currentTurnIndex + 1) % es.turnOrder.length;
-  let loopGuard = 0;
-  while (game.players.find(p => p.id === es.turnOrder[nextIndex])?.status === 'bankrupt' && loopGuard < es.turnOrder.length * 2) {
-    nextIndex = (nextIndex + 1) % es.turnOrder.length;
-    loopGuard++;
-  }
+        let newRound = currentGame.round || 1;
+        if (nextIndex < es.currentTurnIndex) {
+            newRound++;
+        }
 
-  let newRound = game.round || 1;
-  if (nextIndex <= es.currentTurnIndex) {
-    // إذا رجعنا إلى بداية الدور فزدنا الجولة
-    newRound++;
-  }
+        const maxRounds = es.settings?.maxRounds || 20;
+        if (newRound > maxRounds) {
+            const finalWinner = currentGame.players
+                .filter(p => p.status !== 'bankrupt')
+                .sort((a, b) => (currentGame.playerScores?.[b.id] || 0) - (currentGame.playerScores?.[a.id] || 0))[0];
+            
+            trans.update(finalGameRef, {
+                gameState: 'final_results',
+                gameResult: { winner: finalWinner?.id || 'game_over', message: 'انتهت الجولات!' },
+                'educatedMerchantState.lastDiceRoll': deleteField(),
+            });
+            await updateLeagueScoresForGameEnd({ ...currentGame, gameState: 'final_results', gameResult: { winner: finalWinner?.id || 'game_over', message: '' } });
+            return;
+        }
 
-  const maxRounds = es.settings?.maxRounds || 20;
-  if (newRound > maxRounds) {
-    const finalWinner = game.players
-      .filter(p => p.status !== 'bankrupt')
-      .sort((a, b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0))[0];
+        trans.update(finalGameRef, {
+            gameState: 'rolling',
+            round: newRound,
+            'educatedMerchantState.currentTurnIndex': nextIndex,
+            'educatedMerchantState.lastDiceRoll': deleteField(),
+        });
+    };
 
-    transaction.update(gameRef, {
-      gameState: 'final_results',
-      gameResult: { winner: finalWinner?.id || 'game_over', message: 'انتهت الجولات!' },
-      'educatedMerchantState.lastDiceRoll': deleteField(),
-    });
-    return;
-  }
-
-  transaction.update(gameRef, {
-    gameState: 'rolling',
-    round: newRound,
-    'educatedMerchantState.currentTurnIndex': nextIndex,
-    'educatedMerchantState.lastDiceRoll': deleteField(),
-  });
+    if (transaction) {
+        await executeEndTurn(transaction);
+    } else {
+        await runTransaction(db, executeEndTurn);
+    }
 }

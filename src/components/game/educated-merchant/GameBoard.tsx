@@ -10,18 +10,19 @@ import { cn } from "@/lib/utils";
 import { handlePropertyAction } from "@/lib/actions/educated-merchant";
 
 interface GameBoardProps {
-  board: Property[];
-  players: Player[];
   gameId: string;
+  players: Player[];
+  board: Property[];
   diceRoll: number | null;
   isMyTurn: boolean;
   activePlayerId: string;
   gameState: string;
+  currentRound: number;
+  maxRounds: number;
 }
 
 const TILE_GAP = 6; // px
 
-// --- Small color helpers ---
 function hexToRgb(hex: string) {
   if (!hex) return null;
   const h = hex.replace('#', '');
@@ -51,7 +52,6 @@ function hexToRgba(hex: string, alpha = 1) {
 function getContrastColor(hex: string) {
   const rgb = hexToRgb(hex);
   if (!rgb) return '#000';
-  // relative luminance
   const r = rgb.r / 255;
   const g = rgb.g / 255;
   const b = rgb.b / 255;
@@ -82,8 +82,7 @@ const Tile = React.forwardRef<HTMLDivElement, {
   isActive?: boolean;
 }>(({ property, ownerColor, playersOnTile = [], isActive = false }, ref) => {
   const catStyle = property.type === 'property' ? categoryGradientStyle(property.category) : undefined;
-
-  // If tile is owned, mix owner color as a soft overlay to make the entire tile feel like player's color
+  
   const ownerOverlayStyle: React.CSSProperties | undefined = ownerColor
     ? {
         background: `linear-gradient(135deg, ${hexToRgba(ownerColor, 0.15)}, ${hexToRgba(ownerColor, 0.28)}), ${catStyle?.background || 'transparent'}`,
@@ -131,14 +130,12 @@ const Tile = React.forwardRef<HTMLDivElement, {
         )}
       </div>
 
-      {/* owner bar */}
       {ownerColor ? (
         <div className="absolute left-0 bottom-0 w-full h-1 rounded-b-md" style={{ background: ownerColor }} />
       ) : (
         <div className="absolute left-0 bottom-0 w-full h-1 bg-transparent" />
       )}
 
-      {/* players tokens stacked */}
       {playersOnTile.length > 0 && (
         <div className="absolute left-1 bottom-1 flex gap-0.5 items-center">
           {playersOnTile.slice(0, 4).map((pl, i) => (
@@ -161,39 +158,28 @@ const Tile = React.forwardRef<HTMLDivElement, {
 });
 Tile.displayName = 'Tile';
 
-export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId, gameState }: GameBoardProps) {
+export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId, gameState, currentRound, maxRounds }: GameBoardProps) {
   if (!board || board.length === 0) {
     return <div className="text-center p-6 text-lg">جاري تحميل اللوحة...</div>;
   }
-
-  const sideLength = useMemo(() => Math.ceil(board.length / 4) + 1, [board.length]);
-
-  const perimeterPositions = useMemo(() => {
-    const positions = new Map<number, { gridRow: number; gridColumn: number }>();
-    const n = sideLength;
-    const perimeterCount = (n - 1) * 4;
+  
+  const sideLength = Math.floor(board.length / 4) + 1;
+  const gridCells = useMemo(() => {
+    const cells = Array(sideLength * sideLength).fill(null);
+    let x = 0;
+    let y = 0;
+    let dx = 1;
+    let dy = 0;
 
     for (let i = 0; i < board.length; i++) {
-      const idx = i % perimeterCount;
-      let row = 1, col = 1;
-
-      if (idx < n) {
-        row = 1;
-        col = idx + 1;
-      } else if (idx < n + (n - 2)) {
-        row = idx - (n - 1) + 1;
-        col = n;
-      } else if (idx < n + (n - 2) + (n - 1)) {
-        row = n;
-        col = n - (idx - (n + (n - 2)));
-      } else {
-        row = n - (idx - (n + (n - 2) + (n - 1)));
-        col = 1;
-      }
-
-      positions.set(i, { gridRow: row, gridColumn: col });
+        cells[y * sideLength + x] = board[i];
+        if (x + dx >= sideLength || x + dx < 0 || y + dy >= sideLength || y + dy < 0 || (x + dx !== 0 && y + dy !== 0 && x + dx !== sideLength -1 && y + dy !== sideLength -1)) {
+            [dx, dy] = [-dy, dx];
+        }
+        x += dx;
+        y += dy;
     }
-    return positions;
+    return cells;
   }, [board, sideLength]);
 
   const activePlayer = players.find(p => p.id === activePlayerId);
@@ -223,16 +209,15 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
           gap: `${TILE_GAP}px`,
         }}
       >
-        {board.map((property, idx) => {
-          const pos = perimeterPositions.get(idx);
-          if (!pos) return null;
+        {gridCells.map((property: Property | null, index: number) => {
+          if (!property) return <div key={index} />;
 
           const ownerColor = property.ownerId ? players.find(p => p.id === property.ownerId)?.color : undefined;
           const playersOnTile = players.filter(pl => pl.position === property.id && pl.status !== 'bankrupt');
           const isActive = activePosition === property.id;
 
           return (
-            <div key={property.id} style={{ gridRow: pos.gridRow, gridColumn: pos.gridColumn }} className="p-0">
+            <div key={property.id} className="p-0">
               <Tile property={property} ownerColor={ownerColor} playersOnTile={playersOnTile} isActive={isActive} />
             </div>
           );
@@ -243,19 +228,15 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
           style={{ gridArea: `2 / 2 / ${sideLength} / ${sideLength}` }}
         >
           <h2 className="text-lg md:text-2xl font-extrabold text-violet-700 dark:text-violet-300">التاجر المتعلّم</h2>
+          
+          <div className="text-center my-2 bg-black/10 dark:bg-white/10 p-2 rounded-lg">
+            <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">الجولة</p>
+            <p className="text-xl font-bold font-mono text-gray-800 dark:text-gray-100">{currentRound}/{maxRounds}</p>
+          </div>
 
           <div className="mt-2 flex items-center gap-3">
             <div className={cn("px-3 py-1 rounded-full text-sm font-semibold shadow-sm flex items-center gap-2", isMyTurn ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-800 dark:bg-zinc-700 dark:text-zinc-200') }>
               <span>{isMyTurn ? 'دورك الآن' : 'انتظر دورك'}</span>
-              {isMyTurn && <span className="text-xs opacity-80">•</span>}
-            </div>
-
-            <div className="text-sm text-gray-700 dark:text-gray-300">
-              {activePlayer ? (
-                <span>اللاعب التالي: <strong>{activePlayer.name}</strong></span>
-              ) : (
-                <span>جارٍ تحديث الحالة...</span>
-              )}
             </div>
 
             <div className="ml-2 text-sm">

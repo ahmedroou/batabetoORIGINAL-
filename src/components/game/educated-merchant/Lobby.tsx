@@ -9,10 +9,14 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlayerAvatar } from '../PlayerAvatar';
-import { LogOut, Copy, Check, UserX, Loader2, ArrowRight } from 'lucide-react';
+import { LogOut, Copy, Check, UserX, Loader2, ArrowRight, Settings, Save } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
-import { startGame } from '@/lib/actions/educated-merchant';
+import { startGame, updateEducatedMerchantSettings } from '@/lib/actions/educated-merchant';
+import { Label } from '@/components/ui/label';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
+
 
 interface LobbyProps {
     game: Game;
@@ -25,6 +29,8 @@ export function Lobby({ game, self }: LobbyProps) {
     const isHost = game.hostId === self.id;
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [settings, setSettings] = useState(game.educatedMerchantState?.settings || { maxRounds: 20 });
 
     const activePlayers = game.players.filter(p => p.status !== 'left');
 
@@ -49,7 +55,6 @@ export function Lobby({ game, self }: LobbyProps) {
             toast({title: "خطأ في بدء اللعبة", description: result.error, variant: "destructive"});
             setIsSubmitting(false);
         }
-        // On success, the component will unmount due to game state change, no need to set isSubmitting to false.
     };
 
     const handleCopyId = () => {
@@ -57,6 +62,21 @@ export function Lobby({ game, self }: LobbyProps) {
         navigator.clipboard.writeText(game.id);
         setTimeout(() => setIsCopying(false), 2000);
     };
+
+    const handleSaveSettings = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await updateEducatedMerchantSettings(game.id, self.id, settings);
+            toast({ title: "تم حفظ الإعدادات" });
+            setIsSettingsOpen(false);
+        } catch (e: any) {
+            toast({ title: "خطأ", description: e.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
 
     return (
         <Card className="w-full max-w-md animate-bounce-in">
@@ -78,6 +98,41 @@ export function Lobby({ game, self }: LobbyProps) {
                         </Tooltip>
                     </TooltipProvider>
                 </div>
+                 {isHost && (
+                    <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                            <Label className='font-bold text-base'>إعدادات اللعبة</Label>
+                            <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(!isSettingsOpen)}>
+                                <Settings className={cn("w-5 h-5", isSettingsOpen && "animate-spin")} />
+                            </Button>
+                        </div>
+                        <AnimatePresence>
+                        {isSettingsOpen && (
+                            <motion.div 
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50 overflow-hidden"
+                            >
+                                <div className="space-y-1">
+                                    <Label htmlFor="max-rounds">الحد الأقصى للجولات</Label>
+                                    <Input 
+                                        id="max-rounds" 
+                                        type="number" 
+                                        value={settings.maxRounds} 
+                                        onChange={e => setSettings({ ...settings, maxRounds: parseInt(e.target.value, 10) || 1 })}
+                                        min="5"
+                                        max="50"
+                                    />
+                                </div>
+                                <Button onClick={handleSaveSettings} disabled={isSubmitting} className="w-full">
+                                    {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
+                                </Button>
+                            </motion.div>
+                        )}
+                        </AnimatePresence>
+                    </div>
+                )}
                 <div className="space-y-2">
                     <h3 className="font-bold text-center">اللاعبون ({activePlayers.length})</h3>
                     <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">

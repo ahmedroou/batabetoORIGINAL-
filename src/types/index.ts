@@ -695,11 +695,11 @@ export interface Game {
         maxRounds: number;
     };
     board: Property[];
+    questionsByCategory?: Record<string, EducatedMerchantQuestion[]>;
     turnOrder: string[];
     currentTurnIndex: number;
     lastDiceRoll?: number | null;
     currentQuestion?: EducatedMerchantQuestion | null;
-    questionsByCategory?: Record<string, EducatedMerchantQuestion[]>;
     timerEndsAt?: Timestamp | null;
     activityLog?: string[];
     pendingPurchase?: {
@@ -764,6 +764,4 @@ export interface PrivateChat {
     participants: string[];
     messages: PrivateChatMessage[];
 }
-    
-
     
