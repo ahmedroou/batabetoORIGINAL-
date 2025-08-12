@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -24,7 +25,7 @@ import { PROPERTY_NAMES } from '@/data/properties';
 import { getEducatedMerchantCategories } from './admin';
 import { updateLeagueScoresForGameEnd } from './user';
 
-const BOARD_SIZE = 28;
+const BOARD_SIZE = 28; 
 const START_MONEY = 1500;
 const PASS_GO_REWARD = 200;
 const ACTION_TIME_SECONDS = 20;
@@ -121,32 +122,40 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         const currentTurnIndex = game.educatedMerchantState!.currentTurnIndex;
         if (turnOrder[currentTurnIndex] !== playerId) throw new Error("ليس دورك.");
 
-        const diceRoll = Math.floor(Math.random() * 5) + 1;
-        const playerIndex = game.players.findIndex(p => p.id === playerId);
-        const oldPosition = game.players[playerIndex].position;
-        const newPosition = (oldPosition + diceRoll) % BOARD_SIZE;
-
-        const updatedPlayers = [...game.players];
-        updatedPlayers[playerIndex].position = newPosition;
-        
-        let moneyUpdate = 0;
-        let activityMessage = `${updatedPlayers[playerIndex].name} رمى ${diceRoll} وانتقل إلى "${game.educatedMerchantState!.board[newPosition].name}".`;
-
-        if (newPosition < oldPosition) { 
-            moneyUpdate = PASS_GO_REWARD;
-            updatedPlayers[playerIndex].money! += moneyUpdate;
-            activityMessage += ` وحصل على ${PASS_GO_REWARD} دينار للمرور بنقطة البداية.`;
-        }
-        
-        transaction.update(gameRef, {
-            players: updatedPlayers,
-            gameState: 'movement',
-            'educatedMerchantState.lastDiceRoll': diceRoll,
-            'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }),
-            'educatedMerchantState.timerEndsAt': deleteField(),
-        });
+        await rollDiceAndMoveInternal(game, playerId, transaction);
     });
 }
+
+async function rollDiceAndMoveInternal(game: Game, playerId: string, transaction: Transaction) {
+    const diceRoll = Math.floor(Math.random() * 5) + 1;
+    const playerIndex = game.players.findIndex(p => p.id === playerId);
+    if(playerIndex === -1) return;
+
+    const oldPosition = game.players[playerIndex].position;
+    const newPosition = (oldPosition + diceRoll) % BOARD_SIZE;
+
+    const updatedPlayers = [...game.players];
+    updatedPlayers[playerIndex].position = newPosition;
+    
+    let moneyUpdate = 0;
+    let activityMessage = `${updatedPlayers[playerIndex].name} رمى ${diceRoll} وانتقل إلى "${game.educatedMerchantState!.board[newPosition].name}".`;
+
+    if (newPosition < oldPosition) { 
+        moneyUpdate = PASS_GO_REWARD;
+        updatedPlayers[playerIndex].money! += moneyUpdate;
+        activityMessage += ` وحصل على ${PASS_GO_REWARD} دينار للمرور بنقطة البداية.`;
+    }
+    
+    const gameRef = doc(db, 'games', game.id);
+    transaction.update(gameRef, {
+        players: updatedPlayers,
+        gameState: 'movement',
+        'educatedMerchantState.lastDiceRoll': diceRoll,
+        'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }),
+        'educatedMerchantState.timerEndsAt': deleteField(),
+    });
+}
+
 
 export async function handlePropertyLanding(gameId: string, playerId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
@@ -356,8 +365,14 @@ export async function handleTimeout(gameId: string, hostId: string) {
                 'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }),
              });
              await endTurnInternal(gameId, currentPlayerId, transaction);
-        } else if (game.gameState === 'rolling' || game.gameState === 'property_action') {
-             const activityMessage = `انتهى وقت اللاعب ${game.players.find(p=>p.id === currentPlayerId)?.name}.`;
+        } else if (game.gameState === 'rolling') {
+             // If player times out on rolling, roll for them
+             const activityMessage = `انتهى وقت اللاعب ${game.players.find(p=>p.id === currentPlayerId)?.name}، سيتم رمي النرد تلقائياً.`;
+             transaction.update(gameRef, {'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }) });
+             await rollDiceAndMoveInternal(game, currentPlayerId, transaction);
+        } else if (game.gameState === 'property_action') {
+             // If player times out on buying, skip the purchase
+             const activityMessage = `انتهى وقت اللاعب ${game.players.find(p=>p.id === currentPlayerId)?.name} وتخطى شراء العقار.`;
              transaction.update(gameRef, {'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }) });
              await endTurnInternal(gameId, currentPlayerId, transaction);
         }
@@ -403,10 +418,25 @@ async function endTurnInternal(gameId: string, playerId: string, transaction: Tr
     const currentTurnIndex = game.educatedMerchantState!.currentTurnIndex;
     let nextTurnIndex = (currentTurnIndex + 1) % turnOrder.length;
     let loopCount = 0;
-    while (updatedPlayers.find(p => p.id === turnOrder[nextTurnIndex])?.status === 'bankrupt' && loopCount < turnOrder.length) {
+    while (updatedPlayers.find(p => p.id === turnOrder[nextTurnIndex])?.status !== 'alive' && loopCount < turnOrder.length) {
         nextTurnIndex = (nextTurnIndex + 1) % turnOrder.length;
         loopCount++;
     }
+    
+    // Check if after trying to find the next player, we are back at the start and there's no one else left
+     if (updatedPlayers.find(p => p.id === turnOrder[nextTurnIndex])?.status !== 'alive') {
+        const finalWinner = activePlayers[0]; // The last one standing
+        const finalGameData = {
+            ...game,
+            players: updatedPlayers,
+            gameState: 'final_results' as const,
+            gameResult: { winner: finalWinner?.id || 'none', message: `اللاعب ${finalWinner?.name || ''} هو الناجي الأخير!` }
+        };
+        transaction.update(gameRef, finalGameData);
+        await updateLeagueScoresForGameEnd(finalGameData);
+        return;
+    }
+
 
     const newRound = nextTurnIndex < currentTurnIndex ? (game.round || 1) + 1 : game.round || 1;
     const maxRounds = game.educatedMerchantState?.settings?.maxRounds || 20;
