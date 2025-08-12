@@ -256,7 +256,8 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
     const property = game.educatedMerchantState?.board?.[player.position];
     if (!property) {
       // Just an empty tile - end the turn
-      await endTurnInternal(gameRef, tx, playerId, `${player.name} وصل إلى مربع فارغ.`);
+      const { updates } = endTurnInternal(game, playerId, `${player.name} وصل إلى مربع فارغ.`);
+      tx.update(gameRef, updates);
       return;
     }
 
@@ -285,20 +286,23 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
 
           const activityMessage = `${updatedPlayers[payerIndex].name} أفلس لأنه لم يستطع دفع الإيجار لـ ${updatedPlayers[ownerIndex].name}.`;
 
-          await endTurnInternal(gameRef, tx, playerId, activityMessage, { players: updatedPlayers });
+          const { updates } = endTurnInternal(game, playerId, activityMessage, { players: updatedPlayers });
+          tx.update(gameRef, updates);
           return;
         } else {
           updatedPlayers[payerIndex].money = (updatedPlayers[payerIndex].money || 0) - rent;
           updatedPlayers[ownerIndex].money = (updatedPlayers[ownerIndex].money || 0) + rent;
           const activityMessage = `${game.players[payerIndex].name} دفع ${rent} دينار إيجار لـ ${game.players[ownerIndex].name}.`;
 
-          await endTurnInternal(gameRef, tx, playerId, activityMessage, { players: updatedPlayers });
+          const { updates } = endTurnInternal(game, playerId, activityMessage, { players: updatedPlayers });
+          tx.update(gameRef, updates);
           return;
         }
       }
 
       // Own property, end turn
-      await endTurnInternal(gameRef, tx, playerId, `${player.name} وصل إلى عقاره.`);
+      const { updates } = endTurnInternal(game, playerId, `${player.name} وصل إلى عقاره.`);
+      tx.update(gameRef, updates);
       return;
     }
 
@@ -313,19 +317,22 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
         updatedPlayers[playerIndex].bankruptAt = nowTimestamp();
         const activityMessage = `${updatedPlayers[playerIndex].name} أفلس لأنه لم يستطع دفع الغرامة.`;
 
-        await endTurnInternal(gameRef, tx, playerId, activityMessage, { players: updatedPlayers });
+        const { updates } = endTurnInternal(game, playerId, activityMessage, { players: updatedPlayers });
+        tx.update(gameRef, updates);
         return;
       } else {
         updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) - fine;
         const activityMessage = `${updatedPlayers[playerIndex].name} دفع غرامة قدرها ${fine} دينار.`;
 
-        await endTurnInternal(gameRef, tx, playerId, activityMessage, { players: updatedPlayers });
+        const { updates } = endTurnInternal(game, playerId, activityMessage, { players: updatedPlayers });
+        tx.update(gameRef, updates);
         return;
       }
     }
 
-    // Default: end turn
-    await endTurnInternal(gameRef, tx, playerId, `${player.name} وصل إلى نقطة البداية.`);
+    // Default: end turn (e.g. landing on Start)
+    const { updates } = endTurnInternal(game, playerId, `${player.name} وصل إلى نقطة البداية.`);
+    tx.update(gameRef, updates);
   });
 }
 
@@ -465,14 +472,14 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
   let gameEnded = false;
 
   await runTransaction(db, async (tx) => {
+    // --- READ PHASE ---
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
     const game = snap.data() as Game;
 
     // Only the host should trigger timeouts, to prevent multiple triggers.
-    if (game.hostId !== hostId) {
-      return;
-    }
+    if (game.hostId !== hostId) return;
+
     if (!game.educatedMerchantState?.timerEndsAt || Date.now() < game.educatedMerchantState.timerEndsAt.toMillis()) {
       return; // Timer hasn't expired server-side.
     }
@@ -480,47 +487,79 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
     const turnOrder = ensure(game.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود.');
     const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
     const currentPlayerId = turnOrder[currentTurnIndex];
+    const currentPlayer = game.players.find((p) => p.id === currentPlayerId);
 
-    if (game.gameState === 'question') {
-      const pending = game.educatedMerchantState?.pendingPurchase;
-      if (pending) {
-        const playerIndex = getPlayerIndexById(game.players, pending.playerId);
+    // --- PREPARE WRITES based on game state ---
+    let updates: any = {};
+    let activityMessage = '';
+    
+    switch (game.gameState) {
+      case 'rolling': {
+        const diceRoll = randomDiceRoll();
+        const playerIndex = getPlayerIndexById(game.players, currentPlayerId);
+        if (playerIndex === -1) return;
+
         const updatedPlayers = [...game.players];
-        const refund = Math.round((pending.price || 0) / 4);
-        updatedPlayers[playerIndex] = { ...updatedPlayers[playerIndex], money: (updatedPlayers[playerIndex].money || 0) + refund };
+        const oldPosition = updatedPlayers[playerIndex].position || 0;
+        const newPosition = (oldPosition + diceRoll) % BOARD_SIZE;
+        updatedPlayers[playerIndex].position = newPosition;
+        
+        activityMessage = `انتهى وقت اللاعب ${currentPlayer?.name}، تم رمي النرد تلقائياً: ${diceRoll}.`;
+        if (newPosition < oldPosition) {
+          updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + PASS_GO_REWARD;
+          activityMessage += ` وحصل على ${PASS_GO_REWARD} دينار للمرور بنقطة البداية.`;
+        }
 
-        const activityMessage = `${updatedPlayers[playerIndex].name} لم يجب في الوقت واسترد ${refund} دينار.`;
-        const updates: any = {
+        updates = {
           players: updatedPlayers,
-          'educatedMerchantState.pendingPurchase': deleteField(),
-          'educatedMerchantState.currentQuestion': deleteField(),
+          gameState: 'movement',
+          'educatedMerchantState.lastDiceRoll': diceRoll,
+          'educatedMerchantState.rollAnimationNonce': Date.now(),
+          'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: nowTimestamp() }),
           'educatedMerchantState.timerEndsAt': deleteField(),
         };
-
-        const { isGameOver: ended, updates: finalUpdates } = endTurnInternal(game, currentPlayerId, activityMessage, updates);
-        tx.update(gameRef, finalUpdates);
-        gameEnded = ended;
-        if (ended) finalGameDataForLeagueUpdate = { ...game, ...finalUpdates };
-        return;
+        break;
       }
+      case 'property_action': {
+        activityMessage = `انتهى وقت اللاعب ${currentPlayer?.name} وتخطى شراء العقار.`;
+        const endTurnResult = endTurnInternal(game, currentPlayerId, activityMessage);
+        updates = endTurnResult.updates;
+        gameEnded = endTurnResult.isGameOver;
+        if (gameEnded) finalGameDataForLeagueUpdate = { ...game, ...updates };
+        break;
+      }
+      case 'question': {
+        const pending = game.educatedMerchantState?.pendingPurchase;
+        if (pending) {
+          const playerIndex = getPlayerIndexById(game.players, pending.playerId);
+          const updatedPlayers = [...game.players];
+          const refund = Math.round((pending.price || 0) / 4);
+          updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + refund;
+
+          activityMessage = `${currentPlayer?.name} لم يجب في الوقت واسترد ${refund} دينار.`;
+          
+          const baseUpdates = {
+            players: updatedPlayers,
+            'educatedMerchantState.pendingPurchase': deleteField(),
+            'educatedMerchantState.currentQuestion': deleteField(),
+            'educatedMerchantState.timerEndsAt': deleteField(),
+          };
+
+          const endTurnResult = endTurnInternal(game, currentPlayerId, activityMessage, baseUpdates);
+          updates = endTurnResult.updates;
+          gameEnded = endTurnResult.isGameOver;
+          if (gameEnded) finalGameDataForLeagueUpdate = { ...game, ...updates };
+        }
+        break;
+      }
+      default:
+        // No action needed for other states on timeout
+        return;
     }
-
-    if (game.gameState === 'rolling') {
-      const activityMessage = `انتهى وقت اللاعب ${game.players.find((p) => p.id === currentPlayerId)?.name}، سيتم رمي النرد تلقائياً.`;
-      tx.update(gameRef, { 'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: nowTimestamp() }) });
-
-      // perform dice roll inline
-      await rollDiceInternal(gameRef, tx, currentPlayerId);
-      return;
-    }
-
-    if (game.gameState === 'property_action') {
-      const activityMessage = `انتهى وقت اللاعب ${game.players.find((p) => p.id === currentPlayerId)?.name} وتخطى شراء العقار.`;
-      const { isGameOver: ended, updates } = endTurnInternal(game, currentPlayerId, activityMessage);
+    
+    // --- WRITE PHASE ---
+    if (Object.keys(updates).length > 0) {
       tx.update(gameRef, updates);
-      gameEnded = ended;
-      if (ended) finalGameDataForLeagueUpdate = { ...game, ...updates };
-      return;
     }
   });
 
