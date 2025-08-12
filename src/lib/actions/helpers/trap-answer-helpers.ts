@@ -18,6 +18,7 @@ const SIMILARITY_THRESHOLD = 0.85;
  * @param {Record<string, string | null>} playerAnswers - A map of player IDs to their submitted trap answers.
  * @param {Record<string, string | null>} playerGuesses - A map of player IDs to their chosen guess.
  * @param {string[]} awayPlayerIdsInRound - An array of IDs for players who were away during the round.
+ * @param {string[]} shuffledAnswers - The actual list of answers shown to players for guessing.
  * @returns {object} An object containing the calculated scores, the results breakdown, and trick stats.
  */
 export function calculateTrapAnswerScores(
@@ -25,7 +26,8 @@ export function calculateTrapAnswerScores(
     question: TrapQuestion,
     playerAnswers: Record<string, string | null>,
     playerGuesses: Record<string, string | null>,
-    awayPlayerIdsInRound: string[]
+    awayPlayerIdsInRound: string[],
+    shuffledAnswers: string[]
 ) {
     const roundScores: Game['trapAnswerState']['lastRoundResults']['scores'] = activePlayers.reduce((acc, p) => ({ ...acc, [p.id]: { points: 0, breakdown: [] } }), {});
     const newTrickStats: Game['trapAnswerState']['trickStats'] = { trickedBy: {}, trickedOthers: {} };
@@ -91,9 +93,8 @@ export function calculateTrapAnswerScores(
         }
     });
     
-    // Build the full results list to show all options, including dummy answers
-    const allOptionsDisplayed = new Set<string>([question.answer, ...(question.dummyAnswers || [])]);
-    answerGroups.forEach(group => allOptionsDisplayed.add(group.text));
+    // Build the full results list to show all options that were actually displayed.
+    const allOptionsDisplayed = new Set<string>(shuffledAnswers);
     
     const resultsByAnswer: Game['trapAnswerState']['lastRoundResults']['answers'] = [];
 
@@ -113,4 +114,3 @@ export function calculateTrapAnswerScores(
 
     return { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds, awayPlayerIdsDuringRound: awayPlayerIdsInRound };
 }
-

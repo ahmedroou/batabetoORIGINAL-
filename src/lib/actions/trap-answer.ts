@@ -458,7 +458,8 @@ async function _advanceToResults(transaction: Transaction, gameRef: any, game: G
         game.trapAnswerState.currentQuestion,
         game.trapAnswerState.playerAnswers,
         playerGuesses,
-        awayPlayerIdsDuringRound
+        awayPlayerIdsDuringRound,
+        game.trapAnswerState.shuffledAnswers || []
     );
 
     const finalScores = { ...(game.playerScores || {}) };
