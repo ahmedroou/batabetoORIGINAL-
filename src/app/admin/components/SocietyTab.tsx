@@ -21,7 +21,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 
 // Server Actions
-import { adminUpdateUser, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, backfillPunishmentStatus, adminGiveReward, adminApplyPunishment, adminSearchUsers } from '@/lib/actions/admin';
+import { adminUpdateUser, recalculateGameKings, adminSendMail, setAnnouncement, getAnnouncement, backfillPunishmentStatus, adminGiveReward, adminApplyPunishment, adminSearchUsers, backfillUserPermissions } from '@/lib/actions/admin';
 import { GAME_TYPE_NAMES } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -57,6 +57,9 @@ export default function SocietyTab() {
     
     const [isBackfilling, setIsBackfilling] = useState(false);
     const [showBackfillDialog, setShowBackfillDialog] = useState(false);
+
+    const [isBackfillingPermissions, setIsBackfillingPermissions] = useState(false);
+    const [showPermissionsBackfillDialog, setShowPermissionsBackfillDialog] = useState(false);
 
 
 
@@ -144,6 +147,18 @@ export default function SocietyTab() {
         }
         setIsBackfilling(false);
         setShowBackfillDialog(false);
+    };
+
+    const handlePermissionsBackfill = async () => {
+        setIsBackfillingPermissions(true);
+        const result = await backfillUserPermissions();
+        if (result.success) {
+            toast({ title: "نجاح!", description: `تم تحديث صلاحيات ${result.count} لاعب بنجاح.` });
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsBackfillingPermissions(false);
+        setShowPermissionsBackfillDialog(false);
     };
 
     const handleActionSubmit = async () => {
@@ -240,7 +255,7 @@ export default function SocietyTab() {
         }
 
         setIsSendingMail(true);
-        const result = await adminSendMail(adminProfile.uid, Array.from(selectedUserIds), mailSubject, mailBody, coinsToSend);
+        const result = await adminSendMail(Array.from(selectedUserIds), mailSubject, mailBody, coinsToSend);
         if (result.success) {
             toast({ title: "نجاح", description: `تم إرسال الرسالة إلى ${selectedUserIds.size} مستخدم بنجاح.` });
             setIsMailDialogOpen(false);
@@ -500,14 +515,25 @@ export default function SocietyTab() {
                         <CardTitle className="flex items-center gap-2"><DatabaseZap/> أدوات الصيانة</CardTitle>
                         <CardDescription>عمليات تُنفذ مرة واحدة أو عند الحاجة لإصلاح البيانات.</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        <Button variant="outline" onClick={() => setShowBackfillDialog(true)} disabled={isBackfilling}>
-                            <RefreshCw className="ml-2"/>
-                            {isBackfilling ? 'جاري التحديث...' : 'تحديث حالات العقوبة لجميع اللاعبين'}
-                        </Button>
-                        <p className="text-xs text-muted-foreground mt-2">
-                           استخدم هذا الخيار إذا كان اللاعبون المعاقبون لا يظهرون في غرفة العقاب. سيقوم هذا الإجراء بالمرور على كل اللاعبين وتحديث حالتهم.
-                        </p>
+                    <CardContent className="space-y-4">
+                        <div className="p-3 border rounded-lg">
+                             <Button variant="outline" onClick={() => setShowBackfillDialog(true)} disabled={isBackfilling}>
+                                <RefreshCw className="ml-2"/>
+                                {isBackfilling ? 'جاري التحديث...' : 'تحديث حالات العقوبة لجميع اللاعبين'}
+                            </Button>
+                            <p className="text-xs text-muted-foreground mt-2">
+                                استخدم هذا الخيار إذا كان اللاعبون المعاقبون لا يظهرون في غرفة العقاب. سيقوم هذا الإجراء بالمرور على كل اللاعبين وتحديث حالتهم.
+                            </p>
+                        </div>
+                         <div className="p-3 border rounded-lg">
+                             <Button variant="outline" onClick={() => setShowPermissionsBackfillDialog(true)} disabled={isBackfillingPermissions}>
+                                <RefreshCw className="ml-2"/>
+                                {isBackfillingPermissions ? 'جاري التحديث...' : 'تحديث صلاحيات كل اللاعبين'}
+                            </Button>
+                            <p className="text-xs text-muted-foreground mt-2">
+                                استخدم هذا الخيار لمرة واحدة لتحديث صلاحيات كل اللاعبين بناءً على رتبتهم الحالية. مهم بعد أي تغيير في نظام الرتب أو عند إضافة لاعبين جدد بشكل يدوي.
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
@@ -557,6 +583,23 @@ export default function SocietyTab() {
                         <AlertDialogCancel>إلغاء</AlertDialogCancel>
                         <AlertDialogAction onClick={handleBackfill} disabled={isBackfilling}>
                             {isBackfilling ? <Loader2 className="animate-spin" /> : "نعم، قم بالتحديث"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={showPermissionsBackfillDialog} onOpenChange={setShowPermissionsBackfillDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>تأكيد تحديث الصلاحيات</AlertDialogTitle>
+                        <AlertDialogDescription>
+                           سيقوم هذا الإجراء بالمرور على جميع المستخدمين وتحديث قائمة صلاحياتهم بناءً على رتبتهم الحالية. هذه العملية ضرورية لمرة واحدة أو بعد تغييرات كبيرة على نظام الرتب. هل أنت متأكد؟
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                        <AlertDialogAction onClick={handlePermissionsBackfill} disabled={isBackfillingPermissions}>
+                            {isBackfillingPermissions ? <Loader2 className="animate-spin" /> : "نعم، قم بتحديث الصلاحيات"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

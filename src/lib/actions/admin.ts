@@ -1,5 +1,4 @@
 
-
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -1019,6 +1018,53 @@ export async function backfillPunishmentStatus(): Promise<{ success: boolean; co
         return { success: false, count: 0, error: "Failed to update user punishment statuses." };
     }
 };
+
+export async function backfillUserPermissions(): Promise<{ success: boolean; count: number; error?: string }> {
+    const usersRef = collection(db, 'users');
+    try {
+        const [allRanks, usersSnapshot] = await Promise.all([
+            getRanks(),
+            getDocs(usersRef)
+        ]);
+
+        if (usersSnapshot.empty) {
+            return { success: true, count: 0 };
+        }
+
+        const batch = writeBatch(db);
+
+        const getRankForPoints = (points: number, ranks: SocialRank[]): SocialRank | null => {
+            const sortedRanks = [...ranks].sort((a, b) => b.threshold - a.threshold);
+            for (const rank of sortedRanks) {
+                if (points >= rank.threshold) return rank;
+            }
+            return sortedRanks[sortedRanks.length - 1] || null;
+        };
+
+        usersSnapshot.forEach(userDoc => {
+            const userData = userDoc.data() as UserProfile;
+            const currentPoints = userData.leaderboardPoints || 0;
+            const currentRank = getRankForPoints(currentPoints, allRanks);
+            const newPermissions = currentRank?.permissions || [];
+            
+            // Compare arrays to see if an update is needed
+            const currentPermissions = userData.permissions || [];
+            const permissionsAreSame = currentPermissions.length === newPermissions.length && currentPermissions.every(p => newPermissions.includes(p));
+
+            if (!permissionsAreSame) {
+                batch.update(userDoc.ref, { permissions: newPermissions });
+            }
+        });
+
+        await batch.commit();
+        return { success: true, count: usersSnapshot.size };
+
+    } catch (error: any) {
+        console.error("Error backfilling user permissions:", error);
+        return { success: false, count: 0, error: "Failed to update user permissions." };
+    }
+}
+
 
 export const adminGiveReward = giveReward;
 export const adminApplyPunishment = applyPunishment;
