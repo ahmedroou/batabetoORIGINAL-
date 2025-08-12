@@ -6,6 +6,7 @@ import { TimerIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { handleTimeout as handleTrapAnswerTimeout } from '@/lib/actions/trap-answer';
 import { handleTimeout as handleEducatedMerchantTimeout } from '@/lib/actions/educated-merchant';
+import { handleTimeout as handlePrisonTimeout } from '@/lib/actions/prison';
 import type { Game } from '@/types';
 
 interface CountdownTimerProps {
@@ -48,6 +49,9 @@ export const CountdownTimer = ({ gameId, gameType, expiryTimestamp, onExpire, is
                             break;
                         case 'educated-merchant':
                             handleEducatedMerchantTimeout(gameId, selfId);
+                            break;
+                        case 'prison':
+                            handlePrisonTimeout(gameId, selfId);
                             break;
                         // Add other game types that use timeouts here
                     }

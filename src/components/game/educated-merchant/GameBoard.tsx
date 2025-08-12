@@ -42,12 +42,17 @@ const Tile = ({ property, isNewlyBought }: { property: Property, isNewlyBought: 
     const tileStyle = property.ownerId && property.color ? { backgroundColor: property.color } : {};
     
     return (
-        <div className={cn("w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500", baseBgColor, borderColor, isNewlyBought && 'animate-pulse-glow')} style={tileStyle}>
+        <motion.div 
+            className={cn("w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500", baseBgColor, borderColor)} 
+            style={tileStyle}
+            animate={{ boxShadow: isNewlyBought ? ['0 0 0px #fff', '0 0 20px #ffd700', '0 0 0px #fff'] : 'none' }}
+            transition={{ duration: 0.5, repeat: 4, ease: "easeInOut" }}
+        >
             <Icon className="w-5 h-5 mb-1 flex-shrink-0"/>
             <p className="text-[10px] font-bold leading-tight line-clamp-2">{property.name}</p>
             {property.type === 'property' && <p className="text-[10px] font-mono mt-1">{property.price} دينار</p>}
             {property.type === 'fine' && <p className="text-[10px] font-mono mt-1">{property.fineAmount} دينار</p>}
-        </div>
+        </motion.div>
     );
 };
 
@@ -125,12 +130,11 @@ export function GameBoard({ game, self }: GameBoardProps) {
                      }
                 }
                 return null;
-            case 'turn_end': // This state is now very brief, mostly for transition
+            case 'turn_end':
                 return (
                     <div className="text-center text-white space-y-4">
-                        <HelpCircle className="w-16 h-16 mx-auto mb-4 text-primary" />
                         <h2 className="text-2xl font-bold">انتهى دور {game.players.find(p=>p.id === currentPlayerId)?.name}</h2>
-                        <p className="text-muted-foreground mt-2">في انتظار اللاعب التالي...</p>
+                        <p className="text-muted-foreground mt-2 animate-pulse">في انتظار اللاعب التالي...</p>
                     </div>
                 )
             default:
@@ -154,6 +158,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
                  <div className="absolute top-4 left-4 z-20">
                     <CountdownTimer
                         gameId={game.id}
+                        gameType='educated-merchant'
                         expiryTimestamp={game.educatedMerchantState.timerEndsAt.toMillis()}
                         selfId={self.id}
                         isHost={game.hostId === self.id}

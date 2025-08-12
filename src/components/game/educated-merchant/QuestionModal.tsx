@@ -10,11 +10,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { answerQuestion } from '@/lib/actions/educated-merchant';
 import { Loader2, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { handleTimeout } from '@/lib/actions/educated-merchant';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
-
-const QUESTION_TIME_SECONDS = 20;
 
 export function QuestionModal({ game, self }: { game: Game; self: Player }) {
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -25,22 +22,14 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
     const isMyQuestion = game.educatedMerchantState?.pendingPurchase?.playerId === self.id;
     const isHost = game.hostId === self.id;
 
-    const onTimeout = useCallback(() => {
-        if (isHost && isMyQuestion && answerState === 'pending') {
-            handleTimeout(game.id, self.id);
-        }
-    }, [game.id, self.id, isHost, isMyQuestion, answerState]);
-
     const handleSubmit = async () => {
-        if (!selectedAnswer) return;
+        if (!selectedAnswer || !question) return;
         setIsSubmitting(true);
-        const isCorrect = selectedAnswer === question?.answer;
+        const isCorrect = selectedAnswer === question.answer;
         setAnswerState(isCorrect ? 'correct' : 'incorrect');
 
-        // Wait a bit to show feedback, then submit
         setTimeout(async () => {
             await answerQuestion(game.id, self.id, selectedAnswer);
-            // No need to reset states as the modal will close
         }, 1500); 
     };
 
@@ -65,6 +54,7 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                         <CountdownTimer 
                             gameId={game.id}
+                            gameType='educated-merchant'
                             expiryTimestamp={game.educatedMerchantState.timerEndsAt.toMillis()}
                             selfId={self.id}
                             isHost={isHost}

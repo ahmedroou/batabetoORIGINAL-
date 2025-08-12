@@ -9,6 +9,7 @@ import { Trophy } from 'lucide-react';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { Timestamp } from 'firebase/firestore';
 
 interface FinalResultsProps {
   game: Game;
@@ -19,15 +20,22 @@ export function FinalResults({ game, self }: FinalResultsProps) {
   const router = useRouter();
   
   const sortedPlayers = [...game.players].sort((a,b) => {
-    if (a.status === 'bankrupt' && b.status !== 'bankrupt') return 1;
-    if (b.status === 'bankrupt' && a.status !== 'bankrupt') return -1;
-    if (a.status === 'bankrupt' && b.status === 'bankrupt') {
-        return (b.bankruptAt?.toMillis() || 0) - (a.bankruptAt?.toMillis() || 0);
+    // A player who is not bankrupt is always ranked higher
+    if (a.status !== 'bankrupt' && b.status === 'bankrupt') return -1;
+    if (b.status !== 'bankrupt' && a.status === 'bankrupt') return 1;
+
+    // If both are not bankrupt, sort by money (descending)
+    if (a.status !== 'bankrupt' && b.status !== 'bankrupt') {
+        return (b.money || 0) - (a.money || 0);
     }
-    return (b.money || 0) - (a.money || 0);
+
+    // If both are bankrupt, sort by who went bankrupt last (later is better)
+    const bankruptTimeA = a.bankruptAt instanceof Timestamp ? a.bankruptAt.toMillis() : 0;
+    const bankruptTimeB = b.bankruptAt instanceof Timestamp ? b.bankruptAt.toMillis() : 0;
+    return bankruptTimeB - bankruptTimeA;
   });
   
-  const winner = game.players.find(p => p.id === game.gameResult?.winner);
+  const winner = sortedPlayers[0];
 
   return (
     <motion.div

@@ -28,7 +28,7 @@ import { updateLeagueScoresForGameEnd } from './user';
 const BOARD_SIZE = 28; 
 const START_MONEY = 1500;
 const PASS_GO_REWARD = 200;
-const ACTION_TIME_SECONDS = 20;
+const ACTION_TIME_SECONDS = 25;
 
 async function generateBoard(categories: string[]): Promise<Property[]> {
     const board: Property[] = new Array(BOARD_SIZE);
@@ -176,7 +176,6 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
                 updates.gameState = 'property_action';
                 updates['educatedMerchantState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + ACTION_TIME_SECONDS * 1000);
             } else if (property.ownerId !== playerId) {
-                shouldEndTurnNow = true;
                 const owner = game.players.find(p => p.id === property.ownerId);
                 if (owner) {
                     const rent = property.rent;
@@ -198,11 +197,11 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
                     }
                     updates.players = updatedPlayers;
                 }
+                shouldEndTurnNow = true;
             } else {
                 shouldEndTurnNow = true;
             }
         } else if (property.type === 'fine') {
-            shouldEndTurnNow = true;
             const fine = property.fineAmount || 100;
             const playerIndex = game.players.findIndex(p => p.id === playerId);
             const updatedPlayers = [...game.players];
@@ -216,6 +215,7 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
                 activityMessage = `${player.name} دفع غرامة قدرها ${fine} دينار.`;
             }
             updates.players = updatedPlayers;
+            shouldEndTurnNow = true;
         } else {
              shouldEndTurnNow = true;
         }
@@ -248,17 +248,13 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
         }
 
         const questionsCol = collection(db, "trap_answer_questions");
-        const q = query(questionsCol, where("category", "==", property.category), limit(1));
+        const q = query(questionsCol, where("category", "==", property.category), where("randomKey", ">=", Math.random()), limit(1));
         let questionSnapshot = await getDocs(q);
 
         if (questionSnapshot.empty) {
-            const randomKeyQuery = query(questionsCol, where("category", "==", property.category), where("randomKey", ">=", Math.random()), limit(1));
-            questionSnapshot = await getDocs(randomKeyQuery);
-            if(questionSnapshot.empty) {
-                 const wrapAroundQuery = query(questionsCol, where("category", "==", property.category), limit(1));
-                 questionSnapshot = await getDocs(wrapAroundQuery);
-                 if(questionSnapshot.empty) throw new Error(`لا توجد أسئلة متاحة في قسم "${property.category}".`);
-            }
+            const wrapAroundQuery = query(questionsCol, where("category", "==", property.category), limit(1));
+            questionSnapshot = await getDocs(wrapAroundQuery);
+            if(questionSnapshot.empty) throw new Error(`لا توجد أسئلة متاحة في قسم "${property.category}".`);
         }
         
         const questionDoc = questionSnapshot.docs[0];
@@ -366,12 +362,10 @@ export async function handleTimeout(gameId: string, hostId: string) {
              });
              await endTurnInternal(gameId, currentPlayerId, transaction);
         } else if (game.gameState === 'rolling') {
-             // If player times out on rolling, roll for them
              const activityMessage = `انتهى وقت اللاعب ${game.players.find(p=>p.id === currentPlayerId)?.name}، سيتم رمي النرد تلقائياً.`;
              transaction.update(gameRef, {'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }) });
              await rollDiceAndMoveInternal(game, currentPlayerId, transaction);
         } else if (game.gameState === 'property_action') {
-             // If player times out on buying, skip the purchase
              const activityMessage = `انتهى وقت اللاعب ${game.players.find(p=>p.id === currentPlayerId)?.name} وتخطى شراء العقار.`;
              transaction.update(gameRef, {'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }) });
              await endTurnInternal(gameId, currentPlayerId, transaction);
@@ -418,14 +412,13 @@ async function endTurnInternal(gameId: string, playerId: string, transaction: Tr
     const currentTurnIndex = game.educatedMerchantState!.currentTurnIndex;
     let nextTurnIndex = (currentTurnIndex + 1) % turnOrder.length;
     let loopCount = 0;
-    while (updatedPlayers.find(p => p.id === turnOrder[nextTurnIndex])?.status !== 'alive' && loopCount < turnOrder.length) {
+    while (updatedPlayers.find(p => p.id === turnOrder[nextTurnIndex])?.status !== 'alive' && loopCount < turnOrder.length * 2) {
         nextTurnIndex = (nextTurnIndex + 1) % turnOrder.length;
         loopCount++;
     }
     
-    // Check if after trying to find the next player, we are back at the start and there's no one else left
      if (updatedPlayers.find(p => p.id === turnOrder[nextTurnIndex])?.status !== 'alive') {
-        const finalWinner = activePlayers[0]; // The last one standing
+        const finalWinner = activePlayers[0];
         const finalGameData = {
             ...game,
             players: updatedPlayers,
