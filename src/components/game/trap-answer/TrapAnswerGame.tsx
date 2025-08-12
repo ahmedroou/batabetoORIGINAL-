@@ -15,7 +15,7 @@ import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/types';
 import { startTrapAnswerGame, selectCategoryAndGetQuestion, handleTimeout, submitTrapAnswer, submitGuess, nextTrapAnswerRound, sendReaction, updateGameSettings as updateTrapAnswerSettings } from '@/lib/actions/trap-answer';
-import { kickPlayerFromLobby } from '@/lib/actions/room';
+import { kickPlayerFromLobby, leaveGame } from '@/lib/actions/room';
 import { Award, CheckCircle2, ListChecks, Loader2, Send, Server, Star, Users, Trophy, ArrowRight, Copy, Check, TimerIcon, ListX, ListPlus, LogOut, Laugh, MessageCircleOff, Handshake, Drama, UserX, VenetianMask, UserRound, Swords, Save, Settings, EyeOff, AlertTriangle } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -132,7 +132,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
             if (result.error) {
                 toast({ title: "خطأ", description: result.error, variant: "destructive" });
             }
-        } catch (error: any) => {
+        } catch (error: any) {
             toast({ title: "خطأ فادح", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
@@ -795,3 +795,4 @@ function TrapAnswerLobby({ game, self }: { game: Game, self: Player }) {
     );
 }
 
+    
