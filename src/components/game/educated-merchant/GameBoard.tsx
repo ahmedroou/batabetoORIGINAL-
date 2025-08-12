@@ -353,12 +353,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
                                     whileHover={{ scale: 1.08, zIndex: 30 }}
                                 >
                                     <div className="relative w-full h-full">
-                                        {/* soft shadow under avatar that scales when jumping */}
-                                        <span className={cn("player-shadow absolute left-1/2 -translate-x-1/2 bottom-1 rounded-full", isJumping[p.id] && 'shadow-jump')} style={{ width: pieceSize * 0.72, height: Math.max(6, pieceSize * 0.16) }} />
-
-                                        {/* small expanding trail effect on jump */}
-                                        <span className={cn("player-trail absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 rounded-full pointer-events-none", isJumping[p.id] && 'player-trail-active')} style={{ width: pieceSize * 0.45, height: pieceSize * 0.45 }} />
-
                                         <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
                                     </div>
                                 </motion.div>
@@ -369,7 +363,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
             </div>
 
             <style jsx>{`
-                /* Player jump + shadow + trail */
                 @keyframes pulseGlow {
                   0% { box-shadow: 0 0 6px rgba(255,255,255,0.06); }
                   50% { box-shadow: 0 0 18px rgba(255,255,255,0.14); }
@@ -379,40 +372,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
                 .animate-pulse-glow {
                   animation: pulseGlow 1.8s infinite;
                 }
-
-                .player-shadow {
-                  background: rgba(0,0,0,0.45);
-                  filter: blur(6px);
-                  transform-origin: center;
-                  transition: transform 220ms ease, opacity 220ms ease;
-                  opacity: 0.9;
-                }
-
-                .shadow-jump {
-                  transform: translateY(6px) scale(0.72);
-                  opacity: 0.6;
-                }
-
-                .player-trail {
-                  background: radial-gradient(circle at center, rgba(255,255,255,0.18), rgba(255,255,255,0.02));
-                  opacity: 0;
-                  transform: scale(0.6);
-                  transition: opacity 180ms ease, transform 260ms ease;
-                  z-index: 5;
-                }
-
-                .player-trail-active {
-                  opacity: 0.75;
-                  transform: scale(1.15);
-                  animation: trailFade ${TRAIL_LIFETIME}ms ease-out forwards;
-                }
-
-                @keyframes trailFade {
-                  0% { opacity: 0.9; transform: scale(1.05); }
-                  70% { opacity: 0.5; transform: scale(1.35); }
-                  100% { opacity: 0; transform: scale(1.6); }
-                }
-
+                
                 /* tile highlight for temporary landing feedback */
                 .tile-highlight {
                   box-shadow: 0 0 18px rgba(99,102,241,0.18), inset 0 0 18px rgba(99,102,241,0.05);
@@ -428,16 +388,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
 
                 .animate-pulse-glow {
                   animation: boughtPulse 1.2s ease-out;
-                }
-
-                /* small helpers for readability */
-                .tile-highlight, .animate-pulse-glow {
-                  transition: box-shadow 300ms ease, transform 200ms ease;
-                }
-
-                /* reduce motion preference override */
-                @media (prefers-reduced-motion: reduce) {
-                  .player-trail, .animate-pulse-glow, .tile-highlight { animation: none !important; transition: none !important; }
                 }
             `}</style>
         </div>
