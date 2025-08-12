@@ -1,105 +1,65 @@
-// .
+
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import type { Game, Player } from "@/types";
-import { GameBoard } from "./GameBoard";
-import { PlayerHUD } from "./PlayerHUD";
-import { DiceRoll } from "./DiceRoll";
-import { PropertyCard } from "./PropertyCard";
-import { QuestionModal } from "./QuestionModal";
-import { FinalResults } from "./FinalResults";
-import { Lobby } from "./Lobby";
-import { motion, AnimatePresence } from "framer-motion";
-import { resolveExpiredQuestion } from '@/lib/actions/educated-merchant';
+import type { Game, Player } from '@/types';
+import { AnimatePresence, motion } from 'framer-motion';
+import { EducatedMerchantLobby } from './Lobby';
+import { GameBoard } from './GameBoard';
+import { FinalResults } from './FinalResults';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2 } from 'lucide-react';
 
 interface EducatedMerchantGameProps {
-  game: Game;
-  self: Player;
+    game: Game;
+    self: Player;
 }
 
-// Inner component to hold the main game view and its hooks
-const EducatedMerchantGameView = ({ game, self }: EducatedMerchantGameProps) => {
-    const es = game.educatedMerchantState!;
-
-    const activePlayerId = es.turnOrder?.[es.currentTurnIndex] || "";
-    const isMyTurn = activePlayerId === self.id;
-
-    const canRoll = game.gameState === 'rolling' && isMyTurn;
-    const showDiceRoll = (game.gameState === 'rolling' || game.gameState === 'movement') && (es.lastDiceRoll != null || canRoll);
-    const showPropertyInteraction = game.gameState === 'property_action' && isMyTurn;
-    const showQuestion = game.gameState === 'question' && es.currentQuestion;
-
-    useEffect(() => {
-        if (game.gameState !== 'question' || !es?.timerEndsAt) return;
-        
-        const endsAt = (typeof es.timerEndsAt === 'number') ? es.timerEndsAt : new Date((es.timerEndsAt as any)?.toDate() || es.timerEndsAt).getTime();
-        
-        const msLeft = endsAt - Date.now();
-        if (msLeft <= 0) {
-            (async () => { await resolveExpiredQuestion(game.id); })();
-            return;
-        }
-        const t = setTimeout(() => { resolveExpiredQuestion(game.id); }, msLeft + 100);
-        return () => clearTimeout(t);
-    }, [es?.timerEndsAt, es?.currentQuestion, game.gameState, game.id]);
-    
-    const boardProps = useMemo(() => ({
-        players: game.players,
-        properties: es.board || [],
-        className: 'w-full h-full',
-        round: game.round,
-        maxRounds: es.settings?.maxRounds,
-        turnOrder: es.turnOrder,
-        currentPlayerId: activePlayerId,
-    }), [game.players, es.board, game.round, es.settings, es.turnOrder, activePlayerId]);
-
-    return (
-        <div className="w-full h-screen flex flex-col md:flex-row p-2 gap-4 bg-gray-50 dark:bg-gray-900">
-            <div className="flex-grow flex items-stretch justify-center relative min-h-0">
-                <GameBoard {...boardProps} />
-
-                <AnimatePresence>
-                    {showDiceRoll && (
-                        <motion.div key="dice-roll" className="absolute inset-0 z-30 flex items-center justify-center" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>
-                            <DiceRoll
-                                gameId={game.id}
-                                selfId={self.id}
-                                isMyTurnToRoll={canRoll}
-                                diceResult={es.lastDiceRoll ?? null}
-                            />
-                        </motion.div>
-                    )}
-
-                    {showPropertyInteraction && (
-                        <motion.div key="property-card" className="absolute z-40" initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}>
-                            <PropertyCard game={game} self={self} />
-                        </motion.div>
-                    )}
-
-                    {showQuestion && es.currentQuestion && (
-                        <QuestionModal key="question" game={game} self={self} />
-                    )}
-                </AnimatePresence>
-            </div>
-
-            <div className="w-full md:w-[360px] shrink-0">
-                <PlayerHUD players={game.players} balances={game.playerScores || {}} board={es.board || []} currentTurnPlayerId={activePlayerId} activityLog={es.activityLog || []} />
-            </div>
-        </div>
-    );
-}
+const LoadingState = ({ text }: { text: string }) => (
+    <Card className="w-full max-w-md text-center bg-white/90 backdrop-blur-sm">
+        <CardHeader>
+            <CardTitle className="text-2xl text-primary">{text}</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+        </CardContent>
+    </Card>
+);
 
 export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) {
-    const es = game.educatedMerchantState;
+    const renderContent = () => {
+        switch (game.gameState) {
+            case 'lobby':
+                return <EducatedMerchantLobby game={game} self={self} />;
+            
+            case 'rolling':
+            case 'movement':
+            case 'property_action':
+            case 'question':
+            case 'turn_end':
+                return <GameBoard game={game} self={self} />;
 
-    if (game.gameState === 'lobby' || !es?.board || es.board.length === 0) {
-        return <Lobby game={game} self={self} />;
-    }
+            case 'final_results':
+                return <FinalResults game={game} self={self} />;
+                
+            default:
+                return <LoadingState text={`حالة غير معروفة: ${game.gameState}`} />;
+        }
+    };
 
-    if (game.gameState === "final_results") {
-        return <FinalResults game={game} />;
-    }
-
-    return <EducatedMerchantGameView game={game} self={self} />;
+    return (
+        <div className="w-full h-screen flex items-center justify-center relative bg-gray-100 dark:bg-gray-900">
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={game.gameState}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.4 }}
+                    className="w-full h-full flex items-center justify-center"
+                >
+                    {renderContent()}
+                </motion.div>
+            </AnimatePresence>
+        </div>
+    );
 }

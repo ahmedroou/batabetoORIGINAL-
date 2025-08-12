@@ -1,11 +1,9 @@
-
-
 "use client";
 
 import * as React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import type { Challenge, ChallengePrize, UserProfile, EntryFee, GameKing, SocialRank } from '@/types';
-import { getChallenges, joinChallenge, getChallengeDetails } from '@/lib/actions/challenges';
+import { getChallenges, joinChallenge, getChallengeDetails, getAllChallengesForAdmin } from '@/lib/actions/challenges';
 import { getGameKings, getKingOfGames } from '@/lib/actions/user';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -24,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent as AlertDialogContentAlt, AlertDialogDescription as AlertDialogDescriptionAlt, AlertDialogFooter as AlertDialogFooterAlt, AlertDialogHeader as AlertDialogHeaderAlt, AlertDialogTitle as AlertDialogTitleAlt } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 
 const PRIZE_ICONS: Record<ChallengePrize['type'], React.ElementType> = {
     coins: CircleDollarSign,
@@ -141,45 +140,47 @@ const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challen
 
 const EntryFeeDisplay = ({ entryFee }: { entryFee?: EntryFee }) => {
     if (!entryFee || entryFee.value <= 0) {
-        return <p className="text-sm font-semibold text-green-400">انضمام مجاني!</p>;
+        return <Badge className="bg-green-500/20 text-green-300 border-green-500/30">انضمام مجاني!</Badge>;
     }
     
     const Icon = entryFee.type === 'coins' ? CircleDollarSign : Trophy;
     const text = entryFee.type === 'coins' ? 'كوينز' : 'نقاط صدارة';
     
     return (
-        <div className="flex items-center gap-1 text-xs bg-yellow-900/70 text-yellow-200 px-2 py-1 rounded-full backdrop-blur-sm">
-            <Icon className="w-3 h-3" />
+        <Badge className="bg-yellow-500/20 text-yellow-200 border-yellow-500/30 gap-1.5">
+            <Icon className="w-4 h-4" />
             <span>رسوم الانضمام: {entryFee.value} {text}</span>
-        </div>
+        </Badge>
     );
 };
 
-const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: number; }) => {
+const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; index: number; isEnded: boolean; }) => {
     const { user, userProfile } = useAuth();
     const { toast } = useToast();
     const [isJoining, setIsJoining] = useState(false);
     const [isConfirmingJoin, setIsConfirmingJoin] = useState(false);
-    const [timeLeft, setTimeLeft] = useState('');
+    const [progress, setProgress] = useState(0);
     const topThree = challenge.topParticipants || [];
 
     useEffect(() => {
-        const calculateTimeLeft = () => {
-            if (!challenge.endsAt) return "غير محدد";
-            const endsAtDate = challenge.endsAt instanceof Date ? challenge.endsAt : new Date(challenge.endsAt);
-            if (isNaN(endsAtDate.getTime())) return "تاريخ غير صالح";
-
-            const difference = endsAtDate.getTime() - new Date().getTime();
-            if (difference > 0) {
-                return formatDistanceToNowStrict(endsAtDate, { locale: ar, addSuffix: true });
-            }
-            return "انتهت";
+        if (isEnded) {
+            setProgress(100);
+            return;
+        }
+        const calculateProgress = () => {
+            if (!challenge.createdAt || !challenge.endsAt) return;
+            const createdAt = (challenge.createdAt as Timestamp)?.toDate();
+            const endsAt = (challenge.endsAt as Date);
+            if (!createdAt || !endsAt) return;
+            const totalDuration = endsAt.getTime() - createdAt.getTime();
+            const elapsed = Date.now() - createdAt.getTime();
+            const progressPercentage = Math.min(100, (elapsed / totalDuration) * 100);
+            setProgress(progressPercentage);
         };
-
-        setTimeLeft(calculateTimeLeft());
-        const timer = setInterval(() => setTimeLeft(calculateTimeLeft()), 60000); // Update every minute
+        calculateProgress();
+        const timer = setInterval(calculateProgress, 60000);
         return () => clearInterval(timer);
-    }, [challenge.endsAt]);
+    }, [challenge.createdAt, challenge.endsAt, isEnded]);
 
 
     const handleJoin = async () => {
@@ -205,46 +206,42 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
     };
     
     const isParticipant = userProfile && challenge.participantIds?.includes(userProfile.uid);
-    const isEnded = !challenge.endsAt || new Date(challenge.endsAt).getTime() < new Date().getTime();
-
 
     return (
-        <motion.div variants={cardVariants} initial="hidden" animate="visible">
+        <motion.div variants={cardVariants} initial="hidden" animate="visible" className="h-full">
             <Card className={cn(
-                "h-full flex flex-col bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20 relative",
+                "h-full flex flex-col bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20 relative overflow-hidden",
                 isEnded && "opacity-60 bg-gray-900/70 border-gray-700/50"
                 )}>
-                <CardHeader>
-                    <div className="flex justify-between items-start">
-                        <CardTitle className="text-2xl text-purple-300">{challenge.title}</CardTitle>
-                         <div className={cn(
-                             "text-sm font-bold  px-3 py-1 rounded-full",
-                             isEnded ? "bg-red-900/50 text-red-300" : "bg-black/30 text-yellow-300"
-                             )}>
-                           {timeLeft}
-                        </div>
+                 <CardHeader className="border-b border-white/10 pb-4">
+                    <div className="flex justify-between items-start mb-2">
+                        <CardTitle className="text-xl text-purple-300 flex items-center gap-2">
+                             <Swords className="w-5 h-5"/>
+                             {challenge.title}
+                        </CardTitle>
+                        <Badge variant={isEnded ? "destructive" : "secondary"}>{isEnded ? "منتهية" : "نشطة"}</Badge>
                     </div>
-                    <CardDescription className="text-gray-400 pt-2">
+                     <CardDescription className="text-gray-400 text-sm">
                         الهدف: {challenge.targetPoints} نقطة صدارة | اللعبة: {challenge.specificGameType === 'all' ? 'كل الألعاب' : GAME_TYPE_NAMES[challenge.specificGameType as Game['gameType']]}
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="flex-grow space-y-4">
-                     <div>
-                        <h4 className="font-semibold text-gray-300 mb-2">الجوائز:</h4>
+                <CardContent className="flex-grow space-y-4 pt-4">
+                    <div>
+                        <h4 className="font-semibold text-gray-300 mb-2 text-sm">الجوائز:</h4>
                          <div className="space-y-2">
                             <div className="flex items-center gap-2">
-                                <Trophy className="w-5 h-5 text-yellow-400"/>
-                                <span className="font-bold text-sm">المركز الأول:</span>
+                                <Trophy className="w-5 h-5 text-yellow-400 shrink-0"/>
+                                <span className="font-bold text-xs w-16">المركز الأول:</span>
                                 <PrizeDisplay prizes={challenge.firstPlacePrize} />
                             </div>
                             <div className="flex items-center gap-2">
-                                <Trophy className="w-5 h-5 text-slate-400"/>
-                                 <span className="font-bold text-sm">المركز الثاني:</span>
+                                <Trophy className="w-5 h-5 text-slate-400 shrink-0"/>
+                                 <span className="font-bold text-xs w-16">المركز الثاني:</span>
                                 <PrizeDisplay prizes={challenge.secondPlacePrize} />
                             </div>
                             <div className="flex items-center gap-2">
-                                 <Trophy className="w-5 h-5 text-orange-400"/>
-                                 <span className="font-bold text-sm">المركز الثالث:</span>
+                                 <Trophy className="w-5 h-5 text-orange-400 shrink-0"/>
+                                 <span className="font-bold text-xs w-16">المركز الثالث:</span>
                                 <PrizeDisplay prizes={challenge.thirdPlacePrize} />
                             </div>
                         </div>
@@ -252,16 +249,16 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
                      
                     {topThree.length > 0 && (
                          <div>
-                            <h4 className="font-semibold text-gray-300 mb-2">أفضل 3 لاعبين:</h4>
-                             <div className="space-y-2">
+                            <h4 className="font-semibold text-gray-300 mb-2 text-sm">أفضل 3 لاعبين حاليًا:</h4>
+                             <div className="space-y-1">
                                 {topThree.map((player, idx) => (
-                                    <div key={player.uid} className="flex justify-between items-center bg-black/20 p-1.5 rounded-md">
+                                    <div key={player.uid} className="flex justify-between items-center bg-black/20 p-1 rounded-md text-xs">
                                         <div className="flex items-center gap-2">
-                                             <span className="font-bold text-sm w-5">{idx+1}.</span>
-                                            <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
-                                            <span className="text-sm font-semibold">{player.name}</span>
+                                             <span className="font-bold w-4">{idx+1}.</span>
+                                            <PlayerAvatar avatarId={player.avatarId} className="w-6 h-6"/>
+                                            <span className="font-semibold">{player.name}</span>
                                         </div>
-                                        <span className="text-sm font-bold text-yellow-300">{challenge.scores[player.uid] || 0}</span>
+                                        <span className="font-bold text-yellow-300">{challenge.scores[player.uid] || 0} نقطة</span>
                                     </div>
                                 ))}
                             </div>
@@ -269,17 +266,23 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
                     )}
 
                 </CardContent>
-                <CardFooter className="flex-col gap-2">
-                    <div className="flex justify-between items-center w-full">
-                        <span className="flex items-center gap-1 text-xs"><Users/>{challenge.participantCount || 0} مشارك</span>
-                        <ChallengeLeaderboardDialog challenge={challenge} trigger={
-                             <Button variant="link" size="sm" className="text-purple-300">
-                                <ListOrdered className="ml-2 w-4 h-4"/>
+                <CardFooter className="flex-col gap-2 pt-4 border-t border-white/10">
+                     <div className="w-full space-y-1">
+                        <div className="flex justify-between text-xs text-gray-400">
+                             <span>تقدم الوقت</span>
+                             <span>{challenge.participantCount || 0} مشارك</span>
+                        </div>
+                        <Progress value={progress} className="h-2" />
+                    </div>
+                    <div className="flex justify-between items-center w-full mt-2">
+                         <EntryFeeDisplay entryFee={challenge.entryFee} />
+                          <ChallengeLeaderboardDialog challenge={challenge} trigger={
+                             <Button variant="link" size="sm" className="text-purple-300 px-0">
+                                <ListOrdered className="ml-1 w-4 h-4"/>
                                 عرض التفاصيل
                             </Button>
                         }/>
                     </div>
-                     <EntryFeeDisplay entryFee={challenge.entryFee} />
                      <Button onClick={() => setIsConfirmingJoin(true)} disabled={isJoining || isParticipant || isEnded} className="w-full bg-purple-600 hover:bg-purple-700 mt-2">
                          {isJoining ? <Loader2 className="animate-spin" /> : isParticipant ? 'أنت مشارك' : isEnded ? 'انتهت البطولة' : 'انضم للبطولة'}
                      </Button>
@@ -311,44 +314,54 @@ const ChallengeCard = ({ challenge, index }: { challenge: Challenge; index: numb
 }
 
 
-export default function SocietyChallenges() {
+export default function SocietyChallenges({ filter = 'active' }: { filter?: 'active' | 'ended' }) {
     const [challenges, setChallenges] = useState<Challenge[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const fetchChallenges = async () => {
             setIsLoading(true);
-            const fetchedChallenges = await getChallenges();
+            const fetchedChallenges = await getAllChallengesForAdmin(); // Fetch all and filter client-side
             setChallenges(fetchedChallenges);
             setIsLoading(false);
         };
         fetchChallenges();
     }, []);
 
+    const filteredChallenges = challenges.filter(c => {
+        const isEnded = !c.endsAt || new Date(c.endsAt).getTime() < new Date().getTime();
+        return filter === 'active' ? !isEnded : isEnded;
+    });
+
     return (
         <div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {isLoading ? (
                     [...Array(4)].map((_, i) => (
-                         <Card key={i} className="h-full flex flex-col bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20">
+                         <Card key={i} className="h-[420px] flex flex-col bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20">
                             <CardHeader><Skeleton className="h-8 w-3/4 bg-gray-700" /></CardHeader>
-                             <CardContent className="space-y-4">
+                             <CardContent className="space-y-4 flex-grow">
                                 <Skeleton className="h-6 w-full bg-gray-700" />
                                 <Skeleton className="h-6 w-1/2 bg-gray-700" />
+                                <Skeleton className="h-12 w-full bg-gray-700" />
                             </CardContent>
                              <CardFooter>
                                 <Skeleton className="h-10 w-full bg-gray-700" />
                             </CardFooter>
                          </Card>
                     ))
-                ) : challenges.length > 0 ? (
-                    challenges.map((challenge, index) => (
-                       <ChallengeCard key={challenge.id} challenge={challenge} index={index} />
+                ) : filteredChallenges.length > 0 ? (
+                    filteredChallenges.map((challenge, index) => (
+                       <ChallengeCard key={challenge.id} challenge={challenge} index={index} isEnded={filter === 'ended'} />
                     ))
                 ) : (
                     <div className="col-span-full text-center py-16">
-                        <p className="text-2xl text-gray-400">لا توجد تحديات متاحة حاليًا.</p>
-                        <p className="text-gray-500">عد قريبًا للتحقق من جديد!</p>
+                        <p className="text-2xl text-gray-400">
+                           {filter === 'active' ? 'لا توجد تحديات نشطة حاليًا.' : 'لا توجد تحديات منتهية لعرضها.'}
+                        </p>
+                        <p className="text-gray-500">
+                           {filter === 'active' ? 'عد قريبًا للتحقق من جديد!' : ''}
+                        </p>
                     </div>
                 )}
             </div>

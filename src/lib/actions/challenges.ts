@@ -333,7 +333,7 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
             }
             
             transaction.update(userRef, updates);
-            await sendSystemMail(userId, { subject: `🎉 لقد فزت في البطولة!`, body: mailBody });
+            await sendSystemMail(userId, { subject: `🎉 لقد فزت في البطولة!`, body: mailBody }, transaction);
         };
         
         if (sortedWinners.length > 0) {

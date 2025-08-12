@@ -1,9 +1,10 @@
-
 "use client";
 
 import SocietyChallenges from "../society/components/SocietyChallenges";
 import { useAuth } from '@/hooks/useAuth';
 import { useEffect } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Swords, CheckCircle } from "lucide-react";
 
 
 export default function ChallengesPage() {
@@ -27,7 +28,19 @@ export default function ChallengesPage() {
                     </h1>
                      <p className="text-lg text-gray-400 mt-2">انضم إلى التحديات النشطة وتنافس على الجوائز!</p>
                 </header>
-                <SocietyChallenges />
+
+                <Tabs defaultValue="active" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 bg-black/30 backdrop-blur-sm border border-purple-500/30 text-purple-300 mb-6">
+                        <TabsTrigger value="active" className="gap-2"><Swords /> التحديات النشطة</TabsTrigger>
+                        <TabsTrigger value="ended" className="gap-2"><CheckCircle /> التحديات المنتهية</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="active">
+                        <SocietyChallenges filter="active" />
+                    </TabsContent>
+                     <TabsContent value="ended">
+                        <SocietyChallenges filter="ended" />
+                    </TabsContent>
+                </Tabs>
             </main>
         </div>
     )
