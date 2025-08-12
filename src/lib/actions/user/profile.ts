@@ -106,15 +106,20 @@ export async function updateUserAvatar(userId: string, avatarId: string) {
     try {
         const userRef = doc(db, 'users', userId);
         const userDoc = await getDoc(userRef);
-        const userData = userDoc.data() as UserProfile;
         
-        if (!userDoc.exists() || !userData.unlockedAvatars?.includes(avatarId)) {
-            return { error: "أنت لا تملك هذه الشخصية." };
+        if (!userDoc.exists()) {
+            return { error: "لم يتم العثور على المستخدم." };
         }
         
+        const userData = userDoc.data() as UserProfile;
+
         // Prevent changing avatar if under punishment
-        if (userData.originalAvatarToRevert && new Date(userData.originalAvatarToRevert.until) > new Date()) {
-             return { error: "لا يمكنك تغيير شخصيتك وأنت تحت تأثير عقوبة." };
+        if (userData.originalAvatarToRevert && new Date((userData.originalAvatarToRevert.until as any).toDate()) > new Date()) {
+             return { error: "لا يمكنك تغيير شخصيتك وأنت تحت تأثير عقوبة تغيير الصورة." };
+        }
+        
+        if (!userData.unlockedAvatars?.includes(avatarId)) {
+            return { error: "أنت لا تملك هذه الشخصية." };
         }
 
         await updateDoc(userRef, {
