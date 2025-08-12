@@ -115,4 +115,3 @@ export function GameBoard({ board, players, gameId }: { board: Property[], playe
         </div>
     );
 }
-

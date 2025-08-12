@@ -106,4 +106,3 @@ export function Lobby({ game, self }: LobbyProps) {
         </Card>
     );
 }
-
