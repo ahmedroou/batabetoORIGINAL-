@@ -425,20 +425,23 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
       players[playerIndex] = { ...players[playerIndex], money: (players[playerIndex].money || 0) + refund };
       activityMessage = `${players[playerIndex].name} أجاب بشكل خاطئ واسترد ${refund} دينار.`;
     }
-
-    const updates: any = {
+    
+    const finalUpdates = {
       players,
       'educatedMerchantState.board': board,
       'educatedMerchantState.pendingPurchase': deleteField(),
       'educatedMerchantState.currentQuestion': deleteField(),
       'educatedMerchantState.timerEndsAt': deleteField(),
-      'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: nowTimestamp() }),
-    };
-
-    if (isCorrect) updates['educatedMerchantState.newlyBoughtPropertyId'] = pending.propertyId;
-    else updates['educatedMerchantState.newlyBoughtPropertyId'] = deleteField();
-
-    await endTurnInternal(gameRef, tx, playerId, '', updates);
+    } as any;
+    
+    // Add newlyBoughtPropertyId only if correct, otherwise delete it.
+    if(isCorrect) {
+      finalUpdates['educatedMerchantState.newlyBoughtPropertyId'] = pending.propertyId
+    } else {
+      finalUpdates['educatedMerchantState.newlyBoughtPropertyId'] = deleteField();
+    }
+    
+    await endTurnInternal(gameRef, tx, playerId, activityMessage, finalUpdates);
   });
 }
 
@@ -472,7 +475,6 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
           'educatedMerchantState.pendingPurchase': deleteField(),
           'educatedMerchantState.currentQuestion': deleteField(),
           'educatedMerchantState.timerEndsAt': deleteField(),
-          'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: nowTimestamp() }),
         };
 
         await endTurnInternal(gameRef, tx, currentPlayerId, activityMessage, updates);

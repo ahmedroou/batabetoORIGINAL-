@@ -280,6 +280,7 @@ export interface Player {
   bankruptAt?: Timestamp;
   color?: string; // e.g. '#8B5CF6'
   money?: number;
+  propertiesCount?: number;
 }
 
 export interface Humiliation {
@@ -705,7 +706,7 @@ export interface Game {
     lastDiceRoll?: number | null;
     currentQuestion?: EducatedMerchantQuestion | null;
     timerEndsAt?: Timestamp | null;
-    activityLog: { message: string, timestamp: Date }[];
+    activityLog: { message: string, timestamp: Timestamp }[];
     pendingPurchase?: {
         playerId: string;
         propertyId: number;
@@ -713,6 +714,8 @@ export interface Game {
         questionId: string;
     };
     newlyBoughtPropertyId?: number;
+    rollAnimationNonce?: number;
+    diceMax?: number;
   };
 }
 

@@ -92,7 +92,7 @@ export function PropertyCard({ game, self, property, isPopover = false, allowAct
                         {property.price}
                     </div>
                 ) : property.type === 'fine' ? (
-                    <div className="text-lg font-medium text-rose-300">غرامة: {property.fineAmount}</div>
+                    <div className="text-lg font-medium text-rose-300">غرامة: {property.fineAmount} دينار</div>
                 ) : null}
                  {property.type === 'property' && <p className="text-sm text-slate-500 mt-1">الإيجار: {property.rent} دينار</p>}
             </CardContent>
