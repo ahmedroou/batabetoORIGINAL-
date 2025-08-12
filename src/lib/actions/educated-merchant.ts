@@ -31,13 +31,12 @@ import { shuffle } from './helpers';
 import { updateLeagueScoresForGameEnd } from './user';
 import { PROPERTY_NAMES } from '@/data/properties';
 
-
 const BOARD_SIZE = 28;
 const STARTING_BALANCE = 1000;
 const BASE_PROPERTY_PRICE = 100;
 const MAX_PROPERTY_PRICE = 500;
-const PRICE_INCREMENT = 25;
-const PASS_START_BONUS = 200;
+const PRICE_INCREMENT = 50; // To make it easier to be divisible by 4
+const PASS_START_BONUS = 150;
 const QUESTION_TIME_SECONDS = 25;
 
 async function getAvailableCategories(): Promise<string[]> {
@@ -47,7 +46,6 @@ async function getAvailableCategories(): Promise<string[]> {
     const data = settingsSnap.data() as any;
     if (Array.isArray(data.list) && data.list.length > 0) return data.list;
   }
-  // Fallback if no categories are set in admin panel
   return ["علوم", "رياضيات", "برمجة", "أحياء", "كيمياء"];
 }
 
@@ -56,8 +54,11 @@ async function fetchQuestionsForBoard(categories: string[]): Promise<Map<string,
     const questionsCol = collection(db, 'trap_answer_questions');
 
     for (const category of categories) {
-        const q = query(questionsCol, where("category", "==", category));
+        // Fetch a random batch of questions for each category to keep it efficient
+        const randomKey = Math.random();
+        const q = query(questionsCol, where("category", "==", category), where("randomKey", ">=", randomKey), limit(20));
         const querySnapshot = await getDocs(q);
+
         const questions = querySnapshot.docs.map(doc => {
             const data = doc.data();
             const correctAnswer = data.answer as string;
@@ -79,6 +80,7 @@ async function fetchQuestionsForBoard(categories: string[]): Promise<Map<string,
     return questionsByCat;
 }
 
+
 function generateBoard(categories: string[]): Property[] {
   const board: Property[] = [];
   if (categories.length === 0) return [];
@@ -87,19 +89,17 @@ function generateBoard(categories: string[]): Property[] {
 
   const priceCount = Math.floor((MAX_PROPERTY_PRICE - BASE_PROPERTY_PRICE) / PRICE_INCREMENT) + 1;
   const propertyPrices = Array.from({ length: priceCount }, (_, i) => BASE_PROPERTY_PRICE + i * PRICE_INCREMENT);
-  const shuffledPrices = shuffle(propertyPrices);
-
+  
   for (let i = 0; i < BOARD_SIZE; i++) {
     const propertyName = shuffledPropertyNames[i % shuffledPropertyNames.length] || `عقار ${i}`;
     if (i === 0) {
       board.push({ id: i, type: 'start', name: 'نقطة البداية', category: 'special', price: 0, rent: 0, ownerId: null });
-    } else if (i === 7) {
-      board.push({ id: i, type: 'fine', name: 'غرامة', category: 'special', price: 0, rent: 0, ownerId: null, fineAmount: 50 });
-    } else if (i === 21) {
-      board.push({ id: i, type: 'fine', name: 'غرامة كبيرة', category: 'special', price: 0, rent: 0, ownerId: null, fineAmount: 100 });
+    } else if (i === 7 || i === 21) {
+       const fineAmount = i === 7 ? 50 : 100;
+       board.push({ id: i, type: 'fine', name: 'غرامة', category: 'special', price: 0, rent: 0, ownerId: null, fineAmount });
     } else {
       const category = categories[i % categories.length] || 'عام';
-      const price = shuffledPrices[i % shuffledPrices.length] || BASE_PROPERTY_PRICE;
+      const price = propertyPrices[i % propertyPrices.length] || BASE_PROPERTY_PRICE;
       board.push({ id: i, type: 'property', name: propertyName, category, price, rent: Math.floor(price * 0.25), ownerId: null });
     }
   }
@@ -109,7 +109,6 @@ function generateBoard(categories: string[]): Property[] {
 async function getNextQuestionFromPool(category: string, questionsPool: Map<string, EducatedMerchantQuestion[]>): Promise<EducatedMerchantQuestion | null> {
     const categoryQuestions = questionsPool.get(category);
     if (!categoryQuestions || categoryQuestions.length === 0) {
-        // Refetch if pool is empty for this category
         const newQuestions = await fetchQuestionsForBoard([category]);
         const newPool = newQuestions.get(category);
         if (!newPool || newPool.length === 0) return null;
@@ -193,18 +192,23 @@ export async function rollDice(gameId: string, playerId: string): Promise<{ succ
         throw new Error('ليس دورك لرمي النرد.');
       }
 
-      diceResult = Math.floor(Math.random() * 6) + 1;
+      diceResult = Math.floor(Math.random() * 5) + 1; // From 1 to 5
 
       const playerIndex = game.players.findIndex(p => p.id === playerId);
       if (playerIndex === -1) throw new Error('Player not found');
 
       const newActivityLog = [...(es.activityLog || []), `${game.players[playerIndex].name} رمى النرد وحصل على ${diceResult}.`];
+      
+      const gameWithDiceResult = { ...game, educatedMerchantState: { ...es, lastDiceRoll: diceResult, activityLog: newActivityLog }};
 
       transaction.update(gameRef, {
         gameState: 'movement',
         'educatedMerchantState.lastDiceRoll': diceResult,
         'educatedMerchantState.activityLog': newActivityLog,
       });
+
+      // After updating, handle the move in the same transaction
+      await handlePropertyAction(gameRef, gameWithDiceResult, transaction);
     });
 
     return { success: true, diceResult };
@@ -213,98 +217,82 @@ export async function rollDice(gameId: string, playerId: string): Promise<{ succ
   }
 }
 
-export async function handlePropertyAction(gameId: string, playerId: string) {
-  const gameRef = doc(db, 'games', gameId);
-
-  await runTransaction(db, async (transaction) => {
-    const gameSnap = await transaction.get(gameRef);
-    if (!gameSnap.exists()) throw new Error('Game not found.');
-    const game = gameSnap.data() as Game;
+export async function handlePropertyAction(gameRef: DocumentReference, game: Game, transaction: Transaction) {
     const es = game.educatedMerchantState;
     if (!es) throw new Error('Game state is not initialized.');
 
-    const playerIndex = game.players.findIndex(p => p.id === playerId);
+    const activePlayerId = es.turnOrder[es.currentTurnIndex];
+    const playerIndex = game.players.findIndex(p => p.id === activePlayerId);
     if (playerIndex === -1) throw new Error('Player not found in game.');
-    const player = game.players[playerIndex];
+    
+    let player = game.players[playerIndex];
+    let updatedPlayers = [...game.players];
+    let updatedBalances = { ...(game.playerScores || {}) };
+    let newActivityLog = [...(es.activityLog || [])];
 
     const dice = es.lastDiceRoll || 0;
     const oldPosition = player.position || 0;
     const newPosition = (oldPosition + dice) % BOARD_SIZE;
+    const passedStart = (oldPosition + dice) >= BOARD_SIZE;
+
+    player = { ...player, position: newPosition };
+    updatedPlayers[playerIndex] = player;
+    
+    if (passedStart) {
+        updatedBalances[activePlayerId] = (updatedBalances[activePlayerId] || 0) + PASS_START_BONUS;
+        newActivityLog.push(`${player.name} مر بنقطة البداية وحصل على ${PASS_START_BONUS} د.ع.`);
+    }
+
     const newProperty = es.board.find((b: Property) => b.id === newPosition);
     if (!newProperty) throw new Error('Property not found on board.');
-
-    let updatedPlayers = [...game.players];
-    updatedPlayers[playerIndex] = { ...updatedPlayers[playerIndex], position: newPosition };
-
-    let newActivityLog = [...(es.activityLog || [])];
-    const updatedBalances = { ...(game.playerScores || {}) };
-
-    const passedStart = (oldPosition + dice) >= BOARD_SIZE;
-    if (passedStart) {
-      updatedBalances[playerId] = (updatedBalances[playerId] || 0) + PASS_START_BONUS;
-      newActivityLog.push(`${player.name} مر بنقطة البداية وحصل على ${PASS_START_BONUS} د.ع.`);
-    }
-
-    if (newProperty.type === 'start') {
-      transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
-      await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, playerId, transaction);
-      return;
-    }
+    
+    let nextState: GameState = 'rolling'; // Default next state
 
     if (newProperty.type === 'fine') {
-      const fine = newProperty.fineAmount || 0;
-      newActivityLog.push(`${player.name} دفع غرامة بقيمة ${fine} د.ع.`);
-      if ((updatedBalances[playerId] || 0) < fine) {
-        updatedPlayers[playerIndex].status = 'bankrupt';
-        updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
-        newActivityLog.push(`${player.name} أفلس!`);
-        updatedBalances[playerId] = 0;
-      } else {
-        updatedBalances[playerId] -= fine;
-      }
-      transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
-      await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, playerId, transaction);
-      return;
-    }
-
-    if (newProperty.type === 'property') {
-      if (newProperty.ownerId && newProperty.ownerId !== playerId) {
-        const rent = newProperty.rent || 0;
-        newActivityLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${es.board.find(p => p.id === newProperty.id)?.ownerId}.`); // This part needs owner name, will fix later
-        if ((updatedBalances[playerId] || 0) < rent) {
-          updatedBalances[newProperty.ownerId] += updatedBalances[playerId];
-          updatedBalances[playerId] = 0;
+        const fine = newProperty.fineAmount || 0;
+        newActivityLog.push(`${player.name} دفع غرامة بقيمة ${fine} د.ع.`);
+        if ((updatedBalances[activePlayerId] || 0) < fine) {
+          updatedBalances[activePlayerId] = 0;
           updatedPlayers[playerIndex].status = 'bankrupt';
           updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
           newActivityLog.push(`${player.name} أفلس!`);
-
-          const updatedBoard = es.board.map((prop: Property) => {
-            if (prop.ownerId === playerId) {
-              return { ...prop, ownerId: null };
-            }
-            return prop;
-          });
-
-          transaction.update(gameRef, { 'educatedMerchantState.board': updatedBoard });
         } else {
-          updatedBalances[playerId] -= rent;
-          updatedBalances[newProperty.ownerId] += rent;
+            updatedBalances[activePlayerId] -= fine;
         }
-
-        transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
-        await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, playerId, transaction);
+        await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, activePlayerId, transaction);
         return;
-      } else if (!newProperty.ownerId) {
-        newActivityLog.push(`${player.name} توقف على ${newProperty.name}، يمكنه الشراء أو التخطي.`);
-        transaction.update(gameRef, { gameState: 'property_action', players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
-        return;
-      }
     }
 
-    transaction.update(gameRef, { players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
-    await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, playerId, transaction);
-  });
+    if (newProperty.type === 'property') {
+      if (newProperty.ownerId && newProperty.ownerId !== activePlayerId) {
+        const rent = newProperty.rent || 0;
+        const owner = game.players.find(p => p.id === newProperty.ownerId);
+        newActivityLog.push(`${player.name} دفع إيجارًا بقيمة ${rent} د.ع إلى ${owner?.name || 'المالك'}.`);
+        if ((updatedBalances[activePlayerId] || 0) < rent) {
+          updatedBalances[newProperty.ownerId] += updatedBalances[activePlayerId];
+          updatedBalances[activePlayerId] = 0;
+          updatedPlayers[playerIndex].status = 'bankrupt';
+          updatedPlayers[playerIndex].bankruptAt = Timestamp.now();
+          newActivityLog.push(`${player.name} أفلس!`);
+        } else {
+          updatedBalances[activePlayerId] -= rent;
+          updatedBalances[newProperty.ownerId] += rent;
+        }
+        await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, activePlayerId, transaction);
+        return;
+      } else if (!newProperty.ownerId) {
+        newActivityLog.push(`${player.name} توقف على ${newProperty.name}.`);
+        nextState = 'property_action';
+      }
+    }
+    
+    if (nextState === 'rolling') {
+       await endTurn(gameRef, { ...game, players: updatedPlayers, playerScores: updatedBalances, educatedMerchantState: { ...es, activityLog: newActivityLog } }, activePlayerId, transaction);
+    } else {
+        transaction.update(gameRef, { gameState: nextState, players: updatedPlayers, playerScores: updatedBalances, 'educatedMerchantState.activityLog': newActivityLog });
+    }
 }
+
 
 export async function buyPropertyAttempt(gameId: string, playerId: string): Promise<{ success: boolean; error?: string }> {
   const gameRef = doc(db, 'games', gameId);
@@ -375,13 +363,13 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
       const playerBalanceUpdate = { ...game.playerScores };
 
       if (isCorrect) {
-        playerBalanceUpdate[playerId] -= pending.price;
+        playerBalanceUpdate[playerId] = (playerBalanceUpdate[playerId] || 0) - pending.price;
         newBoard[propIndex] = { ...newBoard[propIndex], ownerId: playerId };
         newActivityLog.push(`${player.name} أجاب بشكل صحيح وامتلك ${newBoard[propIndex].name}.`);
       } else {
         const refund = Math.floor(pending.price / 4);
         playerBalanceUpdate[playerId] = (playerBalanceUpdate[playerId] || 0) - pending.price + refund;
-        newActivityLog.push(`${player.name} أجاب بشكل خاطئ! وخسر ${pending.price - refund} د.ع`);
+        newActivityLog.push(`${player.name} أجاب بشكل خاطئ! واسترد ${refund} د.ع فقط.`);
       }
 
       updates = {
