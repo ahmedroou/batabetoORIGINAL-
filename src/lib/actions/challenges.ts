@@ -126,12 +126,14 @@ export async function getChallengeDetails(challengeId: string): Promise<Challeng
         const challengeDoc = await getDoc(challengeRef);
         if (!challengeDoc.exists()) return null;
 
-        const challengeData = {
+        const data = challengeDoc.data();
+        const challengeData: Challenge = {
             id: challengeDoc.id,
-            ...challengeDoc.data(),
-            createdAt: (challengeDoc.data().createdAt as Timestamp)?.toDate() || new Date(),
-            endsAt: (challengeDoc.data().endsAt as Timestamp)?.toDate(),
+            ...data,
+            createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
+            endsAt: (data.endsAt as Timestamp)?.toDate(),
         } as Challenge;
+
 
         // --- Optimization: Fetch only top 10 participants ---
         if (challengeData.scores) {
@@ -288,11 +290,13 @@ export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
         
         return snapshot.docs.map(doc => {
             const data = doc.data();
+            const createdAt = data.createdAt;
+            const endsAt = data.endsAt;
             return {
                 id: doc.id,
                 ...data,
-                createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
-                endsAt: (data.endsAt as Timestamp)?.toDate(),
+                createdAt: (createdAt instanceof Timestamp) ? createdAt.toDate() : createdAt,
+                endsAt: (endsAt instanceof Timestamp) ? endsAt.toDate() : endsAt,
             } as Challenge;
         });
 

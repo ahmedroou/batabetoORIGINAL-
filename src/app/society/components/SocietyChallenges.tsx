@@ -171,8 +171,8 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
         }
         const calculateProgress = () => {
             if (!challenge.createdAt || !challenge.endsAt) return;
-            const createdAt = (challenge.createdAt as Timestamp)?.toDate();
-            const endsAt = (challenge.endsAt as Date);
+            const createdAt = (challenge.createdAt instanceof Timestamp) ? challenge.createdAt.toDate() : challenge.createdAt;
+            const endsAt = (challenge.endsAt instanceof Timestamp) ? challenge.endsAt.toDate() : challenge.endsAt;
             if (!createdAt || !endsAt) return;
             const totalDuration = endsAt.getTime() - createdAt.getTime();
             const elapsed = Date.now() - createdAt.getTime();
@@ -331,7 +331,8 @@ export default function SocietyChallenges({ filter = 'active' }: { filter?: 'act
     }, []);
 
     const filteredChallenges = challenges.filter(c => {
-        const isEnded = !c.endsAt || new Date(c.endsAt).getTime() < new Date().getTime();
+        const endsAtTime = c.endsAt instanceof Timestamp ? c.endsAt.toDate().getTime() : new Date(c.endsAt).getTime();
+        const isEnded = !c.endsAt || endsAtTime < new Date().getTime();
         return filter === 'active' ? !isEnded : isEnded;
     });
 
