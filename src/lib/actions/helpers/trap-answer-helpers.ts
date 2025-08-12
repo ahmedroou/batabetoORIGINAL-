@@ -8,7 +8,7 @@
 import type { Game, Player, TrapQuestion } from '@/types';
 import { safeCompareStrings } from '../helpers';
 
-const SIMILARITY_THRESHOLD = 0.85;
+const SIMILARITY_THRESHOLD = 0.90;
 
 /**
  * Calculates the scores for a completed round of the Trap Answer game.

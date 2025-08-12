@@ -38,7 +38,7 @@ import { calculateEndOfGameAwards } from './user/awards';
 import { getTrapAnswerCategories } from './admin';
 
 // --- Constants for Game Logic ---
-const SIMILARITY_THRESHOLD = 0.85;
+const SIMILARITY_THRESHOLD = 0.75;
 const CATEGORY_SELECTION_TIME_S = 30;
 const DEFAULT_ANSWER_TIME_S = 60;
 
