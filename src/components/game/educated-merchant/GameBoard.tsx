@@ -10,9 +10,10 @@ import { DiceRoll } from './DiceRoll';
 import { PlayerHUD } from './PlayerHUD';
 import { ActivityLog } from './ActivityLog';
 import { cn } from '@/lib/utils';
-import { Banknote, Building, HelpCircle, LandPlot, Trophy } from 'lucide-react';
+import { Banknote, Building, HelpCircle, LandPlot, Trophy, RotateCcw } from 'lucide-react';
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { handlePropertyLanding } from '@/lib/actions/educated-merchant';
+import { handlePropertyLanding, endTurn } from '@/lib/actions/educated-merchant';
+import { Button } from '@/components/ui/button';
 
 interface GameBoardProps {
   game: Game;
@@ -103,6 +104,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
     const turnOrder = game.educatedMerchantState?.turnOrder || [];
     const currentTurnIndex = game.educatedMerchantState?.currentTurnIndex || 0;
     const currentPlayerId = turnOrder[currentTurnIndex];
+    const isMyTurn = self.id === currentPlayerId;
     
     const boardWidth = GRID_SIZE * tileSize + (GRID_SIZE - 1) * gapSize;
     const boardHeight = boardWidth;
@@ -122,15 +124,24 @@ export function GameBoard({ game, self }: GameBoardProps) {
                      }
                 }
                 return null;
+            case 'turn_end':
+                return (
+                    <div className="text-center text-white space-y-4">
+                        <HelpCircle className="w-16 h-16 mx-auto mb-4 text-primary" />
+                        <h2 className="text-2xl font-bold">انتهى دور {game.players.find(p=>p.id === currentPlayerId)?.name}</h2>
+                        <p className="text-muted-foreground mt-2">في انتظار اللاعب التالي...</p>
+                        {isMyTurn && <Button onClick={() => endTurn(game.id, self.id)}><RotateCcw className="ml-2"/> إنهاء الدور</Button>}
+                    </div>
+                )
             default:
                  return (
                     <div className="text-center text-white">
                         <HelpCircle className="w-16 h-16 mx-auto mb-4 text-primary" />
                         <h2 className="text-2xl font-bold">
-                            {game.gameState === 'turn_end' ? 'انتهى الدور' : 'منطقة التحكم'}
+                            منطقة التحكم
                         </h2>
                          <p className="text-muted-foreground mt-2">
-                           {game.gameState === 'turn_end' ? `في انتظار اللاعب التالي...` : `حالة اللعبة: ${game.gameState}`}
+                           حالة اللعبة: {game.gameState}
                         </p>
                     </div>
                 );
