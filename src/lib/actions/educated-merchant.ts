@@ -372,13 +372,16 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
       const newBoard = [...es.board];
       const newActivityLog = [...(es.activityLog || [])];
       let updates: any = {};
+      const playerBalanceUpdate = { ...game.playerScores };
 
       if (isCorrect) {
-        transaction.update(gameRef, { [`playerScores.${playerId}`]: increment(-pending.price) });
+        playerBalanceUpdate[playerId] -= pending.price;
         newBoard[propIndex] = { ...newBoard[propIndex], ownerId: playerId };
         newActivityLog.push(`${player.name} أجاب بشكل صحيح وامتلك ${newBoard[propIndex].name}.`);
       } else {
-        newActivityLog.push(`${player.name} أجاب بشكل خاطئ!`);
+        const refund = Math.floor(pending.price / 4);
+        playerBalanceUpdate[playerId] = (playerBalanceUpdate[playerId] || 0) - pending.price + refund;
+        newActivityLog.push(`${player.name} أجاب بشكل خاطئ! وخسر ${pending.price - refund} د.ع`);
       }
 
       updates = {
@@ -387,6 +390,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         'educatedMerchantState.pendingPurchase': deleteField(),
         'educatedMerchantState.activityLog': newActivityLog,
         'educatedMerchantState.board': newBoard,
+        'playerScores': playerBalanceUpdate,
       };
 
       transaction.update(gameRef, updates);
@@ -394,6 +398,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
       const updatedGameForNextStep: Game = {
         ...game,
         educatedMerchantState: { ...es, activityLog: newActivityLog, board: newBoard },
+        playerScores: playerBalanceUpdate,
       };
 
       await endTurn(gameRef, updatedGameForNextStep, playerId, transaction);

@@ -5,7 +5,7 @@ import type { Player, Property } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../PlayerAvatar';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Skull, Crown, Activity, Building2 } from 'lucide-react';
 
@@ -27,51 +27,55 @@ export function PlayerHUD({ players, balances, board, currentTurnPlayerId, activ
             <CardContent className="flex-grow p-2 flex flex-col min-h-0">
                 <ScrollArea className="flex-grow">
                     <div className="space-y-2 p-2">
-                        {players.map((player, index) => {
-                            const isCurrentTurn = player.id === currentTurnPlayerId;
-                            const isBankrupt = player.status === 'bankrupt';
-                            const ownedProperties = board.filter(p => p.ownerId === player.id);
-                            return (
-                                <motion.div
-                                    key={player.id}
-                                    className={cn(
-                                        "p-3 rounded-lg border-2 transition-all duration-300",
-                                        isBankrupt ? 'bg-red-900/50 border-red-700/50 opacity-50' : 'bg-white dark:bg-gray-900/50',
-                                        isCurrentTurn ? 'border-primary shadow-lg' : 'border-transparent'
-                                    )}
-                                    style={{ borderColor: isCurrentTurn ? player.color : 'transparent' }}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: index * 0.1 }}
-                                >
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-3">
-                                            <PlayerAvatar avatarId={player.avatarId} className="w-12 h-12" />
-                                            <div>
-                                                <h4 className="font-bold text-lg">{player.name}</h4>
-                                                <p className="text-sm font-mono font-bold text-green-600 dark:text-green-400">
-                                                    {balances[player.id]?.toLocaleString() || 0} د.ع
-                                                </p>
+                         <AnimatePresence>
+                            {players.map((player, index) => {
+                                const isCurrentTurn = player.id === currentTurnPlayerId;
+                                const isBankrupt = player.status === 'bankrupt';
+                                const ownedProperties = board.filter(p => p.ownerId === player.id);
+                                return (
+                                    <motion.div
+                                        key={player.id}
+                                        layout
+                                        className={cn(
+                                            "p-3 rounded-lg border-2 transition-all duration-300",
+                                            isBankrupt ? 'bg-red-900/50 border-red-700/50 opacity-50' : 'bg-white dark:bg-gray-900/50',
+                                            isCurrentTurn ? 'border-primary shadow-lg' : 'border-transparent'
+                                        )}
+                                        style={{ borderColor: isCurrentTurn ? player.color : 'transparent' }}
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 20 }}
+                                        transition={{ delay: index * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                                    >
+                                        <div className="flex justify-between items-center">
+                                            <div className="flex items-center gap-3">
+                                                <PlayerAvatar avatarId={player.avatarId} className="w-12 h-12" />
+                                                <div>
+                                                    <h4 className="font-bold text-lg">{player.name}</h4>
+                                                    <p className="text-sm font-mono font-bold text-green-600 dark:text-green-400">
+                                                        {balances[player.id]?.toLocaleString() || 0} د.ع
+                                                    </p>
+                                                </div>
                                             </div>
+                                            {isBankrupt && <Skull className="w-8 h-8 text-red-500" />}
+                                            {isCurrentTurn && !isBankrupt && <Crown className="w-8 h-8 text-yellow-500 animate-pulse" />}
                                         </div>
-                                        {isBankrupt && <Skull className="w-8 h-8 text-red-500" />}
-                                        {isCurrentTurn && !isBankrupt && <Crown className="w-8 h-8 text-yellow-500 animate-pulse" />}
-                                    </div>
-                                    {ownedProperties.length > 0 && (
-                                        <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-700">
-                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">الممتلكات:</p>
-                                            <div className="flex flex-wrap gap-1">
-                                                {ownedProperties.map(prop => (
-                                                    <div key={prop.id} className="w-6 h-6 rounded-md flex items-center justify-center text-white" style={{ backgroundColor: player.color }}>
-                                                        <Building2 className="w-4 h-4" />
-                                                    </div>
-                                                ))}
+                                        {ownedProperties.length > 0 && (
+                                            <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-700">
+                                                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">الممتلكات:</p>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {ownedProperties.map(prop => (
+                                                        <div key={prop.id} className="w-6 h-6 rounded-md flex items-center justify-center text-white" style={{ backgroundColor: player.color }}>
+                                                            <Building2 className="w-4 h-4" />
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
-                                </motion.div>
-                            )
-                        })}
+                                        )}
+                                    </motion.div>
+                                )
+                            })}
+                         </AnimatePresence>
                     </div>
                 </ScrollArea>
                  <div className="mt-4 shrink-0">
