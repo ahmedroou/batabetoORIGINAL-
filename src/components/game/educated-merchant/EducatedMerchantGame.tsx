@@ -27,41 +27,71 @@ const LoadingState = ({ text }: { text: string }) => (
 
 export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) {
     const renderContent = () => {
+        // The main game logic is now within GameBoard.
+        // We only switch out for lobby and final results.
         switch (game.gameState) {
             case 'lobby':
-                return <EducatedMerchantLobby game={game} self={self} />;
-            
-            case 'rolling':
-            case 'movement':
-            case 'property_action':
-            case 'question': // GameBoard now handles showing the QuestionModal
-            case 'turn_end':
-                return <GameBoard game={game} self={self} />;
-
-            case 'final_results':
-                return <FinalResults game={game} self={self} />;
-                
-            default:
-                return <LoadingState text={`حالة غير معروفة: ${game.gameState}`} />;
-        }
-    };
-
-    return (
-        <div className="w-full h-screen flex items-center justify-center relative bg-gray-100 dark:bg-gray-900">
-            <div className="w-full h-full flex items-center justify-center">
-                 <AnimatePresence mode="wait">
-                    <motion.div
-                        key={game.gameState}
+                return (
+                     <motion.div
+                        key="lobby"
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
                         transition={{ duration: 0.4 }}
                         className="w-full h-full flex items-center justify-center"
                     >
-                        {renderContent()}
+                        <EducatedMerchantLobby game={game} self={self} />
                     </motion.div>
-                </AnimatePresence>
-            </div>
+                );
+            case 'final_results':
+                return (
+                     <motion.div
+                        key="final_results"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.4 }}
+                        className="w-full h-full flex items-center justify-center"
+                    >
+                        <FinalResults game={game} self={self} />
+                    </motion.div>
+                );
+            case 'rolling':
+            case 'movement':
+            case 'property_action':
+            case 'question':
+            case 'turn_end':
+                 return (
+                     <motion.div
+                        key="game_board" // Use a consistent key for the active game states
+                        initial={{ opacity: 0, scale: 1 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 1 }}
+                        transition={{ duration: 0.5 }}
+                        className="w-full h-full flex items-center justify-center"
+                    >
+                        <GameBoard game={game} self={self} />
+                    </motion.div>
+                );
+            default:
+                return (
+                    <motion.div
+                        key="loading"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
+                         <LoadingState text={`حالة غير معروفة: ${game.gameState}`} />
+                    </motion.div>
+                );
+        }
+    };
+
+    return (
+        <div className="w-full h-screen flex items-center justify-center relative bg-gray-100 dark:bg-gray-900">
+             <AnimatePresence mode="wait">
+                {renderContent()}
+            </AnimatePresence>
         </div>
     );
 }
