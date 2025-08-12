@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -373,8 +374,35 @@ export async function distributeEndOfGameAwards(game: Game) {
  * @param game The final game state object containing player scores.
  */
 export async function updateLeagueScoresForGameEnd(game: Game) {
+    if (!game.gameResult) return;
+    
     // This is the only place we call distributeEndOfGameAwards, ensuring it's outside any transaction.
     await distributeEndOfGameAwards(game);
-}
 
+    const playersWithLeagues = game.players.filter(p => p.status !== 'left' && p.leagues && p.leagues.length > 0);
+    if(playersWithLeagues.length === 0) return;
     
+    const allRanks = await getRanks();
+    const { updates } = calculateEndOfGameAwards(game, allRanks);
+    
+    const batch = writeBatch(db);
+
+    playersWithLeagues.forEach(player => {
+        const playerUpdates = updates[player.id];
+        if (playerUpdates && playerUpdates.leaderboardPoints > 0) {
+            player.leagues?.forEach(leagueInfo => {
+                const leagueRef = doc(db, 'leagues', leagueInfo.id);
+                batch.update(leagueRef, {
+                    [`scores.${player.id}`]: increment(playerUpdates.leaderboardPoints),
+                    [`gamesPlayed.${player.id}`]: increment(1)
+                });
+            });
+        }
+    });
+    
+    try {
+        await batch.commit();
+    } catch (error) {
+        console.error("Error updating league scores after game end:", error);
+    }
+}
