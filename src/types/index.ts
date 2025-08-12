@@ -81,6 +81,25 @@ export type NewsArticleOutput = z.infer<typeof NewsArticleOutputSchema>;
 
 
 // Regular Types
+export type ComplaintType = 'missing_currency' | 'bug_report';
+
+export interface Complaint {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  type: ComplaintType;
+  status: 'pending' | 'resolved' | 'rejected';
+  details: {
+    game?: Game['gameType'];
+    coins?: number;
+    points?: number;
+    reason?: string; // For missing currency
+    description?: string; // For bug report
+  };
+  createdAt: Timestamp;
+}
+
 export type PermissionId = typeof ALL_PERMISSIONS[number]['id'];
 
 export interface Permission {

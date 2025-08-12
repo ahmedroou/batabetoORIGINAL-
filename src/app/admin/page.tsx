@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -12,7 +13,7 @@ import { Timestamp } from 'firebase/firestore';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Store, ArrowLeft, Loader2, Users, Puzzle, Gavel, Newspaper, TestTube2, MessageSquareWarning } from 'lucide-react';
+import { Store, ArrowLeft, Loader2, Users, Puzzle, Gavel, Newspaper, TestTube2, MessageSquareWarning, MessageSquarePlus } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 // Admin Page Components
@@ -22,6 +23,8 @@ import NewsTab from './components/NewsTab';
 import SocietyTab from './components/SocietyTab';
 import ChallengesTab from './components/ChallengesTab';
 import { GENIUS_CHALLENGES, type GeniusChallenge } from '@/data/genius-challenges';
+import ComplaintsTab from './components/ComplaintsTab';
+
 
 // Server Actions
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
@@ -104,7 +107,7 @@ export default function AdminPage() {
     
     return (
         <main className="flex min-h-screen flex-col items-center p-4 bg-muted/40">
-            <div className="w-full max-w-4xl space-y-8 py-8">
+            <div className="w-full max-w-6xl space-y-8 py-8">
                  <div className="text-center relative">
                     <h1 className="text-3xl font-bold">لوحة تحكم الأدمن</h1>
                     <p className="text-muted-foreground">إدارة محتوى اللعبة وإعداداتها.</p>
@@ -119,11 +122,12 @@ export default function AdminPage() {
                 </div>
                 
                  <Tabs defaultValue="society" className="w-full">
-                    <TabsList className="grid w-full grid-cols-5">
+                    <TabsList className="grid w-full grid-cols-6">
                         <TabsTrigger value="society"><Gavel className='mr-2'/> المجتمع</TabsTrigger>
                         <TabsTrigger value="questions"><Puzzle className='mr-2'/> المحتوى</TabsTrigger>
                         <TabsTrigger value="news"><Newspaper className='mr-2' /> الأخبار</TabsTrigger>
-                        <TabsTrigger value="challenges"><Users className='mr-2'/> التحديات</TabsTrigger>
+                        <TabsTrigger value="challenges"><Users className='mr-2'/> البطولات</TabsTrigger>
+                        <TabsTrigger value="complaints"><MessageSquarePlus className='mr-2' /> الشكاوى</TabsTrigger>
                         <TabsTrigger value="testing"><TestTube2 className='mr-2'/> الاختبار</TabsTrigger>
                     </TabsList>
 
@@ -138,6 +142,9 @@ export default function AdminPage() {
                     </TabsContent>
                      <TabsContent value="challenges">
                         <ChallengesTab />
+                    </TabsContent>
+                     <TabsContent value="complaints">
+                        <ComplaintsTab />
                     </TabsContent>
                     <TabsContent value="testing">
                         <TestingTab 
