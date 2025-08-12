@@ -94,6 +94,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
         <PlayerHUD
           players={game.players}
           balances={game.playerScores || {}}
+          board={es.board || []}
           currentTurnPlayerId={activePlayerId}
           activityLog={es.activityLog || []}
         />

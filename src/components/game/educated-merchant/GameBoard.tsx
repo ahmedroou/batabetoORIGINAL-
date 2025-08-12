@@ -1,13 +1,19 @@
 
 "use client";
 
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { Player, Property } from "@/types";
 import { motion } from "framer-motion";
 import { PlayerAvatar } from "../PlayerAvatar";
 import { Home, Building2, Gavel } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { handlePropertyAction } from "@/lib/actions/educated-merchant";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface GameBoardProps {
   gameId: string;
@@ -49,15 +55,14 @@ function hexToRgba(hex: string, alpha = 1) {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
 }
 
-function getContrastColor(hex: string) {
+function getContrastColor(hex?: string) {
+  if (!hex) return '#000';
   const rgb = hexToRgb(hex);
   if (!rgb) return '#000';
-  const r = rgb.r / 255;
-  const g = rgb.g / 255;
-  const b = rgb.b / 255;
-  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return lum > 0.6 ? '#000000' : '#ffffff';
+  const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+  return lum > 0.5 ? '#000000' : '#ffffff';
 }
+
 
 function categoryHue(category?: string) {
   const s = (category || "generic").toString();
@@ -90,70 +95,87 @@ const Tile = React.forwardRef<HTMLDivElement, {
       }
     : undefined;
 
-  const textColor = ownerColor ? getContrastColor(ownerColor) : undefined;
+  const textColor = getContrastColor(ownerColor);
 
   return (
-    <motion.div
-      ref={ref}
-      layout
-      initial={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
-      whileHover={{ scale: 1.02 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-      className={cn(
-        'relative rounded-lg border p-2 flex flex-col items-center justify-center text-center select-none',
-        property.type === 'start' ? 'shadow-inner' : 'shadow',
-        isActive ? 'ring-4 ring-offset-2 ring-opacity-60' : ''
-      )}
-      style={{
-        ...(ownerOverlayStyle || catStyle || {}),
-        borderWidth: ownerColor ? 2 : 1,
-        borderStyle: 'solid',
-        boxShadow: ownerColor ? '0 8px 22px rgba(0,0,0,0.12)' : undefined,
-      }}
-      title={`${property.name}${property.type === 'property' ? ` — ${property.price} د.ع — إيجار ${property.rent}` : ''}`}
-      aria-label={property.name}
-    >
-      <div className="flex-grow flex flex-col items-center justify-center min-h-[36px]">
-        {property.type === 'start' && <Home className="w-5 h-5 md:w-6 md:h-6 text-green-700" />}
-        {property.type === 'property' && <Building2 className="w-5 h-5 md:w-6 md:h-6 text-gray-700" />}
-        {property.type === 'fine' && <Gavel className="w-5 h-5 md:w-6 md:h-6 text-red-700" />}
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <motion.div
+            ref={ref}
+            layout
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+            className={cn(
+              'relative rounded-lg border p-2 flex flex-col items-center justify-center text-center select-none',
+              property.type === 'start' ? 'shadow-inner' : 'shadow',
+              isActive ? 'ring-4 ring-offset-2 ring-opacity-60' : '',
+              ownerColor ? 'ring-2' : ''
+            )}
+             style={{
+                ...(ownerOverlayStyle || catStyle || {}),
+                borderWidth: 2,
+                borderStyle: 'solid',
+                borderColor: isActive ? ownerColor || 'hsl(var(--primary))' : ownerColor || (catStyle?.borderColor || 'hsl(var(--border))'),
+                boxShadow: ownerColor ? `0 8px 22px ${hexToRgba(ownerColor, 0.2)}` : undefined,
+             }}
+            aria-label={property.name}
+          >
+            <div className="flex-grow flex flex-col items-center justify-center min-h-[36px]">
+              {property.type === 'start' && <Home className="w-5 h-5 md:w-6 md:h-6 text-green-700" />}
+              {property.type === 'property' && <Building2 className="w-5 h-5 md:w-6 md:h-6 text-gray-700" />}
+              {property.type === 'fine' && <Gavel className="w-5 h-5 md:w-6 md:h-6 text-red-700" />}
 
-        <p className="text-[10px] md:text-xs font-extrabold truncate w-full mt-1" style={{ color: textColor }}>{property.name}</p>
+              <p className="text-[10px] md:text-xs font-extrabold truncate w-full mt-1" style={{ color: textColor }}>{property.name}</p>
 
-        {property.type === 'property' && property.price > 0 && (
-          <p className="text-[10px] md:text-xs font-semibold mt-0.5" style={{ color: textColor }}>{property.price} د.ع</p>
-        )}
+              {property.type === 'property' && property.price > 0 && (
+                <p className="text-[10px] md:text-xs font-semibold mt-0.5" style={{ color: textColor }}>{property.price} د.ع</p>
+              )}
 
-        {property.type === 'fine' && property.fineAmount && (
-          <p className="text-[10px] md:text-xs font-semibold mt-0.5" style={{ color: textColor }}>{property.fineAmount} د.ع</p>
-        )}
-      </div>
-
-      {ownerColor ? (
-        <div className="absolute left-0 bottom-0 w-full h-1 rounded-b-md" style={{ background: ownerColor }} />
-      ) : (
-        <div className="absolute left-0 bottom-0 w-full h-1 bg-transparent" />
-      )}
-
-      {playersOnTile.length > 0 && (
-        <div className="absolute left-1 bottom-1 flex gap-0.5 items-center">
-          {playersOnTile.slice(0, 4).map((pl, i) => (
-            <div
-              key={pl.id}
-              className="w-4 h-4 md:w-5 md:h-5 rounded-full border-2 border-white shadow-sm overflow-hidden"
-              style={{ transform: `translateX(${i * 6}px)`, zIndex: 20 + i }}
-              title={pl.name}
-            >
-              <PlayerAvatar avatarId={pl.avatarId} className="w-full h-full" />
+              {property.type === 'fine' && property.fineAmount && (
+                <p className="text-[10px] md:text-xs font-semibold mt-0.5" style={{ color: textColor }}>{property.fineAmount} د.ع</p>
+              )}
             </div>
-          ))}
-          {playersOnTile.length > 4 && (
-            <div className="flex items-center justify-center text-[10px] w-4 h-4 rounded-full bg-gray-800 text-white ml-1">+{playersOnTile.length - 4}</div>
-          )}
-        </div>
-      )}
-    </motion.div>
+
+            {ownerColor && (
+              <div className="absolute left-0 bottom-0 w-full h-1.5 rounded-b-md" style={{ background: ownerColor }} />
+            )}
+
+            {playersOnTile.length > 0 && (
+              <div className="absolute left-1 bottom-1 flex gap-0.5 items-center">
+                {playersOnTile.slice(0, 4).map((pl, i) => (
+                  <div
+                    key={pl.id}
+                    className="w-4 h-4 md:w-5 md:h-5 rounded-full border-2 border-white shadow-sm overflow-hidden"
+                    style={{ transform: `translateX(${i * 6}px)`, zIndex: 20 + i }}
+                    title={pl.name}
+                  >
+                    <PlayerAvatar avatarId={pl.avatarId} className="w-full h-full" />
+                  </div>
+                ))}
+                {playersOnTile.length > 4 && (
+                  <div className="flex items-center justify-center text-[10px] w-4 h-4 rounded-full bg-gray-800 text-white ml-1">+{playersOnTile.length - 4}</div>
+                )}
+              </div>
+            )}
+          </motion.div>
+        </TooltipTrigger>
+        <TooltipContent>
+            <p className='font-bold'>{property.name}</p>
+            {property.type === 'property' && (
+                <>
+                    <p>السعر: {property.price} د.ع</p>
+                    <p>الإيجار: {property.rent} د.ع</p>
+                </>
+            )}
+             {property.type === 'fine' && (
+                <p>غرامة: {property.fineAmount} د.ع</p>
+             )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 });
 Tile.displayName = 'Tile';

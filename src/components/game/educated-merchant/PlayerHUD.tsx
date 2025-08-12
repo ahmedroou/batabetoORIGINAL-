@@ -1,22 +1,23 @@
 
 "use client";
 
-import type { Player } from '@/types';
+import type { Player, Property } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Skull, Crown, Activity } from 'lucide-react';
+import { Skull, Crown, Activity, Building2 } from 'lucide-react';
 
 interface PlayerHUDProps {
     players: Player[];
     balances: Record<string, number>;
+    board: Property[];
     currentTurnPlayerId?: string;
     activityLog?: string[];
 }
 
-export function PlayerHUD({ players, balances, currentTurnPlayerId, activityLog = [] }: PlayerHUDProps) {
+export function PlayerHUD({ players, balances, board, currentTurnPlayerId, activityLog = [] }: PlayerHUDProps) {
 
     return (
         <Card className="w-full h-full flex flex-col bg-gray-200 dark:bg-gray-800">
@@ -29,6 +30,7 @@ export function PlayerHUD({ players, balances, currentTurnPlayerId, activityLog 
                         {players.map((player, index) => {
                             const isCurrentTurn = player.id === currentTurnPlayerId;
                             const isBankrupt = player.status === 'bankrupt';
+                            const ownedProperties = board.filter(p => p.ownerId === player.id);
                             return (
                                 <motion.div
                                     key={player.id}
@@ -37,6 +39,7 @@ export function PlayerHUD({ players, balances, currentTurnPlayerId, activityLog 
                                         isBankrupt ? 'bg-red-900/50 border-red-700/50 opacity-50' : 'bg-white dark:bg-gray-900/50',
                                         isCurrentTurn ? 'border-primary shadow-lg' : 'border-transparent'
                                     )}
+                                    style={{ borderColor: isCurrentTurn ? player.color : 'transparent' }}
                                     initial={{ opacity: 0, x: -20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: index * 0.1 }}
@@ -54,6 +57,18 @@ export function PlayerHUD({ players, balances, currentTurnPlayerId, activityLog 
                                         {isBankrupt && <Skull className="w-8 h-8 text-red-500" />}
                                         {isCurrentTurn && !isBankrupt && <Crown className="w-8 h-8 text-yellow-500 animate-pulse" />}
                                     </div>
+                                    {ownedProperties.length > 0 && (
+                                        <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-700">
+                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">الممتلكات:</p>
+                                            <div className="flex flex-wrap gap-1">
+                                                {ownedProperties.map(prop => (
+                                                    <div key={prop.id} className="w-6 h-6 rounded-md flex items-center justify-center text-white" style={{ backgroundColor: player.color }}>
+                                                        <Building2 className="w-4 h-4" />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </motion.div>
                             )
                         })}
