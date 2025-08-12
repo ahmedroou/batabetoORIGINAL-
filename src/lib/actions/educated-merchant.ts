@@ -27,6 +27,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   Timestamp,
   deleteField,
   arrayUnion,
@@ -573,8 +574,8 @@ function endTurnInternal(
     const finalGameData: any = {
       gameState: 'final_results',
       gameResult: { winner: winner?.id || 'none', message: `اللاعب ${winner?.name || ''} هو الناجي الأخير!`, ranking },
-      'educatedMerchantState.timerEndsAt': deleteField(),
       players: updatedPlayers,
+      'educatedMerchantState.timerEndsAt': deleteField(),
     };
     return { isGameOver: true, updates: finalGameData };
   }
