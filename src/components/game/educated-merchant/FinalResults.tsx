@@ -158,7 +158,7 @@ export function FinalResults({ game, onPlayAgain }: FinalResultsProps) {
                 </div>
                 <div className="mt-3 text-lg font-extrabold">{winner?.name ?? '—'}</div>
                 <div className="mt-2 px-4 py-1 rounded-t-md bg-yellow-300 font-bold">1</div>
-                <div className="mt-1 text-sm text-gray-600">{fmtScore(winner ?? { id: '', name: '', avatarId: '', status: 'active' } as Player)}</div>
+                <div className="mt-1 text-sm text-gray-600">{fmtScore(winner ?? { id: '', name: '', avatarId: '', status: 'alive' } as Player)}</div>
               </motion.div>
 
               {/** third place */}

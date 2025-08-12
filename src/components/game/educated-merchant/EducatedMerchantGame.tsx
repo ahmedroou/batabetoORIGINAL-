@@ -11,6 +11,7 @@ import { QuestionModal } from "./QuestionModal";
 import { FinalResults } from "./FinalResults";
 import { Lobby } from "./Lobby";
 import { motion, AnimatePresence } from "framer-motion";
+import { resolveExpiredQuestion } from '@/lib/actions/educated-merchant';
 
 interface EducatedMerchantGameProps {
   game: Game;
@@ -21,10 +22,8 @@ interface EducatedMerchantGameProps {
 }
 
 // Inner component to hold the main game view and its hooks
-const EducatedMerchantGameView = ({ game, self, onRefresh }: EducatedMerchantGameProps) => {
+const EducatedMerchantGameView = ({ game, self }: EducatedMerchantGameProps) => {
     const es = game.educatedMerchantState!;
-    const [loadingAction, setLoadingAction] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
     const activePlayerId = es.turnOrder?.[es.currentTurnIndex] || "";
     const isMyTurn = activePlayerId === self.id;
@@ -34,54 +33,29 @@ const EducatedMerchantGameView = ({ game, self, onRefresh }: EducatedMerchantGam
     const showPropertyInteraction = game.gameState === 'property_action' && isMyTurn;
     const showQuestion = game.gameState === 'question' && es.currentQuestion;
 
-    const callApi = useCallback(async (path: string, body?: any) => {
-        setError(null);
-        setLoadingAction(true);
-        try {
-            const res = await fetch(path, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: body ? JSON.stringify(body) : undefined,
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data?.error || data?.message || 'خطأ في الخادم');
-            if (onRefresh) await onRefresh();
-            return { ok: true, data };
-        } catch (err: any) {
-            setError(err.message || String(err));
-            return { ok: false, error: err.message || String(err) };
-        } finally {
-            setLoadingAction(false);
-        }
-    }, [onRefresh]);
-
-    const handleBuy = useCallback(async (propId?: number) => {
-        if (!isMyTurn) return;
-        await callApi('/api/game/buy', { gameId: game.id, playerId: self.id });
-    }, [callApi, game.id, isMyTurn, self.id]);
-
-    const handleSkip = useCallback(async () => {
-        if (!isMyTurn) return;
-        await callApi('/api/game/skip', { gameId: game.id, playerId: self.id });
-    }, [callApi, game.id, isMyTurn, self.id]);
-
     useEffect(() => {
         if (game.gameState !== 'question' || !es?.timerEndsAt) return;
-        const endsAt = (typeof es.timerEndsAt === 'number') ? es.timerEndsAt : (new Date(es.timerEndsAt as any)).getTime();
+        
+        const endsAt = (typeof es.timerEndsAt === 'number') ? es.timerEndsAt : new Date((es.timerEndsAt as any)?.toDate() || es.timerEndsAt).getTime();
+        
         const msLeft = endsAt - Date.now();
         if (msLeft <= 0) {
-            (async () => { await callApi('/api/game/resolveExpired', { gameId: game.id }); })();
+            (async () => { await resolveExpiredQuestion(game.id); })();
             return;
         }
-        const t = setTimeout(() => { callApi('/api/game/resolveExpired', { gameId: game.id }); }, msLeft + 100);
+        const t = setTimeout(() => { resolveExpiredQuestion(game.id); }, msLeft + 100);
         return () => clearTimeout(t);
-    }, [es?.timerEndsAt, es?.currentQuestion, game.gameState, callApi, game.id]);
+    }, [es?.timerEndsAt, es?.currentQuestion, game.gameState, game.id]);
     
     const boardProps = useMemo(() => ({
         players: game.players,
         properties: es.board || [],
         className: 'w-full h-full',
-    }), [game.players, es.board]);
+        round: game.round,
+        maxRounds: es.settings?.maxRounds,
+        turnOrder: es.turnOrder,
+        currentPlayerId: activePlayerId,
+    }), [game.players, es.board, game.round, es.settings, es.turnOrder, activePlayerId]);
 
     return (
         <div className="w-full h-screen flex flex-col md:flex-row p-2 gap-4 bg-gray-50 dark:bg-gray-900">
@@ -90,7 +64,7 @@ const EducatedMerchantGameView = ({ game, self, onRefresh }: EducatedMerchantGam
 
                 <AnimatePresence>
                     {showDiceRoll && (
-                        <motion.div key="dice-roll" className="absolute z-30" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>
+                        <motion.div key="dice-roll" className="absolute inset-0 z-30 flex items-center justify-center" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>
                             <DiceRoll
                                 gameId={game.id}
                                 selfId={self.id}
@@ -102,7 +76,7 @@ const EducatedMerchantGameView = ({ game, self, onRefresh }: EducatedMerchantGam
 
                     {showPropertyInteraction && (
                         <motion.div key="property-card" className="absolute z-40" initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}>
-                            <PropertyCard game={game} self={self} onBuy={() => handleBuy()} onSkip={() => handleSkip()} />
+                            <PropertyCard game={game} self={self} />
                         </motion.div>
                     )}
 
@@ -110,10 +84,6 @@ const EducatedMerchantGameView = ({ game, self, onRefresh }: EducatedMerchantGam
                         <QuestionModal key="question" game={game} self={self} />
                     )}
                 </AnimatePresence>
-
-                {error && (
-                    <div className="absolute left-4 bottom-4 bg-red-600 text-white px-3 py-2 rounded">{error}</div>
-                )}
             </div>
 
             <div className="w-full md:w-[360px] shrink-0">

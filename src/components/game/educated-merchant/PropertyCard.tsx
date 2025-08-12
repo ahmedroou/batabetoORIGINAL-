@@ -111,7 +111,7 @@ export function PropertyCard({ game, self, onSuccess }: PropertyCardProps) {
         setIsSubmitting(null);
         return;
       }
-      toast({ title: 'تم الشراء', description: `${currentProperty.name} أصبحت ملكك الآن.`, variant: 'success' });
+      toast({ title: 'تم الشراء', description: `${currentProperty.name} أصبحت ملكك الآن.`, variant: 'default' });
       setConfirmOpen(false);
       onSuccess?.();
     } catch (e) {

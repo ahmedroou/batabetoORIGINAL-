@@ -75,7 +75,7 @@ export function DiceRoll({ gameId, selfId, isMyTurnToRoll, diceResult }: DiceRol
   return (
     <motion.div
       key="dice-container"
-      className="absolute z-20 flex flex-col items-center justify-center"
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center"
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.8 }}
