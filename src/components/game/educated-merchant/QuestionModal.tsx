@@ -6,52 +6,15 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import type { Game, Player } from '@/types';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { answerQuestion } from '@/lib/actions/educated-merchant';
 import { Loader2, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { handleTimeout } from '@/lib/actions/educated-merchant';
 import { motion, AnimatePresence } from 'framer-motion';
+import { CountdownTimer } from '@/components/game/CountdownTimer';
 
-const TimerRing = ({ expiryTimestamp, onExpire }: { expiryTimestamp: number, onExpire: () => void }) => {
-    const [timeLeft, setTimeLeft] = useState(() => Math.max(0, (expiryTimestamp - Date.now()) / 1000));
-    
-    useEffect(() => {
-        const timer = setInterval(() => {
-            const remaining = Math.max(0, (expiryTimestamp - Date.now()) / 1000);
-            setTimeLeft(remaining);
-            if (remaining <= 0) {
-                clearInterval(timer);
-                onExpire();
-            }
-        }, 1000);
-        return () => clearInterval(timer);
-    }, [expiryTimestamp, onExpire]);
-
-    const circumference = 2 * Math.PI * 45;
-    const progress = (timeLeft / 25) * circumference;
-
-    return (
-        <div className="relative w-24 h-24">
-            <svg className="w-full h-full" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="45" className="text-gray-700" strokeWidth="10" fill="transparent" />
-                <motion.circle
-                    cx="50" cy="50" r="45"
-                    className="text-primary"
-                    strokeWidth="10"
-                    fill="transparent"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={progress - circumference}
-                    transform="rotate(-90 50 50)"
-                    transition={{ duration: 1, ease: "linear" }}
-                />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-3xl font-mono font-bold">
-                {Math.ceil(timeLeft)}
-            </div>
-        </div>
-    );
-};
+const QUESTION_TIME_SECONDS = 20;
 
 export function QuestionModal({ game, self }: { game: Game; self: Player }) {
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -62,11 +25,11 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
     const isMyQuestion = game.educatedMerchantState?.pendingPurchase?.playerId === self.id;
     const isHost = game.hostId === self.id;
 
-    const onTimeout = () => {
-        if (isHost && answerState === 'pending') {
+    const onTimeout = useCallback(() => {
+        if (isHost && isMyQuestion && answerState === 'pending') {
             handleTimeout(game.id, self.id);
         }
-    };
+    }, [game.id, self.id, isHost, isMyQuestion, answerState]);
 
     const handleSubmit = async () => {
         if (!selectedAnswer) return;
@@ -98,16 +61,18 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
                         </motion.div>
                     )}
                 </AnimatePresence>
-                <DialogHeader className="text-center">
-                    {game.educatedMerchantState?.timerEndsAt && answerState === 'pending' && (
-                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-                            <TimerRing 
-                                expiryTimestamp={game.educatedMerchantState.timerEndsAt.toMillis()}
-                                onExpire={onTimeout}
-                            />
-                        </div>
-                    )}
-                    <DialogTitle className="pt-28 text-2xl">{question.question}</DialogTitle>
+                 {game.educatedMerchantState?.timerEndsAt && answerState === 'pending' && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                        <CountdownTimer 
+                            gameId={game.id}
+                            expiryTimestamp={game.educatedMerchantState.timerEndsAt.toMillis()}
+                            selfId={self.id}
+                            isHost={isHost}
+                        />
+                    </div>
+                 )}
+                <DialogHeader className="text-center pt-20">
+                    <DialogTitle className="text-2xl">{question.question}</DialogTitle>
                 </DialogHeader>
                 <motion.div 
                     animate={answerState === 'incorrect' ? { x: [-5, 5, -5, 5, 0] } : {}}

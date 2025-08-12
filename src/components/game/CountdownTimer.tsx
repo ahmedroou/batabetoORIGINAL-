@@ -4,47 +4,63 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { TimerIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { handleTimeout as handleTrapAnswerTimeout } from '@/lib/actions/trap-answer';
+import { handleTimeout as handleEducatedMerchantTimeout } from '@/lib/actions/educated-merchant';
+import type { Game } from '@/types';
 
 interface CountdownTimerProps {
+    gameId: string;
+    gameType: Game['gameType'];
     expiryTimestamp: number;
-    onExpire: () => void;
+    onExpire?: () => void;
+    isHost: boolean;
+    selfId: string;
 }
 
 /**
- * A shared component to display a countdown and trigger a callback when time expires.
+ * A shared component to display a countdown and trigger a server-side timeout action via the host.
  * @param {object} props - Component props.
  * @param {number} props.expiryTimestamp - The timestamp (in milliseconds) when the timer should expire.
- * @param {function} props.onExpire - Callback function to be called when the timer expires.
  */
-export const CountdownTimer = ({ expiryTimestamp, onExpire }: CountdownTimerProps) => {
+export const CountdownTimer = ({ gameId, gameType, expiryTimestamp, onExpire, isHost, selfId }: CountdownTimerProps) => {
     const calculateTimeLeft = useCallback(() => expiryTimestamp ? Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000) : 0, [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
     
-    const onExpireRef = useRef(onExpire);
-    onExpireRef.current = onExpire;
+    const timeoutProcessed = useRef(false);
 
     useEffect(() => {
         if (!expiryTimestamp) return;
-        
-        const expireHasBeenCalled = { current: false };
 
         const timer = setInterval(() => {
             const remaining = calculateTimeLeft();
             setTimeLeft(remaining);
-            if (remaining <= 0 && !expireHasBeenCalled.current) {
-                expireHasBeenCalled.current = true;
-                clearInterval(timer);
-                onExpireRef.current();
+            if (remaining <= 0) {
+                 clearInterval(timer);
+                 if (onExpire) {
+                    onExpire();
+                 }
+                 // Host is responsible for triggering the server-side timeout logic.
+                 if (isHost && !timeoutProcessed.current) {
+                    timeoutProcessed.current = true;
+                    switch (gameType) {
+                        case 'trap-answer':
+                            handleTrapAnswerTimeout(gameId, selfId);
+                            break;
+                        case 'educated-merchant':
+                            handleEducatedMerchantTimeout(gameId, selfId);
+                            break;
+                        // Add other game types that use timeouts here
+                    }
+                 }
             }
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [expiryTimestamp, calculateTimeLeft]);
-
+    }, [expiryTimestamp, onExpire, isHost, gameId, selfId, gameType, calculateTimeLeft]);
 
     if (!expiryTimestamp || timeLeft <= 0) return null;
 
-    const isLowTime = timeLeft <= 10;
+    const isLowTime = timeLeft <= 5;
 
     return (
         <div className={cn("flex items-center gap-2 p-2 rounded-full transition-all duration-300", 

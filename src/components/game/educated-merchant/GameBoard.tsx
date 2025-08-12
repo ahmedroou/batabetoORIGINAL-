@@ -14,6 +14,7 @@ import { Banknote, Building, HelpCircle, LandPlot, Trophy, RotateCcw } from 'luc
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { handlePropertyLanding, endTurn } from '@/lib/actions/educated-merchant';
 import { Button } from '@/components/ui/button';
+import { CountdownTimer } from '@/components/game/CountdownTimer';
 
 interface GameBoardProps {
   game: Game;
@@ -124,13 +125,12 @@ export function GameBoard({ game, self }: GameBoardProps) {
                      }
                 }
                 return null;
-            case 'turn_end':
+            case 'turn_end': // This state is now very brief, mostly for transition
                 return (
                     <div className="text-center text-white space-y-4">
                         <HelpCircle className="w-16 h-16 mx-auto mb-4 text-primary" />
                         <h2 className="text-2xl font-bold">انتهى دور {game.players.find(p=>p.id === currentPlayerId)?.name}</h2>
                         <p className="text-muted-foreground mt-2">في انتظار اللاعب التالي...</p>
-                        {isMyTurn && <Button onClick={() => endTurn(game.id, self.id)}><RotateCcw className="ml-2"/> إنهاء الدور</Button>}
                     </div>
                 )
             default:
@@ -150,6 +150,17 @@ export function GameBoard({ game, self }: GameBoardProps) {
 
     return (
         <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
+            {game.educatedMerchantState?.timerEndsAt && game.gameState !== 'question' && (
+                 <div className="absolute top-4 left-4 z-20">
+                    <CountdownTimer
+                        gameId={game.id}
+                        expiryTimestamp={game.educatedMerchantState.timerEndsAt.toMillis()}
+                        selfId={self.id}
+                        isHost={game.hostId === self.id}
+                     />
+                 </div>
+            )}
+           
             <QuestionModal game={game} self={self} />
 
             <div className="w-full md:w-1/4 xl:w-1/5 space-y-4 shrink-0 flex flex-col">

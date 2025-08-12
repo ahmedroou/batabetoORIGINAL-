@@ -47,7 +47,6 @@ export function DiceRoll({ game, self }: DiceRollProps) {
         setIsRolling(true);
         try {
             await rollDice(game.id, self.id);
-            // The state will update automatically via listener, no need to setIsRolling(false) here
         } catch (error: any) {
             console.error("Error rolling dice:", error);
             setIsRolling(false);

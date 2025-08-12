@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -28,7 +27,7 @@ import { updateLeagueScoresForGameEnd } from './user';
 const BOARD_SIZE = 28;
 const START_MONEY = 1500;
 const PASS_GO_REWARD = 200;
-const QUESTION_TIME_SECONDS = 25;
+const ACTION_TIME_SECONDS = 20;
 
 async function generateBoard(categories: string[]): Promise<Property[]> {
     const board: Property[] = new Array(BOARD_SIZE);
@@ -105,6 +104,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
             'educatedMerchantState.turnOrder': turnOrder,
             'educatedMerchantState.currentTurnIndex': 0,
             'educatedMerchantState.activityLog': [{ message: "بدأت اللعبة!", timestamp: new Date() }],
+            'educatedMerchantState.timerEndsAt': Timestamp.fromMillis(Date.now() + ACTION_TIME_SECONDS * 1000),
         });
     });
 }
@@ -143,6 +143,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             gameState: 'movement',
             'educatedMerchantState.lastDiceRoll': diceRoll,
             'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }),
+            'educatedMerchantState.timerEndsAt': deleteField(),
         });
     });
 }
@@ -159,13 +160,14 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
         const property = game.educatedMerchantState!.board[player.position];
         let activityMessage = '';
         let updates: any = {};
-        let turnShouldEnd = false;
+        let shouldEndTurnNow = false;
 
         if (property.type === 'property') {
             if (!property.ownerId) { 
                 updates.gameState = 'property_action';
+                updates['educatedMerchantState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + ACTION_TIME_SECONDS * 1000);
             } else if (property.ownerId !== playerId) {
-                turnShouldEnd = true;
+                shouldEndTurnNow = true;
                 const owner = game.players.find(p => p.id === property.ownerId);
                 if (owner) {
                     const rent = property.rent;
@@ -188,10 +190,10 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
                     updates.players = updatedPlayers;
                 }
             } else {
-                turnShouldEnd = true;
+                shouldEndTurnNow = true;
             }
         } else if (property.type === 'fine') {
-            turnShouldEnd = true;
+            shouldEndTurnNow = true;
             const fine = property.fineAmount || 100;
             const playerIndex = game.players.findIndex(p => p.id === playerId);
             const updatedPlayers = [...game.players];
@@ -206,7 +208,7 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
             }
             updates.players = updatedPlayers;
         } else {
-             turnShouldEnd = true;
+             shouldEndTurnNow = true;
         }
 
         if(activityMessage) {
@@ -215,7 +217,7 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
         
         transaction.update(gameRef, updates);
 
-        if(turnShouldEnd) {
+        if(shouldEndTurnNow) {
            await endTurnInternal(gameId, playerId, transaction);
         }
     });
@@ -264,7 +266,7 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
             players: updatedPlayers,
             gameState: 'question',
             'educatedMerchantState.currentQuestion': questionData,
-            'educatedMerchantState.timerEndsAt': Timestamp.fromMillis(Date.now() + QUESTION_TIME_SECONDS * 1000),
+            'educatedMerchantState.timerEndsAt': Timestamp.fromMillis(Date.now() + ACTION_TIME_SECONDS * 1000),
             'educatedMerchantState.pendingPurchase': {
                 playerId: playerId,
                 propertyId: property.id,
@@ -315,21 +317,32 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             'educatedMerchantState.timerEndsAt': deleteField(),
             'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }),
             'educatedMerchantState.newlyBoughtPropertyId': isCorrect ? pendingPurchase.propertyId : deleteField(),
-            gameState: 'turn_end'
         });
+        await endTurnInternal(gameId, playerId, transaction);
     });
 }
 
-export async function handleTimeout(gameId: string, playerId: string) {
+export async function handleTimeout(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
      await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
+        
+        if (game.hostId !== hostId) return;
 
-        if (game.gameState === 'question' && game.educatedMerchantState?.pendingPurchase?.playerId === playerId) {
+        const timerEndsAt = game.educatedMerchantState?.timerEndsAt;
+        if (!timerEndsAt || timerEndsAt.toMillis() > Date.now()) {
+            return;
+        }
+
+        const turnOrder = game.educatedMerchantState!.turnOrder;
+        const currentTurnIndex = game.educatedMerchantState!.currentTurnIndex;
+        const currentPlayerId = turnOrder[currentTurnIndex];
+
+        if (game.gameState === 'question') {
              const pendingPurchase = game.educatedMerchantState!.pendingPurchase!;
-             const playerIndex = game.players.findIndex(p => p.id === playerId);
+             const playerIndex = game.players.findIndex(p => p.id === currentPlayerId);
              const updatedPlayers = [...game.players];
              const refund = Math.round(pendingPurchase.price / 4);
              updatedPlayers[playerIndex].money! += refund;
@@ -341,8 +354,12 @@ export async function handleTimeout(gameId: string, playerId: string) {
                 'educatedMerchantState.currentQuestion': deleteField(),
                 'educatedMerchantState.timerEndsAt': deleteField(),
                 'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }),
-                gameState: 'turn_end'
              });
+             await endTurnInternal(gameId, currentPlayerId, transaction);
+        } else if (game.gameState === 'rolling' || game.gameState === 'property_action') {
+             const activityMessage = `انتهى وقت اللاعب ${game.players.find(p=>p.id === currentPlayerId)?.name}.`;
+             transaction.update(gameRef, {'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }) });
+             await endTurnInternal(gameId, currentPlayerId, transaction);
         }
      });
 }
@@ -406,6 +423,7 @@ async function endTurnInternal(gameId: string, playerId: string, transaction: Tr
             'educatedMerchantState.currentTurnIndex': nextTurnIndex,
             'educatedMerchantState.lastDiceRoll': deleteField(),
             'educatedMerchantState.newlyBoughtPropertyId': deleteField(),
+            'educatedMerchantState.timerEndsAt': Timestamp.fromMillis(Date.now() + ACTION_TIME_SECONDS * 1000),
             round: newRound,
             players: updatedPlayers,
         });

@@ -26,9 +26,9 @@ export function PropertyCard({ game, self, property }: PropertyCardProps) {
         setIsSubmitting(true);
         try {
             await purchaseProperty(game.id, self.id);
+            // No need to set submitting to false, as the game state will change
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        } finally {
             setIsSubmitting(false);
         }
     }
@@ -39,8 +39,7 @@ export function PropertyCard({ game, self, property }: PropertyCardProps) {
             await endTurn(game.id, self.id);
         } catch (error: any) {
              toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        } finally {
-             setIsSubmitting(false);
+             setIsSubmitting(false); // Only set to false on error
         }
     }
 
