@@ -20,13 +20,17 @@ export function PropertyCard({ game, self, property }: PropertyCardProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { toast } = useToast();
     
+    const turnOrder = game.educatedMerchantState?.turnOrder || [];
+    const currentTurnPlayerId = turnOrder[game.educatedMerchantState?.currentTurnIndex || 0];
+    const currentPlayer = game.players.find(p => p.id === currentTurnPlayerId);
+    const isMyTurn = self.id === currentTurnPlayerId;
+    
     const canAfford = (self.money || 0) >= property.price;
 
     const handlePurchase = async () => {
         setIsSubmitting(true);
         try {
             await purchaseProperty(game.id, self.id);
-            // No need to set submitting to false, as the game state will change
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
             setIsSubmitting(false);
@@ -39,7 +43,7 @@ export function PropertyCard({ game, self, property }: PropertyCardProps) {
             await endTurn(game.id, self.id);
         } catch (error: any) {
              toast({ title: "خطأ", description: error.message, variant: "destructive" });
-             setIsSubmitting(false); // Only set to false on error
+             setIsSubmitting(false);
         }
     }
 
@@ -65,15 +69,23 @@ export function PropertyCard({ game, self, property }: PropertyCardProps) {
                 </div>
                  <p className="text-sm text-slate-500 mt-1">الإيجار: {property.rent} دينار</p>
             </CardContent>
-            <CardFooter className="flex gap-2">
-                <Button className="flex-1" onClick={handlePurchase} disabled={isSubmitting || !canAfford}>
-                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'شراء'}
-                </Button>
-                <Button className="flex-1" variant="secondary" onClick={handleSkip} disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'تخطي'}
-                </Button>
-            </CardFooter>
-             {!canAfford && <p className="text-xs text-destructive text-center pb-2">لا تملك ما يكفي من المال لشراء هذا العقار.</p>}
+            
+            {isMyTurn ? (
+                <CardFooter className="flex gap-2">
+                    <Button className="flex-1" onClick={handlePurchase} disabled={isSubmitting || !canAfford}>
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'شراء'}
+                    </Button>
+                    <Button className="flex-1" variant="secondary" onClick={handleSkip} disabled={isSubmitting}>
+                        {isSubmitting ? <Loader2 className="animate-spin" /> : 'تخطي'}
+                    </Button>
+                </CardFooter>
+            ) : (
+                 <CardFooter>
+                    <p className="text-center w-full text-muted-foreground animate-pulse">في انتظار قرار {currentPlayer?.name}...</p>
+                 </CardFooter>
+            )}
+
+            {isMyTurn && !canAfford && <p className="text-xs text-destructive text-center pb-2">لا تملك ما يكفي من المال لشراء هذا العقار.</p>}
         </Card>
         </motion.div>
     );

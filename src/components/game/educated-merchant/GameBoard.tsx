@@ -39,7 +39,7 @@ const Tile = ({ property, isNewlyBought }: { property: Property, isNewlyBought: 
         borderColor = 'border-red-500';
     }
 
-    const tileStyle = property.ownerId && property.color ? { backgroundColor: property.color } : {};
+    const tileStyle = property.ownerId && property.color ? { backgroundColor: property.color, transition: 'background-color 0.5s ease' } : {};
     
     return (
         <motion.div 
@@ -111,6 +111,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
     const currentTurnIndex = game.educatedMerchantState?.currentTurnIndex || 0;
     const currentPlayerId = turnOrder[currentTurnIndex];
     const isMyTurn = self.id === currentPlayerId;
+    const isHost = game.hostId === self.id;
     
     const boardWidth = GRID_SIZE * tileSize + (GRID_SIZE - 1) * gapSize;
     const boardHeight = boardWidth;
@@ -135,12 +136,12 @@ export function GameBoard({ game, self }: GameBoardProps) {
                  const nextPlayerIndex = (currentTurnIndex + 1) % turnOrder.length;
                  const nextPlayer = game.players.find(p => p.id === turnOrder[nextPlayerIndex]);
                 return (
-                    <div className="text-center text-white space-y-4">
+                    <div className="text-center text-white space-y-4 p-4 bg-slate-800 rounded-lg">
                         <h2 className="text-2xl font-bold">انتهى دور {turnEndingPlayer?.name}</h2>
                         <p className="text-muted-foreground mt-2 animate-pulse">الدور على: {nextPlayer?.name}</p>
-                        {isHost && (
+                        {isMyTurn && (
                             <Button onClick={() => endTurn(game.id, self.id)}>
-                                بدء الدور التالي
+                                إنهاء الدور
                             </Button>
                         )}
                     </div>
