@@ -1,4 +1,3 @@
-
 /* Educated Merchant — Full Refactor & Feature Upgrade
    - Fully updated to match the user's game rules (التاجر المتعلم)
    - Improvements:
