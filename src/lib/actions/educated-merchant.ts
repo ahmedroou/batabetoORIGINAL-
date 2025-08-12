@@ -188,7 +188,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
       'educatedMerchantState.activityLog': [{ message: 'بدأت اللعبة!', timestamp: nowTimestamp() }],
       'educatedMerchantState.timerEndsAt': addActionTimer(),
       'educatedMerchantState.movesThisRound': 0,
-      'educatedMerchantState.settings': { maxRounds: DEFAULT_MAX_ROUNDS },
+      'educatedMerchantState.settings': { maxRounds: DEFAULT_MAX_ROUNDS, categories: categoriesResult.categories },
     });
   });
 }
@@ -448,8 +448,10 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     tx.update(gameRef, endTurnResult.updates);
     gameEnded = endTurnResult.isGameOver;
 
-    if (isGameOver) {
-      finalGameDataForLeagueUpdate = { ...game, ...endTurnResult.updates };
+    if (gameEnded) {
+      const finalGameData = { ...game, ...endTurnResult.updates };
+      // Assign league update data here
+      finalGameDataForLeagueUpdate = finalGameData;
     }
   });
 
@@ -460,9 +462,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
 
 export async function handleTimeout(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
-  let finalGameDataForLeagueUpdate: Game | null = null;
-  let gameEnded = false;
-
+  
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
@@ -477,20 +477,20 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
     const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
     const currentPlayerId = turnOrder[currentTurnIndex];
     const currentPlayer = game.players.find((p) => p.id === currentPlayerId);
-    let updates: any = {};
-    let activityMessage = '';
+    let finalUpdates: any = {};
     
     switch (game.gameState) {
       case 'rolling': {
         await rollDiceInternal(gameRef, tx, currentPlayerId);
-        break;
+        return; // rollDiceInternal commits the transaction
       }
       case 'property_action': {
-        activityMessage = `انتهى وقت اللاعب ${currentPlayer?.name} وتخطى شراء العقار.`;
-        const endTurnResult = endTurnInternal(game, currentPlayerId, activityMessage);
-        updates = endTurnResult.updates;
-        gameEnded = endTurnResult.isGameOver;
-        if (gameEnded) finalGameDataForLeagueUpdate = { ...game, ...updates };
+        const activityMessage = `انتهى وقت اللاعب ${currentPlayer?.name} وتخطى شراء العقار.`;
+        const { updates, isGameOver } = endTurnInternal(game, currentPlayerId, activityMessage);
+        finalUpdates = updates;
+        if(isGameOver) {
+          await updateLeagueScoresForGameEnd({ ...game, ...finalUpdates });
+        }
         break;
       }
       case 'question': {
@@ -501,7 +501,7 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
           const refund = Math.round((pending.price || 0) / 4);
           updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + refund;
 
-          activityMessage = `${currentPlayer?.name} لم يجب في الوقت واسترد ${refund} دينار.`;
+          const activityMessage = `${currentPlayer?.name} لم يجب في الوقت واسترد ${refund} دينار.`;
           
           const baseUpdates = {
             players: updatedPlayers,
@@ -510,10 +510,11 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
             'educatedMerchantState.timerEndsAt': deleteField(),
           };
 
-          const endTurnResult = endTurnInternal(game, currentPlayerId, activityMessage, baseUpdates);
-          updates = endTurnResult.updates;
-          gameEnded = endTurnResult.isGameOver;
-          if (gameEnded) finalGameDataForLeagueUpdate = { ...game, ...updates };
+          const { updates, isGameOver } = endTurnInternal(game, currentPlayerId, activityMessage, baseUpdates);
+          finalUpdates = updates;
+          if(isGameOver) {
+            await updateLeagueScoresForGameEnd({ ...game, ...finalUpdates });
+          }
         }
         break;
       }
@@ -521,14 +522,10 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
         return;
     }
     
-    if (Object.keys(updates).length > 0) {
-      tx.update(gameRef, updates);
+    if (Object.keys(finalUpdates).length > 0) {
+      tx.update(gameRef, finalUpdates);
     }
   });
-
-  if (gameEnded && finalGameDataForLeagueUpdate) {
-    await updateLeagueScoresForGameEnd(finalGameDataForLeagueUpdate);
-  }
 }
 
 function endTurnInternal(

@@ -89,7 +89,7 @@ const CategoryManager = ({
         const result = await onEdit(editingCategory.oldName, editingCategory.newName);
         if (result.success) {
             toast({ title: 'تم تعديل القسم بنجاح' });
-            setCategories(categories.map(c => (c === editingCategory.oldName ? editingCategory.newName : c)));
+            setCategories(categories.map(c => (c === editingCategory.oldName ? editingCategory.newName.trim() : c)));
             setEditingCategory(null);
         } else {
             toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
@@ -363,7 +363,7 @@ export default function QuestionManagementTab() {
 
         if (deletionParams.game === 'trap-answer' && typeof deletionParams.duplicates === 'object') {
             result = await deleteSimilarQuestions('trap-answer', deletionParams.duplicates.threshold, deletionParams.category);
-        } else if (deletionParams.game === 'word_war' && deletionParams.duplicates === 'word_war_duplicates') {
+        } else if (deletionParams.game === 'word_war' && deletionParams.duplicates) {
             result = await deleteDuplicateWords();
         } else {
             result = await deleteQuestions(deletionParams as any);
@@ -535,7 +535,7 @@ export default function QuestionManagementTab() {
             <div className="space-y-2 border-t pt-4">
                  <h4 className="font-bold">حذف الكلمات المكررة</h4>
                  <p className="text-sm text-muted-foreground">سيقوم هذا الإجراء بفحص جميع الكلمات وحذف أي نسخ متطابقة 100%.</p>
-                 <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'word_war', duplicates: 'word_war_duplicates' })} disabled={isDeleting}>
+                 <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'word_war', duplicates: 'word_war_duplicates' as any })} disabled={isDeleting}>
                     <Sparkles className="mr-2 h-4 w-4" />
                     {isDeleting ? 'جاري الفحص والحذف...' : 'حذف الكلمات المكررة 100%'}
                 </Button>
