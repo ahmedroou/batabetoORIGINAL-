@@ -11,7 +11,7 @@ import { PlayerHUD } from './PlayerHUD';
 import { ActivityLog } from './ActivityLog';
 import { cn } from '@/lib/utils';
 import { Banknote, Building, HelpCircle, LandPlot, Trophy } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 
 interface GameBoardProps {
   game: Game;
@@ -20,32 +20,6 @@ interface GameBoardProps {
 
 const BOARD_SIZE = 28; 
 const GRID_SIZE = 8; // 8x8 grid for a 28-tile board
-
-// Adjust tile size for better fit on screen
-const TILE_WIDTH = 100;
-const TILE_HEIGHT = 100; 
-const GAP_SIZE = 4;
-
-const getPositionStyles = (index: number): React.CSSProperties => {
-  const sideLength = GRID_SIZE - 1;
-  let top = 0, left = 0;
-
-  if (index >= 0 && index < sideLength) { // Top row
-    top = 0;
-    left = index * (TILE_WIDTH + GAP_SIZE);
-  } else if (index >= sideLength && index < sideLength * 2) { // Right col
-    top = (index - sideLength) * (TILE_HEIGHT + GAP_SIZE);
-    left = (sideLength) * (TILE_WIDTH + GAP_SIZE);
-  } else if (index >= sideLength * 2 && index < sideLength * 3) { // Bottom row
-    top = (sideLength) * (TILE_HEIGHT + GAP_SIZE);
-    left = (sideLength - (index - sideLength * 2)) * (TILE_WIDTH + GAP_SIZE);
-  } else { // Left col
-    top = (sideLength - (index - sideLength * 3)) * (TILE_HEIGHT + GAP_SIZE);
-    left = 0;
-  }
-  return { top: `${top}px`, left: `${left}px`, position: 'absolute' };
-};
-
 
 const Tile = ({ property, playersOnTile, isNewlyBought }: { property: Property, playersOnTile: Player[], isNewlyBought: boolean }) => {
     let Icon = Building;
@@ -77,6 +51,49 @@ const Tile = ({ property, playersOnTile, isNewlyBought }: { property: Property, 
 export function GameBoard({ game, self }: GameBoardProps) {
     const board = game.educatedMerchantState?.board;
     const memoizedBoard = useMemo(() => board, [board]);
+    const [tileSize, setTileSize] = useState(100);
+    const [gapSize, setGapSize] = useState(4);
+    const containerRef = useRef<HTMLDivElement>(null);
+    
+    const getPositionStyles = useCallback((index: number): React.CSSProperties => {
+      const sideLength = GRID_SIZE - 1;
+      let top = 0, left = 0;
+      const step = tileSize + gapSize;
+
+      if (index >= 0 && index < sideLength) { // Top row
+        top = 0;
+        left = index * step;
+      } else if (index >= sideLength && index < sideLength * 2) { // Right col
+        top = (index - sideLength) * step;
+        left = sideLength * step;
+      } else if (index >= sideLength * 2 && index < sideLength * 3) { // Bottom row
+        top = sideLength * step;
+        left = (sideLength - (index - sideLength * 2)) * step;
+      } else { // Left col
+        top = (sideLength - (index - sideLength * 3)) * step;
+        left = 0;
+      }
+      return { top: `${top}px`, left: `${left}px`, position: 'absolute' };
+    }, [tileSize, gapSize]);
+
+
+    useEffect(() => {
+        const calculateSize = () => {
+            if (containerRef.current) {
+                const containerWidth = containerRef.current.offsetWidth;
+                const containerHeight = containerRef.current.offsetHeight;
+                const minDim = Math.min(containerWidth, containerHeight);
+                const newTileSize = Math.floor(minDim / (GRID_SIZE + 1)); // +1 for padding
+                setTileSize(newTileSize);
+                setGapSize(Math.max(2, Math.floor(newTileSize * 0.04)));
+            }
+        };
+
+        calculateSize();
+        window.addEventListener('resize', calculateSize);
+        return () => window.removeEventListener('resize', calculateSize);
+    }, []);
+
     
     if (!memoizedBoard || memoizedBoard.length === 0) {
         return <div>جاري تحميل لوحة اللعب...</div>;
@@ -85,6 +102,10 @@ export function GameBoard({ game, self }: GameBoardProps) {
     const turnOrder = game.educatedMerchantState?.turnOrder || [];
     const currentTurnIndex = game.educatedMerchantState?.currentTurnIndex || 0;
     const currentPlayerId = turnOrder[currentTurnIndex];
+    
+    const boardWidth = GRID_SIZE * tileSize + (GRID_SIZE - 1) * gapSize;
+    const boardHeight = boardWidth;
+
 
     const renderCenterContent = () => {
         switch(game.gameState) {
@@ -115,21 +136,29 @@ export function GameBoard({ game, self }: GameBoardProps) {
     }
 
     return (
-        <div className="w-screen h-screen bg-gray-800 p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
+        <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
             <QuestionModal game={game} self={self} />
 
-            <div className="w-full md:w-1/4 space-y-4 shrink-0">
+            <div className="w-full md:w-1/4 xl:w-1/5 space-y-4 shrink-0 flex flex-col">
                 <PlayerHUD players={game.players} turnOrder={turnOrder} currentTurnIndex={game.educatedMerchantState?.currentTurnIndex || 0} />
                 <ActivityLog log={game.educatedMerchantState?.activityLog || []} />
             </div>
 
-            <div className="flex-grow flex items-center justify-center">
-                 <div className="relative" style={{ width: `${GRID_SIZE * TILE_WIDTH + (GRID_SIZE - 1) * GAP_SIZE}px`, height: `${GRID_SIZE * TILE_HEIGHT + (GRID_SIZE - 1) * GAP_SIZE}px`}}>
-                    <div className="absolute inset-28 bg-gray-900/50 rounded-2xl flex items-center justify-center p-8 shadow-inner">
+            <div ref={containerRef} className="flex-grow flex items-center justify-center relative min-h-0 min-w-0">
+                 <div className="relative" style={{ width: boardWidth, height: boardHeight }}>
+                    <div 
+                        className="absolute bg-gray-900/50 rounded-2xl flex items-center justify-center p-2 md:p-8 shadow-inner"
+                        style={{
+                            top: tileSize + gapSize,
+                            left: tileSize + gapSize,
+                            right: tileSize + gapSize,
+                            bottom: tileSize + gapSize,
+                        }}
+                    >
                         {renderCenterContent()}
                     </div>
                     {memoizedBoard.map((property, index) => (
-                        <div key={index} style={{...getPositionStyles(index), width: TILE_WIDTH, height: TILE_HEIGHT}}>
+                        <div key={index} style={{...getPositionStyles(index), width: tileSize, height: tileSize}}>
                             <Tile property={property} playersOnTile={[]} isNewlyBought={game.educatedMerchantState?.newlyBoughtPropertyId === property.id}/>
                         </div>
                     ))}
@@ -143,9 +172,12 @@ export function GameBoard({ game, self }: GameBoardProps) {
                                 initial={style}
                                 animate={style}
                                 transition={{ type: "spring", stiffness: 200, damping: 30 }}
-                                style={{width: TILE_WIDTH, height: TILE_HEIGHT}}
+                                style={{width: tileSize, height: tileSize}}
                             >
-                                <div className={cn("absolute bottom-1 right-1 w-10 h-10 transition-all duration-300", p.id === currentPlayerId && 'animate-pulse-glow')}>
+                                <div 
+                                     className={cn("absolute bottom-1 right-1 transition-all duration-300", p.id === currentPlayerId && 'animate-pulse-glow')}
+                                     style={{ width: `${tileSize * 0.4}px`, height: `${tileSize * 0.4}px` }}
+                                >
                                     <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
                                 </div>
                             </motion.div>
