@@ -18,7 +18,7 @@ import HomeDialogs from "./components/home/Dialogs";
 import WelcomeGuest from "./components/home/WelcomeGuest";
 import MainLoadingSkeleton from "./components/home/MainLoadingSkeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import SocietyChallenges from "./society/components/SocietyChallenges";
+import { CompactChallengeList } from "./components/home/CompactChallengeList";
 
 export default function Home() {
     const { user, userProfile, loading, socialRanks, getSocialRankForUser, activeChallenges, newChallengeAvailable, markChallengeAsSeen } = useAuth();
@@ -81,7 +81,7 @@ export default function Home() {
                                 <CardDescription>انضم إلى التحديات الحالية واربح جوائز قيمة!</CardDescription>
                             </CardHeader>
                             <CardContent>
-                               <SocietyChallenges filter="active" />
+                               <CompactChallengeList challenges={activeChallenges} />
                             </CardContent>
                         </Card>
                     )}
