@@ -214,39 +214,43 @@ const Tile = React.forwardRef<HTMLDivElement, {
 });
 Tile.displayName = 'Tile';
 
-function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId, gameState, currentRound, maxRounds }: GameBoardProps) {
+export default function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId, gameState, currentRound, maxRounds }: GameBoardProps) {
   // Defensive fallback
   if (!board || board.length === 0) {
     return <div className="text-center p-6 text-lg">جاري تحميل اللوحة...</div>;
   }
 
   // Compute board geometry once (memoized)
-  const { sideLength, totalCells, gridCells } = useMemo(() => {
+  const { sideLength, totalCells, boardCells } = useMemo(() => {
     const side = Math.floor((board.length + 3) / 4);
-    const cells: Array<Property | null> = [];
+    const total = (side + 1) * 4 - 4;
+    const cells: Array<Property | null> = Array(total).fill(null);
 
-    // Bottom row (left to right)
-    for (let i = 0; i <= side; i++) cells.push(board[i]);
-    // Right column (bottom to top)
-    for (let i = side + 1; i <= side * 2; i++) cells.push(board[i]);
-    // Top row (right to left)
-    for (let i = side * 2 + 1; i <= side * 3; i++) cells.push(board[i]);
-    // Left column (top to bottom)
-    for (let i = side * 3 + 1; i < board.length; i++) cells.push(board[i]);
+    for (let i = 0; i < board.length && i < total; i++) {
+      let x = 0, y = 0;
+      const n = side; // number of "inner steps" per side
+      if (i <= n) {
+        // bottom row: left -> right
+        x = i;
+        y = n;
+      } else if (i <= n * 2) {
+        // right col: bottom-1 -> top
+        x = n;
+        y = n - (i - n);
+      } else if (i <= n * 3) {
+        // top row: right-1 -> left
+        x = n - (i - n * 2);
+        y = 0;
+      } else {
+        // left col: top+1 -> bottom-1
+        x = 0;
+        y = i - n * 3;
+      }
+      const index = y * (n + 1) + x;
+      if (index >= 0 && index < cells.length) cells[index] = board[i];
+    }
 
-    const finalGrid: Array<Property | null> = Array((side + 1) * (side + 1)).fill(null);
-    let currentCellIndex = 0;
-    
-    // Place bottom row
-    for(let i=0; i<=side; i++) finalGrid[side * (side+1) + i] = cells[currentCellIndex++];
-    // Place right col
-    for(let i=side-1; i>=0; i--) finalGrid[i * (side+1) + side] = cells[currentCellIndex++];
-    // Place top row
-    for(let i=side-1; i>=0; i--) finalGrid[i] = cells[currentCellIndex++];
-    // Place left col
-    for(let i=1; i<side; i++) finalGrid[i * (side+1)] = cells[currentCellIndex++];
-
-    return { sideLength: side, totalCells: board.length, gridCells: finalGrid };
+    return { sideLength: side, totalCells: total, boardCells: cells };
   }, [board]);
 
   // Fast lookup map: propertyId -> players on that tile
@@ -304,15 +308,20 @@ function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId,
           gap: `${TILE_GAP}px`,
         }}
       >
-        {gridCells.map((property: Property | null, index: number) => {
+        {boardCells.map((property: Property | null, index: number) => {
           if (!property) return <div key={index} />;
 
           const ownerColor = property.ownerId ? players.find(p => p.id === property.ownerId)?.color : undefined;
           const playersOnTile = playersByPosition.get(property.id) || [];
           const isActive = activePosition === property.id;
 
+          const gridRow = Math.floor(index / (sideLength + 1)) + 1;
+          const gridColumn = (index % (sideLength + 1)) + 1;
+
           return (
-            <Tile key={property.id} property={property} ownerColor={ownerColor} playersOnTile={playersOnTile} isActive={isActive} onActivate={() => handleTileActivate(property)} />
+            <div key={property.id} className="p-0" style={{ gridRow, gridColumn }}>
+              <Tile property={property} ownerColor={ownerColor} playersOnTile={playersOnTile} isActive={isActive} onActivate={() => handleTileActivate(property)} />
+            </div>
           );
         })}
 
@@ -354,5 +363,3 @@ function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId,
     </div>
   );
 }
-
-export { GameBoard };

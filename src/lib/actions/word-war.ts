@@ -27,17 +27,15 @@ import type { Game, Player, UserProfile, League, WordWarCard } from '@/types';
 import { shuffle } from './helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
+import { WORD_WAR_WORDS } from '@/data/word-war-words';
 
 const generateCards = async (): Promise<WordWarCard[]> => {
-    const wordsCol = collection(db, 'word_war_words');
-    const snapshot = await getDocs(wordsCol);
     const WORD_COUNT = 40;
-    if (snapshot.docs.length < WORD_COUNT) {
-        throw new Error(`لا توجد كلمات كافية في قاعدة البيانات. تحتاج إلى ${WORD_COUNT} كلمة على الأقل.`);
+    if (WORD_WAR_WORDS.length < WORD_COUNT) {
+        throw new Error(`لا توجد كلمات كافية في قائمة الكلمات. تحتاج إلى ${WORD_COUNT} كلمة على الأقل.`);
     }
     
-    const allWords = snapshot.docs.map(doc => doc.data().text as string);
-    const shuffledWords = shuffle(allWords).slice(0, WORD_COUNT);
+    const shuffledWords = shuffle([...WORD_WAR_WORDS]).slice(0, WORD_COUNT);
     
     // 15 Red, 14 Blue, 10 Neutral, 1 Assassin
     const redCount = 15;
