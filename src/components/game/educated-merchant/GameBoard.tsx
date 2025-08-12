@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import type { Player, Property } from "@/types";
 import { motion } from "framer-motion";
 import { PlayerAvatar } from "../PlayerAvatar";
@@ -185,24 +185,31 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
     return <div className="text-center p-6 text-lg">جاري تحميل اللوحة...</div>;
   }
   
-  const sideLength = Math.floor(board.length / 4) + 1;
-  const gridCells = useMemo(() => {
-    const cells = Array(sideLength * sideLength).fill(null);
-    let x = 0;
-    let y = 0;
-    let dx = 1;
-    let dy = 0;
+  const sideLength = Math.floor((board.length + 3) / 4);
+  const totalCells = (sideLength + 1) * 4 - 4; // This is the total number of perimeter cells for a (sideLength+1)x(sideLength+1) board.
+  const boardCells = Array(totalCells).fill(null);
 
-    for (let i = 0; i < board.length; i++) {
-        cells[y * sideLength + x] = board[i];
-        if (x + dx >= sideLength || x + dx < 0 || y + dy >= sideLength || y + dy < 0 || (x + dx !== 0 && y + dy !== 0 && x + dx !== sideLength -1 && y + dy !== sideLength -1)) {
-            [dx, dy] = [-dy, dx];
-        }
-        x += dx;
-        y += dy;
-    }
-    return cells;
-  }, [board, sideLength]);
+  // Place board properties onto the perimeter
+  for(let i=0; i< board.length; i++){
+      let x, y;
+      if (i <= sideLength) { // Bottom row
+          x = i;
+          y = sideLength;
+      } else if (i <= sideLength * 2) { // Right column
+          x = sideLength;
+          y = sideLength - (i - sideLength);
+      } else if (i <= sideLength * 3) { // Top row
+          x = sideLength - (i - sideLength * 2);
+          y = 0;
+      } else { // Left column
+          x = 0;
+          y = i - sideLength * 3;
+      }
+      const index = y * (sideLength + 1) + x;
+      if(index < boardCells.length) {
+          boardCells[index] = board[i];
+      }
+  }
 
   const activePlayer = players.find(p => p.id === activePlayerId);
   const activePosition = activePlayer?.position;
@@ -226,20 +233,24 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
       <div
         className="relative w-full h-full grid"
         style={{
-          gridTemplateColumns: `repeat(${sideLength}, minmax(40px, 1fr))`,
-          gridTemplateRows: `repeat(${sideLength}, minmax(40px, 1fr))`,
+          gridTemplateColumns: `repeat(${sideLength + 1}, minmax(40px, 1fr))`,
+          gridTemplateRows: `repeat(${sideLength + 1}, minmax(40px, 1fr))`,
           gap: `${TILE_GAP}px`,
         }}
       >
-        {gridCells.map((property: Property | null, index: number) => {
+        {boardCells.map((property: Property | null, index: number) => {
           if (!property) return <div key={index} />;
 
           const ownerColor = property.ownerId ? players.find(p => p.id === property.ownerId)?.color : undefined;
           const playersOnTile = players.filter(pl => pl.position === property.id && pl.status !== 'bankrupt');
           const isActive = activePosition === property.id;
+          
+          let gridRow = Math.floor(index / (sideLength + 1)) + 1;
+          let gridColumn = (index % (sideLength + 1)) + 1;
+
 
           return (
-            <div key={property.id} className="p-0">
+            <div key={property.id} className="p-0" style={{ gridRow, gridColumn }}>
               <Tile property={property} ownerColor={ownerColor} playersOnTile={playersOnTile} isActive={isActive} />
             </div>
           );
@@ -247,7 +258,7 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
 
         <div
           className="flex items-center justify-center flex-col p-2 rounded-xl bg-gradient-to-tl from-white/60 to-transparent dark:from-black/40"
-          style={{ gridArea: `2 / 2 / ${sideLength} / ${sideLength}` }}
+          style={{ gridArea: `2 / 2 / ${sideLength + 1} / ${sideLength + 1}` }}
         >
           <h2 className="text-lg md:text-2xl font-extrabold text-violet-700 dark:text-violet-300">التاجر المتعلّم</h2>
           
