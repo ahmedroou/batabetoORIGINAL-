@@ -255,7 +255,7 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
     const property = game.educatedMerchantState?.board?.[player.position];
     if (!property) {
       // Just an empty tile - end the turn
-      await endTurnInternal(gameRef, tx, playerId);
+      await endTurnInternal(gameRef, tx, playerId, `${player.name} وصل إلى مربع فارغ.`);
       return;
     }
 
@@ -297,7 +297,7 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
       }
 
       // Own property, end turn
-      await endTurnInternal(gameRef, tx, playerId);
+      await endTurnInternal(gameRef, tx, playerId, `${player.name} وصل إلى عقاره.`);
       return;
     }
 
@@ -324,7 +324,7 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
     }
 
     // Default: end turn
-    await endTurnInternal(gameRef, tx, playerId);
+    await endTurnInternal(gameRef, tx, playerId, `${player.name} وصل إلى نقطة البداية.`);
   });
 }
 
@@ -397,6 +397,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
   const gameRef = doc(db, 'games', gameId);
 
   await runTransaction(db, async (tx) => {
+    // --- READ PHASE ---
     const snap = await tx.get(gameRef);
     if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
     const game = snap.data() as Game;
@@ -408,11 +409,18 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
 
     const question = ensure(game.educatedMerchantState?.currentQuestion, 'السؤال الحالي مفقود.');
     const isCorrect = answer === question.answer;
-    const board = [...ensure(game.educatedMerchantState?.board, 'اللوح مفقود.')];
-    const players = [...game.players];
-    const playerIndex = getPlayerIndexById(players, playerId);
 
+    // --- PREPARE WRITES ---
+    let board = [...ensure(game.educatedMerchantState?.board, 'اللوح مفقود.')];
+    let players = [...game.players];
+    const playerIndex = getPlayerIndexById(players, playerId);
     let activityMessage = '';
+    let finalUpdates: any = {
+      // These will be deleted regardless of outcome
+      'educatedMerchantState.pendingPurchase': deleteField(),
+      'educatedMerchantState.currentQuestion': deleteField(),
+      'educatedMerchantState.timerEndsAt': deleteField(),
+    };
 
     if (isCorrect) {
       const propertyIndex = board.findIndex((p) => p.id === pending.propertyId);
@@ -420,27 +428,19 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         board[propertyIndex] = { ...board[propertyIndex], ownerId: playerId, color: players[playerIndex].color } as Property;
       }
       activityMessage = `${players[playerIndex].name} أجاب بشكل صحيح وامتلك "${board[propertyIndex].name}"!`;
+      finalUpdates['educatedMerchantState.newlyBoughtPropertyId'] = pending.propertyId;
     } else {
       const refund = Math.round(pending.price / 4);
       players[playerIndex] = { ...players[playerIndex], money: (players[playerIndex].money || 0) + refund };
       activityMessage = `${players[playerIndex].name} أجاب بشكل خاطئ واسترد ${refund} دينار.`;
-    }
-    
-    const finalUpdates = {
-      players,
-      'educatedMerchantState.board': board,
-      'educatedMerchantState.pendingPurchase': deleteField(),
-      'educatedMerchantState.currentQuestion': deleteField(),
-      'educatedMerchantState.timerEndsAt': deleteField(),
-    } as any;
-    
-    // Add newlyBoughtPropertyId only if correct, otherwise delete it.
-    if(isCorrect) {
-      finalUpdates['educatedMerchantState.newlyBoughtPropertyId'] = pending.propertyId
-    } else {
       finalUpdates['educatedMerchantState.newlyBoughtPropertyId'] = deleteField();
     }
     
+    // Merge the player and board updates into the final update object.
+    finalUpdates.players = players;
+    finalUpdates['educatedMerchantState.board'] = board;
+    
+    // `endTurnInternal` no longer reads; it just processes the prepared updates.
     await endTurnInternal(gameRef, tx, playerId, activityMessage, finalUpdates);
   });
 }
@@ -509,23 +509,25 @@ async function endTurnInternal(
   extraMessage = '',
   extraUpdates: any = {}
 ): Promise<void> {
-  // Re-fetch and merge
   const snap = await tx.get(gameRef);
   if (!snap.exists()) throw new Error('اللعبة غير موجودة أثناء إنهاء الدور.');
 
-  // Merge snapshot data and any pending updates passed in
   const baseGame = snap.data() as Game;
-  const mergedGame = { ...baseGame, ...extraUpdates } as Game;
-
-  // Clean up properties owned by bankrupt players
-  const updatedBoard = (mergedGame.educatedMerchantState?.board || []).map((prop) => {
-    const owner = mergedGame.players.find((p) => p.id === prop.ownerId);
+  
+  // Create a merged game state from base and pending updates *before* processing logic.
+  let mergedGameData = { ...baseGame, ...extraUpdates };
+  // Deep merge for players and board if they exist in extraUpdates
+  if (extraUpdates.players) mergedGameData.players = [...extraUpdates.players];
+  if (extraUpdates['educatedMerchantState.board']) mergedGameData.educatedMerchantState!.board = [...extraUpdates['educatedMerchantState.board']];
+  
+  // Clean up properties owned by bankrupt players based on the *merged* state.
+  const updatedBoard = (mergedGameData.educatedMerchantState?.board || []).map((prop) => {
+    const owner = mergedGameData.players.find((p) => p.id === prop.ownerId);
     if (owner && owner.status === 'bankrupt') return { ...prop, ownerId: null, color: undefined } as Property;
     return prop;
   });
 
-  // Ensure bankrupt players have zero money
-  const updatedPlayers = mergedGame.players.map((p) => {
+  const updatedPlayers = mergedGameData.players.map((p) => {
     if (p.status === 'bankrupt' && (p.money || 0) > 0) return { ...p, money: 0 };
     return p;
   });
@@ -535,121 +537,86 @@ async function endTurnInternal(
   // If <= 1 active player => game over
   if (activePlayers.length <= 1) {
     const winner = activePlayers[0];
-
-    // Build ranking: winner first, then eliminated players ordered by bankruptAt (most recent elimination first)
-    const eliminated = updatedPlayers
-      .filter((p) => p.id !== winner?.id)
-      .map((p) => ({ id: p.id, name: p.name, bankruptAt: p.bankruptAt?.toMillis() || 0 }))
-      .sort((a, b) => (b.bankruptAt || 0) - (a.bankruptAt || 0));
-
-    const ranking = [
-      { playerId: winner?.id || 'none', name: winner?.name || '—', rank: 1, bankruptAt: winner?.bankruptAt || null },
-      ...eliminated.map((p, i) => ({ playerId: p.id, name: p.name, rank: i + 2, bankruptAt: p.bankruptAt ? Timestamp.fromMillis(p.bankruptAt) : null })),
-    ];
+    const ranking = updatedPlayers
+      .sort((a, b) => {
+          if (a.status === 'alive' && b.status !== 'alive') return -1;
+          if (b.status === 'alive' && a.status !== 'alive') return 1;
+          if (a.status === 'bankrupt' && b.status === 'bankrupt') return (b.bankruptAt?.toMillis() || 0) - (a.bankruptAt?.toMillis() || 0);
+          return (b.money || 0) - (a.money || 0);
+      })
+      .map((p, i) => ({ playerId: p.id, name: p.name, rank: i + 1, bankruptAt: p.bankruptAt || null }));
 
     const finalGameData: any = {
-      ...mergedGame,
-      players: updatedPlayers,
       gameState: 'final_results',
-      gameResult: {
-        winner: winner?.id || 'none',
-        message: `اللاعب ${winner?.name || ''} هو الناجي الأخير!`,
-        ranking,
-      },
+      gameResult: { winner: winner?.id || 'none', message: `اللاعب ${winner?.name || ''} هو الناجي الأخير!`, ranking },
+      'educatedMerchantState.timerEndsAt': deleteField(),
+      players: updatedPlayers,
     };
-
     tx.update(gameRef, finalGameData);
-    await updateLeagueScoresForGameEnd(finalGameData);
+    await updateLeagueScoresForGameEnd({ ...baseGame, ...finalGameData });
     return;
   }
 
   // Normal flow: find next alive player's index
-  const turnOrder = ensure(mergedGame.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود أثناء إنهاء الدور.');
-  const currentTurnIndex = ensure(mergedGame.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود أثناء إنهاء الدور.');
+  const turnOrder = ensure(mergedGameData.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود أثناء إنهاء الدور.');
+  const currentTurnIndex = ensure(mergedGameData.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود أثناء إنهاء الدور.');
 
   let nextTurnIndex = findNextAliveIndex(turnOrder, updatedPlayers, currentTurnIndex);
 
   if (nextTurnIndex === -1) {
-    // Edge-case: pick first alive player's index in turnOrder
     const firstAliveId = updatedPlayers.find((p) => p.status === 'alive')?.id;
     const altIndex = turnOrder.findIndex((id) => id === firstAliveId);
     if (altIndex === -1) {
-      // no alive players? end game defensively
       const finalGameData: any = {
-        ...mergedGame,
-        players: updatedPlayers,
-        gameState: 'final_results',
-        gameResult: { winner: 'none', message: 'انتهت اللعبة: لا يوجد فائز.' },
+        gameState: 'final_results', gameResult: { winner: 'none', message: 'انتهت اللعبة: لا يوجد فائز.' }, players: updatedPlayers
       };
       tx.update(gameRef, finalGameData);
-      await updateLeagueScoresForGameEnd(finalGameData);
+      await updateLeagueScoresForGameEnd({ ...baseGame, ...finalGameData });
       return;
     }
     nextTurnIndex = altIndex;
   }
 
-  // movesThisRound logic: a "round" is when every alive player made a move
-  const currentMoves = mergedGame.educatedMerchantState?.movesThisRound || 0;
-  const activeCount = updatedPlayers.filter((p) => p.status === 'alive').length;
+  const currentMoves = mergedGameData.educatedMerchantState?.movesThisRound || 0;
   let newMoves = currentMoves + 1;
-  let newRound = mergedGame.round || 1;
-  let movesReset = false;
+  let newRound = mergedGameData.round || 1;
 
-  if (newMoves >= activeCount) {
-    newRound = (mergedGame.round || 1) + 1;
-    newMoves = 0; // reset for the next round
-    movesReset = true;
+  if (newMoves >= activePlayers.length) {
+    newRound++;
+    newMoves = 0;
   }
 
-  const maxRounds = mergedGame.educatedMerchantState?.settings?.maxRounds || DEFAULT_MAX_ROUNDS;
+  const maxRounds = mergedGameData.educatedMerchantState?.settings?.maxRounds || DEFAULT_MAX_ROUNDS;
 
   if (newRound > maxRounds) {
-    // Determine winner by highest money among non-bankrupt players
     const contenders = updatedPlayers.filter((p) => p.status !== 'bankrupt');
     const winner = contenders.reduce((a, b) => ((a.money || 0) > (b.money || 0) ? a : b));
-
-    // Ranking by money desc
-    const ranking = updatedPlayers
-      .slice()
-      .sort((a, b) => (b.money || 0) - (a.money || 0))
-      .map((p, i) => ({ playerId: p.id, name: p.name, rank: i + 1, bankruptAt: p.bankruptAt || null }));
-
-    const finalGameData: any = {
-      ...mergedGame,
-      players: updatedPlayers,
-      gameState: 'final_results',
-      gameResult: {
-        winner: winner?.id || 'none',
-        message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.`,
-        ranking,
-      },
-    };
-
+    const ranking = updatedPlayers.slice().sort((a, b) => (b.money || 0) - (a.money || 0)).map((p, i) => ({ playerId: p.id, name: p.name, rank: i + 1, bankruptAt: p.bankruptAt || null }));
+    const finalGameData: any = { gameState: 'final_results', gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.`, ranking }, players: updatedPlayers };
     tx.update(gameRef, finalGameData);
-    await updateLeagueScoresForGameEnd(finalGameData);
+    await updateLeagueScoresForGameEnd({ ...baseGame, ...finalGameData });
     return;
   }
-
-  // Continue game: prepare final updates
+  
   const finalUpdates: any = {
     ...extraUpdates,
     gameState: 'rolling',
     'educatedMerchantState.board': updatedBoard,
     'educatedMerchantState.currentTurnIndex': nextTurnIndex,
     'educatedMerchantState.lastDiceRoll': deleteField(),
-    'educatedMerchantState.newlyBoughtPropertyId': deleteField(),
     'educatedMerchantState.timerEndsAt': addActionTimer(),
     round: newRound,
     players: updatedPlayers,
     'educatedMerchantState.movesThisRound': newMoves,
   };
-
+  
   if (extraMessage) {
     finalUpdates['educatedMerchantState.activityLog'] = arrayUnion({ message: extraMessage, timestamp: nowTimestamp() });
   }
 
   tx.update(gameRef, finalUpdates);
 }
+
 
 export async function endTurn(gameId: string, playerId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
@@ -665,14 +632,3 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
     await endTurnInternal(gameRef, tx, playerId, `${game.players.find((p) => p.id === playerId)?.name} أنهى دوره.`);
   });
 }
-
-// -----------------------------
-// End of module
-// -----------------------------
-
-/* أفكار مقبلة / تحسينات ممكنة:
-   - فصل بعض المنطق إلى طبقات خدمة منفصلة (service layer) للاختبار.
-   - إضافة اختبار تكاملي باستخدام Firestore emulator.
-   - إضافة hooks/Cloud Functions لإرسال إشعارات لحظية (push notifications) عند انتهاء الدور أو نهاية اللعبة.
-   - تحسين استعلام الأسئلة لتعتمد على فهرس عشوائي أو pre-sharded collections لتقليل القراءة.
-*/
