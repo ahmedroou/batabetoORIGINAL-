@@ -241,7 +241,7 @@ export default function QuestionManagementTab() {
         if(game === 'trap-answer') {
             setActiveCategoryManager('trap-answer');
         } else if (game === 'educated-merchant') {
-            setActiveCategoryManager('educated-merchant');
+             setActiveCategoryManager('educated-merchant');
         } else {
              setActiveCategoryManager(null);
         }
