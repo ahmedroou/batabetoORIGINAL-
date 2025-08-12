@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -25,17 +24,15 @@ import { PROPERTY_NAMES } from '@/data/properties';
 import { getEducatedMerchantCategories } from './admin';
 
 const BOARD_SIZE = 28;
-const START_MONEY = 1000;
-const PASS_GO_REWARD = 150;
+const START_MONEY = 1500;
+const PASS_GO_REWARD = 200;
 const QUESTION_TIME_SECONDS = 25;
 
 async function generateBoard(categories: string[]): Promise<Property[]> {
     const board: Property[] = new Array(BOARD_SIZE);
 
-    // Place Start at index 0
     board[0] = { id: 0, type: 'start', name: 'نقطة البداية', category: '', price: 0, rent: 0, ownerId: null };
 
-    // Place 3 Fine tiles at random positions, avoiding start
     const finePositions = new Set<number>();
     while(finePositions.size < 3) {
         const pos = Math.floor(Math.random() * (BOARD_SIZE - 1)) + 1;
@@ -50,9 +47,8 @@ async function generateBoard(categories: string[]): Promise<Property[]> {
 
     const availablePropertyNames = shuffle([...PROPERTY_NAMES]);
 
-    // Fill the rest with properties
     for (let i = 1; i < BOARD_SIZE; i++) {
-        if (!board[i]) { // If the spot is empty
+        if (!board[i]) {
             const name = availablePropertyNames.pop() || `عقار ${i}`;
             const price = (Math.floor(Math.random() * ( (500 - 100) / 10 + 1)) + (100 / 10) ) * 10;
             const category = categories[Math.floor(Math.random() * categories.length)];
@@ -62,7 +58,7 @@ async function generateBoard(categories: string[]): Promise<Property[]> {
                 name: name,
                 category: category,
                 price: price,
-                rent: Math.round(price / 4), // Rent is 1/4th of price
+                rent: Math.round(price / 4),
                 ownerId: null,
             };
         }
@@ -131,7 +127,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         let moneyUpdate = 0;
         let activityMessage = `${updatedPlayers[playerIndex].name} رمى ${diceRoll} وانتقل إلى "${game.educatedMerchantState!.board[newPosition].name}".`;
 
-        if (newPosition < oldPosition && oldPosition + diceRoll >= BOARD_SIZE) { // Player passed GO
+        if (newPosition < oldPosition && oldPosition + diceRoll >= BOARD_SIZE) { 
             moneyUpdate = PASS_GO_REWARD;
             updatedPlayers[playerIndex].money! += moneyUpdate;
             activityMessage += ` وحصل على ${PASS_GO_REWARD} دينار للمرور بنقطة البداية.`;
@@ -298,9 +294,39 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
             'educatedMerchantState.currentQuestion': deleteField(),
             'educatedMerchantState.timerEndsAt': deleteField(),
             'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }),
+            'educatedMerchantState.newlyBoughtPropertyId': isCorrect ? pendingPurchase.propertyId : deleteField(),
             gameState: 'turn_end'
         });
     });
+}
+
+export async function handleTimeout(gameId: string, playerId: string) {
+    // This function will be called by the timer on the client side.
+    // It should handle both question timeouts and potentially others in the future.
+    const gameRef = doc(db, 'games', gameId);
+     await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) return;
+        const game = gameDoc.data() as Game;
+
+        if (game.gameState === 'question' && game.educatedMerchantState?.pendingPurchase?.playerId === playerId) {
+             const pendingPurchase = game.educatedMerchantState!.pendingPurchase!;
+             const playerIndex = game.players.findIndex(p => p.id === playerId);
+             const updatedPlayers = [...game.players];
+             const refund = Math.round(pendingPurchase.price / 4);
+             updatedPlayers[playerIndex].money! += refund;
+             const activityMessage = `${updatedPlayers[playerIndex].name} لم يجب في الوقت واسترد ${refund} دينار.`;
+
+             transaction.update(gameRef, {
+                players: updatedPlayers,
+                'educatedMerchantState.pendingPurchase': deleteField(),
+                'educatedMerchantState.currentQuestion': deleteField(),
+                'educatedMerchantState.timerEndsAt': deleteField(),
+                'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: new Date() }),
+                gameState: 'turn_end'
+             });
+        }
+     });
 }
 
 
@@ -335,8 +361,8 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
         const newRound = nextTurnIndex < currentTurnIndex ? (game.round || 1) + 1 : game.round || 1;
         
         if (newRound > (game.educatedMerchantState!.settings.maxRounds || 20)) {
-             const winner = game.players.filter(p=>p.status !== 'bankrupt').reduce((prev, current) => ((prev.money || 0) > (current.money || 0)) ? prev : current);
-             transaction.update(gameRef, {
+            const winner = game.players.filter(p=>p.status !== 'bankrupt').reduce((prev, current) => ((prev.money || 0) > (current.money || 0)) ? prev : current);
+            transaction.update(gameRef, {
                 gameState: 'final_results',
                 gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name} بأعلى رصيد.` }
             });
@@ -344,6 +370,7 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
              transaction.update(gameRef, {
                 gameState: 'rolling',
                 'educatedMerchantState.currentTurnIndex': nextTurnIndex,
+                'educatedMerchantState.newlyBoughtPropertyId': deleteField(),
                 round: newRound
             });
         }

@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { motion } from 'framer-motion';
 import { PlayerAvatar } from '../PlayerAvatar';
-import { HandCoins, Home } from 'lucide-react';
+import { HandCoins, Home, Building } from 'lucide-react';
 import type { Player } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +20,7 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
     const currentPlayerId = turnOrder[currentTurnIndex];
 
     return (
-        <Card className="h-full">
+        <Card className="h-full bg-gray-900/50 border-gray-700 text-white">
             <CardHeader>
                 <CardTitle>اللاعبون</CardTitle>
             </CardHeader>
@@ -33,9 +33,11 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
                                 layout
                                 className={cn(
                                     "flex items-center justify-between p-2 rounded-lg transition-all border-l-4",
-                                    player.id === currentPlayerId ? 'bg-primary/20 border-primary shadow-lg' : 'bg-muted border-transparent',
+                                    player.id === currentPlayerId ? 'bg-primary/20 border-primary shadow-lg' : 'bg-slate-800 border-transparent',
                                     player.status === 'bankrupt' && 'opacity-50 bg-destructive/20 border-destructive'
                                 )}
+                                animate={{ scale: player.id === currentPlayerId ? 1.05 : 1 }}
+                                transition={{ type: "spring", stiffness: 300, damping: 20 }}
                             >
                                 <div className="flex items-center gap-3">
                                     <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10"/>

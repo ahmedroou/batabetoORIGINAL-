@@ -22,57 +22,55 @@ const CORNER_INDICES = [0, 7, 14, 21];
 
 const getPositionStyles = (index: number, gridSize: number): React.CSSProperties => {
   const sideLength = gridSize - 1;
-  let top = '', left = '', right = '', bottom = '';
+  let top = '0px', left = '0px', transform = '';
+
+  const TILE_SIZE = 112; // 28rem
+  const GAP_SIZE = 4; // 1rem
 
   if (index >= 0 && index < sideLength) { // Top row
-    top = '0%';
-    left = `${(index / sideLength) * 100}%`;
+    top = '0px';
+    left = `${index * (TILE_SIZE + GAP_SIZE)}px`;
   } else if (index >= sideLength && index < sideLength * 2) { // Right col
-    top = `${((index - sideLength) / sideLength) * 100}%`;
-    right = '0%';
+    top = `${(index - sideLength) * (TILE_SIZE + GAP_SIZE)}px`;
+    left = `${sideLength * (TILE_SIZE + GAP_SIZE)}px`;
   } else if (index >= sideLength * 2 && index < sideLength * 3) { // Bottom row
-    bottom = '0%';
-    right = `${((index - sideLength * 2) / sideLength) * 100}%`;
+    top = `${sideLength * (TILE_SIZE + GAP_SIZE)}px`;
+    left = `${(sideLength - (index - sideLength * 2)) * (TILE_SIZE + GAP_SIZE)}px`;
   } else { // Left col
-    bottom = `${((index - sideLength * 3) / sideLength) * 100}%`;
-    left = '0%';
+    top = `${(sideLength - (index - sideLength * 3)) * (TILE_SIZE + GAP_SIZE)}px`;
+    left = '0px';
   }
-  return { top, left, right, bottom, position: 'absolute' };
+  return { top, left, transform, position: 'absolute' };
 };
 
 
-const Tile = ({ property, playersOnTile }: { property: Property, playersOnTile: Player[] }) => {
+const Tile = ({ property, playersOnTile, isNewlyBought }: { property: Property, playersOnTile: Player[], isNewlyBought: boolean }) => {
     let Icon = Building;
-    let bgColor = 'bg-slate-700';
+    let baseBgColor = 'bg-slate-700';
     let borderColor = 'border-slate-500';
 
     if (property.type === 'start') {
         Icon = Trophy;
-        bgColor = 'bg-yellow-500';
+        baseBgColor = 'bg-yellow-500';
         borderColor = 'border-yellow-300';
     } else if (property.type === 'fine') {
         Icon = Banknote;
-        bgColor = 'bg-red-700';
+        baseBgColor = 'bg-red-700';
         borderColor = 'border-red-500';
     } else if (property.ownerId) {
-        bgColor = property.color || 'bg-gray-500';
-        borderColor = 'border-gray-400';
+        // If there's an owner, we use inline style for dynamic color
+        borderColor = property.color || 'border-gray-400';
     }
+    
+    // Style for dynamically colored background
+    const tileStyle = property.ownerId ? { backgroundColor: property.color } : {};
 
     return (
-        <div className={cn("w-28 h-28 rounded-lg border-2 flex flex-col items-center justify-center p-2 text-center text-white shadow-lg", bgColor, borderColor)}>
+        <div className={cn("w-28 h-28 rounded-lg border-2 flex flex-col items-center justify-center p-2 text-center text-white shadow-lg transition-all duration-500", baseBgColor, borderColor, isNewlyBought && 'animate-pulse-glow')} style={tileStyle}>
             <Icon className="w-6 h-6 mb-1"/>
             <p className="text-xs font-bold leading-tight line-clamp-2">{property.name}</p>
             {property.type === 'property' && <p className="text-xs font-mono mt-1">{property.price} دينار</p>}
             {property.type === 'fine' && <p className="text-xs font-mono mt-1">{property.fineAmount} دينار</p>}
-
-            {playersOnTile.length > 0 && (
-                <div className="absolute -bottom-2 -right-2 flex -space-x-2">
-                    {playersOnTile.map(p => (
-                        <PlayerAvatar key={p.id} avatarId={p.avatarId} className="w-8 h-8 rounded-full border-2 border-white"/>
-                    ))}
-                </div>
-            )}
         </div>
     );
 };
@@ -84,9 +82,11 @@ export function GameBoard({ game, self }: GameBoardProps) {
         return <div>جاري تحميل لوحة اللعب...</div>;
     }
     
-    const gridSize = 8; // 8x8 grid for 28 tiles (7 per side)
+    const gridSize = 8;
     const turnOrder = game.educatedMerchantState?.turnOrder || [];
-    const currentTurnPlayer = turnOrder[game.educatedMerchantState?.currentTurnIndex || 0];
+    const currentTurnPlayerId = turnOrder[game.educatedMerchantState?.currentTurnIndex || 0];
+    const newlyBoughtPropertyId = game.educatedMerchantState?.newlyBoughtPropertyId;
+
 
     const renderCenterContent = () => {
         switch(game.gameState) {
@@ -95,7 +95,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
             case 'movement':
                  return <p className="text-2xl text-white animate-pulse">يتحرك اللاعب...</p>;
             case 'property_action':
-                const player = game.players.find(p => p.id === currentTurnPlayer);
+                const player = game.players.find(p => p.id === currentTurnPlayerId);
                 if (player) {
                      const property = board[player.position];
                      return <PropertyCard game={game} self={self} property={property} />;
@@ -109,7 +109,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
                             {game.gameState === 'turn_end' ? 'انتهى الدور' : 'منطقة التحكم'}
                         </h2>
                          <p className="text-muted-foreground mt-2">
-                           {game.gameState === 'turn_end' ? `في انتظار اللاعب ${game.players.find(p=>p.id === currentTurnPlayer)?.name} لإنهاء دوره.` : `حالة اللعبة: ${game.gameState}`}
+                           {game.gameState === 'turn_end' ? `في انتظار اللاعب التالي...` : `حالة اللعبة: ${game.gameState}`}
                         </p>
                     </div>
                 );
@@ -126,22 +126,32 @@ export function GameBoard({ game, self }: GameBoardProps) {
             </div>
 
             <div className="flex-grow flex items-center justify-center">
-                 <div className="relative w-[700px] h-[700px]">
-                    <div className="absolute inset-20 bg-gray-900/50 rounded-2xl flex items-center justify-center p-8 shadow-inner">
+                 <div className="relative w-[950px] h-[950px]">
+                    <div className="absolute inset-28 bg-gray-900/50 rounded-2xl flex items-center justify-center p-8 shadow-inner">
                         {renderCenterContent()}
                     </div>
                     {board.map((property, index) => {
-                         const playersOnTile = game.players.filter(p => p.position === index);
+                         const playersOnTile = game.players.filter(p => p.position === index && p.status !== 'bankrupt');
+                         const isNewlyBought = property.id === newlyBoughtPropertyId;
                          return (
-                            <motion.div 
-                                key={index} 
-                                style={getPositionStyles(index, gridSize)}
-                                initial={{ opacity: 0, scale: 0.5 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: index * 0.05, type: 'spring' }}
-                            >
-                                <Tile property={property} playersOnTile={playersOnTile} />
-                            </motion.div>
+                            <div key={index} style={getPositionStyles(index, gridSize)} className="w-28 h-28">
+                                <Tile property={property} playersOnTile={[]} isNewlyBought={isNewlyBought} />
+                                {playersOnTile.length > 0 && (
+                                     <div className="absolute inset-0 flex items-center justify-center -space-x-2 pointer-events-none">
+                                        {playersOnTile.map((p, i) => (
+                                            <motion.div
+                                                key={p.id}
+                                                layoutId={`player-piece-${p.id}`}
+                                                className="z-10"
+                                                initial={false}
+                                                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                            >
+                                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full border-2 border-white shadow-lg" />
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                          )
                     })}
                 </div>

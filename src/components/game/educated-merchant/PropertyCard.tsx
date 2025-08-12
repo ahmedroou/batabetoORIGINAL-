@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { purchaseProperty, endTurn } from '@/lib/actions/educated-merchant';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Banknote, Building } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { motion } from 'framer-motion';
 
 interface PropertyCardProps {
     game: Game;
@@ -44,16 +45,19 @@ export function PropertyCard({ game, self, property }: PropertyCardProps) {
     }
 
     return (
-        <Card className="w-full max-w-sm text-center">
+        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring" }}>
+        <Card className="w-full max-w-sm text-center bg-slate-800 border-primary text-white">
             <CardHeader>
+                 <Building className="w-12 h-12 mx-auto text-primary" />
                 <CardTitle>{property.name}</CardTitle>
-                <CardDescription>
+                <CardDescription className="text-slate-400">
                     قسم: {property.category}
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="text-4xl font-bold text-primary">
-                    {property.price} دينار
+                <div className="text-4xl font-bold text-yellow-400 flex items-center justify-center gap-2">
+                    <Banknote />
+                    {property.price}
                 </div>
             </CardContent>
             <CardFooter className="flex gap-2">
@@ -66,5 +70,6 @@ export function PropertyCard({ game, self, property }: PropertyCardProps) {
             </CardFooter>
              {!canAfford && <p className="text-xs text-destructive text-center pb-2">لا تملك ما يكفي من المال لشراء هذا العقار.</p>}
         </Card>
+        </motion.div>
     );
 }

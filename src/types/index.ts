@@ -698,7 +698,7 @@ export interface Game {
     settings: { 
         maxRounds: number,
         categories: string[],
-    };
+     };
     board: Property[];
     turnOrder: string[];
     currentTurnIndex: number;
@@ -712,6 +712,7 @@ export interface Game {
         price: number;
         questionId: string;
     };
+    newlyBoughtPropertyId?: number;
   };
 }
 
