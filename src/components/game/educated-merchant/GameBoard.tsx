@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useMemo } from "react";
@@ -13,7 +12,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
+} from "@/components/ui/tooltip";
 
 interface GameBoardProps {
   gameId: string;
@@ -27,11 +26,11 @@ interface GameBoardProps {
   maxRounds: number;
 }
 
-const TILE_GAP = 6; // px
+const TILE_GAP = 6; // px - kept as constant for easy tuning
 
-function hexToRgb(hex: string) {
+function hexToRgb(hex: string | undefined | null) {
   if (!hex) return null;
-  const h = hex.replace('#', '');
+  const h = hex.replace("#", "");
   if (h.length === 3) {
     return {
       r: parseInt(h[0] + h[0], 16),
@@ -49,20 +48,19 @@ function hexToRgb(hex: string) {
   return null;
 }
 
-function hexToRgba(hex: string, alpha = 1) {
+function hexToRgba(hex: string | undefined | null, alpha = 1) {
   const rgb = hexToRgb(hex);
   if (!rgb) return `rgba(0,0,0,${alpha})`;
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
 }
 
-function getContrastColor(hex?: string) {
-  if (!hex) return '#000';
+function getContrastColor(hex?: string | null) {
+  if (!hex) return "#000";
   const rgb = hexToRgb(hex);
-  if (!rgb) return '#000';
+  if (!rgb) return "#000";
   const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
-  return lum > 0.5 ? '#000000' : '#ffffff';
+  return lum > 0.5 ? "#000000" : "#ffffff";
 }
-
 
 function categoryHue(category?: string) {
   const s = (category || "generic").toString();
@@ -80,22 +78,50 @@ function categoryGradientStyle(category?: string) {
   } as React.CSSProperties;
 }
 
+// Small animated token used to visually represent players on tiles.
+function PlayerToken({ player }: { player: Player }) {
+  return (
+    <motion.div
+      layoutId={`token-${player.id}`}
+      initial={{ scale: 0.9, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0.8, opacity: 0 }}
+      transition={{ type: "spring", stiffness: 400, damping: 28 }}
+      className="w-5 h-5 md:w-6 md:h-6 rounded-full overflow-hidden border-2 border-white shadow-sm"
+      title={player.name}
+      aria-hidden={false}
+      role="img"
+    >
+      <PlayerAvatar avatarId={player.avatarId} className="w-full h-full" />
+    </motion.div>
+  );
+}
+
 const Tile = React.forwardRef<HTMLDivElement, {
   property: Property;
   ownerColor?: string | undefined;
   playersOnTile?: Player[];
   isActive?: boolean;
-}>(({ property, ownerColor, playersOnTile = [], isActive = false }, ref) => {
-  const catStyle = property.type === 'property' ? categoryGradientStyle(property.category) : undefined;
-  
+  onActivate?: () => void;
+}>(({ property, ownerColor, playersOnTile = [], isActive = false, onActivate }, ref) => {
+  const catStyle = property.type === "property" ? categoryGradientStyle(property.category) : undefined;
+
   const ownerOverlayStyle: React.CSSProperties | undefined = ownerColor
     ? {
-        background: `linear-gradient(135deg, ${hexToRgba(ownerColor, 0.15)}, ${hexToRgba(ownerColor, 0.28)}), ${catStyle?.background || 'transparent'}`,
+        background: `linear-gradient(135deg, ${hexToRgba(ownerColor, 0.12)}, ${hexToRgba(ownerColor, 0.22)}), ${catStyle?.background || "transparent"}`,
         borderColor: ownerColor,
       }
     : undefined;
 
-  const textColor = getContrastColor(ownerColor);
+  // Determine text color: prefer owner color contrast, otherwise use dark on light backgrounds
+  const textColor = ownerColor ? getContrastColor(ownerColor) : (property.type === 'property' ? '#111827' : '#0f172a');
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onActivate?.();
+    }
+  };
 
   return (
     <TooltipProvider>
@@ -109,19 +135,26 @@ const Tile = React.forwardRef<HTMLDivElement, {
             whileHover={{ scale: 1.02 }}
             transition={{ type: 'spring', stiffness: 300, damping: 24 }}
             className={cn(
-              'relative rounded-lg border p-2 flex flex-col items-center justify-center text-center select-none',
+              'relative rounded-lg border p-2 flex flex-col items-center justify-center text-center select-none focus:outline-none focus:ring-4',
               property.type === 'start' ? 'shadow-inner' : 'shadow',
-              isActive ? 'ring-4 ring-offset-2 ring-opacity-60' : '',
+              isActive ? 'ring-offset-2 ring-opacity-60' : '',
               ownerColor ? 'ring-2' : ''
             )}
-             style={{
-                ...(ownerOverlayStyle || catStyle || {}),
-                borderWidth: 2,
-                borderStyle: 'solid',
-                borderColor: isActive ? ownerColor || 'hsl(var(--primary))' : ownerColor || (catStyle?.borderColor || 'hsl(var(--border))'),
-                boxShadow: ownerColor ? `0 8px 22px ${hexToRgba(ownerColor, 0.2)}` : undefined,
-             }}
+            style={{
+              ...(ownerOverlayStyle || catStyle || {}),
+              borderWidth: 2,
+              borderStyle: 'solid',
+              borderColor: isActive ? (ownerColor || 'hsl(var(--primary))') : (ownerColor || (catStyle?.borderColor || 'hsl(var(--border))')),
+              boxShadow: ownerColor ? `0 8px 22px ${hexToRgba(ownerColor, 0.14)}` : undefined,
+              minHeight: 56,
+              padding: 8,
+            }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={handleKey}
+            onClick={() => onActivate?.()}
             aria-label={property.name}
+            aria-current={isActive}
           >
             <div className="flex-grow flex flex-col items-center justify-center min-h-[36px]">
               {property.type === 'start' && <Home className="w-5 h-5 md:w-6 md:h-6 text-green-700" />}
@@ -148,11 +181,12 @@ const Tile = React.forwardRef<HTMLDivElement, {
                 {playersOnTile.slice(0, 4).map((pl, i) => (
                   <div
                     key={pl.id}
-                    className="w-4 h-4 md:w-5 md:h-5 rounded-full border-2 border-white shadow-sm overflow-hidden"
-                    style={{ transform: `translateX(${i * 6}px)`, zIndex: 20 + i }}
+                    className="-ml-1"
+                    style={{ zIndex: 20 + i }}
                     title={pl.name}
+                    aria-hidden={false}
                   >
-                    <PlayerAvatar avatarId={pl.avatarId} className="w-full h-full" />
+                    <PlayerToken player={pl} />
                   </div>
                 ))}
                 {playersOnTile.length > 4 && (
@@ -163,16 +197,16 @@ const Tile = React.forwardRef<HTMLDivElement, {
           </motion.div>
         </TooltipTrigger>
         <TooltipContent>
-            <p className='font-bold'>{property.name}</p>
-            {property.type === 'property' && (
-                <>
-                    <p>السعر: {property.price} د.ع</p>
-                    <p>الإيجار: {property.rent} د.ع</p>
-                </>
-            )}
-             {property.type === 'fine' && (
-                <p>غرامة: {property.fineAmount} د.ع</p>
-             )}
+          <p className='font-bold'>{property.name}</p>
+          {property.type === 'property' && (
+            <>
+              <p>السعر: {property.price} د.ع</p>
+              <p>الإيجار: {property.rent} د.ع</p>
+            </>
+          )}
+          {property.type === 'fine' && (
+            <p>غرامة: {property.fineAmount} د.ع</p>
+          )}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -180,44 +214,61 @@ const Tile = React.forwardRef<HTMLDivElement, {
 });
 Tile.displayName = 'Tile';
 
-export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId, gameState, currentRound, maxRounds }: GameBoardProps) {
+function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePlayerId, gameState, currentRound, maxRounds }: GameBoardProps) {
+  // Defensive fallback
   if (!board || board.length === 0) {
     return <div className="text-center p-6 text-lg">جاري تحميل اللوحة...</div>;
   }
-  
-  const sideLength = Math.floor((board.length + 3) / 4);
-  const totalCells = (sideLength + 1) * 4 - 4; // This is the total number of perimeter cells for a (sideLength+1)x(sideLength+1) board.
-  const boardCells = Array(totalCells).fill(null);
 
-  // Place board properties onto the perimeter
-  for(let i=0; i< board.length; i++){
-      let x, y;
-      if (i <= sideLength) { // Bottom row
-          x = i;
-          y = sideLength;
-      } else if (i <= sideLength * 2) { // Right column
-          x = sideLength;
-          y = sideLength - (i - sideLength);
-      } else if (i <= sideLength * 3) { // Top row
-          x = sideLength - (i - sideLength * 2);
-          y = 0;
-      } else { // Left column
-          x = 0;
-          y = i - sideLength * 3;
-      }
-      const index = y * (sideLength + 1) + x;
-      if(index < boardCells.length) {
-          boardCells[index] = board[i];
-      }
-  }
+  // Compute board geometry once (memoized)
+  const { sideLength, totalCells, gridCells } = useMemo(() => {
+    const side = Math.floor((board.length + 3) / 4);
+    const cells: Array<Property | null> = [];
+
+    // Bottom row (left to right)
+    for (let i = 0; i <= side; i++) cells.push(board[i]);
+    // Right column (bottom to top)
+    for (let i = side + 1; i <= side * 2; i++) cells.push(board[i]);
+    // Top row (right to left)
+    for (let i = side * 2 + 1; i <= side * 3; i++) cells.push(board[i]);
+    // Left column (top to bottom)
+    for (let i = side * 3 + 1; i < board.length; i++) cells.push(board[i]);
+
+    const finalGrid: Array<Property | null> = Array((side + 1) * (side + 1)).fill(null);
+    let currentCellIndex = 0;
+    
+    // Place bottom row
+    for(let i=0; i<=side; i++) finalGrid[side * (side+1) + i] = cells[currentCellIndex++];
+    // Place right col
+    for(let i=side-1; i>=0; i--) finalGrid[i * (side+1) + side] = cells[currentCellIndex++];
+    // Place top row
+    for(let i=side-1; i>=0; i--) finalGrid[i] = cells[currentCellIndex++];
+    // Place left col
+    for(let i=1; i<side; i++) finalGrid[i * (side+1)] = cells[currentCellIndex++];
+
+    return { sideLength: side, totalCells: board.length, gridCells: finalGrid };
+  }, [board]);
+
+  // Fast lookup map: propertyId -> players on that tile
+  const playersByPosition = useMemo(() => {
+    const map = new Map<string | number, Player[]>();
+    for (const p of players) {
+      if (!p || p.status === 'bankrupt') continue;
+      if (!map.has(p.position)) map.set(p.position, []);
+      map.get(p.position)!.push(p);
+    }
+    return map;
+  }, [players]);
 
   const activePlayer = players.find(p => p.id === activePlayerId);
   const activePosition = activePlayer?.position;
 
   useEffect(() => {
+    // Automatic server-side action when movement phase occurs and dice rolled
     const movePlayer = async () => {
       if (diceRoll === null || !isMyTurn) return;
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // small delay to let frontend animations start
+      await new Promise(resolve => setTimeout(resolve, 700));
       try {
         await handlePropertyAction(gameId, activePlayerId);
       } catch (e) {
@@ -228,46 +279,56 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
     if (gameState === 'movement') movePlayer();
   }, [diceRoll, isMyTurn, gameId, activePlayerId, gameState]);
 
+  // click handler: offer a manual activation for tile (helpful for debugging / accessibility)
+  const handleTileActivate = async (prop: Property) => {
+    if (!isMyTurn) return;
+    if (activePosition !== prop.id) return;
+    try {
+      await handlePropertyAction(gameId, activePlayerId);
+    } catch (e) {
+      console.error('manual handlePropertyAction failed', e);
+    }
+  };
+
+  // Determine grid template sizes (responsive)
+  const minTile = 52; // px
+  const template = `repeat(${sideLength + 1}, minmax(${minTile}px, 1fr))`;
+
   return (
-    <div className="p-2 rounded-3xl shadow-2xl bg-gradient-to-br from-violet-50 to-violet-100 dark:from-zinc-900 dark:to-zinc-800 w-full max-w-[92vh] mx-auto">
+    <div className="p-3 rounded-3xl shadow-2xl bg-gradient-to-br from-violet-50 to-violet-100 dark:from-zinc-900 dark:to-zinc-800 w-full max-w-[92vh] mx-auto">
       <div
         className="relative w-full h-full grid"
         style={{
-          gridTemplateColumns: `repeat(${sideLength + 1}, minmax(40px, 1fr))`,
-          gridTemplateRows: `repeat(${sideLength + 1}, minmax(40px, 1fr))`,
+          gridTemplateColumns: template,
+          gridTemplateRows: template,
           gap: `${TILE_GAP}px`,
         }}
       >
-        {boardCells.map((property: Property | null, index: number) => {
+        {gridCells.map((property: Property | null, index: number) => {
           if (!property) return <div key={index} />;
 
           const ownerColor = property.ownerId ? players.find(p => p.id === property.ownerId)?.color : undefined;
-          const playersOnTile = players.filter(pl => pl.position === property.id && pl.status !== 'bankrupt');
+          const playersOnTile = playersByPosition.get(property.id) || [];
           const isActive = activePosition === property.id;
-          
-          let gridRow = Math.floor(index / (sideLength + 1)) + 1;
-          let gridColumn = (index % (sideLength + 1)) + 1;
-
 
           return (
-            <div key={property.id} className="p-0" style={{ gridRow, gridColumn }}>
-              <Tile property={property} ownerColor={ownerColor} playersOnTile={playersOnTile} isActive={isActive} />
-            </div>
+            <Tile key={property.id} property={property} ownerColor={ownerColor} playersOnTile={playersOnTile} isActive={isActive} onActivate={() => handleTileActivate(property)} />
           );
         })}
 
+        {/* Center hub */}
         <div
-          className="flex items-center justify-center flex-col p-2 rounded-xl bg-gradient-to-tl from-white/60 to-transparent dark:from-black/40"
-          style={{ gridArea: `2 / 2 / ${sideLength + 1} / ${sideLength + 1}` }}
+          className="flex items-center justify-center flex-col p-3 rounded-xl bg-gradient-to-tl from-white/60 to-transparent dark:from-black/40"
+          style={{ gridArea: `2 / 2 / ${sideLength + 1} / ${sideLength + 1}`, minHeight: 120 }}
         >
           <h2 className="text-lg md:text-2xl font-extrabold text-violet-700 dark:text-violet-300">التاجر المتعلّم</h2>
-          
-          <div className="text-center my-2 bg-black/10 dark:bg-white/10 p-2 rounded-lg">
+
+          <div className="text-center my-2 bg-black/10 dark:bg-white/10 p-2 rounded-lg w-full max-w-[220px]">
             <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">الجولة</p>
             <p className="text-xl font-bold font-mono text-gray-800 dark:text-gray-100">{currentRound}/{maxRounds}</p>
           </div>
 
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">
             <div className={cn("px-3 py-1 rounded-full text-sm font-semibold shadow-sm flex items-center gap-2", isMyTurn ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-800 dark:bg-zinc-700 dark:text-zinc-200') }>
               <span>{isMyTurn ? 'دورك الآن' : 'انتظر دورك'}</span>
             </div>
@@ -278,8 +339,20 @@ export function GameBoard({ board, players, gameId, diceRoll, isMyTurn, activePl
               )}
             </div>
           </div>
+
+          {/* quick players preview */}
+          <div className="mt-3 flex items-center gap-2 flex-wrap justify-center">
+            {players.map(pl => (
+              <div key={pl.id} className="flex items-center gap-2 px-2 py-1 rounded-md bg-white/60 dark:bg-black/30">
+                <PlayerAvatar avatarId={pl.avatarId} className="w-6 h-6 rounded-full" />
+                <div className="text-sm font-medium">{pl.name}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+export { GameBoard };
