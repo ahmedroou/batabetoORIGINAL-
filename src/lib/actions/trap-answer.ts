@@ -35,6 +35,7 @@ import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { calculateTrapAnswerScores } from './helpers/trap-answer-helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
+import { getTrapAnswerCategories } from './admin';
 
 // --- Constants for Game Logic ---
 const SIMILARITY_THRESHOLD = 0.85;
@@ -68,7 +69,14 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
         if (game.players.length < 2) throw new Error("The game requires at least 2 players.");
 
         const turnOrder = shuffle(game.players.map(p => p.id));
-        const allCategories = game.trapAnswerState?.settings?.categories || [];
+        
+        // Fetch the most up-to-date categories directly from the source of truth
+        const categoriesResult = await getTrapAnswerCategories();
+        if (!categoriesResult.success || !categoriesResult.categories || categoriesResult.categories.length === 0) {
+            throw new Error("لا يمكن بدء اللعبة، لم يتم العثور على أقسام أسئلة صالحة.");
+        }
+        const allCategories = categoriesResult.categories;
+        
         const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
 
         transaction.update(gameRef, {
