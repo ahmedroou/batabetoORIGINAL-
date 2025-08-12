@@ -35,19 +35,18 @@ interface GameBoardProps {
 
 const TILE_MIN_SIZE = 64; // px for min tile size; responsive grid uses minmax
 
-export function GameBoard({ players, properties, tilesPerSide, startLabel = "بداية", className }: GameBoardProps) {
+export const GameBoard: React.FC<GameBoardProps> = ({ players, properties, tilesPerSide, startLabel = "بداية", className }) => {
   // compute minimal side length n such that perimeter 4n - 4 >= properties.length
   const size = useMemo(() => {
     const m = Math.max(0, properties?.length ?? 0);
     const minimal = Math.max(3, Math.ceil((m + 4) / 4)); // fixed: use Math.ceil to avoid missing tiles
     return typeof tilesPerSide === 'number' && tilesPerSide >= 3 ? Math.max(tilesPerSide, minimal) : minimal;
-  }, [properties?.length, tilesPerSide]);
+  }, [properties.length, tilesPerSide]);
 
   const perimeterLen = 4 * size - 4;
 
   // create ordered tile slots around perimeter (fill with null if properties shorter)
   const tileSlots = useMemo(() => {
-    if (!properties) return [];
     const slots: Array<Property | null> = Array.from({ length: perimeterLen }, (_, i) => properties[i] ?? null);
     return slots;
   }, [properties, perimeterLen]);
