@@ -198,9 +198,8 @@ export async function submitHint(gameId: string, playerId: string, word: string,
 }
 
 export async function revealCard(gameId: string, playerId: string, cardText: string) {
-    let gameDataForLeagueUpdate: Game | null = null;
+    const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-        const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
@@ -215,14 +214,9 @@ export async function revealCard(gameId: string, playerId: string, cardText: str
         const card = cards[cardIndex];
         if (card.revealed) return;
 
-        const newCard = { ...card, revealed: true };
-        const newCards = [...cards.slice(0, cardIndex), newCard, ...cards.slice(cardIndex + 1)];
+        cards[cardIndex] = { ...card, revealed: true };
         
-        let updates: any = {
-             'wordWarState.cards': newCards,
-        };
-
-        const guessesLeft = wwState.guessesLeft! - 1;
+        let updates: any = { 'wordWarState.cards': cards };
 
         const checkWinCondition = (currentCards: WordWarCard[]) => {
             const redLeft = currentCards.filter(c => c.color === 'red' && !c.revealed).length;
@@ -230,52 +224,34 @@ export async function revealCard(gameId: string, playerId: string, cardText: str
             if (redLeft === 0) return { winner: 'red', message: 'كشف الفريق الأحمر جميع كلماته!' };
             if (blueLeft === 0) return { winner: 'blue', message: 'كشف الفريق الأزرق جميع كلماته!' };
             return null;
-        }
-
-        let winner: Game['gameResult'] | null = null;
-        let turnShouldEnd = false;
+        };
 
         if (card.color === 'assassin') {
-             winner = { winner: wwState.turn === 'red' ? 'blue' : 'red', message: 'تم كشف القاتل!' };
-        } else if (card.color === 'neutral') {
-            turnShouldEnd = true;
-        } else if (card.color !== wwState.turn) {
-            turnShouldEnd = true;
+            updates.gameResult = { winner: wwState.turn === 'red' ? 'blue' : 'red', message: 'تم كشف القاتل!' };
+        } else if (card.color !== wwState.turn || (wwState.guessesLeft! - 1) <= 0) {
+            updates['wordWarState.turn'] = wwState.turn === 'red' ? 'blue' : 'red';
         }
 
-        // Check for win AFTER revealing the current card but BEFORE ending the turn
-        const winCheckResult = checkWinCondition(newCards);
+        const winCheckResult = checkWinCondition(cards);
         if (winCheckResult) {
-            winner = winCheckResult;
+            updates.gameResult = winCheckResult;
         }
         
-        if (winner) {
+        if (updates.gameResult) {
             updates.gameState = 'board_reveal';
-            updates.gameResult = winner;
             updates['wordWarState.timerEndsAt'] = deleteField();
-            gameDataForLeagueUpdate = { ...game, ...updates, gameResult: winner }; // Capture state for league update
-            transaction.update(gameRef, updates);
-            return;
-        } 
-        
-        if (turnShouldEnd || guessesLeft <= 0) {
-            const turnTime = game.wordWarState?.settings?.turnTime || 60;
+        } else if (updates['wordWarState.turn']) {
             updates.gameState = 'guide_turn';
-            updates['wordWarState.turn'] = wwState.turn === 'red' ? 'blue' : 'red';
             updates['wordWarState.currentHint'] = null;
             updates['wordWarState.guessesLeft'] = 0;
             updates['wordWarState.suspicions'] = {};
-            updates['wordWarState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + turnTime * 1000);
+            updates['wordWarState.timerEndsAt'] = Timestamp.fromMillis(Date.now() + (game.wordWarState?.settings?.turnTime || 60) * 1000);
         } else {
-            updates['wordWarState.guessesLeft'] = guessesLeft;
+            updates['wordWarState.guessesLeft'] = wwState.guessesLeft! - 1;
         }
 
         transaction.update(gameRef, updates);
     });
-
-    if (gameDataForLeagueUpdate) {
-        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
-    }
 }
 
 export async function endTurn(gameId: string, playerId: string) {

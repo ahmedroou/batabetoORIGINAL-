@@ -196,13 +196,13 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
                     return;
                 }
                 setIsSubmitting(true);
+                // Fire and forget
                 wordWarActions.submitHint(game.id, self.id, trimmedHint, hintNumber).catch((error) => {
                      toast({ title: "خطأ", description: error.message, variant: "destructive" });
-                }).finally(() => {
-                    setHintWord('');
-                    setHintNumber(1);
-                    setIsSubmitting(false);
+                     setIsSubmitting(false); // Only re-enable on error
                 });
+                setHintWord('');
+                setHintNumber(1);
             };
 
             return (
@@ -470,7 +470,7 @@ export function WordWarGame({ game, self }: WordWarGameProps) {
             
         return (
             <div className={cn("w-full h-screen flex flex-col p-1 sm:p-2 md:p-4 bg-gray-50 transition-shadow duration-500", turnGlowClass)}>
-                 {(wwState.timerEndsAt && game.gameState !== 'final_results') && (
+                 {(wwState.timerEndsAt && game.gameState !== 'final_results' && game.gameState !== 'board_reveal') && (
                     <div className="absolute top-4 right-4 z-10">
                         <CountdownTimer 
                             expiryTimestamp={wwState.timerEndsAt.toMillis()}
