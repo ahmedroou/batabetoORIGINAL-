@@ -46,6 +46,14 @@ export async function getPlayerFromUserId(userId: string): Promise<UserProfile> 
     
     const humiliation = userData.humiliation ? { ...userData.humiliation, at: userData.humiliation.at?.toDate(), until: userData.humiliation.until?.toDate() } : null;
     const originalAvatarToRevert = userData.originalAvatarToRevert ? { ...userData.originalAvatarToRevert, until: userData.originalAvatarToRevert.until?.toDate() } : null;
+    
+    const lastPunishmentTimestamp = userData.lastPunishmentTimestamp || {};
+    for (const key in lastPunishmentTimestamp) {
+        if (lastPunishmentTimestamp[key]?.toDate) {
+            lastPunishmentTimestamp[key] = lastPunishmentTimestamp[key].toDate();
+        }
+    }
+
 
     return {
         uid: userId,
@@ -56,6 +64,7 @@ export async function getPlayerFromUserId(userId: string): Promise<UserProfile> 
         decrees,
         humiliation,
         originalAvatarToRevert,
+        lastPunishmentTimestamp
     } as UserProfile;
 }
 
@@ -111,6 +120,13 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
             const humiliation = data.humiliation ? { ...data.humiliation, at: (data.humiliation.at as any)?.toDate(), until: (data.humiliation.until as any)?.toDate() } : null;
             const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: (data.originalAvatarToRevert.until as any)?.toDate() } : null;
 
+            const lastPunishmentTimestamp = data.lastPunishmentTimestamp || {};
+            for (const key in lastPunishmentTimestamp) {
+                if (lastPunishmentTimestamp[key]?.toDate) {
+                    lastPunishmentTimestamp[key] = lastPunishmentTimestamp[key].toDate();
+                }
+            }
+
             return {
                 uid: doc.id,
                 name: data.name || 'Unknown',
@@ -140,7 +156,7 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
                 alliances: data.alliances || [],
                 decrees: decrees,
                 duelChallenges: (data.duelChallenges || []),
-                lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
+                lastPunishmentTimestamp: lastPunishmentTimestamp,
                 originalAvatarToRevert: originalAvatarToRevert,
                 unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
                 isPunished: data.isPunished || false,

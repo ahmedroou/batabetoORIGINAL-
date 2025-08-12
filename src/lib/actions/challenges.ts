@@ -92,7 +92,14 @@ export async function getChallenges(): Promise<Challenge[]> {
                 if (top3Ids.length > 0) {
                     const usersQuery = query(collection(db, 'users'), where('__name__', 'in', top3Ids));
                     const usersSnapshot = await getDocs(usersQuery);
-                    const topUsersData = usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+                    const topUsersData = usersSnapshot.docs.map(doc => {
+                         const data = doc.data();
+                         // Convert Timestamps inside user profile to Dates
+                         const decrees = (data.decrees || []).map((d: any) => ({ ...d, until: d.until?.toDate ? d.until.toDate() : d.until }));
+                         const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
+                         const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
+                         return { uid: doc.id, ...data, decrees, humiliation, originalAvatarToRevert } as UserProfile;
+                    });
                     challenge.topParticipants = topUsersData.sort((a,b) => (challenge.scores[b.uid] || 0) - (challenge.scores[a.uid] || 0));
                 } else {
                      challenge.topParticipants = [];
@@ -136,7 +143,13 @@ export async function getChallengeDetails(challengeId: string): Promise<Challeng
                 // Fetch only the user profiles for the top 10
                 const usersQuery = query(collection(db, 'users'), where('__name__', 'in', top10Ids));
                 const usersSnapshot = await getDocs(usersQuery);
-                const topUsersData = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
+                const topUsersData = usersSnapshot.docs.map(d => {
+                     const data = d.data();
+                     const decrees = (data.decrees || []).map((dec: any) => ({ ...dec, until: dec.until?.toDate ? dec.until.toDate() : dec.until }));
+                     const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
+                     const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
+                     return { uid: d.id, ...data, decrees, humiliation, originalAvatarToRevert } as UserProfile;
+                });
 
                 // Sort the fetched users again to ensure correct order
                 challengeData.participants = topUsersData.sort((a, b) => (challengeData.scores[b.uid] || 0) - (challengeData.scores[a.uid] || 0));

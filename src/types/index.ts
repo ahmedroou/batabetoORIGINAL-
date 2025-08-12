@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -384,7 +385,7 @@ export interface UserProfile {
   alliances?: Alliance[];
   decrees?: Decree[];
   duelChallenges?: DuelChallenge[];
-  lastPunishmentTimestamp?: Record<string, number>; // { [targetId]: timestamp }
+  lastPunishmentTimestamp?: Record<string, Date>; // { [targetId]: date }
   originalAvatarToRevert?: { 
       id: string; 
       until: Date;
