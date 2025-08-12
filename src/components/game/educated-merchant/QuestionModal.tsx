@@ -21,7 +21,6 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
     const question = game.educatedMerchantState?.currentQuestion;
     const pendingPurchase = game.educatedMerchantState?.pendingPurchase;
     const isMyTurnToAnswer = pendingPurchase?.playerId === self.id;
-    const questionAsker = game.players.find(p => p.id === pendingPurchase?.playerId);
     const isOpen = game.gameState === 'question';
 
     const isHost = game.hostId === self.id;
@@ -80,7 +79,7 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
                     <DialogTitle className="text-2xl">{question.question}</DialogTitle>
                     {!isMyTurnToAnswer && (
                         <DialogDescription className="text-base text-yellow-300 animate-pulse">
-                            في انتظار {questionAsker?.name || 'اللاعب'} للإجابة...
+                            في انتظار {game.players.find(p => p.id === pendingPurchase.playerId)?.name || 'اللاعب'} للإجابة...
                         </DialogDescription>
                     )}
                 </DialogHeader>

@@ -171,8 +171,8 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
         }
         const calculateProgress = () => {
             if (!challenge.createdAt || !challenge.endsAt) return;
-            const createdAt = (challenge.createdAt instanceof Timestamp) ? challenge.createdAt.toDate() : challenge.createdAt;
-            const endsAt = (challenge.endsAt instanceof Timestamp) ? challenge.endsAt.toDate() : challenge.endsAt;
+            const createdAt = (challenge.createdAt instanceof Timestamp) ? challenge.createdAt.toDate() : new Date(challenge.createdAt);
+            const endsAt = (challenge.endsAt instanceof Timestamp) ? challenge.endsAt.toDate() : new Date(challenge.endsAt);
             if (!createdAt || !endsAt) return;
             const totalDuration = endsAt.getTime() - createdAt.getTime();
             const elapsed = Date.now() - createdAt.getTime();

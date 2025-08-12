@@ -34,7 +34,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
             case 'rolling':
             case 'movement':
             case 'property_action':
-            case 'question':
+            case 'question': // GameBoard now handles showing the QuestionModal
             case 'turn_end':
                 return <GameBoard game={game} self={self} />;
 

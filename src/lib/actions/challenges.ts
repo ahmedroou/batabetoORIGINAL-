@@ -292,11 +292,15 @@ export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
             const data = doc.data();
             const createdAt = data.createdAt;
             const endsAt = data.endsAt;
+            // Ensure both are valid date-like objects before conversion
+            const safeCreatedAt = createdAt?.toDate ? createdAt.toDate() : (createdAt ? new Date(createdAt) : new Date());
+            const safeEndsAt = endsAt?.toDate ? endsAt.toDate() : (endsAt ? new Date(endsAt) : new Date());
+
             return {
                 id: doc.id,
                 ...data,
-                createdAt: (createdAt instanceof Timestamp) ? createdAt.toDate() : createdAt,
-                endsAt: (endsAt instanceof Timestamp) ? endsAt.toDate() : endsAt,
+                createdAt: safeCreatedAt,
+                endsAt: safeEndsAt,
             } as Challenge;
         });
 
