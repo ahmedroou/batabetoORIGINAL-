@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dices, Loader2 } from 'lucide-react';
@@ -14,11 +14,28 @@ interface DiceRollProps { game: Game; self: Player }
 
 const DEFAULT_DICE_MAX = 5;
 const MIN_FACE_RENDER = 6;
-const FACE_HEIGHT = 80;
+const FACE_HEIGHT = 80; // px, ensure consistency with CSS
 
-// Use a stable timeout implementation
-const setRafTimeout = (fn: () => void, ms: number) => window.setTimeout(fn, ms);
-const clearRafTimeout = (id: number | null) => { if (id) window.clearTimeout(id); };
+// Custom hook for a safer setTimeout that cleans up on unmount
+const useRafTimeout = () => {
+  const timeoutId = useRef<number | null>(null);
+
+  const set = useCallback((fn: () => void, ms: number) => {
+    timeoutId.current = window.setTimeout(fn, ms);
+  }, []);
+
+  const clear = useCallback(() => {
+    if (timeoutId.current) {
+      window.clearTimeout(timeoutId.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => clear(); // Cleanup on unmount
+  }, [clear]);
+
+  return { set, clear };
+};
 
 
 function RollingNumber({ number, maxFace = MIN_FACE_RENDER, isAnimating = false }: { number: number; maxFace?: number; isAnimating?: boolean }) {
@@ -51,7 +68,8 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const [localHistory, setLocalHistory] = useState<number[]>([]);
 
   const animIntervalRef = useRef<number | null>(null);
-  const fallbackTimeoutRef = useRef<number | null>(null);
+  const { set: setFallbackTimeout, clear: clearFallbackTimeout } = useRafTimeout();
+  const lastNonceRef = useRef<number | null>(null);
 
   const turnOrder = game.educatedMerchantState?.turnOrder || [];
   const currentTurnPlayerId = turnOrder[game.educatedMerchantState?.currentTurnIndex || 0];
@@ -59,7 +77,6 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const lastRoll = game.educatedMerchantState?.lastDiceRoll;
   const rollNonce = game.educatedMerchantState?.rollAnimationNonce ?? null;
   const diceMax = game.educatedMerchantState?.settings?.diceMax ?? DEFAULT_DICE_MAX;
-  const lastNonceRef = useRef<number | null>(null);
 
   const startLocalSpin = useCallback(() => {
     if (animIntervalRef.current) return;
@@ -68,7 +85,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
       setOptimisticNumber(Math.floor(Math.random() * Math.max(6, diceMax)) + 1);
     }, 80);
 
-    fallbackTimeoutRef.current = setRafTimeout(() => {
+    setFallbackTimeout(() => {
       if (animIntervalRef.current) {
         window.clearInterval(animIntervalRef.current!);
         animIntervalRef.current = null;
@@ -76,23 +93,26 @@ export function DiceRoll({ game, self }: DiceRollProps) {
       setIsRolling(false);
       setOptimisticNumber(null);
       toast({ title: 'انتهى وقت الاستجابة', description: 'لم نتلق نتيجة من الخادم — حاول مرة أخرى', variant: 'destructive' });
-    }, 8000) as unknown as number;
-  }, [diceMax, toast]);
+    }, 8000);
+  }, [diceMax, setFallbackTimeout, toast]);
 
   const stopLocalSpin = useCallback(() => {
     if (animIntervalRef.current) { window.clearInterval(animIntervalRef.current); animIntervalRef.current = null; }
-    if (fallbackTimeoutRef.current) { clearRafTimeout(fallbackTimeoutRef.current); fallbackTimeoutRef.current = null; }
+    clearFallbackTimeout();
     setIsRolling(false);
     setOptimisticNumber(null);
-  }, []);
-
+  }, [clearFallbackTimeout]);
+  
+  // Effect to handle server-driven roll animation
   useEffect(() => {
     if (rollNonce === null) return;
-    if (lastNonceRef.current === rollNonce) return; 
-    lastNonceRef.current = rollNonce;
-    startLocalSpin();
+    if (lastNonceRef.current !== rollNonce) {
+        lastNonceRef.current = rollNonce;
+        startLocalSpin();
+    }
   }, [rollNonce, startLocalSpin]);
-
+  
+  // Effect to stop animation and show final result when `lastRoll` is updated
   useEffect(() => {
     if (typeof lastRoll === 'number') {
       stopLocalSpin();
@@ -100,23 +120,24 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     }
   }, [lastRoll, stopLocalSpin]);
 
+  // General cleanup on unmount
   useEffect(() => {
     return () => {
-      if (animIntervalRef.current) window.clearInterval(animIntervalRef.current);
-      if (fallbackTimeoutRef.current) clearRafTimeout(fallbackTimeoutRef.current);
+        if(animIntervalRef.current) window.clearInterval(animIntervalRef.current);
+        clearFallbackTimeout();
     };
-  }, []);
+  }, [clearFallbackTimeout]);
 
   const handleRoll = useCallback(async () => {
     if (!isMyTurn || isRolling) return;
-    startLocalSpin();
     try {
       await rollDice(game.id, self.id);
+      // No need to call startLocalSpin here as it will be triggered by the nonce change
     } catch (err: any) {
       stopLocalSpin();
       toast({ title: 'فشل رمي النرد', description: err?.message || 'حدث خطأ أثناء الاتصال بالخادم', variant: 'destructive' });
     }
-  }, [game.id, isMyTurn, isRolling, self.id, startLocalSpin, stopLocalSpin, toast]);
+  }, [game.id, isMyTurn, isRolling, self.id, stopLocalSpin, toast]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent) => {
     if ((e.key === 'Enter' || e.key === ' ') && isMyTurn && !isRolling) {
@@ -127,7 +148,6 @@ export function DiceRoll({ game, self }: DiceRollProps) {
 
   const displayedNumber = typeof lastRoll === 'number' ? lastRoll : optimisticNumber;
 
-  // The main component render
   if (typeof displayedNumber === 'number' && !isRolling) {
       return (
             <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
@@ -164,11 +184,9 @@ export function DiceRoll({ game, self }: DiceRollProps) {
                 {isRolling ? <Loader2 className="animate-spin" /> : (isMyTurn ? 'ارمِ النرد' : 'انتظر')}
               </Button>
             </div>
-            <div className="text-xs text-slate-400">
-                {isRolling ? 'يتم تشغيل رسوم متحركة محلية أثناء انتظار نتيجة الخادم.' : 'اضغط لرمي النرد.'}
-            </div>
+            
             <div className="w-full mt-2 text-left">
-              <div className="text-sm text-slate-200 mb-1">سجل الرميات (محلي):</div>
+              <div className="text-sm text-slate-200 mb-1">آخر الرميات:</div>
               <div className="flex gap-2">
                 {localHistory.length === 0 ? (
                   <div className="text-slate-500">لا يوجد سجل بعد</div>

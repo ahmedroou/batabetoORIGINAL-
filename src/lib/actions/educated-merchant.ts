@@ -305,29 +305,36 @@ export async function handlePropertyLanding(gameId: string, playerId: string): P
       tx.update(gameRef, updates);
       return;
     }
-
+    
+    // NEW: Fine space logic
     if (property.type === 'fine') {
-      const fine = property.fineAmount || DEFAULT_FINE;
-      const playerIndex = getPlayerIndexById(game.players, playerId);
-      const updatedPlayers = [...game.players];
+        const fineAmount = property.fineAmount || DEFAULT_FINE;
 
-      if ((updatedPlayers[playerIndex].money || 0) < fine) {
-        updatedPlayers[playerIndex].money = 0;
-        updatedPlayers[playerIndex].status = 'bankrupt';
-        updatedPlayers[playerIndex].bankruptAt = nowTimestamp();
-        const activityMessage = `${updatedPlayers[playerIndex].name} أفلس لأنه لم يستطع دفع الغرامة.`;
+        const questionsCol = collection(db, 'educated_merchant_questions');
+        let q = query(questionsCol, where("category", "==", "قسم الغرامات"), limit(1));
+        let qs = await getDocs(q);
+        
+        // No specific fine questions found, fallback to any question
+        if (qs.empty) {
+            const anyQ = query(collection(db, 'educated_merchant_questions'), limit(1));
+            qs = await getDocs(anyQ);
+        }
 
-        const { updates } = endTurnInternal(game, playerId, activityMessage, { players: updatedPlayers });
-        tx.update(gameRef, updates);
+        if (qs.empty) throw new Error("لا توجد أسئلة متاحة في قاعدة البيانات للغرامة.");
+
+        const questionDoc = qs.docs[0];
+        const questionData = { id: questionDoc.id, ...questionDoc.data() } as EducatedMerchantQuestion;
+
+        const options = shuffle([...(questionData.dummyAnswers || []), questionData.answer]);
+        questionData.options = options;
+
+        tx.update(gameRef, {
+            gameState: 'question',
+            'educatedMerchantState.currentQuestion': questionData,
+            'educatedMerchantState.timerEndsAt': addActionTimer(),
+            'educatedMerchantState.pendingFine': { playerId, fineAmount },
+        });
         return;
-      } else {
-        updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) - fine;
-        const activityMessage = `${updatedPlayers[playerIndex].name} دفع غرامة قدرها ${fine} دينار.`;
-
-        const { updates } = endTurnInternal(game, playerId, activityMessage, { players: updatedPlayers });
-        tx.update(gameRef, updates);
-        return;
-      }
     }
 
     // Default: end turn (e.g. landing on Start)
@@ -433,8 +440,10 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
     const game = snap.data() as Game;
 
-    const pending = game.educatedMerchantState?.pendingPurchase;
-    if (game.gameState !== 'question' || !pending || pending.playerId !== playerId) {
+    const pendingPurchase = game.educatedMerchantState?.pendingPurchase;
+    const pendingFine = game.educatedMerchantState?.pendingFine;
+    
+    if (game.gameState !== 'question' || (!pendingPurchase && !pendingFine) || (pendingPurchase?.playerId !== playerId && pendingFine?.playerId !== playerId)) {
       return; 
     }
 
@@ -446,33 +455,49 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     const playerIndex = getPlayerIndexById(players, playerId);
     let activityMessage = '';
     let extraUpdates: any = {
-      'educatedMerchantState.pendingPurchase': deleteField(),
       'educatedMerchantState.currentQuestion': deleteField(),
       'educatedMerchantState.timerEndsAt': deleteField(),
     };
-
-    if (isCorrect) {
-      const propertyIndex = board.findIndex((p) => p.id === pending.propertyId);
-      if (propertyIndex !== -1) {
-        board[propertyIndex] = { ...board[propertyIndex], ownerId: playerId, color: players[playerIndex].color } as Property;
-      }
-      activityMessage = `${players[playerIndex].name} أجاب بشكل صحيح وامتلك "${board[propertyIndex].name}"!`;
-      extraUpdates['educatedMerchantState.newlyBoughtPropertyId'] = pending.propertyId;
-    } else {
-      const refund = Math.round(pending.price / 4);
-      players[playerIndex] = { ...players[playerIndex], money: (players[playerIndex].money || 0) + refund };
-      activityMessage = `${players[playerIndex].name} أجاب بشكل خاطئ واسترد ${refund} دينار.`;
-      extraUpdates['educatedMerchantState.newlyBoughtPropertyId'] = deleteField();
+    
+    if(pendingPurchase) {
+        extraUpdates['educatedMerchantState.pendingPurchase'] = deleteField();
+         if (isCorrect) {
+            const propertyIndex = board.findIndex((p) => p.id === pendingPurchase.propertyId);
+            if (propertyIndex !== -1) {
+                board[propertyIndex] = { ...board[propertyIndex], ownerId: playerId, color: players[playerIndex].color } as Property;
+            }
+            activityMessage = `${players[playerIndex].name} أجاب بشكل صحيح وامتلك "${board[propertyIndex].name}"!`;
+            extraUpdates['educatedMerchantState.newlyBoughtPropertyId'] = pendingPurchase.propertyId;
+        } else {
+            const refund = Math.round(pendingPurchase.price / 4);
+            players[playerIndex] = { ...players[playerIndex], money: (players[playerIndex].money || 0) + refund };
+            activityMessage = `${players[playerIndex].name} أجاب بشكل خاطئ واسترد ${refund} دينار.`;
+            extraUpdates['educatedMerchantState.newlyBoughtPropertyId'] = deleteField();
+        }
+    } else if (pendingFine) {
+        extraUpdates['educatedMerchantState.pendingFine'] = deleteField();
+        if(isCorrect) {
+            activityMessage = `${players[playerIndex].name} أجاب بشكل صحيح ونجا من الغرامة!`;
+        } else {
+            const fine = pendingFine.fineAmount;
+            if ((players[playerIndex].money || 0) < fine) {
+                players[playerIndex].money = 0;
+                players[playerIndex].status = 'bankrupt';
+                players[playerIndex].bankruptAt = nowTimestamp();
+                activityMessage = `${players[playerIndex].name} أجاب خطأ وأفلس لأنه لم يستطع دفع الغرامة.`;
+            } else {
+                players[playerIndex].money = (players[playerIndex].money || 0) - fine;
+                activityMessage = `${players[playerIndex].name} أجاب خطأ ودفع غرامة ${fine} دينار.`;
+            }
+        }
     }
     
     extraUpdates.players = players;
     extraUpdates['educatedMerchantState.board'] = board;
     
-    // Now call endTurnInternal with the complete set of pre-calculated updates
     const { updates, isGameOver } = endTurnInternal(game, playerId, activityMessage, extraUpdates);
     gameEnded = isGameOver;
     
-    // If the game is over, prepare the data for the league update *outside* the transaction.
     if (isGameOver) {
         finalGameDataForLeagueUpdate = { ...game, ...updates };
     }
@@ -480,7 +505,6 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     tx.update(gameRef, updates);
   });
 
-  // Perform the league update *after* the main game transaction has successfully committed.
   if (gameEnded && finalGameDataForLeagueUpdate) {
     await updateLeagueScoresForGameEnd(finalGameDataForLeagueUpdate);
   }
@@ -516,23 +540,40 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
         break;
       }
       case 'question': {
-        const pending = game.educatedMerchantState?.pendingPurchase;
-        if (pending) {
-          const playerIndex = getPlayerIndexById(game.players, pending.playerId);
-          const updatedPlayers = [...game.players];
-          const refund = Math.round((pending.price || 0) / 4);
-          updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + refund;
-
-          const activityMessage = `${currentPlayer?.name} لم يجب في الوقت واسترد ${refund} دينار.`;
-          
-          const baseUpdates = {
-            players: updatedPlayers,
-            'educatedMerchantState.pendingPurchase': deleteField(),
-            'educatedMerchantState.currentQuestion': deleteField(),
-            'educatedMerchantState.timerEndsAt': deleteField(),
-          };
-
-          Object.assign(updates, endTurnInternal(game, currentPlayerId, activityMessage, baseUpdates).updates);
+        const pendingPurchase = game.educatedMerchantState?.pendingPurchase;
+        const pendingFine = game.educatedMerchantState?.pendingFine;
+        if (pendingPurchase) {
+            const playerIndex = getPlayerIndexById(game.players, pendingPurchase.playerId);
+            const updatedPlayers = [...game.players];
+            const refund = Math.round((pendingPurchase.price || 0) / 4);
+            updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + refund;
+            const activityMessage = `${currentPlayer?.name} لم يجب في الوقت واسترد ${refund} دينار.`;
+            const baseUpdates = {
+                players: updatedPlayers,
+                'educatedMerchantState.pendingPurchase': deleteField(),
+                'educatedMerchantState.currentQuestion': deleteField(),
+                'educatedMerchantState.timerEndsAt': deleteField(),
+            };
+            Object.assign(updates, endTurnInternal(game, currentPlayerId, activityMessage, baseUpdates).updates);
+        } else if (pendingFine) {
+            const playerIndex = getPlayerIndexById(game.players, pendingFine.playerId);
+            const updatedPlayers = [...game.players];
+            const fine = pendingFine.fineAmount;
+             if ((updatedPlayers[playerIndex].money || 0) < fine) {
+                updatedPlayers[playerIndex].money = 0;
+                updatedPlayers[playerIndex].status = 'bankrupt';
+                updatedPlayers[playerIndex].bankruptAt = nowTimestamp();
+             } else {
+                updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) - fine;
+             }
+            const activityMessage = `${currentPlayer?.name} لم يجب في الوقت وتم تطبيق الغرامة.`;
+            const baseUpdates = {
+                players: updatedPlayers,
+                'educatedMerchantState.pendingFine': deleteField(),
+                'educatedMerchantState.currentQuestion': deleteField(),
+                'educatedMerchantState.timerEndsAt': deleteField(),
+            };
+            Object.assign(updates, endTurnInternal(game, currentPlayerId, activityMessage, baseUpdates).updates);
         }
         break;
       }
