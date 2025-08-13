@@ -1,16 +1,18 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
-import type { GameKing, Game, UserProfile } from "@/types";
+import { useState, useEffect, useMemo } from "react";
+import type { GameKing, Game, UserProfile, SocialRank } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { GAME_ICONS } from "@/data/icons";
-import { Crown, Star, Trophy } from "lucide-react";
+import { Crown, Star, Trophy, Shield } from "lucide-react";
 import { motion } from "framer-motion";
 import { getGameKings, getKingOfGames } from "@/lib/actions/user";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
+
 
 const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',
@@ -25,6 +27,7 @@ export default function KingsClient() {
     const [kings, setKings] = useState<Record<string, GameKing>>({});
     const [kingOfGames, setKingOfGames] = useState<UserProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const { socialRanks, getSocialRankForUser } = useAuth();
 
     useEffect(() => {
         const fetchKingsData = async () => {
@@ -40,12 +43,19 @@ export default function KingsClient() {
         fetchKingsData();
     }, []);
 
+    const kingOfGamesRank = useMemo(() => {
+        if (!kingOfGames || socialRanks.length === 0) return null;
+        return getSocialRankForUser(kingOfGames.leaderboardPoints || 0);
+    }, [kingOfGames, socialRanks, getSocialRankForUser]);
+
+
     const renderLoadingState = () => (
          <div className="w-full">
             <Card className="mb-8 bg-yellow-900/20 border-yellow-500/30">
                  <CardContent className="p-4 flex flex-col md:flex-row items-center gap-4">
                      <Skeleton className="w-24 h-24 md:w-32 md:h-32 rounded-full bg-slate-700" />
-                     <div className="text-center md:text-right flex-grow">
+                     <div className="text-center md:text-right flex-grow space-y-2">
+                         <Skeleton className="h-6 w-32 mx-auto md:mx-0 bg-slate-700" />
                          <Skeleton className="h-8 w-48 mx-auto md:mx-0 bg-slate-700" />
                          <Skeleton className="h-6 w-32 mt-2 mx-auto md:mx-0 bg-slate-700" />
                      </div>
@@ -54,7 +64,7 @@ export default function KingsClient() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, i) => (
                     <Card key={i} className="text-center p-4 bg-gray-800/50 border-purple-500/30 text-white backdrop-blur-sm shadow-lg shadow-purple-900/20">
-                        <Skeleton className="w-20 h-20 mx-auto mb-2 rounded-full bg-slate-700" />
+                        <Skeleton className="w-16 h-16 mx-auto mb-2 rounded-full bg-slate-700" />
                         <Skeleton className="h-6 w-3/4 mx-auto mb-2 bg-slate-700" />
                         <Skeleton className="w-24 h-24 mx-auto rounded-full bg-slate-700" />
                         <Skeleton className="h-5 w-1/2 mx-auto mt-2 bg-slate-700" />
@@ -109,12 +119,22 @@ export default function KingsClient() {
                             <CardContent className="p-4 md:p-6 flex flex-col md:flex-row items-center gap-6">
                                 <PlayerAvatar avatarId={kingOfGames.avatarId} className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-yellow-200 shadow-lg" />
                                 <div className="text-center md:text-right flex-grow">
-                                    <h2 className="text-2xl font-bold text-yellow-900 flex items-center justify-center md:justify-start gap-2" style={{ textShadow: '1px 1px 2px rgba(255,255,255,0.3)' }}>
-                                        <Crown className="w-8 h-8 text-yellow-800 drop-shadow-lg"/>
-                                        ملك بطابيطو
-                                    </h2>
+                                    <div className="flex items-center justify-center md:justify-start gap-2 text-yellow-900">
+                                         <Crown className="w-8 h-8 drop-shadow-lg"/>
+                                        <h2 className="text-2xl font-bold" style={{ textShadow: '1px 1px 2px rgba(255,255,255,0.3)' }}>
+                                            ملك بطابيطو
+                                        </h2>
+                                    </div>
                                     <h3 className="text-4xl md:text-5xl font-extrabold mt-1" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.6)' }}>{kingOfGames.name}</h3>
-                                    <p className="text-xl font-semibold text-yellow-100/90 mt-2 flex items-center justify-center md:justify-start gap-2"><Trophy className="w-5 h-5"/>{kingOfGames.leaderboardPoints} نقطة صدارة</p>
+                                     <div className="flex flex-col md:flex-row items-center justify-center md:justify-start gap-x-4 gap-y-1 mt-2 text-xl font-semibold text-yellow-100/90">
+                                        <div className="flex items-center gap-2"><Trophy className="w-5 h-5"/>{kingOfGames.leaderboardPoints} نقطة صدارة</div>
+                                        {kingOfGamesRank && kingOfGamesRank.icon && 
+                                            <div className="flex items-center gap-2">
+                                                {React.createElement(kingOfGamesRank.icon, { className: "w-5 h-5" })}
+                                                <span>{kingOfGamesRank.name}</span>
+                                            </div>
+                                        }
+                                     </div>
                                 </div>
                             </CardContent>
                         </Card>
@@ -124,6 +144,8 @@ export default function KingsClient() {
                     {Object.entries(GAME_TYPE_NAMES).map(([gameType, name], index) => {
                         const king = kings[gameType];
                         const Icon = GAME_ICONS[gameType as keyof typeof GAME_ICONS] || Star;
+                        const kingRank = king ? getSocialRankForUser(king.leaderboardPoints || 0) : null;
+                        const RankIcon = kingRank?.icon || Shield;
                         return (
                             <motion.div
                                 key={gameType}
@@ -140,6 +162,12 @@ export default function KingsClient() {
                                         <div className="mt-4 space-y-2">
                                             <PlayerAvatar avatarId={king.avatarId} className="w-24 h-24 mx-auto rounded-full border-4 border-amber-400 shadow-lg" />
                                             <p className="font-semibold text-xl text-amber-300">{king.name}</p>
+                                             {kingRank && (
+                                                <div className="flex items-center justify-center gap-1.5 text-sm text-gray-300">
+                                                    <RankIcon className="w-4 h-4"/>
+                                                    <span>{kingRank.name}</span>
+                                                </div>
+                                             )}
                                             <div className="flex justify-center items-center gap-4 text-sm text-gray-400">
                                                 <span className="flex items-center gap-1.5"><Star className="w-4 h-4" /> {king.winCount} انتصارات</span>
                                                 <span className="flex items-center gap-1.5"><Trophy className="w-4 h-4" /> {king.leaderboardPoints || 0} نقطة</span>
