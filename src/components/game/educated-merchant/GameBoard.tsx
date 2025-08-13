@@ -101,7 +101,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
   );
 
   const movePlayerPiece = useCallback(
-    async (playerId: string, steps: number, startPos: number, callServer = false) => {
+    async (playerId: string, steps: number, startPos: number) => {
       const actualSteps = Math.max(0, Math.floor(steps));
       if (actualSteps === 0) return;
 
@@ -133,22 +133,22 @@ export function GameBoard({ game, self }: GameBoardProps) {
         await sleep(140);
         setIsJumping((s) => ({ ...s, [playerId]: false }));
       }
+      
+      if (playerId === self.id) {
+          try {
+            await handlePropertyLanding(game.id, playerId);
+          } catch (err) {
+            console.error('handlePropertyLanding failed', err);
+          }
+      }
 
       setAnimatingPlayers((s) => {
         const copy = { ...s };
         delete copy[playerId];
         return copy;
       });
-
-      if (callServer) {
-        try {
-          await handlePropertyLanding(game.id, playerId);
-        } catch (err) {
-          console.error('handlePropertyLanding failed', err);
-        }
-      }
     },
-    [game.id, shouldReduceMotion]
+    [game.id, self.id, shouldReduceMotion]
   );
   
   const handleServerMovement = useCallback(() => {
@@ -168,10 +168,9 @@ export function GameBoard({ game, self }: GameBoardProps) {
     const serverPos = playerFromServer?.position ?? 0;
     const startPos = (serverPos - steps + BOARD_SIZE) % BOARD_SIZE;
 
-    const callServer = movingPlayerId === self.id;
-    movePlayerPiece(movingPlayerId, steps, startPos, callServer);
+    movePlayerPiece(movingPlayerId, steps, startPos);
 
-  }, [game.educatedMerchantState?.rollAnimationNonce, game.gameState, game.players, movePlayerPiece, self.id]);
+  }, [game.educatedMerchantState?.rollAnimationNonce, game.gameState, game.players, movePlayerPiece]);
 
   useEffect(() => {
     handleServerMovement();

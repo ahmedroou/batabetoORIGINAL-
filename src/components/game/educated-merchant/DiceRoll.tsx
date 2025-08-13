@@ -130,7 +130,9 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
       <Card className="text-center bg-slate-800 border-primary text-white shadow-lg" tabIndex={0} onKeyDown={onKeyDown} aria-live="polite">
         <CardHeader className="pb-2">
-          <CardTitle className="text-primary">نتيجة النرد</CardTitle>
+          <CardTitle className="text-primary">
+            {isRolling ? 'جارٍ الرمي...' : `نتيجة النرد`}
+          </CardTitle>
           <CardDescription className="text-slate-400">{isMyTurn ? 'دورك — اضغط لرمي النرد' : `دور: ${game.players.find(p => p.id === currentTurnPlayerId)?.name || 'لاعب'}`}</CardDescription>
         </CardHeader>
         <CardContent>
