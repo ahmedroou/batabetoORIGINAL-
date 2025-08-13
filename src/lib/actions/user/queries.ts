@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -102,19 +101,15 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
 }
 
 
-export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
+export async function getAllUsers(filter?: 'punished', queryLimit?: number): Promise<UserProfile[]> {
     try {
         const usersCol = collection(db, 'users');
         let usersQuery;
         
         if (filter === 'punished') {
-            usersQuery = query(usersCol, where('isPunished', '==', true));
+            const baseQuery = query(usersCol, where('isPunished', '==', true));
+            usersQuery = queryLimit ? query(baseQuery, limit(queryLimit)) : baseQuery;
         } else {
-            // Avoid fetching all users unless absolutely necessary
-            // This is a very expensive operation. If a use case needs all users,
-            // it should be carefully considered and paginated if possible.
-            // For now, let's assume the main use case is the pyramid, which doesn't need this.
-            // Returning an empty array if no filter is provided.
             return [];
         }
 

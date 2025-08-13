@@ -1,5 +1,4 @@
 
-
 'use server';
 
 /**
@@ -280,46 +279,42 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
 
     try {
         const itemsCol = collection(db, collectionName);
-        let count = 0;
-
+        let q;
+        
         if (criteria.all) {
             const querySnapshot = await getDocs(itemsCol);
-            count = querySnapshot.size;
-        } else if (criteria.category && criteria.duplicates && typeof criteria.duplicates === 'object' && criteria.game === 'trap-answer') {
+            return { success: true, count: querySnapshot.size };
+        }
+
+        if (criteria.category && criteria.duplicates && typeof criteria.duplicates === 'object' && criteria.game === 'trap-answer') {
             const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
-            count = duplicateCount;
-        } else if (criteria.duplicates === 'word_war_duplicates' && criteria.game === 'word_war') {
+            return { success: true, count: duplicateCount };
+        }
+
+        if (criteria.duplicates === 'word_war_duplicates' && criteria.game === 'word_war') {
             const { count: duplicateCount } = await findDuplicateWords();
-            count = duplicateCount;
-        } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
-            const q = query(itemsCol, where('category', '==', criteria.category.trim()));
-            const querySnapshot = await getDocs(q);
-            count = querySnapshot.size;
+            return { success: true, count: duplicateCount };
+        }
+        
+        if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
+            q = query(itemsCol, where('category', '==', criteria.category.trim()));
         } else if (criteria.searchTerm) {
             const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
-            querySnapshot.forEach(doc => {
-                const text = doc.data()[textFieldName] as string;
-                if (text && text.includes(searchTerm)) {
-                    count++;
-                }
-            });
+            q = query(itemsCol, where(textFieldName, '>=', searchTerm), where(textFieldName, '<=', searchTerm + '\uf8ff'));
         } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
             const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
-            querySnapshot.forEach(doc => {
-                const text = doc.data()['answer'] as string;
-                if (text && text.includes(searchTerm)) {
-                    count++;
-                }
-            });
+            q = query(itemsCol, where('answer', '>=', searchTerm), where('answer', '<=', searchTerm + '\uf8ff'));
+        } else {
+            return { error: "معايير العد غير صالحة." };
         }
         
-        return { success: true, count };
+        const querySnapshot = await getDocs(q);
+        return { success: true, count: querySnapshot.size };
+
     } catch (error) {
         console.error("Error counting items:", error);
-        return { error: 'حدث خطأ أثناء عد العناصر.' };
+        return { error: 'حدث خطأ أثناء عد العناصر. قد تحتاج إلى إنشاء فهرس في قاعدة البيانات.' };
     }
 };
 
@@ -340,59 +335,36 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
     try {
         const batch = writeBatch(db);
         const itemsCol = collection(db, collectionName);
-        let count = 0;
+        let q;
 
         if (criteria.all) {
-            const querySnapshot = await getDocs(itemsCol);
-            if (querySnapshot.empty) return { success: true, count: 0, message: 'قاعدة البيانات فارغة بالفعل.' };
-            querySnapshot.forEach(doc => {
-                batch.delete(doc.ref);
-                count++;
-            });
+            q = query(itemsCol);
         } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
-            const q = query(itemsCol, where('category', '==', criteria.category.trim()));
-            const querySnapshot = await getDocs(q);
-            if (querySnapshot.empty) {
-                return { success: true, count: 0, message: 'لم يتم العثور على أسئلة في هذا القسم.' };
-            }
-            querySnapshot.forEach(doc => {
-                batch.delete(doc.ref);
-                count++;
-            });
+            q = query(itemsCol, where('category', '==', criteria.category.trim()));
         } else if (criteria.searchTerm) {
             const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
-            querySnapshot.forEach(doc => {
-                const text = doc.data()[textFieldName] as string;
-                if (text && text.includes(searchTerm)) {
-                    batch.delete(doc.ref);
-                    count++;
-                }
-            });
-            if (count === 0) {
-                return { success: true, count: 0, message: 'لم يتم العثور على عناصر تحتوي على هذا النص.' };
-            }
+            q = query(itemsCol, where(textFieldName, '>=', searchTerm), where(textFieldName, '<=', searchTerm + '\uf8ff'));
         } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
             const searchTerm = criteria.answerSearchTerm.trim();
-            const querySnapshot = await getDocs(itemsCol); // Fetch all for client-side filtering
-            querySnapshot.forEach(doc => {
-                const text = doc.data()['answer'] as string;
-                if (text && text.includes(searchTerm)) {
-                    batch.delete(doc.ref);
-                    count++;
-                }
-            });
-            if (count === 0) {
-                return { success: true, count: 0, message: 'لم يتم العثور على أسئلة تحتوي على هذا الجواب.' };
-            }
+             q = query(itemsCol, where('answer', '>=', searchTerm), where('answer', '<=', searchTerm + '\uf8ff'));
+        } else {
+            return { error: "معايير الحذف غير صالحة." };
         }
 
+        const querySnapshot = await getDocs(q);
+        if (querySnapshot.empty) return { success: true, count: 0, message: 'لم يتم العثور على عناصر تطابق المعايير المحددة.' };
+
+        querySnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        
         await batch.commit();
-        return { success: true, count };
+        return { success: true, count: querySnapshot.size };
+
     } catch (error) {
         console.error("Error deleting items:", error);
-        return { error: 'حدث خطأ أثناء حذف العناصر.' };
+        return { error: 'حدث خطأ أثناء حذف العناصر. قد تحتاج إلى إنشاء فهرس في قاعدة البيانات.' };
     }
 };
 

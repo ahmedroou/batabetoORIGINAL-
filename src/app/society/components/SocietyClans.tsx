@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import type { Clan, UserProfile } from '@/types';
@@ -29,7 +29,7 @@ function ClanManagementDialogs({ userProfile }: { userProfile: UserProfile | nul
       toast({ title: 'الرجاء إدخال اسم للفريق', variant: 'destructive' });
       return;
     }
-    if (userProfile.coins < 5) {
+    if ((userProfile.coins || 0) < 5) {
         toast({ title: 'ليس لديك ما يكفي من الكوينز', description: 'إنشاء فريق يتطلب 5 كوينز.', variant: 'destructive' });
         return;
     }
@@ -101,18 +101,16 @@ export default function SocietyClans() {
     const [clans, setClans] = useState<Clan[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    const memoizedGetClans = useMemo(() => {
-        return async () => {
-            setIsLoading(true);
-            const fetchedClans = await getClans();
-            setClans(fetchedClans);
-            setIsLoading(false);
-        };
+    const fetchClansCallback = useCallback(async () => {
+        setIsLoading(true);
+        const fetchedClans = await getClans();
+        setClans(fetchedClans);
+        setIsLoading(false);
     }, []);
 
     useEffect(() => {
-        memoizedGetClans();
-    }, [memoizedGetClans]);
+        fetchClansCallback();
+    }, [fetchClansCallback]);
     
     const cardVariants = {
         hidden: { opacity: 0, y: 20 },

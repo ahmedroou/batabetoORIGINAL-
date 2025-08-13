@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -48,12 +47,13 @@ export default function SocietyPrison() {
     const fetchPrisonData = useCallback(async () => {
         setIsLoading(true);
         try {
+            // Fetch only a limited number of prisoners initially
             const [prisoners, punisher] = await Promise.all([
-                getAllUsers('punished'),
+                getAllUsers('punished', 30),
                 getTopPunisher()
             ]);
             setAllPrisoners(prisoners);
-            setFilteredPrisoners(prisoners.slice(0, 30));
+            setFilteredPrisoners(prisoners); // Initially, show what was fetched
             setTopPunisher(punisher);
         } catch (error) {
             console.error("Failed to fetch prison data:", error);
@@ -69,12 +69,14 @@ export default function SocietyPrison() {
     useEffect(() => {
         if (searchTerm) {
             const lowercasedFilter = searchTerm.toLowerCase();
+            // Filter the already-fetched list of prisoners client-side for performance
             const filtered = allPrisoners.filter(player =>
                 player.name.toLowerCase().includes(lowercasedFilter)
             );
             setFilteredPrisoners(filtered);
         } else {
-            setFilteredPrisoners(allPrisoners.slice(0, 30));
+            // When search is cleared, show the initial list again
+            setFilteredPrisoners(allPrisoners);
         }
     }, [searchTerm, allPrisoners]);
 
