@@ -31,7 +31,7 @@ import { updateLeagueScoresForGameEnd } from './user';
 const BOARD_SIZE = 28;
 const START_MONEY = 1000;
 const PASS_GO_REWARD = 200;
-const ACTION_TIME_SECONDS = 35; // Increased slightly
+const ACTION_TIME_SECONDS = 35; 
 const MAX_FINES = 3;
 const DEFAULT_FINE = 100;
 const DEFAULT_MAX_ROUNDS = 20;
@@ -101,7 +101,7 @@ async function fetchRandomQuestion(category: string): Promise<EducatedMerchantQu
 export async function generateBoard(categories: string[]): Promise<Property[]> {
   const board: Property[] = new Array(BOARD_SIZE).fill(undefined as unknown as Property);
 
-  board[0] = { id: 0, type: 'start', name: 'نقطة البداية', category: '', price: 0, rent: 0, ownerId: null } as Property;
+  board[0] = { id: 0, type: 'start', name: 'نقطة البداية', category: '', price: 0, rent: 0, ownerId: null };
 
   const finePositions = new Set<number>();
   while (finePositions.size < MAX_FINES) {
@@ -120,7 +120,7 @@ export async function generateBoard(categories: string[]): Promise<Property[]> {
       rent: 0,
       ownerId: null,
       fineAmount,
-    } as Property;
+    };
     fineAmount += 50;
   }
 
@@ -141,7 +141,7 @@ export async function generateBoard(categories: string[]): Promise<Property[]> {
       price,
       rent: Math.round(price / 4),
       ownerId: null,
-    } as Property;
+    };
   }
 
   return board;
@@ -218,16 +218,17 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
 
     const updatedPlayers = [...game.players];
     updatedPlayers[playerIndex] = { ...player, position: newPosition };
-
-    let activityMessage = `${player.name} رمى ${diceRoll} وتحرك إلى "${game.educatedMerchantState?.board[newPosition].name}".`;
+    
+    const board = ensure(game.educatedMerchantState?.board, "اللوح غير موجود");
+    const landingProperty = ensure(board[newPosition], "خانة غير موجودة على اللوح");
+    let activityMessage = `${player.name} رمى ${diceRoll} وتحرك إلى "${landingProperty.name}".`;
     
     if (newPosition < oldPosition) {
       updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + PASS_GO_REWARD;
       activityMessage = `${player.name} رمى ${diceRoll} ومر بنقطة البداية، وحصل على ${PASS_GO_REWARD} دينار.`;
     }
 
-    const landingProperty = ensure(game.educatedMerchantState?.board?.[newPosition], "خانة غير موجودة على اللوح");
-    let nextGameState: Game['gameState'] = 'rolling'; // Default fallback
+    let nextGameState: Game['gameState'] | null = null;
     let extraUpdates: any = {
       'educatedMerchantState.rollAnimationNonce': Date.now(),
       'educatedMerchantState.lastDiceRoll': diceRoll,
@@ -259,7 +260,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         const { updates: turnEndUpdates } = endTurnInternal(game, playerId, "", { ...extraUpdates, players: updatedPlayers });
         Object.assign(extraUpdates, turnEndUpdates);
       } else { 
-        const { updates: turnEndUpdates } = endTurnInternal(game, playerId, `${player.name} وصل إلى عقاره.`);
+        const { updates: turnEndUpdates } = endTurnInternal(game, playerId, `${player.name} وصل إلى عقاره.`, {...extraUpdates});
         Object.assign(extraUpdates, turnEndUpdates);
       }
     } else if (landingProperty.type === 'fine') {
@@ -269,7 +270,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         extraUpdates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: landingProperty.fineAmount };
     }
     
-    if (nextGameState) {
+    if (nextGameState && !extraUpdates.gameState) {
         extraUpdates.gameState = nextGameState;
     }
 
@@ -478,7 +479,7 @@ function endTurnInternal(
     const owner = mergedGameData.players.find((p) => p.id === prop.ownerId);
     if (owner && owner.status === 'bankrupt') {
       const { ownerId, color, ...rest } = prop;
-      return { ...rest, ownerId: null, color: undefined } as Property;
+      return { ...rest, ownerId: null, color: undefined };
     }
     return prop;
   });
