@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -94,7 +95,7 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
                                         'disabled:cursor-not-allowed disabled:opacity-50',
                                         answerState !== 'pending' ? 'pointer-events-none' : '',
                                         selectedAnswer === option ? 'border-primary bg-primary/20' : 'border-slate-700 bg-slate-800/50 hover:bg-slate-700/50',
-                                        answerState !== 'pending' && option === question.answer && 'border-green-500 bg-green-500/20 animate-pulse',
+                                        answerState === 'correct' && option === question.answer && 'border-green-500 bg-green-500/20 animate-pulse',
                                         answerState === 'incorrect' && selectedAnswer === option && 'border-red-500 bg-red-500/20'
                                     )}>
                                         <RadioGroupItem value={option} id={`option-${i}`} disabled={answerState !== 'pending'}/>
