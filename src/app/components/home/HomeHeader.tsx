@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { LogOut, User, ShieldCheck, Store, Mail as MailIcon, MessageSquarePlus } from "lucide-react";
@@ -330,4 +330,3 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
         </header>
     );
 }
-
