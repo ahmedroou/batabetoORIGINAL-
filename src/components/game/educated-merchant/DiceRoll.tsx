@@ -47,28 +47,29 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const lastNonceRef = useRef<number | null>(null);
 
   const turnOrder = game.educatedMerchantState?.turnOrder || [];
-  const currentTurnPlayerId = turnOrder[game.educatedMerchantState?.currentTurnIndex || 0];
+  const currentTurnIndex = game.educatedMerchantState?.currentTurnIndex || 0;
+  const currentTurnPlayerId = turnOrder[currentTurnIndex];
   const isMyTurn = self.id === currentTurnPlayerId;
   const lastRoll = game.educatedMerchantState?.lastDiceRoll;
   const rollNonce = game.educatedMerchantState?.rollAnimationNonce ?? null;
   const diceMax = game.educatedMerchantState?.settings?.diceMax ?? DEFAULT_DICE_MAX;
 
   useEffect(() => {
-    // Start animation when it's our turn and the game state is 'rolling'
-    if (isMyTurn && game.gameState === 'rolling' && !isRolling) {
-      setIsRolling(true);
-    }
-    
-    // Stop animation when a new nonce arrives from the server
+    // When a new roll nonce comes from the server, it means a roll has completed.
+    // Stop the rolling animation.
     if (rollNonce && lastNonceRef.current !== rollNonce) {
         lastNonceRef.current = rollNonce;
-        const timer = setTimeout(() => setIsRolling(false), 1200); // Visual flair duration
+        const timer = setTimeout(() => setIsRolling(false), 1200); // Allow animation to finish
         return () => clearTimeout(timer);
-    } else if (game.gameState !== 'rolling' && isRolling) {
-      // If the game state moves on but we are still rolling, stop it.
+    }
+  }, [rollNonce]);
+
+  // Handle cases where the game state might change unexpectedly while rolling.
+  useEffect(() => {
+    if (game.gameState !== 'rolling' && isRolling) {
       setIsRolling(false);
     }
-  }, [rollNonce, game.gameState, isMyTurn, isRolling]);
+  }, [game.gameState, isRolling]);
 
   useEffect(() => {
     if (typeof lastRoll === 'number' && lastRoll !== localHistory[0]) {
@@ -79,7 +80,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const handleRoll = useCallback(async () => {
     if (!isMyTurn || isRolling) return;
     
-    setIsRolling(true); // Optimistically start rolling animation on click
+    setIsRolling(true); // Start rolling animation on click
     
     try {
       await rollDice(game.id, self.id);
