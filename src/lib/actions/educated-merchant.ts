@@ -27,7 +27,7 @@ import { updateLeagueScoresForGameEnd } from './user';
 const BOARD_SIZE = 28;
 const START_MONEY = 1000;
 const PASS_GO_REWARD = 200;
-const ACTION_TIME_SECONDS = 35; // Slightly increased
+const ACTION_TIME_SECONDS = 35; 
 const MAX_FINES = 3;
 const DEFAULT_FINE = 100;
 const DEFAULT_MAX_ROUNDS = 20;
@@ -121,7 +121,6 @@ export async function generateBoard(categories: string[]): Promise<Property[]> {
   }
 
   const availablePropertyNames = shuffle([...PROPERTY_NAMES]);
-  // Filter out the 'Fine' category from being assigned to regular properties
   const propertyCategories = categories.filter(c => c !== 'قسم الغرامات');
 
 
@@ -130,7 +129,6 @@ export async function generateBoard(categories: string[]): Promise<Property[]> {
 
     const name = availablePropertyNames.pop() || `عقار ${i}`;
     const price = Math.round((Math.random() * (500 - 100) + 100) / 10) * 10;
-    // Assign a category from the filtered list
     const category = propertyCategories.length ? propertyCategories[Math.floor(Math.random() * propertyCategories.length)] : '';
 
     board[i] = {
@@ -193,7 +191,6 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
   });
 }
 
-// Server is the source of truth for all movement and state changes
 export async function rollDice(gameId: string, playerId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (tx) => {
@@ -217,38 +214,36 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     const newPosition = (oldPosition + diceRoll) % BOARD_SIZE;
 
     const board = ensure(game.educatedMerchantState?.board, 'اللوح مفقود.');
-    const landingProperty = ensure(
-      board[newPosition],
-      'خانة غير موجودة على اللوح'
-    );
+    const landingProperty = ensure(board[newPosition], 'خانة غير موجودة على اللوح');
+    let activityMessage = `${player.name} رمى ${diceRoll} وتحرك إلى "${landingProperty.name}".`;
 
     let updatedPlayers = [...game.players];
     updatedPlayers[playerIndex] = { ...player, position: newPosition };
     
-    let activityMessage = `${player.name} رمى ${diceRoll} وتحرك إلى "${landingProperty.name}".`;
-
     if (newPosition < oldPosition) {
       updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + PASS_GO_REWARD;
       activityMessage += ` ومر بنقطة البداية، وحصل على ${PASS_GO_REWARD} دينار.`
     }
     
-    let baseUpdates: any = {
+    const baseUpdates: any = {
       players: updatedPlayers,
       'educatedMerchantState.rollAnimationNonce': Date.now(),
       'educatedMerchantState.lastDiceRoll': diceRoll,
       'educatedMerchantState.timerEndsAt': addActionTimer(),
     };
 
-    game = {...game, ...baseUpdates}; // Update the game object for internal logic
+    game = {...game, ...baseUpdates, players: updatedPlayers}; // Update the game object for internal logic
 
-    let finalUpdates: any;
+    let finalUpdates: any = {};
+    let nextGameState: Game['gameState'] | null = null;
 
     if (landingProperty.type === 'start') {
-      const { updates } = endTurnInternal(game, playerId, activityMessage);
-      finalUpdates = updates;
+      const { updates } = endTurnInternal(game, playerId, activityMessage, baseUpdates);
+      Object.assign(finalUpdates, updates);
     } else if (landingProperty.type === 'property') {
       if (!landingProperty.ownerId) {
-        finalUpdates = { ...baseUpdates, gameState: 'property_action', 'educatedMerchantState.activityLog': arrayUnion({message: activityMessage, timestamp: Timestamp.now()}) };
+        nextGameState = 'property_action';
+        finalUpdates.activityLog = arrayUnion({message: activityMessage, timestamp: Timestamp.now()})
       } else if (landingProperty.ownerId !== playerId) {
         const ownerIndex = getPlayerIndexById(updatedPlayers, landingProperty.ownerId);
         const rent = landingProperty.rent || 0;
@@ -268,28 +263,30 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         
         baseUpdates.players = updatedPlayers;
         game = {...game, ...baseUpdates};
-        const { updates } = endTurnInternal(game, playerId, rentMessage);
-        finalUpdates = updates;
+        const { updates } = endTurnInternal(game, playerId, rentMessage, baseUpdates);
+        Object.assign(finalUpdates, updates);
 
       } else {
-        const { updates } = endTurnInternal(game, playerId, `${activityMessage} فهو يملكها بالفعل.`);
-        finalUpdates = updates;
+        const { updates } = endTurnInternal(game, playerId, `${activityMessage} فهو يملكها بالفعل.`, baseUpdates);
+        Object.assign(finalUpdates, updates);
       }
     } else if (landingProperty.type === 'fine') {
       const question = await fetchRandomQuestion('قسم الغرامات');
-      finalUpdates = {
-        ...baseUpdates,
-        'educatedMerchantState.activityLog': arrayUnion({message: activityMessage, timestamp: Timestamp.now()}),
-        gameState: 'question',
-        'educatedMerchantState.currentQuestion': question,
-        'educatedMerchantState.pendingFine': { playerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE },
-      };
+      nextGameState = 'question';
+      finalUpdates.activityLog = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
+      finalUpdates['educatedMerchantState.currentQuestion'] = question;
+      finalUpdates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE };
     } else {
-      const { updates } = endTurnInternal(game, playerId, activityMessage);
-      finalUpdates = updates;
+      const { updates } = endTurnInternal(game, playerId, activityMessage, baseUpdates);
+      Object.assign(finalUpdates, updates);
     }
     
-    tx.update(gameRef, finalUpdates);
+    // Only set gameState if it's not determined by endTurnInternal (which returns final_results)
+    if (nextGameState) {
+        finalUpdates.gameState = nextGameState;
+    }
+    
+    tx.update(gameRef, {...baseUpdates, ...finalUpdates});
   });
 }
 

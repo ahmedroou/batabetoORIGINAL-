@@ -54,16 +54,21 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const diceMax = game.educatedMerchantState?.settings?.diceMax ?? DEFAULT_DICE_MAX;
 
   useEffect(() => {
+    // Start animation when it's our turn and the game state is 'rolling'
+    if (isMyTurn && game.gameState === 'rolling' && !isRolling) {
+      setIsRolling(true);
+    }
+    
+    // Stop animation when a new nonce arrives from the server
     if (rollNonce && lastNonceRef.current !== rollNonce) {
         lastNonceRef.current = rollNonce;
-        setIsRolling(true);
         const timer = setTimeout(() => setIsRolling(false), 1200); // Visual flair duration
         return () => clearTimeout(timer);
-    } else if (game.gameState === 'rolling' && isRolling) {
-      // If the state goes back to rolling but we are still in an animation, reset it.
+    } else if (game.gameState !== 'rolling' && isRolling) {
+      // If the game state moves on but we are still rolling, stop it.
       setIsRolling(false);
     }
-  }, [rollNonce, game.gameState]);
+  }, [rollNonce, game.gameState, isMyTurn, isRolling]);
 
   useEffect(() => {
     if (typeof lastRoll === 'number' && lastRoll !== localHistory[0]) {
@@ -74,13 +79,12 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const handleRoll = useCallback(async () => {
     if (!isMyTurn || isRolling) return;
     
-    // We don't set isRolling(true) here anymore. The server will tell us when to animate via the nonce.
-    // This prevents the UI from getting out of sync.
+    setIsRolling(true); // Optimistically start rolling animation on click
     
     try {
       await rollDice(game.id, self.id);
     } catch (err: any) {
-      // isRolling state is managed by nonce, no need to reset it here
+      setIsRolling(false); // Stop rolling if the server call fails
       toast({ title: 'فشل رمي النرد', description: err?.message || 'حدث خطأ أثناء الاتصال بالخادم', variant: 'destructive' });
     }
   }, [game.id, isMyTurn, isRolling, self.id, toast]);
