@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -33,6 +31,49 @@ const TRAIL_LIFETIME_MS = 420;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// --------------------------------------
+// Helpers for the money animations (no external files)
+// --------------------------------------
+function useAnimatedNumber(value: number, opts?: { duration?: number; disabled?: boolean }) {
+  const { duration = 600, disabled = false } = opts || {};
+  const [display, setDisplay] = useState(value);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (disabled) {
+      setDisplay(value);
+      return;
+    }
+    const startVal = display;
+    const delta = value - startVal;
+    const start = performance.now();
+
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+      setDisplay(Math.round(startVal + delta * eased));
+      if (p < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, duration, disabled]);
+
+  return display;
+}
+
+const formatMoney = (n: number) => {
+  try {
+    return n.toLocaleString('ar-EG');
+  } catch {
+    return n.toLocaleString();
+  }
+};
+
 export function GameBoard({ game, self }: GameBoardProps) {
   const board = game.educatedMerchantState?.board || [];
   const shouldReduceMotion = useReducedMotion();
@@ -45,6 +86,65 @@ export function GameBoard({ game, self }: GameBoardProps) {
   const [isJumping, setIsJumping] = useState<Record<string, boolean>>({});
   const [tileHighlight, setTileHighlight] = useState<Record<number, boolean>>({});
   const lastRollNonceRef = useRef<number | null>(null);
+
+  // Money delta tracking (per-player) – used for floating +/− badges & self HUD pulses
+  const [moneySnapshot, setMoneySnapshot] = useState<Record<string, number>>(() => {
+    const init: Record<string, number> = {};
+    (game.players || []).forEach((p) => (init[p.id] = p.money || 0));
+    return init;
+  });
+  const [moneyDelta, setMoneyDelta] = useState<Record<string, number>>({});
+  const [moneyDeltaNonce, setMoneyDeltaNonce] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    // Detect money changes from the server and spawn transient deltas
+    const incoming: Record<string, number> = {};
+    const deltas: Record<string, number> = {};
+    const nonces: Record<string, number> = {};
+
+    game.players.forEach((p) => {
+      const prev = moneySnapshot[p.id] ?? p.money ?? 0;
+      const now = p.money ?? 0;
+      incoming[p.id] = now;
+      const diff = now - prev;
+      if (diff !== 0) {
+        deltas[p.id] = diff;
+        nonces[p.id] = Date.now();
+      }
+    });
+
+    if (Object.keys(deltas).length) {
+      setMoneySnapshot(incoming);
+      setMoneyDelta((s) => ({ ...s, ...deltas }));
+      setMoneyDeltaNonce((s) => ({ ...s, ...nonces }));
+
+      // Clear each player's delta after a short while
+      Object.keys(deltas).forEach((pid) => {
+        setTimeout(() => {
+          setMoneyDelta((s) => {
+            const copy = { ...s };
+            delete copy[pid];
+            return copy;
+          });
+        }, 1600);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.players]);
+
+  // Self HUD animation helpers
+  const selfPlayer = useMemo(() => game.players.find((p) => p.id === self.id), [game.players, self.id]);
+  const selfMoney = selfPlayer?.money ?? 0;
+  const animatedSelfMoney = useAnimatedNumber(selfMoney, { duration: 650, disabled: !!shouldReduceMotion });
+  const selfDelta = moneyDelta[self.id];
+  const [pulseTint, setPulseTint] = useState<'neutral' | 'up' | 'down'>('neutral');
+  useEffect(() => {
+    if (typeof selfDelta === 'number') {
+      setPulseTint(selfDelta > 0 ? 'up' : 'down');
+      const t = setTimeout(() => setPulseTint('neutral'), 850);
+      return () => clearTimeout(t);
+    }
+  }, [selfDelta]);
 
   useEffect(() => {
     const initialPositions: Record<string, number> = {};
@@ -253,6 +353,54 @@ export function GameBoard({ game, self }: GameBoardProps) {
   });
   Tile.displayName = 'Tile';
 
+  // --------------------------------------
+  // Self Money HUD (floating, animated)
+  // --------------------------------------
+  const hudTintMap: Record<typeof pulseTint, string> = {
+    neutral: 'bg-slate-900/80 border-slate-700',
+    up: 'bg-emerald-900/70 border-emerald-500/60 shadow-[0_0_0_3px_rgba(16,185,129,0.15)]',
+    down: 'bg-rose-900/70 border-rose-500/60 shadow-[0_0_0_3px_rgba(244,63,94,0.15)]',
+  };
+
+  const MoneyHUD = (
+    <motion.div
+      className={cn(
+        'pointer-events-none select-none absolute z-40 top-2 right-2 md:top-4 md:right-4',
+        'rounded-xl border px-3 py-2 md:px-4 md:py-2.5 text-white shadow-lg'
+      )}
+      animate={{
+        scale: pulseTint === 'neutral' ? 1 : 1.035,
+      }}
+      transition={{ type: 'spring', stiffness: 280, damping: 18 }}
+    >
+      <motion.div
+        className={cn('flex items-center gap-2 md:gap-2.5 text-sm md:text-base font-bold', hudTintMap[pulseTint])}
+        layout
+      >
+        <Banknote className="w-4 h-4 md:w-5 md:h-5 opacity-90" />
+        <div className="tabular-nums">{formatMoney(animatedSelfMoney)}<span className="text-xs md:text-sm font-normal opacity-80 mr-1"> دينار</span></div>
+      </motion.div>
+
+      <AnimatePresence>
+        {typeof selfDelta === 'number' && (
+          <motion.div
+            key={moneyDeltaNonce[self.id]}
+            initial={{ y: 8, opacity: 0 }}
+            animate={{ y: -14, opacity: 1 }}
+            exit={{ y: -26, opacity: 0 }}
+            transition={{ duration: 0.6 }}
+            className={cn(
+              'absolute -bottom-5 right-0 px-1.5 py-0.5 rounded text-[11px] font-semibold',
+              selfDelta > 0 ? 'bg-emerald-600/90' : 'bg-rose-600/90'
+            )}
+          >
+            {selfDelta > 0 ? `+${formatMoney(selfDelta)}` : `-${formatMoney(Math.abs(selfDelta))}`}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+
   return (
     <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
       <QuestionModal game={game} self={self} />
@@ -277,6 +425,9 @@ export function GameBoard({ game, self }: GameBoardProps) {
       </div>
 
       <div ref={containerRef} className="flex-grow flex items-center justify-center relative min-h-0 min-w-0">
+        {/* Self floating money HUD */}
+        {MoneyHUD}
+
         <div className="relative" style={{ width: boardWidth, height: boardHeight }}>
           <div
             className="absolute bg-gray-900/60 rounded-2xl flex flex-col items-center justify-center p-2 md:p-8 shadow-inner"
@@ -335,7 +486,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
                 left: `${numericLeft + offsetX}px`,
                 width: pieceSize,
                 height: pieceSize,
-                position: 'absolute',
+                position: 'absolute' as const,
               };
 
               return (
@@ -354,6 +505,25 @@ export function GameBoard({ game, self }: GameBoardProps) {
                       <div className="absolute -right-1 -top-1 bg-red-600 text-white text-[10px] px-1 rounded">
                       </div>
                     )}
+
+                    {/* Small floating delta badge over any piece whose money just changed */}
+                    <AnimatePresence>
+                      {typeof moneyDelta[p.id] === 'number' && (
+                        <motion.div
+                          key={`${p.id}-${moneyDeltaNonce[p.id]}`}
+                          initial={{ y: 8, opacity: 0 }}
+                          animate={{ y: -18, opacity: 1 }}
+                          exit={{ y: -30, opacity: 0 }}
+                          transition={{ duration: 0.6 }}
+                          className={cn(
+                            'absolute left-1/2 -translate-x-1/2 -top-2 px-1.5 py-0.5 rounded text-[10px] font-bold shadow',
+                            moneyDelta[p.id]! > 0 ? 'bg-emerald-600/90 text-white' : 'bg-rose-600/90 text-white'
+                          )}
+                        >
+                          {moneyDelta[p.id]! > 0 ? `+${formatMoney(moneyDelta[p.id]!)}` : `-${formatMoney(Math.abs(moneyDelta[p.id]!))}`}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </motion.div>
               );

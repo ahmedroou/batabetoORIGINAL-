@@ -15,53 +15,55 @@ import { CountdownTimer } from '@/components/game/CountdownTimer';
 export function QuestionModal({ game, self }: { game: Game; self: Player }) {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [submitFailed, setSubmitFailed] = useState<string | null>(null);
+  const [answerState, setAnswerState] = useState<'pending' | 'correct' | 'incorrect'>('pending');
 
   const question = game.educatedMerchantState?.currentQuestion ?? null;
   const pendingPurchase = game.educatedMerchantState?.pendingPurchase ?? null;
   const pendingFine = game.educatedMerchantState?.pendingFine ?? null;
 
+  // modal open when server sets gameState 'question' and a pending action exists
   const isOpen = game.gameState === 'question' && (pendingPurchase !== null || pendingFine !== null);
+
   const questionPlayerId = pendingPurchase?.playerId ?? pendingFine?.playerId;
   const isMyTurnToAnswer = questionPlayerId === self.id;
   const isHost = game.hostId === self.id;
   const isFineQuestion = !!pendingFine;
 
-  // reset local state when a new question/pending appears or modal closes
+  // reset local UI state when new question/pending or modal open/close
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && isMyTurnToAnswer) {
       setSelectedAnswer(null);
       setIsSubmitting(false);
-      setSubmitted(false);
-      setSubmitFailed(null);
+      setAnswerState('pending');
     } else {
+      // reset also when modal closed or it's not my turn
       setSelectedAnswer(null);
       setIsSubmitting(false);
-      setSubmitted(false);
-      setSubmitFailed(null);
+      setAnswerState('pending');
     }
-  }, [isOpen, question?.id, pendingPurchase?.playerId, pendingFine?.playerId]);
+  }, [isOpen, question?.id, pendingPurchase?.playerId, pendingFine?.playerId, isMyTurnToAnswer]);
 
   const handleSubmit = useCallback(async () => {
     if (!selectedAnswer || !isMyTurnToAnswer || !question) return;
+
+    // local instant feedback
+    const isCorrect = selectedAnswer === question.answer;
+    setAnswerState(isCorrect ? 'correct' : 'incorrect');
     setIsSubmitting(true);
-    setSubmitFailed(null);
 
-    // We DO NOT check correctness locally here to avoid revealing the answer.
-    // Show a 'submitted' state briefly, then call server action.
-    setSubmitted(true);
-
-    try {
-      await answerQuestion(game.id, self.id, selectedAnswer);
-      // server will update game state and modal will close (or update).
-      // keep UI until server override (or you may close here).
-    } catch (err: any) {
-      console.error('Failed to submit answer', err);
-      setSubmitFailed(err?.message || 'فشل إرسال الإجابة');
-      setIsSubmitting(false);
-      setSubmitted(false);
-    }
+    // short visual delay so player sees feedback, then call server
+    setTimeout(async () => {
+      try {
+        await answerQuestion(game.id, self.id, selectedAnswer);
+        // server will update game state (close modal or advance). we don't need to do more here.
+      } catch (err) {
+        // revert UI if server-side fails
+        console.error('Failed to submit answer', err);
+        setIsSubmitting(false);
+        setAnswerState('pending');
+        // keep selectedAnswer so user can retry if desired
+      }
+    }, 700); // 700ms feedback before sending (matches your previous UX)
   }, [selectedAnswer, isMyTurnToAnswer, question, game.id, self.id]);
 
   if (!isOpen) return null;
@@ -74,20 +76,21 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
         className="max-w-xl bg-gray-900/80 backdrop-blur-md border-primary/30 text-white"
         onInteractOutside={(e) => e.preventDefault()}
       >
-        {/* show a generic submitted animation if user clicked confirm */}
+        {/* overlays for immediate feedback */}
         <AnimatePresence>
-          {submitted && isMyTurnToAnswer && !isSubmitting && (
-            <motion.div initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-              <Check className="w-44 h-44 text-green-500/30" />
+          {answerState === 'correct' && isMyTurnToAnswer && (
+            <motion.div initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1.08 }} exit={{ opacity: 0 }} className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+              <Check className="w-44 h-44 text-green-500/35" />
             </motion.div>
           )}
-          {submitFailed && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute top-8 left-1/2 -translate-x-1/2 z-30">
-              <div className="bg-rose-700/80 text-white px-4 py-2 rounded">{submitFailed}</div>
+          {answerState === 'incorrect' && isMyTurnToAnswer && (
+            <motion.div initial={{ opacity: 0, rotate: -12, scale: 0.8 }} animate={{ opacity: 1, rotate: 0, scale: 1.05 }} exit={{ opacity: 0 }} className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+              <X className="w-44 h-44 text-red-500/35" />
             </motion.div>
           )}
         </AnimatePresence>
 
+        {/* countdown for answering player */}
         {game.educatedMerchantState?.timerEndsAt && isMyTurnToAnswer && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
             <CountdownTimer
@@ -116,6 +119,7 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
           )}
         </DialogHeader>
 
+        {/* if question object hasn't arrived from server yet, show loader */}
         {!question ? (
           <div className="py-8 flex flex-col items-center gap-4">
             <Loader2 className="animate-spin w-10 h-10 text-primary" />
@@ -124,34 +128,45 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
         ) : (
           <>
             {isMyTurnToAnswer ? (
-              <motion.div animate={{}} transition={{ duration: 0.2 }}>
+              <motion.div animate={answerState === 'incorrect' ? { x: [-6, 6, -6, 6, 0] } : {}} transition={{ duration: 0.35 }}>
                 <div className="py-4">
                   <RadioGroup value={selectedAnswer ?? ''} onValueChange={(v) => setSelectedAnswer(v || null)} className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {question.options.map((option, i) => (
-                      <Label
-                        key={i}
-                        htmlFor={`option-${i}`}
-                        className={cn(
-                          'flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all',
-                          'disabled:cursor-not-allowed disabled:opacity-50',
-                          submitted && 'pointer-events-none opacity-60',
-                          !submitted && (selectedAnswer === option ? 'border-primary bg-primary/20' : 'border-slate-700 bg-slate-800/50')
-                        )}
-                      >
-                        <RadioGroupItem value={option} id={`option-${i}`} disabled={submitted} />
-                        <span className="text-base font-semibold">{option}</span>
-                      </Label>
-                    ))}
+                    {question.options.map((option, i) => {
+                      const isTheSelected = option === selectedAnswer;
+                      const isTheCorrect = option === question.answer;
+
+                      return (
+                        <Label
+                          key={i}
+                          htmlFor={`option-${i}`}
+                          className={cn(
+                            'flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all',
+                            'disabled:cursor-not-allowed disabled:opacity-50',
+                            // when still answering (pending) show selection highlight
+                            answerState === 'pending' && (isTheSelected ? 'border-primary bg-primary/20' : 'border-slate-700 bg-slate-800/50'),
+                            // feedback when correct
+                            answerState === 'correct' && isTheSelected && 'border-green-500 bg-green-500/20 opacity-100',
+                            // feedback when incorrect: selected -> red; correct -> highlight green ring
+                            answerState === 'incorrect' && isTheSelected && 'border-red-500 bg-red-500/20 opacity-100',
+                            answerState === 'incorrect' && isTheCorrect && 'ring-2 ring-green-400/30'
+                          )}
+                        >
+                          <RadioGroupItem value={option} id={`option-${i}`} disabled={answerState !== 'pending'} />
+                          <span className="text-base font-semibold">{option}</span>
+                        </Label>
+                      );
+                    })}
                   </RadioGroup>
                 </div>
 
                 <div className="flex gap-2">
-                  <Button onClick={handleSubmit} disabled={!selectedAnswer || submitted || isSubmitting} className="flex-1">
-                    {isSubmitting ? <Loader2 className="animate-spin" /> : (submitted ? 'مرسل...' : 'تأكيد الإجابة')}
+                  <Button onClick={handleSubmit} disabled={!selectedAnswer || isSubmitting || answerState !== 'pending'} className="flex-1">
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'تأكيد الإجابة'}
                   </Button>
                 </div>
               </motion.div>
             ) : (
+              // not my turn: show question and options read-only
               <div className="py-4">
                 <div className="mb-3 text-sm text-slate-300">السؤال:</div>
                 <div className="mb-4 p-3 rounded bg-slate-800/40 border border-slate-700">{question.question}</div>

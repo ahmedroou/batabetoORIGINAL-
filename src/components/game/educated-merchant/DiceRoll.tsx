@@ -45,7 +45,7 @@ function createAudioHelpers() {
         osc.stop(now + 0.22);
       }
     } catch (e) {
-      // fail silently for audio problems (iOS autoplay, etc.)
+      // silently fail audio issues (iOS/autoplay restrictions etc.)
     }
   };
 
@@ -64,11 +64,16 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const [soundOn, setSoundOn] = useState<boolean>(() => {
     try { return localStorage.getItem('dice.sound') !== '0'; } catch { return true; }
   });
-  const [showResultNumber, setShowResultNumber] = useState<number | null>(null);
+
+  // rolling animation / digital display
+  const [rollingDisplayNumber, setRollingDisplayNumber] = useState<number>(1); // number that cycles fast during roll
+  const [showResultNumber, setShowResultNumber] = useState<number | null>(null); // final number from server
 
   const audio = useRef<ReturnType<typeof createAudioHelpers> | null>(null);
   const handledNonceRef = useRef<number | string | null>(null);
-  const serverResponseTimerRef = useRef<number | null>(null); // fallback timer id
+  const serverResponseTimerRef = useRef<number | null>(null);
+  const rollingIntervalRef = useRef<number | null>(null);
+  const resultHideTimerRef = useRef<number | null>(null);
 
   // server-driven fields
   const turnOrder = game.educatedMerchantState?.turnOrder || [];
@@ -76,113 +81,173 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const currentTurnPlayerId = turnOrder[currentTurnIndex];
   const isMyTurn = self.id === currentTurnPlayerId;
 
-  // IMPORTANT: server writes an object like { number, nonce } into educatedMerchantState.displayingRollResult
+  // dice max from server (used to cycle numbers within valid faces)
+  const diceMax = game.educatedMerchantState?.settings?.diceMax ?? 5;
+
+  // server's "displaying" payload (set by your server-side actions)
   const displaying = (game.educatedMerchantState as any)?.displayingRollResult as { number: number; nonce: number } | undefined;
 
+  /* ---------- setup / cleanup ---------- */
   useEffect(() => {
     audio.current = createAudioHelpers();
     return () => {
-      // cleanup any pending fallback timer when unmounting
+      // cleanup any timers/intervals
       if (serverResponseTimerRef.current) {
         clearTimeout(serverResponseTimerRef.current);
         serverResponseTimerRef.current = null;
       }
+      if (rollingIntervalRef.current) {
+        clearInterval(rollingIntervalRef.current);
+        rollingIntervalRef.current = null;
+      }
+      if (resultHideTimerRef.current) {
+        clearTimeout(resultHideTimerRef.current);
+        resultHideTimerRef.current = null;
+      }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     try { localStorage.setItem('dice.sound', soundOn ? '1' : '0'); } catch { /* ignore */ }
   }, [soundOn]);
 
-  // If game state changed to QUESTION (or anything else), we should reset showResultNumber and handled nonce
-  useEffect(() => {
-    // Whenever the overall gameState becomes 'question', ensure we don't render the roll result UI
-    if (game.gameState === 'question') {
-      setShowResultNumber(null);
-      // keep handledNonceRef as-is to avoid re-displaying old nonce — but it's safe to clear it if you prefer:
-      // handledNonceRef.current = null;
-      setIsRolling(false);
-      if (serverResponseTimerRef.current) {
-        clearTimeout(serverResponseTimerRef.current);
-        serverResponseTimerRef.current = null;
-      }
-    }
-  }, [game.gameState]);
-
-  // React to server's displayingRollResult — but guard against question state to avoid the "double show" problem.
+  /* ---------- handle server "displayingRollResult" ---------- */
   useEffect(() => {
     if (!displaying) return;
-
-    // If the game is in question state, do not display the dice result (defensive)
-    if (game.gameState === 'question') {
-      // Optionally update history but do not show number
-      const { number, nonce } = displaying;
-      // still push to history once (so "last rolls" remains accurate)
-      setLocalHistory((prev) => [number, ...prev].slice(0, 5));
-      // mark nonce handled so we won't show it later accidentally
-      handledNonceRef.current = nonce;
-      return;
-    }
 
     const { number, nonce } = displaying;
     if (nonce === undefined || nonce === null) return;
 
-    // avoid processing the same nonce multiple times
-    if (handledNonceRef.current === nonce) return;
+    // avoid double-processing same nonce
+    if (handledNonceRef.current === nonce) {
+      return;
+    }
     handledNonceRef.current = nonce;
 
-    // show to user
+    // stop rolling animation, play result sound, show final number
     setIsRolling(false);
     if (soundOn) audio.current?.playSound('result');
+
+    // update history
     setLocalHistory((prev) => [number, ...prev].slice(0, 5));
+
+    // stop rolling interval if still running
+    if (rollingIntervalRef.current) {
+      clearInterval(rollingIntervalRef.current);
+      rollingIntervalRef.current = null;
+    }
+
+    // show final number prominently for a few seconds
     setShowResultNumber(number);
 
-    // Hide after a short delay
-    const hideTimer = window.setTimeout(() => setShowResultNumber(null), 2500);
+    // clear any previous hide-timer
+    if (resultHideTimerRef.current) {
+      clearTimeout(resultHideTimerRef.current);
+      resultHideTimerRef.current = null;
+    }
 
-    // Clear any fallback timer since server responded
+    // hide after 2200ms (adjust if you want longer)
+    resultHideTimerRef.current = window.setTimeout(() => {
+      setShowResultNumber(null);
+      resultHideTimerRef.current = null;
+    }, 2200);
+
+    // cancel server fallback timer
     if (serverResponseTimerRef.current) {
       clearTimeout(serverResponseTimerRef.current);
       serverResponseTimerRef.current = null;
     }
+  }, [displaying, soundOn]);
 
-    return () => clearTimeout(hideTimer);
-  }, [displaying, game.gameState, soundOn]);
+  /* ---------- rolling animation (digital number cycling) ---------- */
+  useEffect(() => {
+    // start cycling when isRolling true; stop when false or final result shown
+    if (isRolling) {
+      // clear old interval if exists
+      if (rollingIntervalRef.current) {
+        clearInterval(rollingIntervalRef.current);
+        rollingIntervalRef.current = null;
+      }
+      // start fast cycling (every 60-90ms). We'll use 70ms for snappy feel.
+      rollingIntervalRef.current = window.setInterval(() => {
+        setRollingDisplayNumber((prev) => {
+          // cycle 1..diceMax
+          const next = (prev % Math.max(1, diceMax)) + 1;
+          return next;
+        });
+      }, 70);
+    } else {
+      // stop interval
+      if (rollingIntervalRef.current) {
+        clearInterval(rollingIntervalRef.current);
+        rollingIntervalRef.current = null;
+      }
+    }
 
-  // handle roll action
+    return () => {
+      if (rollingIntervalRef.current) {
+        clearInterval(rollingIntervalRef.current);
+        rollingIntervalRef.current = null;
+      }
+    };
+  }, [isRolling, diceMax]);
+
+  /* ---------- handle roll action ---------- */
   const handleRoll = useCallback(async () => {
     if (!isMyTurn || isRolling) return;
 
+    // prepare UI
     setIsRolling(true);
+    setShowResultNumber(null);
+    handledNonceRef.current = null;
 
     if (soundOn) {
       try {
         audio.current?.ctx?.resume?.();
+        // quick roll beep trio
         [0, 1, 2].forEach((i) => setTimeout(() => audio.current?.playSound('roll'), i * 100));
       } catch {}
     }
 
-    // fallback: if server doesn't respond within X ms — stop spinner and notify user
+    // ensure only one fallback timer
     if (serverResponseTimerRef.current) {
       clearTimeout(serverResponseTimerRef.current);
       serverResponseTimerRef.current = null;
     }
+    // fallback: if server doesn't respond in X ms, stop rolling and notify
     serverResponseTimerRef.current = window.setTimeout(() => {
       serverResponseTimerRef.current = null;
+      // stop UI rolling animation
       setIsRolling(false);
+      // clear rolling interval
+      if (rollingIntervalRef.current) {
+        clearInterval(rollingIntervalRef.current);
+        rollingIntervalRef.current = null;
+      }
       toast({ title: 'لم يرد الخادم', description: 'لم يتم استلام نتيجة النرد. حاول مرة أخرى.', variant: 'destructive' });
-    }, 8000);
+    }, 10000); // 10s fallback
 
     try {
       await rollDice(game.id, self.id);
-      // do not set isRolling=false here — wait for server's displayingRollResult to arrive (handled in effect)
-    } catch (err: any) {
-      // network/server error — clear fallback timer and stop spinner
+
+      // if request returned (no exception) cancel fallback — the server will later push displayingRollResult
       if (serverResponseTimerRef.current) {
         clearTimeout(serverResponseTimerRef.current);
         serverResponseTimerRef.current = null;
       }
+      // do not forcibly set isRolling = false here; we wait for the server's displaying payload
+    } catch (err: any) {
+      if (serverResponseTimerRef.current) {
+        clearTimeout(serverResponseTimerRef.current);
+        serverResponseTimerRef.current = null;
+      }
+      // stop UI
       setIsRolling(false);
+      if (rollingIntervalRef.current) {
+        clearInterval(rollingIntervalRef.current);
+        rollingIntervalRef.current = null;
+      }
       toast({ title: 'فشل رمي النرد', description: err?.message || 'حدث خطأ أثناء الاتصال بالخادم', variant: 'destructive' });
     }
   }, [game.id, isMyTurn, isRolling, self.id, soundOn, toast]);
@@ -196,6 +261,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
 
   const toggleSound = () => setSoundOn((s) => !s);
 
+  /* ---------- UI rendering ---------- */
   return (
     <motion.div initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
       <Card className="w-64 text-center bg-slate-800 border-primary text-white shadow-lg" tabIndex={0} onKeyDown={onKeyDown} aria-live="polite" role="region" aria-label="لوحة رمي النرد">
@@ -216,16 +282,23 @@ export function DiceRoll({ game, self }: DiceRollProps) {
         <CardContent className="flex flex-col items-center justify-center min-h-[120px] relative">
           <AnimatePresence mode="wait">
             {isRolling ? (
-              <motion.div key="rolling" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <Loader2 className="w-24 h-24 mx-auto text-primary animate-spin" aria-label="جارٍ رمي النرد" />
+              // show rapidly changing digital number while rolling
+              <motion.div key="rollingNum" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1.02 }} exit={{ opacity: 0 }} className="select-none">
+                <div className="text-6xl md:text-8xl font-mono font-extrabold text-white animate-[pulse_0.9s_infinite]">
+                  {rollingDisplayNumber}
+                </div>
+                <div className="text-xs text-slate-300 mt-2">... جاري الرمي</div>
               </motion.div>
             ) : showResultNumber !== null ? (
-               <motion.div key="result" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
-                 <div className="text-8xl font-mono font-extrabold text-white" style={{ textShadow: '0 0 20px rgba(59,130,246,0.6)' }}>
-                   {showResultNumber}
-                 </div>
-               </motion.div>
+              // final result big and held
+              <motion.div key="result" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
+                <div className="text-8xl md:text-9xl font-mono font-extrabold text-white" style={{ textShadow: '0 0 24px rgba(59,130,246,0.3)' }}>
+                  {showResultNumber}
+                </div>
+                <div className="text-sm text-slate-300 mt-2">نتيجة النرد</div>
+              </motion.div>
             ) : (
+              // idle
               <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <Dices className="w-24 h-24 mx-auto text-primary" aria-hidden />
               </motion.div>
