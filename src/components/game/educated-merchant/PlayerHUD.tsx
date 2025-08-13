@@ -41,8 +41,6 @@ function useAnimatedMoney(players: Player[], opts?: { duration?: number; clearAf
 
   // per-player RAF handlers
   const rafs = useRef<Record<string, number | null>>({});
-  
-  const moneySignature = JSON.stringify(players.map(p => p.money));
 
   useEffect(() => {
     // on players change, kick off animations for any whose money changed
@@ -93,7 +91,7 @@ function useAnimatedMoney(players: Player[], opts?: { duration?: number; clearAf
       Object.values(rafs.current).forEach((r) => r && cancelAnimationFrame(r as number));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moneySignature, duration, clearAfterMs]); // Depend on the money signature instead of the player array reference
+  }, [players, duration, clearAfterMs]); // Depend on players array reference directly
 
   return { display, deltas, nonceMap };
 }
@@ -120,8 +118,7 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
   const nf = useMemo(() => new Intl.NumberFormat('en-US'), []);
 
   return (
-    // keep HUD inside layout flow and slightly closer to board by using a compact width
-    <div className="w-full sticky top-4 z-10">
+    <div className="w-full">
       <Card className="bg-gray-900/70 border-gray-700 text-white shadow-lg">
         <CardHeader className="py-2">
           <CardTitle className="flex items-center gap-2 text-sm">
@@ -201,30 +198,22 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
                           <span className="flex items-center gap-1"><Home className="w-3 h-3" /> <span className="font-mono">{player.position ?? 0}</span></span>
                           <span className="flex items-center gap-1"><Building className="w-3 h-3" /> <span className="font-mono">{player.propertiesCount ?? 0}</span></span>
                         </div>
-
-                        {/* NEW: money shown below the name for clarity (mobile-friendly and avoids overlap) */}
-                        <div className="mt-2 flex items-center gap-2">
+                        <div className="mt-1 flex items-center gap-2">
                           <HandCoins className="w-4 h-4 text-yellow-400" />
-                          <motion.div
-                            layout
-                            initial={false}
-                            animate={{ backgroundColor: delta ? (delta > 0 ? 'rgba(16,185,129,0.06)' : 'rgba(244,63,94,0.06)') : 'transparent' }}
-                            transition={{ duration: 0.35 }}
-                            className="px-3 py-1 rounded-md ring-1 ring-white/6"
+                          <div
+                            className="tabular-nums font-mono font-bold text-sm"
                             title={`${player.name} - رصيد`}
                           >
-                            <div aria-live="polite" className="tabular-nums font-mono font-extrabold text-sm leading-none">
-                              {nf.format(moneyDisplay)}
-                            </div>
-                            <div className="text-[10px] text-slate-400 text-right">د.ع</div>
-                          </motion.div>
+                            {nf.format(moneyDisplay)}
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* right-side compact rank indicator (no money here anymore) */}
                     <div className="flex flex-col items-end min-w-[48px]">
-                      <div className="text-[10px] text-slate-400">{rank ? `#${rank}` : '—'}</div>
+                      <div className="text-lg font-bold">
+                        {rank ? `#${rank}` : '—'}
+                      </div>
                     </div>
                   </motion.div>
                 );
