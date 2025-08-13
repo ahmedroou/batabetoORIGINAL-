@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import type { Game, Player, Property } from '@/types';
@@ -113,6 +111,7 @@ export function PropertyCard({ game, self, property, allowActions = false }: Pro
             ) : null}
 
             {isMyTurn && allowActions && property.type === 'property' && !canAfford && !property.ownerId && <p className="text-xs text-destructive text-center pb-2">لا تملك ما يكفي من المال لشراء هذا العقار.</p>}
+            </Card>
         </motion.div>
     );
 }
