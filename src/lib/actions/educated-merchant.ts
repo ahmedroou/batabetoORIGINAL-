@@ -1,5 +1,3 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -14,6 +12,7 @@ import {
   deleteField,
   arrayUnion,
   limit,
+  getDoc,
 } from 'firebase/firestore';
 import type { Game, Player, Property, EducatedMerchantQuestion } from '@/types';
 import { shuffle } from './helpers';
@@ -196,25 +195,23 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     const gameRef = doc(db, 'games', gameId);
 
     // --- Pre-transaction logic ---
-    const initialGameDoc = await getDoc(gameRef);
-    if (!initialGameDoc.exists()) throw new Error('اللعبة غير موجودة.');
-    const gameForPreCalc = initialGameDoc.data() as Game;
-
-    if (gameForPreCalc.gameState !== 'rolling') throw new Error('ليس وقت رمي النرد.');
-    const turnOrder = ensure(gameForPreCalc.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود.');
-    const currentTurnIndex = ensure(gameForPreCalc.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
-    if (turnOrder[currentTurnIndex] !== playerId) throw new Error('ليس دورك الآن.');
-    
     const diceRollResult = randomDiceRoll();
-    const playerForPreCalc = ensure(gameForPreCalc.players.find(p => p.id === playerId), 'اللاعب غير موجود.');
-    const board = ensure(gameForPreCalc.educatedMerchantState?.board, 'اللوح مفقود.');
     
-    const newPosition = (playerForPreCalc.position + diceRollResult) % BOARD_SIZE;
-    const landingProperty = ensure(board[newPosition], 'خانة غير موجودة على اللوح');
-
     let questionForFine: EducatedMerchantQuestion | null = null;
-    if (landingProperty.type === 'fine') {
-        questionForFine = await fetchRandomQuestion('قسم الغرامات');
+    
+    // We need to get the current state to determine if we need to fetch a question
+    const preTxSnap = await getDoc(gameRef);
+    if (preTxSnap.exists()) {
+        const gameForPreCalc = preTxSnap.data() as Game;
+        const playerForPreCalc = ensure(gameForPreCalc.players.find(p => p.id === playerId), 'اللاعب غير موجود.');
+        const board = ensure(gameForPreCalc.educatedMerchantState?.board, 'اللوح مفقود.');
+        const newPosition = (playerForPreCalc.position + diceRollResult) % BOARD_SIZE;
+        const landingProperty = ensure(board[newPosition], 'خانة غير موجودة على اللوح');
+        if (landingProperty.type === 'fine') {
+            questionForFine = await fetchRandomQuestion('قسم الغرامات');
+        }
+    } else {
+        throw new Error('اللعبة غير موجودة.');
     }
 
     // --- Transaction logic ---
@@ -223,9 +220,16 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
         const game = snap.data() as Game;
 
+        if (game.gameState !== 'rolling') throw new Error('ليس وقت رمي النرد.');
+        const turnOrder = ensure(game.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود.');
+        const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
+        if (turnOrder[currentTurnIndex] !== playerId) throw new Error('ليس دورك الآن.');
+
         const playerIndex = getPlayerIndexById(game.players, playerId);
         const player = game.players[playerIndex];
         const oldPosition = player.position;
+        const newPosition = (oldPosition + diceRollResult) % BOARD_SIZE;
+        const landingProperty = ensure(game.educatedMerchantState?.board[newPosition], 'خانة غير موجودة على اللوح');
         
         // --- Prepare local and firestore updates ---
         let localGameCopy = JSON.parse(JSON.stringify(game)); // Deep copy
@@ -244,13 +248,13 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             localGameCopy.players[playerIndex].money = (localGameCopy.players[playerIndex].money || 0) + PASS_GO_REWARD;
             logEvents.push({ message: `${player.name} مر بنقطة البداية، وحصل على ${PASS_GO_REWARD} دينار.`, timestamp: Timestamp.now() });
         }
-        firestoreUpdates.players = localGameCopy.players;
-        localGameCopy.educatedMerchantState.lastDiceRoll = diceRollResult;
-        firestoreUpdates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+        
+        // Use the local copy for further calculations within this transaction
+        const nestedExtra = { players: localGameCopy.players };
 
         // --- Determine next game state based on landing tile ---
         if (landingProperty.type === 'start') {
-            const { updates } = endTurnInternal(localGameCopy, playerId);
+            const { updates } = endTurnInternal(localGameCopy, playerId, null, nestedExtra);
             Object.assign(firestoreUpdates, updates);
         } else if (landingProperty.type === 'property') {
             if (!landingProperty.ownerId) {
@@ -273,7 +277,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
                     rentMessage = `${player.name} دفع ${rent} دينار إيجار لـ ${localGameCopy.players[ownerIndex].name}.`;
                 }
                 
-                firestoreUpdates.players = localGameCopy.players;
                 const { updates } = endTurnInternal(localGameCopy, playerId, rentMessage);
                 Object.assign(firestoreUpdates, updates);
             } else {
@@ -286,6 +289,10 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             firestoreUpdates['educatedMerchantState.currentQuestion'] = questionForFine;
             firestoreUpdates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE };
         }
+        
+        // Add final player and log updates
+        firestoreUpdates.players = localGameCopy.players;
+        firestoreUpdates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
         
         tx.update(gameRef, firestoreUpdates);
     });
@@ -393,12 +400,13 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         }
       }
     }
-
-    const { updates, isGameOver } = endTurnInternal(localGameCopy, playerId, activityMessage);
+    
+    const nestedExtra = { players: localGameCopy.players, educatedMerchantState: { board: localGameCopy.educatedMerchantState.board } };
+    const { updates, isGameOver } = endTurnInternal(localGameCopy, playerId, activityMessage, nestedExtra);
     gameEnded = isGameOver;
 
     if (isGameOver) {
-      finalGameDataForLeagueUpdate = { ...game, ...updates };
+      finalGameDataForLeagueUpdate = { ...localGameCopy, ...updates };
     }
 
     // Always clear pending states
@@ -438,9 +446,34 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
     let updates: any;
     let localGameCopy = JSON.parse(JSON.stringify(game)); 
 
-    if (game.gameState === 'rolling' || game.gameState === 'property_action') {
-      ({ updates, isGameOver: gameEnded } = endTurnInternal(game, currentPlayerId, activityMessage));
-       if (gameEnded) finalGameDataForLeagueUpdate = { ...game, ...updates };
+    if (game.gameState === 'rolling') {
+        // Auto-roll dice for the player
+        const diceRollResult = randomDiceRoll();
+        const playerIndex = getPlayerIndexById(localGameCopy.players, currentPlayerId);
+        const oldPosition = localGameCopy.players[playerIndex].position;
+        const newPosition = (oldPosition + diceRollResult) % BOARD_SIZE;
+        localGameCopy.players[playerIndex].position = newPosition;
+        
+        let questionForFine: EducatedMerchantQuestion | null = null;
+        const board = ensure(game.educatedMerchantState?.board, 'اللوح مفقود.');
+        const landingProperty = ensure(board[newPosition], 'خانة غير موجودة على اللوح');
+        if (landingProperty.type === 'fine') {
+            questionForFine = await fetchRandomQuestion('قسم الغرامات');
+        }
+
+        const passGo = newPosition < oldPosition;
+        if(passGo) {
+            localGameCopy.players[playerIndex].money = (localGameCopy.players[playerIndex].money || 0) + PASS_GO_REWARD;
+        }
+
+        const nestedExtra = { players: localGameCopy.players };
+        ({ updates, isGameOver: gameEnded } = endTurnInternal(game, currentPlayerId, activityMessage, nestedExtra));
+        updates['educatedMerchantState.lastDiceRoll'] = diceRollResult;
+        updates['educatedMerchantState.rollAnimationNonce'] = Date.now();
+        if(questionForFine) updates['educatedMerchantState.currentQuestion'] = questionForFine;
+
+    } else if (game.gameState === 'property_action') {
+        ({ updates, isGameOver: gameEnded } = endTurnInternal(game, currentPlayerId, activityMessage));
     } else if (game.gameState === 'question') {
         const pendingPurchase = game.educatedMerchantState?.pendingPurchase;
         const pendingFine = game.educatedMerchantState?.pendingFine;
@@ -463,17 +496,18 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
             activityMessage = `${currentPlayer?.name} لم يجب في الوقت وتم تطبيق الغرامة.`;
         }
         
-        ({ updates, isGameOver: gameEnded } = endTurnInternal(localGameCopy, currentPlayerId, activityMessage));
-        if (gameEnded) finalGameDataForLeagueUpdate = { ...localGameCopy, ...updates };
+        const nestedExtra = { players: localGameCopy.players };
+        ({ updates, isGameOver: gameEnded } = endTurnInternal(localGameCopy, currentPlayerId, activityMessage, nestedExtra));
         
         updates['educatedMerchantState.pendingPurchase'] = deleteField();
         updates['educatedMerchantState.pendingFine'] = deleteField();
         updates['educatedMerchantState.currentQuestion'] = deleteField();
-
     } else {
       return; 
     }
 
+    if (gameEnded) finalGameDataForLeagueUpdate = { ...localGameCopy, ...updates };
+    
     if (updates && Object.keys(updates).length > 0) {
       tx.update(gameRef, updates);
     }
@@ -488,8 +522,21 @@ function endTurnInternal(
   game: Game,
   playerId: string,
   extraMessage: string | null = null,
+  extraUpdates?: { players?: Player[], educatedMerchantState?: { board?: Property[] }}
 ): { isGameOver: boolean; updates: any } {
-  const localGameCopy = JSON.parse(JSON.stringify(game));
+  
+  let localGameCopy = JSON.parse(JSON.stringify(game)); 
+  if(extraUpdates) {
+      localGameCopy = {
+          ...localGameCopy,
+          players: extraUpdates.players || localGameCopy.players,
+          educatedMerchantState: {
+              ...localGameCopy.educatedMerchantState,
+              ...extraUpdates.educatedMerchantState,
+          }
+      };
+  }
+  
   const logEvents = [];
   if (extraMessage) {
       logEvents.push({ message: extraMessage, timestamp: Timestamp.now() });
@@ -530,8 +577,10 @@ function endTurnInternal(
       players: localGameCopy.players,
       'educatedMerchantState.timerEndsAt': deleteField(),
       'educatedMerchantState.board': localGameCopy.educatedMerchantState.board,
-      'educatedMerchantState.activityLog': arrayUnion(...logEvents),
     };
+    if (logEvents.length > 0) {
+        finalGameData['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+    }
     return { isGameOver: true, updates: finalGameData };
   }
 
@@ -540,11 +589,12 @@ function endTurnInternal(
 
   let nextTurnIndex = findNextAliveIndex(turnOrder, localGameCopy.players, currentTurnIndex);
 
-  const currentMoves = localGameCopy.educatedMerchantState?.movesThisRound || 0;
+  let currentMoves = localGameCopy.educatedMerchantState?.movesThisRound || 0;
   let newMoves = currentMoves + 1;
   let newRound = localGameCopy.round || 1;
 
-  if (newMoves >= activePlayers.length) {
+  const currentAliveCount = activePlayers.length;
+  if (newMoves >= currentAliveCount) {
     newRound++;
     newMoves = 0;
   }
@@ -561,12 +611,15 @@ function endTurnInternal(
       gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.`, ranking },
       players: localGameCopy.players,
       'educatedMerchantState.board': localGameCopy.educatedMerchantState.board,
-      'educatedMerchantState.activityLog': arrayUnion(...logEvents),
     };
+    if (logEvents.length > 0) {
+        finalGameData['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+    }
     return { isGameOver: true, updates: finalGameData };
   }
 
   const finalUpdates: any = {
+    gameState: 'rolling',
     'educatedMerchantState.board': localGameCopy.educatedMerchantState.board,
     'educatedMerchantState.currentTurnIndex': nextTurnIndex,
     'educatedMerchantState.timerEndsAt': addActionTimer(),
@@ -574,10 +627,6 @@ function endTurnInternal(
     players: localGameCopy.players,
     'educatedMerchantState.movesThisRound': newMoves,
   };
-
-  if (!finalUpdates.gameState) {
-      finalUpdates.gameState = 'rolling';
-  }
   
   if (logEvents.length > 0) {
     finalUpdates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
@@ -605,13 +654,7 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
       playerId,
       `${game.players.find((p) => p.id === playerId)?.name} قرر تخطي دوره.`
     );
-    
-    // Manually merge players since endTurnInternal might have updated them
-    const finalUpdates = {
-        ...updates,
-        players: updates.players,
-    };
 
-    tx.update(gameRef, finalUpdates);
+    tx.update(gameRef, updates);
   });
 }
