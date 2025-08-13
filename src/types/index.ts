@@ -426,6 +426,7 @@ export interface GameKing {
     avatarId: string;
     winCount: number;
     kingId: string;
+    leaderboardPoints?: number;
 }
 
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";

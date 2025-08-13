@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { GAME_ICONS } from "@/data/icons";
-import { Crown, Star } from "lucide-react";
+import { Crown, Star, Trophy } from "lucide-react";
 import { motion } from "framer-motion";
 import { getGameKings, getKingOfGames } from "@/lib/actions/user";
 import { cn } from "@/lib/utils";
@@ -109,9 +109,12 @@ export default function KingsClient() {
                             <CardContent className="p-4 md:p-6 flex flex-col md:flex-row items-center gap-6">
                                 <PlayerAvatar avatarId={kingOfGames.avatarId} className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-yellow-200 shadow-lg" />
                                 <div className="text-center md:text-right flex-grow">
-                                    <h2 className="text-2xl font-bold text-yellow-900" style={{ textShadow: '1px 1px 2px rgba(255,255,255,0.3)' }}>ملك الملوك</h2>
+                                    <h2 className="text-2xl font-bold text-yellow-900 flex items-center justify-center md:justify-start gap-2" style={{ textShadow: '1px 1px 2px rgba(255,255,255,0.3)' }}>
+                                        <Crown className="w-8 h-8 text-yellow-800 drop-shadow-lg"/>
+                                        ملك الملوك
+                                    </h2>
                                     <h3 className="text-4xl md:text-5xl font-extrabold mt-1" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.6)' }}>{kingOfGames.name}</h3>
-                                    <p className="text-xl font-semibold text-yellow-100/90 mt-2">{kingOfGames.leaderboardPoints} نقطة صدارة</p>
+                                    <p className="text-xl font-semibold text-yellow-100/90 mt-2 flex items-center justify-center md:justify-start gap-2"><Trophy className="w-5 h-5"/>{kingOfGames.leaderboardPoints} نقطة صدارة</p>
                                 </div>
                             </CardContent>
                         </Card>
@@ -130,14 +133,17 @@ export default function KingsClient() {
                             >
                                 <Card className="text-center p-4 h-full flex flex-col justify-between bg-black/30 backdrop-blur-sm border-purple-800/50 text-white shadow-lg shadow-purple-900/40 hover:shadow-purple-500/50 hover:-translate-y-1 transition-all duration-300">
                                     <div>
-                                        <Icon className="w-16 h-16 text-purple-400 mx-auto mb-2"/>
+                                        <Icon className="w-16 h-16 text-purple-400 mx-auto mb-2 drop-shadow-[0_0_10px_rgba(192,132,252,0.5)]"/>
                                         <h3 className="font-bold text-2xl text-purple-300">{name}</h3>
                                     </div>
                                     {king ? (
                                         <div className="mt-4 space-y-2">
                                             <PlayerAvatar avatarId={king.avatarId} className="w-24 h-24 mx-auto rounded-full border-4 border-amber-400 shadow-lg" />
                                             <p className="font-semibold text-xl text-amber-300">{king.name}</p>
-                                            <p className="text-sm text-gray-400">{king.winCount} انتصارات</p>
+                                            <div className="flex justify-center items-center gap-4 text-sm text-gray-400">
+                                                <span className="flex items-center gap-1.5"><Star className="w-4 h-4" /> {king.winCount} انتصارات</span>
+                                                <span className="flex items-center gap-1.5"><Trophy className="w-4 h-4" /> {king.leaderboardPoints || 0} نقطة</span>
+                                            </div>
                                         </div>
                                     ) : (
                                         <div className="mt-4 flex-grow flex flex-col items-center justify-center">
