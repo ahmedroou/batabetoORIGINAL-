@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import type { Game, Player } from '@/types';
@@ -30,8 +31,8 @@ export function FinalResults({ game, self }: FinalResultsProps) {
     }
 
     // If both are bankrupt, sort by who went bankrupt last (later is better)
-    const bankruptTimeA = a.bankruptAt instanceof Timestamp ? a.bankruptAt.toMillis() : 0;
-    const bankruptTimeB = b.bankruptAt instanceof Timestamp ? b.bankruptAt.toMillis() : 0;
+    const bankruptTimeA = (a.bankruptAt instanceof Timestamp ? a.bankruptAt.toMillis() : (typeof a.bankruptAt === 'number' ? a.bankruptAt : 0));
+    const bankruptTimeB = (b.bankruptAt instanceof Timestamp ? b.bankruptAt.toMillis() : (typeof b.bankruptAt === 'number' ? b.bankruptAt : 0));
     return bankruptTimeB - bankruptTimeA;
   });
   

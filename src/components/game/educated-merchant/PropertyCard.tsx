@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import type { Game, Player, Property } from '@/types';
@@ -96,22 +97,22 @@ export function PropertyCard({ game, self, property, allowActions = false }: Pro
                      {property.type === 'property' && <p className="text-sm text-slate-500 mt-1">الإيجار: {property.rent} دينار</p>}
                 </CardContent>
             
-            {isMyTurn && allowActions ? (
+            {isMyTurn && allowActions && property.type === 'property' && !property.ownerId ? (
                 <CardFooter className="flex gap-2 pt-3">
-                    <Button className="flex-1" onClick={handlePurchase} disabled={isSubmitting || !canAfford || !!property.ownerId}>
+                    <Button className="flex-1" onClick={handlePurchase} disabled={isSubmitting || !canAfford}>
                         {isSubmitting ? <Loader2 className="animate-spin" /> : 'شراء'}
                     </Button>
                     <Button className="flex-1" variant="secondary" onClick={handleSkip} disabled={isSubmitting}>
                         {isSubmitting ? <Loader2 className="animate-spin" /> : 'تخطي'}
                     </Button>
                 </CardFooter>
-            ) : (
+            ) : !allowActions && !owner ? (
                  <CardFooter className="pt-3">
                     <p className="text-center w-full text-muted-foreground animate-pulse">في انتظار قرار {currentPlayer?.name}...</p>
                  </CardFooter>
-            )}
+            ) : null}
 
-            {isMyTurn && allowActions && !canAfford && !property.ownerId && <p className="text-xs text-destructive text-center pb-2">لا تملك ما يكفي من المال لشراء هذا العقار.</p>}
+            {isMyTurn && allowActions && property.type === 'property' && !canAfford && !property.ownerId && <p className="text-xs text-destructive text-center pb-2">لا تملك ما يكفي من المال لشراء هذا العقار.</p>}
         </motion.div>
     );
 }

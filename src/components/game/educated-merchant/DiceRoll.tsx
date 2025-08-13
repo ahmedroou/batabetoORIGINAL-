@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Dices, Loader2 } from 'lucide-react';
 import type { Game, Player } from '@/types';
-import { rollDice } from '@/lib/actions/educated-merchant';
+import { rollDice, endTurn, purchaseProperty } from '@/lib/actions/educated-merchant';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 
@@ -57,21 +57,23 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     if (rollNonce && lastNonceRef.current !== rollNonce) {
         lastNonceRef.current = rollNonce;
         setIsRolling(true);
+        const timer = setTimeout(() => setIsRolling(false), 1200); // Visual flair
+        return () => clearTimeout(timer);
     }
   }, [rollNonce]);
 
   useEffect(() => {
-    if (typeof lastRoll === 'number') {
-      setIsRolling(false);
+    if (typeof lastRoll === 'number' && lastRoll !== localHistory[0]) {
       setLocalHistory((h) => [lastRoll, ...h].slice(0, 5));
     }
-  }, [lastRoll]);
+  }, [lastRoll, localHistory]);
 
   const handleRoll = useCallback(async () => {
     if (!isMyTurn || isRolling) return;
     setIsRolling(true);
     try {
       await rollDice(game.id, self.id);
+      // We no longer set state here; we wait for the server to update the game state
     } catch (err: any) {
       setIsRolling(false);
       toast({ title: 'فشل رمي النرد', description: err?.message || 'حدث خطأ أثناء الاتصال بالخادم', variant: 'destructive' });
@@ -87,14 +89,14 @@ export function DiceRoll({ game, self }: DiceRollProps) {
 
 
   const renderContent = () => {
-    if (typeof lastRoll === 'number') {
+    if (typeof lastRoll === 'number' && game.gameState !== 'rolling') {
          return (
              <>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-primary">نتيجة النرد</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <RollingNumber number={lastRoll} maxFace={diceMax} isAnimating={isRolling} />
+                    <RollingNumber number={lastRoll} maxFace={diceMax} />
                 </CardContent>
              </>
          );

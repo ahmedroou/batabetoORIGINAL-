@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -12,8 +13,7 @@ import { PlayerHUD } from './PlayerHUD';
 import { ActivityLog } from './ActivityLog';
 import { cn } from '@/lib/utils';
 import { Banknote, Building, HelpCircle, Trophy } from 'lucide-react';
-import { handlePropertyLanding, endTurn, rollDice } from '@/lib/actions/educated-merchant';
-import { Button } from '@/components/ui/button';
+import { endTurn } from '@/lib/actions/educated-merchant';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
 
 interface GameBoardProps {
@@ -24,13 +24,11 @@ interface GameBoardProps {
 const BOARD_SIZE = 28;
 const GRID_SIZE = 8;
 
-// Animation Constants
 const JUMP_HEIGHT = 14; 
 const STEP_BASE_DELAY_MS = 200;
 const STEP_FINAL_EXTRA_DELAY_MS = 170; 
 const TRAIL_LIFETIME_MS = 420;
 
-// Utility to create a delay
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function GameBoard({ game, self }: GameBoardProps) {
@@ -40,36 +38,18 @@ export function GameBoard({ game, self }: GameBoardProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [tileSize, setTileSize] = useState(96);
   const [gapSize, setGapSize] = useState(6);
-
-  // This state now serves as the "source of truth" for piece positions on the board.
-  // It is initialized from the game state but updated locally during animations.
-  const [playerPositions, setPlayerPositions] = useState<Record<string, number>>(() => {
-    const map: Record<string, number> = {};
-    (game.players || []).forEach((p) => (map[p.id] = p.position || 0));
-    return map;
-  });
-
+  const [playerPositions, setPlayerPositions] = useState<Record<string, number>>({});
   const [animatingPlayers, setAnimatingPlayers] = useState<Record<string, boolean>>({});
   const [isJumping, setIsJumping] = useState<Record<string, boolean>>({});
   const [tileHighlight, setTileHighlight] = useState<Record<number, boolean>>({});
   const lastRollNonceRef = useRef<number | null>(null);
 
-  // Effect to reset local positions to server state when not animating
   useEffect(() => {
-    setPlayerPositions((prevPositions) => {
-      const nextPositions = { ...prevPositions };
-      let changed = false;
-      for (const player of game.players) {
-        if (!animatingPlayers[player.id] && (nextPositions[player.id] !== player.position)) {
-          nextPositions[player.id] = player.position ?? 0;
-          changed = true;
-        }
-      }
-      return changed ? nextPositions : prevPositions;
-    });
-  }, [game.players, animatingPlayers]);
+    const initialPositions: Record<string, number> = {};
+    (game.players || []).forEach((p) => (initialPositions[p.id] = p.position || 0));
+    setPlayerPositions(initialPositions);
+  }, [game.players]);
 
-  // Effect to handle resizing the board
   useEffect(() => {
     const calculateSize = () => {
       if (!containerRef.current) return;
@@ -84,7 +64,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
     return () => window.removeEventListener('resize', calculateSize);
   }, []);
 
-  // Returns the CSS properties for a tile at a given index
   const getPositionStyles = useCallback(
     (index: number): React.CSSProperties => {
       const sideLength = GRID_SIZE - 1;
@@ -111,8 +90,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
     [tileSize, gapSize]
   );
   
-  // This is the core animation logic. It's now purely visual.
-  // It no longer calls a server action at the end.
   const movePlayerPiece = useCallback(
     async (playerId: string, steps: number, startPos: number) => {
       if (steps === 0) return;
@@ -148,7 +125,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
     [shouldReduceMotion]
   );
 
-  // This effect listens for a new roll from the server and triggers the animation
   useEffect(() => {
     const nonce = game.educatedMerchantState?.rollAnimationNonce;
     if (nonce === null || nonce === undefined || lastRollNonceRef.current === nonce) return;
@@ -181,20 +157,16 @@ export function GameBoard({ game, self }: GameBoardProps) {
         if (!player) return null;
         const property = board[player.position];
         if (!property) return null;
-        const allowActions = currentPlayerId === self.id;
-        return <PropertyCard game={game} self={self} property={property} allowActions={allowActions} />;
+        return <PropertyCard game={game} self={self} property={property} allowActions={true} />;
       }
       case 'turn_end': {
         const turnEndingPlayer = game.players.find((p) => p.id === currentPlayerId);
-        const nextPlayerIndex = (currentTurnIndex + 1) % (game.educatedMerchantState?.turnOrder?.length ?? 1);
-        const nextPlayer = game.players.find((p) => p.id === game.educatedMerchantState?.turnOrder?.[nextPlayerIndex]);
+        const nextPlayerIndex = findNextAliveIndex(turnOrder, game.players, currentTurnIndex);
+        const nextPlayer = game.players.find((p) => p.id === turnOrder[nextPlayerIndex]);
         return (
           <div className="text-center text-white space-y-4 p-4 bg-slate-800 rounded-lg">
             <h2 className="text-2xl font-bold">انتهى دور {turnEndingPlayer?.name}</h2>
             <p className="text-muted-foreground mt-2">الدور على: {nextPlayer?.name}</p>
-            {currentPlayerId === self.id && (
-              <Button onClick={() => endTurn(game.id, self.id)}>إنهاء الدور</Button>
-            )}
           </div>
         );
       }
@@ -261,11 +233,11 @@ export function GameBoard({ game, self }: GameBoardProps) {
     return (
       <motion.div
         className={cn(
-          'w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500',
+          'w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500 cursor-pointer',
           baseBg, borderColor, isNewlyBought && 'animate-pulse-glow', isHighlighted && 'tile-highlight'
         )}
         style={dynamicStyle}
-        whileHover={{ scale: 1.03 }}
+        whileHover={{ scale: 1.03, zIndex: 10 }}
         transition={{ duration: 0.22 }}
       >
         <Icon className="w-5 h-5 mb-1 flex-shrink-0" />

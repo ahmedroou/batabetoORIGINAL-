@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -86,7 +87,7 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
     return map;
   }, [players]);
 
-  const nf = useMemo(() => new Intl.NumberFormat('ar-EG'), []);
+  const nf = useMemo(() => new Intl.NumberFormat('en-US'), []);
 
   return (
     <Card className="h-full bg-gray-900/50 border-gray-700 text-white">

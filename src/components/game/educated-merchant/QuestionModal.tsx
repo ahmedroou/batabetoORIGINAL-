@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -102,21 +103,30 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
                     >
                         <div className="py-4">
                             <RadioGroup value={selectedAnswer || ''} onValueChange={setSelectedAnswer} className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {question.options.map((option, i) => (
-                                    <Label key={i} htmlFor={`option-${i}`} className={cn(
-                                        'flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all',
-                                        'disabled:cursor-not-allowed disabled:opacity-50',
-                                        answerState !== 'pending' ? 'pointer-events-none opacity-50' : '',
-                                        selectedAnswer === option ? 'border-primary bg-primary/20' : 'border-slate-700 bg-slate-800/50 hover:bg-slate-700/50',
-                                        // When showing feedback, only highlight the selected answer
-                                        answerState === 'incorrect' && selectedAnswer === option && 'border-red-500 bg-red-500/20',
-                                        // Do not reveal the correct answer if another option was chosen
-                                        answerState === 'correct' && selectedAnswer === option && 'border-green-500 bg-green-500/20'
-                                    )}>
-                                        <RadioGroupItem value={option} id={`option-${i}`} disabled={answerState !== 'pending'}/>
-                                        <span className="text-base font-semibold">{option}</span>
-                                    </Label>
-                                ))}
+                                {question.options.map((option, i) => {
+                                    const isTheCorrectAnswer = option === question.answer;
+                                    const isTheSelectedAnswer = option === selectedAnswer;
+                                    
+                                    return (
+                                        <Label key={i} htmlFor={`option-${i}`} className={cn(
+                                            'flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all',
+                                            'disabled:cursor-not-allowed disabled:opacity-50',
+                                            answerState !== 'pending' && 'pointer-events-none opacity-60',
+                                            !isTheSelectedAnswer && 'hover:bg-slate-700/50',
+                                            
+                                            // Normal state
+                                            answerState === 'pending' && (selectedAnswer === option ? 'border-primary bg-primary/20' : 'border-slate-700 bg-slate-800/50'),
+
+                                            // Feedback state
+                                            answerState === 'correct' && isTheSelectedAnswer && 'border-green-500 bg-green-500/20 opacity-100',
+                                            answerState === 'incorrect' && isTheSelectedAnswer && 'border-red-500 bg-red-500/20 opacity-100',
+                                            answerState === 'incorrect' && isTheCorrectAnswer && '!opacity-40' // Don't highlight correct answer
+                                        )}>
+                                            <RadioGroupItem value={option} id={`option-${i}`} disabled={answerState !== 'pending'}/>
+                                            <span className="text-base font-semibold">{option}</span>
+                                        </Label>
+                                    )
+                                })}
                             </RadioGroup>
                         </div>
                         <Button onClick={handleSubmit} disabled={!selectedAnswer || isSubmitting || answerState !== 'pending'} className="w-full">
