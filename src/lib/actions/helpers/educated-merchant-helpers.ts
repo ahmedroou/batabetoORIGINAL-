@@ -139,14 +139,16 @@ function _endTurnInternal(game: Game, playerId: string, extraMessage: string | n
   if (isGameOver) {
     const winner = activePlayers[0];
     const finalGameData = { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board }, gameState: 'final_results' as const, gameResult: { winner: winner?.id || 'none', message: `اللاعب ${winner?.name || ''} هو الناجي الأخير!` } };
-    const updates = {
+    const updates: any = {
         gameState: 'final_results',
         gameResult: finalGameData.gameResult,
         players,
         'educatedMerchantState.board': board,
         'educatedMerchantState.timerEndsAt': deleteField(),
-        'educatedMerchantState.activityLog': logEvents.length > 0 ? arrayUnion(...logEvents) : undefined,
     };
+    if (logEvents.length > 0) {
+        updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+    }
     return { isGameOver: true, updates, finalGame: finalGameData as Game };
   }
 
@@ -175,14 +177,16 @@ function _endTurnInternal(game: Game, playerId: string, extraMessage: string | n
   if (newRound > maxRounds) {
     const winner = activePlayers.reduce((a, b) => ((a.money || 0) > (b.money || 0) ? a : b));
     const finalGameData = { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board }, gameState: 'final_results' as const, gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.` } };
-    const updates = {
+    const updates: any = {
         gameState: 'final_results',
         gameResult: finalGameData.gameResult,
         players,
         'educatedMerchantState.board': board,
         'educatedMerchantState.timerEndsAt': deleteField(),
-        'educatedMerchantState.activityLog': logEvents.length > 0 ? arrayUnion(...logEvents) : undefined,
     };
+     if (logEvents.length > 0) {
+        updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+    }
     return { isGameOver: true, updates, finalGame: finalGameData as Game };
   }
 
@@ -236,7 +240,6 @@ export function _rollDice(game: Game, playerId: string) {
     // Determine next state
     if (landingProperty.type === 'property') {
         if (landingProperty.ownerId && landingProperty.ownerId !== playerId) {
-            // Landed on owned property
             const ownerIndex = getPlayerIndexById(players, landingProperty.ownerId);
             const rent = landingProperty.rent || 0;
             if ((player.money || 0) < rent) {
@@ -252,33 +255,34 @@ export function _rollDice(game: Game, playerId: string) {
                 logEvents.push({ message: `${player.name} دفع ${rent} دينار إيجار لـ ${players[ownerIndex].name}.`, timestamp: nowTimestamp() });
             }
             updates['educatedMerchantState.lastRentPayment'] = { payer: player.name, owner: players[ownerIndex].name, amount: rent, nonce: Date.now() };
-            // After rent payment, the turn always ends.
             const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, null, { players, educatedMerchantState: { board } });
             Object.assign(updates, endUpdates);
-            if (logEvents.length > 0) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+            if (logEvents.length > 0 && !updates['educatedMerchantState.activityLog']) {
+                updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+            }
             return { updates, needsQuestion: null, isGameOver, finalGame };
 
         } else if (landingProperty.ownerId === playerId) {
-             // Landed on own property, end turn.
             const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, `${player.name} هبط على ملكيته.`, { players, educatedMerchantState: { board } });
             Object.assign(updates, endUpdates);
-            if (logEvents.length > 0) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+             if (logEvents.length > 0 && !updates['educatedMerchantState.activityLog']) {
+                updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+            }
             return { updates, needsQuestion: null, isGameOver, finalGame };
         }
         else {
-            // Landed on unowned property, go to action phase.
             updates.gameState = 'property_action';
             updates['educatedMerchantState.timerEndsAt'] = addActionTimer(ACTION_TIME_SECONDS);
         }
     } else if (landingProperty.type === 'start') {
-        // Landed on start, end turn.
         const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, `${player.name} استراح عند نقطة البداية.`, { players, educatedMerchantState: { board } });
         Object.assign(updates, endUpdates);
-        if (logEvents.length > 0) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+        if (logEvents.length > 0 && !updates['educatedMerchantState.activityLog']) {
+            updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+        }
         return { updates, needsQuestion: null, isGameOver, finalGame };
         
     } else if (landingProperty.type === 'fine') {
-        // Landed on fine, go to question phase.
         const token = newQuestionToken();
         updates.gameState = 'question';
         updates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE };
@@ -407,3 +411,5 @@ export function _handleTimeout(game: Game) {
   // Fallback for safety
   return _endTurnInternal(game, currentPlayerId, `انتهى وقت اللاعب ${game.players.find(p => p.id === currentPlayerId)?.name} وتخطى دوره.`);
 }
+
+    
