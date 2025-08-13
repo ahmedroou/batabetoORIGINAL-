@@ -100,28 +100,9 @@ export function PropertyCard({ game, self, property, isPopover = false, allowAct
         </Card>
     );
 
-    // If this is rendered inside a popover, but the current session can act, show footer there too.
+    // If this is rendered inside a popover, it's for info only
     if (isPopover) {
-        return (
-            <div>
-                {cardBody}
-                {allowActions ? (
-                    <CardFooter className="flex gap-2 mt-2">
-                        <Button className="flex-1" onClick={handlePurchase} disabled={isSubmitting || !canAfford || !!property.ownerId}>
-                            {isSubmitting ? <Loader2 className="animate-spin" /> : 'شراء'}
-                        </Button>
-                        <Button className="flex-1" variant="secondary" onClick={handleSkip} disabled={isSubmitting}>
-                            {isSubmitting ? <Loader2 className="animate-spin" /> : 'تخطي'}
-                        </Button>
-                    </CardFooter>
-                ) : owner ? null : (
-                    <CardFooter>
-                        <p className="text-center w-full text-muted-foreground animate-pulse">في انتظار قرار {currentPlayer?.name}...</p>
-                    </CardFooter>
-                )}
-                {allowActions && !canAfford && !property.ownerId && <p className="text-xs text-destructive text-center pb-2">لا تملك ما يكفي من المال لشراء هذا العقار.</p>}
-            </div>
-        );
+        return cardBody;
     }
 
     // default non-popover rendering (standalone)
@@ -133,8 +114,8 @@ export function PropertyCard({ game, self, property, isPopover = false, allowAct
             className="transform-style-3d"
         >
             {cardBody}
-            {isMyTurn ? (
-                <CardFooter className="flex gap-2">
+            {isMyTurn && allowActions ? (
+                <CardFooter className="flex gap-2 pt-3">
                     <Button className="flex-1" onClick={handlePurchase} disabled={isSubmitting || !canAfford || !!property.ownerId}>
                         {isSubmitting ? <Loader2 className="animate-spin" /> : 'شراء'}
                     </Button>
@@ -143,12 +124,12 @@ export function PropertyCard({ game, self, property, isPopover = false, allowAct
                     </Button>
                 </CardFooter>
             ) : (
-                 <CardFooter>
+                 <CardFooter className="pt-3">
                     <p className="text-center w-full text-muted-foreground animate-pulse">في انتظار قرار {currentPlayer?.name}...</p>
                  </CardFooter>
             )}
 
-            {isMyTurn && !canAfford && !property.ownerId && <p className="text-xs text-destructive text-center pb-2">لا تملك ما يكفي من المال لشراء هذا العقار.</p>}
+            {isMyTurn && allowActions && !canAfford && !property.ownerId && <p className="text-xs text-destructive text-center pb-2">لا تملك ما يكفي من المال لشراء هذا العقار.</p>}
         </motion.div>
     );
 }

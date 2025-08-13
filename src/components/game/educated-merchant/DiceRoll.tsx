@@ -16,6 +16,7 @@ const DEFAULT_DICE_MAX = 5;
 const MIN_FACE_RENDER = 6;
 const FACE_HEIGHT = 80;
 
+// Use a stable timeout implementation
 const setRafTimeout = (fn: () => void, ms: number) => window.setTimeout(fn, ms);
 const clearRafTimeout = (id: number | null) => { if (id) window.clearTimeout(id); };
 
@@ -126,24 +127,46 @@ export function DiceRoll({ game, self }: DiceRollProps) {
 
   const displayedNumber = typeof lastRoll === 'number' ? lastRoll : optimisticNumber;
 
+  // The main component render
+  if (typeof displayedNumber === 'number' && !isRolling) {
+      return (
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
+                <Card className="text-center bg-slate-800 border-primary text-white shadow-lg" tabIndex={0} onKeyDown={onKeyDown} aria-live="polite">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-primary">نتيجة النرد</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <RollingNumber number={displayedNumber} maxFace={diceMax} isAnimating={isRolling} />
+                        <div className="mt-3 text-slate-300">نتيجة مؤكدة من الخادم</div>
+                    </CardContent>
+                </Card>
+            </motion.div>
+      )
+  }
+
   return (
     <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
       <Card className="text-center bg-slate-800 border-primary text-white shadow-lg" tabIndex={0} onKeyDown={onKeyDown} aria-live="polite">
         <CardHeader className="pb-2">
           <CardTitle className="text-primary">
-            {isRolling ? 'جارٍ الرمي...' : `نتيجة النرد`}
+            {isRolling ? 'جارٍ الرمي...' : (isMyTurn ? 'دورك لرمي النرد' : `دور: ${game.players.find(p => p.id === currentTurnPlayerId)?.name || 'لاعب'}`)}
           </CardTitle>
-          <CardDescription className="text-slate-400">{isMyTurn ? 'دورك — اضغط لرمي النرد' : `دور: ${game.players.find(p => p.id === currentTurnPlayerId)?.name || 'لاعب'}`}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center gap-3">
-            <RollingNumber number={displayedNumber ?? 1} maxFace={Math.max(MIN_FACE_RENDER, diceMax)} isAnimating={isRolling} />
+            {isRolling ? (
+                 <RollingNumber number={displayedNumber ?? 1} maxFace={Math.max(MIN_FACE_RENDER, diceMax)} isAnimating={isRolling} />
+            ) : (
+                <Dices className="w-24 h-24 mx-auto text-primary" aria-hidden />
+            )}
             <div className="flex w-full gap-2">
               <Button onClick={handleRoll} disabled={!isMyTurn || isRolling} className="flex-1" aria-disabled={!isMyTurn || isRolling} aria-label={isMyTurn ? (isRolling ? 'جارٍ رمي النرد' : 'ارمِ النرد') : 'ليس دورك'}>
                 {isRolling ? <Loader2 className="animate-spin" /> : (isMyTurn ? 'ارمِ النرد' : 'انتظر')}
               </Button>
             </div>
-            <div className="text-xs text-slate-400">هناك تأخير بسيط أثناء انتظار نتيجة الخادم — يتم تشغيل رسوم متحركة محلية لراحة العرض.</div>
+            <div className="text-xs text-slate-400">
+                {isRolling ? 'يتم تشغيل رسوم متحركة محلية أثناء انتظار نتيجة الخادم.' : 'اضغط لرمي النرد.'}
+            </div>
             <div className="w-full mt-2 text-left">
               <div className="text-sm text-slate-200 mb-1">سجل الرميات (محلي):</div>
               <div className="flex gap-2">

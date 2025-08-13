@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -134,6 +135,8 @@ export function GameBoard({ game, self }: GameBoardProps) {
         setIsJumping((s) => ({ ...s, [playerId]: false }));
       }
       
+      // The server will now immediately end the turn if needed, and the game state will update.
+      // We only need to call this on the client moving to trigger the server-side logic.
       if (playerId === self.id) {
           try {
             await handlePropertyLanding(game.id, playerId);
@@ -306,14 +309,15 @@ export function GameBoard({ game, self }: GameBoardProps) {
             </motion.div>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" side="bottom" align="center">
-            <PropertyCard game={game} self={self} property={property} isPopover={true} allowActions={isMyTurn && game.gameState === 'property_action'} />
+            {/* The popover content is now just informational. Actions are in the center. */}
+            <PropertyCard game={game} self={self} property={property} isPopover={true} allowActions={false} />
           </PopoverContent>
         </Popover>
       );
     };
 
     return React.memo(Inner);
-  }, [game, self, isMyTurn]);
+  }, [game, self]);
 
   return (
     <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">

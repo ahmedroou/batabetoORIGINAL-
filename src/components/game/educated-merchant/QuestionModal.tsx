@@ -26,6 +26,7 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
     const isHost = game.hostId === self.id;
 
     useEffect(() => {
+        // Reset state only when the question modal becomes relevant for the current user
         if (isOpen && isMyTurnToAnswer) {
             setSelectedAnswer(null);
             setIsSubmitting(false);
@@ -39,8 +40,11 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
         const isCorrect = selectedAnswer === question.answer;
         setAnswerState(isCorrect ? 'correct' : 'incorrect');
 
+        // Wait a moment for the user to see the feedback before the modal closes
         setTimeout(async () => {
             await answerQuestion(game.id, self.id, selectedAnswer);
+            // The modal will close automatically when the game state changes on the server.
+            // No need to set isSubmitting back to false if the component unmounts.
         }, 1500); 
     };
 
@@ -93,11 +97,9 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
                                     <Label key={i} htmlFor={`option-${i}`} className={cn(
                                         'flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all',
                                         'disabled:cursor-not-allowed disabled:opacity-50',
-                                        answerState !== 'pending' ? 'pointer-events-none' : '',
+                                        answerState !== 'pending' ? 'pointer-events-none opacity-50' : '', // Disable all options after answering
                                         selectedAnswer === option ? 'border-primary bg-primary/20' : 'border-slate-700 bg-slate-800/50 hover:bg-slate-700/50',
-                                        // Hide correct answer on incorrect guess
-                                        // answerState === 'correct' && option === question.answer && 'border-green-500 bg-green-500/20 animate-pulse',
-                                        answerState === 'incorrect' && selectedAnswer === option && 'border-red-500 bg-red-500/20'
+                                        answerState === 'incorrect' && selectedAnswer === option && 'border-red-500 bg-red-500/20' // Highlight wrong selection
                                     )}>
                                         <RadioGroupItem value={option} id={`option-${i}`} disabled={answerState !== 'pending'}/>
                                         <span className="text-base font-semibold">{option}</span>
