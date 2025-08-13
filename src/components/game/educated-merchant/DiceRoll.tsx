@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Dices, Loader2 } from 'lucide-react';
 import type { Game, Player } from '@/types';
-import { rollDice, endTurn, purchaseProperty } from '@/lib/actions/educated-merchant';
+import { rollDice } from '@/lib/actions/educated-merchant';
 import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 
@@ -57,10 +57,13 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     if (rollNonce && lastNonceRef.current !== rollNonce) {
         lastNonceRef.current = rollNonce;
         setIsRolling(true);
-        const timer = setTimeout(() => setIsRolling(false), 1200); // Visual flair
+        const timer = setTimeout(() => setIsRolling(false), 1200); // Visual flair duration
         return () => clearTimeout(timer);
+    } else if (game.gameState === 'rolling' && isRolling) {
+      // If the state goes back to rolling but we are still in an animation, reset it.
+      setIsRolling(false);
     }
-  }, [rollNonce]);
+  }, [rollNonce, game.gameState]);
 
   useEffect(() => {
     if (typeof lastRoll === 'number' && lastRoll !== localHistory[0]) {
@@ -70,12 +73,14 @@ export function DiceRoll({ game, self }: DiceRollProps) {
 
   const handleRoll = useCallback(async () => {
     if (!isMyTurn || isRolling) return;
-    setIsRolling(true);
+    
+    // We don't set isRolling(true) here anymore. The server will tell us when to animate via the nonce.
+    // This prevents the UI from getting out of sync.
+    
     try {
       await rollDice(game.id, self.id);
-      // We no longer set state here; we wait for the server to update the game state
     } catch (err: any) {
-      setIsRolling(false);
+      // isRolling state is managed by nonce, no need to reset it here
       toast({ title: 'فشل رمي النرد', description: err?.message || 'حدث خطأ أثناء الاتصال بالخادم', variant: 'destructive' });
     }
   }, [game.id, isMyTurn, isRolling, self.id, toast]);
@@ -96,7 +101,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
                     <CardTitle className="text-primary">نتيجة النرد</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <RollingNumber number={lastRoll} maxFace={diceMax} />
+                    <RollingNumber number={lastRoll} maxFace={diceMax} isAnimating={isRolling} />
                 </CardContent>
              </>
          );

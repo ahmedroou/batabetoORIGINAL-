@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -212,14 +213,12 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
 
     const updatedPlayers = [...game.players];
     updatedPlayers[playerIndex] = { ...player, position: newPosition };
-
-    // Ensure property exists before using its name
+    
     const landingProperty = ensure(
       game.educatedMerchantState?.board?.[newPosition],
       'خانة غير موجودة على اللوح'
     );
-
-    // Build activity log events (movement + pass-go if applicable)
+    
     const logEvents: Array<{ message: string; timestamp: Timestamp }> = [];
     logEvents.push({
       message: `${player.name} رمى ${diceRoll} وتحرك إلى "${landingProperty.name}".`,
@@ -234,7 +233,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
       });
     }
 
-    // Base updates that always happen on a roll
     const baseExtra: any = {
       players: updatedPlayers,
       'educatedMerchantState.rollAnimationNonce': Date.now(),
@@ -243,27 +241,18 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
       'educatedMerchantState.activityLog': arrayUnion(...logEvents),
     };
 
-    // We'll compute a single updates object to commit
     let updatesToWrite: any = null;
 
-    // Only set nextGameState explicitly in branches that DO NOT end the turn via endTurnInternal
-    let nextGameState: Game['gameState'] | null = null;
-
     if (landingProperty.type === 'start') {
-      // End turn immediately (standing on start)
       const { updates } = endTurnInternal(game, playerId, '', { ...baseExtra });
       updatesToWrite = updates;
     } else if (landingProperty.type === 'property') {
       if (!landingProperty.ownerId) {
-        // Offer to buy
-        nextGameState = 'property_action';
-        updatesToWrite = { ...baseExtra, gameState: nextGameState };
+        updatesToWrite = { ...baseExtra, gameState: 'property_action' };
       } else if (landingProperty.ownerId !== playerId) {
-        // Pay rent or bankrupt
         const ownerIndex = getPlayerIndexById(updatedPlayers, landingProperty.ownerId);
         const rent = landingProperty.rent || 0;
         if ((updatedPlayers[playerIndex].money || 0) < rent) {
-          // Transfer everything then bankrupt
           updatedPlayers[ownerIndex].money =
             (updatedPlayers[ownerIndex].money || 0) + (updatedPlayers[playerIndex].money || 0);
           updatedPlayers[playerIndex].money = 0;
@@ -284,22 +273,18 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         const { updates } = endTurnInternal(game, playerId, '', { ...baseExtra, players: updatedPlayers });
         updatesToWrite = updates;
       } else {
-        // Landed on own property -> end turn; make sure to pass baseExtra so new position persists
         const { updates } = endTurnInternal(game, playerId, `${player.name} وصل إلى عقاره.`, { ...baseExtra });
         updatesToWrite = updates;
       }
     } else if (landingProperty.type === 'fine') {
-      // Ask a question to avoid the fine
       const question = await fetchRandomQuestion('قسم الغرامات');
-      nextGameState = 'question';
       updatesToWrite = {
         ...baseExtra,
-        gameState: nextGameState,
+        gameState: 'question',
         'educatedMerchantState.currentQuestion': question,
         'educatedMerchantState.pendingFine': { playerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE },
       };
     } else {
-      // Fallback: end the turn with base updates
       const { updates } = endTurnInternal(game, playerId, '', { ...baseExtra });
       updatesToWrite = updates;
     }
@@ -523,6 +508,7 @@ function endTurnInternal(
   const updatedBoard = (mergedGameData.educatedMerchantState?.board || []).map((prop) => {
     const owner = mergedGameData.players.find((p) => p.id === prop.ownerId);
     if (owner && owner.status === 'bankrupt') {
+      // Only reset if owner is bankrupt
       const { ownerId, color, ...rest } = prop;
       return { ...rest, ownerId: null, color: undefined } as Property;
     }
