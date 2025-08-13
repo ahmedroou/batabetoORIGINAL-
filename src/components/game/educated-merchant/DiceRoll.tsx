@@ -64,11 +64,8 @@ function RollingNumber({ number, maxFace = MIN_FACE_RENDER, isAnimating = false 
 export function DiceRoll({ game, self }: DiceRollProps) {
   const { toast } = useToast();
   const [isRolling, setIsRolling] = useState(false);
-  const [optimisticNumber, setOptimisticNumber] = useState<number | null>(null);
   const [localHistory, setLocalHistory] = useState<number[]>([]);
 
-  const animIntervalRef = useRef<number | null>(null);
-  const { set: setFallbackTimeout, clear: clearFallbackTimeout } = useRafTimeout();
   const lastNonceRef = useRef<number | null>(null);
 
   const turnOrder = game.educatedMerchantState?.turnOrder || [];
@@ -78,66 +75,30 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const rollNonce = game.educatedMerchantState?.rollAnimationNonce ?? null;
   const diceMax = game.educatedMerchantState?.settings?.diceMax ?? DEFAULT_DICE_MAX;
 
-  const startLocalSpin = useCallback(() => {
-    if (animIntervalRef.current) return;
-    setIsRolling(true);
-    animIntervalRef.current = window.setInterval(() => {
-      setOptimisticNumber(Math.floor(Math.random() * Math.max(6, diceMax)) + 1);
-    }, 80);
-
-    setFallbackTimeout(() => {
-      if (animIntervalRef.current) {
-        window.clearInterval(animIntervalRef.current!);
-        animIntervalRef.current = null;
-      }
-      setIsRolling(false);
-      setOptimisticNumber(null);
-      toast({ title: 'انتهى وقت الاستجابة', description: 'لم نتلق نتيجة من الخادم — حاول مرة أخرى', variant: 'destructive' });
-    }, 8000);
-  }, [diceMax, setFallbackTimeout, toast]);
-
-  const stopLocalSpin = useCallback(() => {
-    if (animIntervalRef.current) { window.clearInterval(animIntervalRef.current); animIntervalRef.current = null; }
-    clearFallbackTimeout();
-    setIsRolling(false);
-    setOptimisticNumber(null);
-  }, [clearFallbackTimeout]);
-  
-  // Effect to handle server-driven roll animation
   useEffect(() => {
-    if (rollNonce === null) return;
-    if (lastNonceRef.current !== rollNonce) {
+    if (rollNonce && lastNonceRef.current !== rollNonce) {
         lastNonceRef.current = rollNonce;
-        startLocalSpin();
+        setIsRolling(true);
     }
-  }, [rollNonce, startLocalSpin]);
-  
-  // Effect to stop animation and show final result when `lastRoll` is updated
+  }, [rollNonce]);
+
   useEffect(() => {
     if (typeof lastRoll === 'number') {
-      stopLocalSpin();
-      setLocalHistory((h) => [lastRoll, ...h].slice(0, 6));
+      setIsRolling(false);
+      setLocalHistory((h) => [lastRoll, ...h].slice(0, 5));
     }
-  }, [lastRoll, stopLocalSpin]);
-
-  // General cleanup on unmount
-  useEffect(() => {
-    return () => {
-        if(animIntervalRef.current) window.clearInterval(animIntervalRef.current);
-        clearFallbackTimeout();
-    };
-  }, [clearFallbackTimeout]);
+  }, [lastRoll]);
 
   const handleRoll = useCallback(async () => {
     if (!isMyTurn || isRolling) return;
+    setIsRolling(true);
     try {
       await rollDice(game.id, self.id);
-      // No need to call startLocalSpin here as it will be triggered by the nonce change
     } catch (err: any) {
-      stopLocalSpin();
+      setIsRolling(false);
       toast({ title: 'فشل رمي النرد', description: err?.message || 'حدث خطأ أثناء الاتصال بالخادم', variant: 'destructive' });
     }
-  }, [game.id, isMyTurn, isRolling, self.id, stopLocalSpin, toast]);
+  }, [game.id, isMyTurn, isRolling, self.id, toast]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent) => {
     if ((e.key === 'Enter' || e.key === ' ') && isMyTurn && !isRolling) {
@@ -146,59 +107,60 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     }
   }, [handleRoll, isMyTurn, isRolling]);
 
-  const displayedNumber = typeof lastRoll === 'number' ? lastRoll : optimisticNumber;
 
-  if (typeof displayedNumber === 'number' && !isRolling) {
-      return (
-            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
-                <Card className="text-center bg-slate-800 border-primary text-white shadow-lg" tabIndex={0} onKeyDown={onKeyDown} aria-live="polite">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-primary">نتيجة النرد</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <RollingNumber number={displayedNumber} maxFace={diceMax} isAnimating={isRolling} />
-                        <div className="mt-3 text-slate-300">نتيجة مؤكدة من الخادم</div>
-                    </CardContent>
-                </Card>
-            </motion.div>
-      )
+  const renderContent = () => {
+    if (game.gameState === 'movement' || (typeof lastRoll === 'number' && !isRolling)) {
+         return (
+             <>
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-primary">نتيجة النرد</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <RollingNumber number={lastRoll || 1} maxFace={diceMax} isAnimating={isRolling} />
+                    <div className="mt-3 text-slate-300">{isRolling ? 'جارٍ التحرك...' : 'نتيجة مؤكدة من الخادم'}</div>
+                </CardContent>
+             </>
+         );
+    }
+    
+    return (
+        <>
+             <CardHeader className="pb-2">
+                <CardTitle className="text-primary">
+                    {isMyTurn ? 'دورك لرمي النرد' : `دور: ${game.players.find(p => p.id === currentTurnPlayerId)?.name || 'لاعب'}`}
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="flex flex-col items-center gap-3">
+                    <Dices className="w-24 h-24 mx-auto text-primary" aria-hidden />
+                    <Button onClick={handleRoll} disabled={!isMyTurn || isRolling} className="w-full" aria-disabled={!isMyTurn || isRolling} aria-label={isMyTurn ? (isRolling ? 'جارٍ رمي النرد' : 'ارمِ النرد') : 'ليس دورك'}>
+                        {isRolling ? <Loader2 className="animate-spin" /> : (isMyTurn ? 'ارمِ النرد' : 'انتظر')}
+                    </Button>
+                </div>
+            </CardContent>
+        </>
+    );
   }
+
 
   return (
     <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
       <Card className="text-center bg-slate-800 border-primary text-white shadow-lg" tabIndex={0} onKeyDown={onKeyDown} aria-live="polite">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-primary">
-            {isRolling ? 'جارٍ الرمي...' : (isMyTurn ? 'دورك لرمي النرد' : `دور: ${game.players.find(p => p.id === currentTurnPlayerId)?.name || 'لاعب'}`)}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center gap-3">
-            {isRolling ? (
-                 <RollingNumber number={displayedNumber ?? 1} maxFace={Math.max(MIN_FACE_RENDER, diceMax)} isAnimating={isRolling} />
-            ) : (
-                <Dices className="w-24 h-24 mx-auto text-primary" aria-hidden />
-            )}
-            <div className="flex w-full gap-2">
-              <Button onClick={handleRoll} disabled={!isMyTurn || isRolling} className="flex-1" aria-disabled={!isMyTurn || isRolling} aria-label={isMyTurn ? (isRolling ? 'جارٍ رمي النرد' : 'ارمِ النرد') : 'ليس دورك'}>
-                {isRolling ? <Loader2 className="animate-spin" /> : (isMyTurn ? 'ارمِ النرد' : 'انتظر')}
-              </Button>
-            </div>
-            
-            <div className="w-full mt-2 text-left">
-              <div className="text-sm text-slate-200 mb-1">آخر الرميات:</div>
-              <div className="flex gap-2">
-                {localHistory.length === 0 ? (
-                  <div className="text-slate-500">لا يوجد سجل بعد</div>
-                ) : (
-                  localHistory.map((r, i) => (
-                    <div key={i} className="w-8 h-8 rounded bg-gray-800/60 flex items-center justify-center border border-primary/20">{r}</div>
-                  ))
-                )}
+          {renderContent()}
+          <CardContent>
+              <div className="w-full mt-2 text-left">
+                  <div className="text-sm text-slate-200 mb-1">آخر الرميات:</div>
+                  <div className="flex gap-2">
+                      {localHistory.length === 0 ? (
+                          <div className="text-slate-500 text-xs">لا يوجد سجل بعد</div>
+                      ) : (
+                          localHistory.map((r, i) => (
+                              <div key={i} className="w-8 h-8 rounded bg-gray-800/60 flex items-center justify-center border border-primary/20">{r}</div>
+                          ))
+                      )}
+                  </div>
               </div>
-            </div>
-          </div>
-        </CardContent>
+          </CardContent>
       </Card>
     </motion.div>
   );
