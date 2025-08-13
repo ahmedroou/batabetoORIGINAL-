@@ -260,7 +260,7 @@ export function _rollDice(game: Game, playerId: string) {
 
         } else if (landingProperty.ownerId === playerId) {
              // Landed on own property, end turn.
-            const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, null, { players, educatedMerchantState: { board } });
+            const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, `${player.name} هبط على ملكيته.`, { players, educatedMerchantState: { board } });
             Object.assign(updates, endUpdates);
             if (logEvents.length > 0) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
             return { updates, needsQuestion: null, isGameOver, finalGame };
@@ -272,7 +272,7 @@ export function _rollDice(game: Game, playerId: string) {
         }
     } else if (landingProperty.type === 'start') {
         // Landed on start, end turn.
-        const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, null, { players, educatedMerchantState: { board } });
+        const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, `${player.name} استراح عند نقطة البداية.`, { players, educatedMerchantState: { board } });
         Object.assign(updates, endUpdates);
         if (logEvents.length > 0) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
         return { updates, needsQuestion: null, isGameOver, finalGame };
@@ -329,6 +329,7 @@ export function _answerQuestion(game: Game, playerId: string, answer: string) {
     const board = cloneBoard(ensure(game.educatedMerchantState.board));
     const playerIndex = getPlayerIndexById(players, playerId);
     let activityMessage = '';
+    let extraUpdates = {};
 
     if (pendingPurchase) {
         const propertyName = pendingPurchase.propertyName || 'عقار';
@@ -340,6 +341,7 @@ export function _answerQuestion(game: Game, playerId: string, answer: string) {
             }
             players[playerIndex].propertiesCount = (players[playerIndex].propertiesCount || 0) + 1;
             activityMessage = `${players[playerIndex].name} أجاب بشكل صحيح وامتلك "${propertyName}"!`;
+            extraUpdates = { 'educatedMerchantState.newlyBoughtPropertyId': pendingPurchase.propertyId };
         } else {
             const refund = Math.round((pendingPurchase.price || 0) / 4);
             players[playerIndex].money += refund;
@@ -363,10 +365,15 @@ export function _answerQuestion(game: Game, playerId: string, answer: string) {
     }
 
     const { updates, isGameOver, finalGame } = _endTurnInternal(game, playerId, activityMessage, { players, educatedMerchantState: { board } });
-    updates['educatedMerchantState.pendingPurchase'] = deleteField();
-    updates['educatedMerchantState.pendingFine'] = deleteField();
-    updates['educatedMerchantState.currentQuestion'] = deleteField();
-    updates['educatedMerchantState.questionToken'] = deleteField();
+    
+    Object.assign(updates, {
+      ...extraUpdates,
+      'educatedMerchantState.pendingPurchase': deleteField(),
+      'educatedMerchantState.pendingFine': deleteField(),
+      'educatedMerchantState.currentQuestion': deleteField(),
+      'educatedMerchantState.questionToken': deleteField(),
+    });
+
     return { updates, isGameOver, finalGame };
 }
 
@@ -375,7 +382,8 @@ export function _endTurn(game: Game, playerId: string) {
     const turnOrder = ensure(game.educatedMerchantState?.turnOrder);
     if (turnOrder[ensure(game.educatedMerchantState.currentTurnIndex)] !== playerId) throw new Error('Not your turn.');
     
-    return _endTurnInternal(game, playerId, `${game.players.find(p => p.id === playerId)?.name} قرر تخطي دوره.`);
+    const player = game.players.find(p => p.id === playerId);
+    return _endTurnInternal(game, playerId, `${player?.name} قرر عدم شراء العقار.`);
 }
 
 export function _handleTimeout(game: Game) {
