@@ -92,7 +92,7 @@ export default function ComplaintsTab() {
                                             <div className="flex items-center gap-2">
                                                 <PlayerAvatar avatarId={complaint.userAvatar} className="w-8 h-8" />
                                                 <span className="font-bold">{complaint.userName}</span>
-                                                <span className="text-xs text-muted-foreground">({formatDistanceToNow(complaint.createdAt.toDate(), { addSuffix: true, locale: ar })})</span>
+                                                <span className="text-xs text-muted-foreground">({formatDistanceToNow(complaint.createdAt, { addSuffix: true, locale: ar })})</span>
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="space-y-4 p-2 bg-muted/50 rounded-b-md">
@@ -146,7 +146,7 @@ export default function ComplaintsTab() {
                                             <div className="flex items-center gap-2">
                                                 <PlayerAvatar avatarId={complaint.userAvatar} className="w-8 h-8" />
                                                 <span className="font-bold">{complaint.userName}</span>
-                                                <span className="text-xs text-muted-foreground">({formatDistanceToNow(complaint.createdAt.toDate(), { addSuffix: true, locale: ar })})</span>
+                                                <span className="text-xs text-muted-foreground">({formatDistanceToNow(complaint.createdAt, { addSuffix: true, locale: ar })})</span>
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="space-y-2 p-2 bg-muted/50 rounded-b-md">

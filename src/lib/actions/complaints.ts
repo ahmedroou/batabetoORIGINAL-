@@ -45,10 +45,11 @@ export async function getComplaints(): Promise<{ success: boolean; complaints?: 
 
         const complaints = snapshot.docs.map(doc => {
             const data = doc.data();
+            const createdAtTimestamp = data.createdAt as Timestamp;
             return {
                 id: doc.id,
                 ...data,
-                createdAt: (data.createdAt as Timestamp) || Timestamp.now(),
+                createdAt: createdAtTimestamp ? createdAtTimestamp.toDate() : new Date(), // Convert to JS Date here
             } as Complaint;
         });
 
