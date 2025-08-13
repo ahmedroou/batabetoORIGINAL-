@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -113,7 +114,7 @@ export default function KingsClient() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.6 }}
                          >
-                        <Card className="mb-12 bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 border-2 border-yellow-300/80 shadow-2xl shadow-yellow-500/50 text-white shadow-inner-light">
+                        <Card className="mb-12 bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 border-2 border-yellow-300/80 shadow-2xl shadow-yellow-500/50 text-black shadow-inner-light">
                             <CardContent className="p-4 md:p-6 flex flex-col md:flex-row items-center gap-6">
                                 <PlayerAvatar avatarId={kingOfGames.avatarId} className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-yellow-200 shadow-lg" />
                                 <div className="text-center md:text-right flex-grow">
