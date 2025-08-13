@@ -6,11 +6,10 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { LogOut, User, ShieldCheck, Store, Mail as MailIcon, MessageSquarePlus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
-import type { UserProfile, Game, ComplaintType } from "@/types";
+import type { UserProfile, Game, ComplaintType, Mail } from "@/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,6 +20,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2 } from "lucide-react";
 import { submitComplaint } from "@/lib/actions/complaints";
 import { GAME_TYPE_NAMES } from "@/data/icons";
+import { useAuth } from "@/hooks/useAuth";
+import { getMail, claimMailCoins, markMailAsRead } from "@/lib/actions/user";
+import { formatDistanceToNow } from "date-fns";
+import { ar } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 
 const ComplaintDialog = ({ userProfile }: { userProfile: UserProfile }) => {
@@ -145,6 +150,110 @@ const ComplaintDialog = ({ userProfile }: { userProfile: UserProfile }) => {
     )
 }
 
+const MailboxDialog = () => {
+    const { user, refreshUserProfile } = useAuth();
+    const { toast } = useToast();
+    const [isOpen, setIsOpen] = useState(false);
+    const [userMail, setUserMail] = useState<Mail[]>([]);
+    const [isFetchingMail, setIsFetchingMail] = useState(false);
+    const [isClaimingCoins, setIsClaimingCoins] = useState<string | null>(null);
+
+    const handleOpenMailbox = async () => {
+        if (!user) return;
+        setIsOpen(true);
+        setIsFetchingMail(true);
+        const mail = await getMail(user.uid);
+        setUserMail(mail);
+        setIsFetchingMail(false);
+    };
+
+    const handleMarkAsRead = async (mailId: string) => {
+        if (!user) return;
+        const mailIndex = userMail.findIndex(m => m.id === mailId);
+        if (mailIndex !== -1 && !userMail[mailIndex].isRead) {
+            setUserMail(prev => {
+                const newMail = [...prev];
+                newMail[mailIndex].isRead = true;
+                return newMail;
+            });
+            await markMailAsRead(user.uid, mailId);
+        }
+    };
+
+    const handleClaimCoins = async (mailId: string) => {
+        if (!user) return;
+        setIsClaimingCoins(mailId);
+        const result = await claimMailCoins(user.uid, mailId);
+        if (result.success) {
+            toast({ title: "نجاح!", description: "تمت إضافة الكوينز إلى رصيدك." });
+            setUserMail(prev => prev.map(m => m.id === mailId ? { ...m, coinsClaimed: true } : m));
+            if (refreshUserProfile) refreshUserProfile();
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: "destructive" });
+        }
+        setIsClaimingCoins(null);
+    };
+
+    const unreadMailCount = useMemo(() => userMail.filter(m => !m.isRead).length, [userMail]);
+
+    useEffect(() => {
+        if (user && !isFetchingMail) {
+            getMail(user.uid).then(setUserMail);
+        }
+    }, [user, isFetchingMail]);
+    
+    return (
+         <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                 <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                           <Button variant="ghost" size="icon" onClick={handleOpenMailbox} className="relative">
+                                <MailIcon className="h-6 w-6 text-primary" />
+                                {unreadMailCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500"/>}
+                            </Button>
+                        </TooltipTrigger>
+                         <TooltipContent><p>صندوق البريد</p></TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>صندوق البريد</DialogTitle>
+                    <DialogDescription>الرسائل من الإدارة. تختفي الرسائل بعد 3 أيام.</DialogDescription>
+                </DialogHeader>
+                <ScrollArea className="h-96 w-full rounded-md border p-2 bg-background mt-4">
+                    {isFetchingMail ? (
+                        <p>جاري تحميل البريد...</p>
+                    ) : userMail.length > 0 ? (
+                        userMail.map(mail => (
+                            <div key={mail.id} className="p-3 mb-2 rounded-md bg-muted" onClick={() => handleMarkAsRead(mail.id)}>
+                                <div className="flex justify-between items-center">
+                                    <p className="text-xs text-muted-foreground">{formatDistanceToNow(mail.createdAt, { addSuffix: true, locale: ar })}</p>
+                                    <div className="flex items-center gap-2">
+                                        <p className={cn("font-semibold text-right", !mail.isRead && "text-primary")}>{mail.subject}</p>
+                                        {!mail.isRead && <div className="w-2 h-2 rounded-full bg-primary" />}
+                                    </div>
+                                </div>
+                                <p className="mt-2 text-sm text-muted-foreground text-right">{mail.body}</p>
+                                {mail.coins && !mail.coinsClaimed && (
+                                    <div className="mt-2 text-left">
+                                        <Button size="sm" onClick={() => handleClaimCoins(mail.id)} disabled={isClaimingCoins === mail.id}>
+                                            {isClaimingCoins === mail.id ? "جاري..." : `المطالبة بـ ${mail.coins} كوينز`}
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-center text-muted-foreground p-8">صندوق بريدك فارغ.</p>
+                    )}
+                </ScrollArea>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 interface HomeHeaderProps {
     userProfile: UserProfile;
 }
@@ -173,6 +282,7 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
                             <TooltipContent><p>ملفك الشخصي</p></TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
+                    <MailboxDialog />
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -220,3 +330,4 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
         </header>
     );
 }
+

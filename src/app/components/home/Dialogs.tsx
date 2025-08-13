@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, PlusCircle, DoorOpen, Trophy, Mail as MailIcon, MessageSquarePlus } from "lucide-react";
 import Link from 'next/link';
 import type { User, UserProfile, League, Mail, Game, Challenge, EntryFee, ComplaintType } from '@/types';
-import { createLeague, joinLeague as joinLeagueAction, getMail, claimMailCoins, markMailAsRead, updateUserGender, joinChallenge } from '@/lib/actions/user';
+import { createLeague, joinLeague, getMail, claimMailCoins, markMailAsRead, updateUserGender, joinChallenge } from '@/lib/actions/user';
 import { submitComplaint } from '@/lib/actions/complaints';
 import { GAME_TYPE_NAMES } from '@/data/icons';
 import { formatDistanceToNow } from "date-fns";
@@ -114,12 +114,6 @@ export default function HomeDialogs({ user, userProfile, activeChallenges, newCh
     const [joinLeagueId, setJoinLeagueId] = useState("");
     const [joinLeaguePassword, setJoinLeaguePassword] = useState("");
 
-    // Mail Dialog States
-    const [isMailboxOpen, setIsMailboxOpen] = useState(false);
-    const [userMail, setUserMail] = useState<Mail[]>([]);
-    const [isFetchingMail, setIsFetchingMail] = useState(false);
-    const [isClaimingCoins, setIsClaimingCoins] = useState<string | null>(null);
-
     // Gender Dialog States
     const [isGenderModalOpen, setIsGenderModalOpen] = useState(!userProfile.gender);
     const [selectedGender, setSelectedGender] = useState<'male' | 'female' | null>(null);
@@ -169,50 +163,6 @@ export default function HomeDialogs({ user, userProfile, activeChallenges, newCh
         }
         setIsLoading(false);
     };
-    
-    const handleOpenMailbox = async () => {
-        if (!user) return;
-        setIsMailboxOpen(true);
-        setIsFetchingMail(true);
-        const mail = await getMail(user.uid);
-        setUserMail(mail);
-        setIsFetchingMail(false);
-    };
-
-    const handleMarkAsRead = async (mailId: string) => {
-        if (!user) return;
-        const mailIndex = userMail.findIndex(m => m.id === mailId);
-        if (mailIndex !== -1 && !userMail[mailIndex].isRead) {
-            setUserMail(prev => {
-                const newMail = [...prev];
-                newMail[mailIndex].isRead = true;
-                return newMail;
-            });
-            await markMailAsRead(user.uid, mailId);
-        }
-    };
-    
-    const handleClaimCoins = async (mailId: string) => {
-        if (!user) return;
-        setIsClaimingCoins(mailId);
-        const result = await claimMailCoins(user.uid, mailId);
-        if(result.success) {
-            toast({ title: "نجاح!", description: "تمت إضافة الكوينز إلى رصيدك."});
-            setUserMail(prev => prev.map(m => m.id === mailId ? {...m, coinsClaimed: true} : m));
-            if(refreshUserProfile) refreshUserProfile();
-        } else {
-            toast({ title: "خطأ", description: result.error, variant: "destructive"});
-        }
-        setIsClaimingCoins(null);
-    };
-    
-    const unreadMailCount = useMemo(() => userMail.filter(m => !m.isRead).length, [userMail]);
-    
-    useEffect(() => {
-        if (user && !isFetchingMail) {
-            getMail(user.uid).then(setUserMail);
-        }
-    }, [user, isFetchingMail]);
     
     const handleGenderSave = async () => {
         if (!user || !selectedGender) {
@@ -330,43 +280,6 @@ export default function HomeDialogs({ user, userProfile, activeChallenges, newCh
                             ))
                         ) : (
                             <p className="text-center text-muted-foreground p-4">لم تنضم إلى أي دوري بعد.</p>
-                        )}
-                    </ScrollArea>
-                </DialogContent>
-            </Dialog>
-            
-            {/* Mailbox Dialog */}
-             <Dialog open={isMailboxOpen} onOpenChange={setIsMailboxOpen}>
-                <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle>صندوق البريد</DialogTitle>
-                        <DialogDescription>الرسائل من الإدارة. تختفي الرسائل بعد 3 أيام.</DialogDescription>
-                    </DialogHeader>
-                    <ScrollArea className="h-96 w-full rounded-md border p-2 bg-background mt-4">
-                        {isFetchingMail ? (
-                            <p>جاري تحميل البريد...</p>
-                        ) : userMail.length > 0 ? (
-                            userMail.map(mail => (
-                                <div key={mail.id} className="p-3 mb-2 rounded-md bg-muted" onClick={() => handleMarkAsRead(mail.id)}>
-                                    <div className="flex justify-between items-center">
-                                        <p className="text-xs text-muted-foreground">{formatDistanceToNow(mail.createdAt, { addSuffix: true, locale: ar })}</p>
-                                        <div className="flex items-center gap-2">
-                                            <p className={cn("font-semibold text-right", !mail.isRead && "text-primary")}>{mail.subject}</p>
-                                            {!mail.isRead && <div className="w-2 h-2 rounded-full bg-primary" />}
-                                        </div>
-                                    </div>
-                                    <p className="mt-2 text-sm text-muted-foreground text-right">{mail.body}</p>
-                                    {mail.coins && !mail.coinsClaimed && (
-                                        <div className="mt-2 text-left">
-                                            <Button size="sm" onClick={() => handleClaimCoins(mail.id)} disabled={isClaimingCoins === mail.id}>
-                                                {isClaimingCoins === mail.id ? "جاري..." : `المطالبة بـ ${mail.coins} كوينز`}
-                                            </Button>
-                                        </div>
-                                    )}
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-center text-muted-foreground p-8">صندوق بريدك فارغ.</p>
                         )}
                     </ScrollArea>
                 </DialogContent>

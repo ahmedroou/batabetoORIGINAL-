@@ -1,4 +1,5 @@
 
+'use server';
 
 /**
  * @fileoverview This file re-exports all user-related actions from their new, modular locations.
@@ -81,3 +82,4 @@ export {
 
 
     
+
