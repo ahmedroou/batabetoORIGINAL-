@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dices, Loader2, Volume, VolumeX, Smartphone } from 'lucide-react';
 import type { Game, Player } from '@/types';
 import { rollDice } from '@/lib/actions/educated-merchant';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 
 interface DiceRollProps { game: Game; self: Player }
@@ -170,4 +170,3 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     </motion.div>
   );
 }
-
