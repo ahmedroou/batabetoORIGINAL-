@@ -34,8 +34,8 @@ export default function StoreClient() {
     const [purchaseCandidate, setPurchaseCandidate] = useState<{avatar: AvatarPrice, type: 'regular' | 'punishment'} | null>(null);
 
     // Pagination state
-    const [visibleRegularCount, setVisibleRegularCount] = useState(8);
-    const [visiblePunishmentCount, setVisiblePunishmentCount] = useState(8);
+    const [visibleRegularCount, setVisibleRegularCount] = useState(12);
+    const [visiblePunishmentCount, setVisiblePunishmentCount] = useState(12);
 
 
     const fetchPageData = useCallback(async () => {
@@ -135,36 +135,38 @@ export default function StoreClient() {
                     </div>
                 ) : (
                     <ScrollArea className="h-[60vh]">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-1">
+                        <div className="flex flex-wrap -m-2">
                             {avatarList.slice(0, visibleCount).map(avatarId => {
                                 const isUnlocked = unlockedList.includes(avatarId);
                                 const itemPrice = currentPrices[avatarId];
                                 const price = itemPrice?.price ?? -1;
 
                                 return (
-                                <div key={avatarId} className="space-y-2 cursor-pointer group relative" onClick={() => handleAvatarClick(avatarId, type)}>
-                                    <PlayerAvatar avatarId={avatarId} className={cn("w-full aspect-square rounded-lg border-2 border-muted group-hover:border-primary transition-all", isUnlocked && "border-green-500")} />
-                                    {isUnlocked ? (
-                                        <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full p-1 shadow-lg">
-                                            <Check className="w-4 h-4" />
-                                        </div>
-                                    ) : (price >= 0 &&
-                                        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 text-sm bg-black/50 text-white px-2 py-1 rounded-full font-bold">
-                                            {itemPrice?.currency === 'diamonds' ? <Diamond className="w-4 h-4 text-blue-300"/> : <CircleDollarSign className="w-4 h-4 text-yellow-400"/>}
-                                            <span>{price}</span>
-                                        </div>
-                                    )}
-                                    {!isUnlocked && price < 0 && (
-                                         <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center text-white">
-                                            <Lock className="w-8 h-8"/>
-                                        </div>
-                                    )}
+                                <div key={avatarId} className="w-1/2 sm:w-1/3 md:w-1/4 lg:w-1/5 xl:w-1/6 p-2">
+                                    <div className="space-y-2 cursor-pointer group relative" onClick={() => handleAvatarClick(avatarId, type)}>
+                                        <PlayerAvatar avatarId={avatarId} className={cn("w-full aspect-square rounded-lg border-2 border-muted group-hover:border-primary transition-all", isUnlocked && "border-green-500")} />
+                                        {isUnlocked ? (
+                                            <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full p-1 shadow-lg">
+                                                <Check className="w-4 h-4" />
+                                            </div>
+                                        ) : (price >= 0 &&
+                                            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 text-sm bg-black/50 text-white px-2 py-1 rounded-full font-bold">
+                                                {itemPrice?.currency === 'diamonds' ? <Diamond className="w-4 h-4 text-blue-300"/> : <CircleDollarSign className="w-4 h-4 text-yellow-400"/>}
+                                                <span>{price}</span>
+                                            </div>
+                                        )}
+                                        {!isUnlocked && price < 0 && (
+                                             <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center text-white">
+                                                <Lock className="w-8 h-8"/>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )})}
                         </div>
                           {visibleCount < avatarList.length && (
                             <div className="text-center mt-4">
-                                <Button variant="outline" onClick={() => setVisibleCount(prev => prev + 8)}>
+                                <Button variant="outline" onClick={() => setVisibleCount(prev => prev + 12)}>
                                     عرض المزيد
                                 </Button>
                             </div>
