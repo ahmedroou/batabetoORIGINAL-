@@ -40,6 +40,8 @@ function useAnimatedMoney(players: Player[], opts?: { duration?: number; clearAf
 
   // per-player RAF handlers
   const rafs = useRef<Record<string, number | null>>({});
+  
+  const moneySignature = JSON.stringify(players.map(p => p.money));
 
   useEffect(() => {
     // on players change, kick off animations for any whose money changed
@@ -87,10 +89,10 @@ function useAnimatedMoney(players: Player[], opts?: { duration?: number; clearAf
     });
 
     return () => {
-      Object.values(rafs.current).forEach((r) => r && cancelAnimationFrame(r));
+      Object.values(rafs.current).forEach((r) => r && cancelAnimationFrame(r as number));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [players]);
+  }, [moneySignature, duration, clearAfterMs]); // Depend on the money signature instead of the player array reference
 
   return { display, deltas, nonceMap };
 }
