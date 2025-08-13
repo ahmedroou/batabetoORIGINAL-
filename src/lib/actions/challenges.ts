@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -75,13 +74,13 @@ export async function getChallenges(): Promise<Challenge[]> {
         
         const challenges = snapshot.docs.map(doc => {
             const data = doc.data();
-            const createdAt = data.createdAt as Timestamp;
-            const endsAt = data.endsAt as Timestamp;
+            const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date();
+            const endsAt = data.endsAt instanceof Timestamp ? data.endsAt.toDate() : new Date(Date.now() + 24 * 60 * 60 * 1000); // Fallback
             return {
                 id: doc.id,
                 ...data,
-                createdAt: createdAt?.toDate ? createdAt.toDate() : new Date(),
-                endsAt: endsAt?.toDate ? endsAt.toDate() : new Date(Date.now() + 24 * 60 * 60 * 1000), // Fallback
+                createdAt,
+                endsAt,
             } as Challenge;
         });
 
@@ -96,7 +95,6 @@ export async function getChallenges(): Promise<Challenge[]> {
                     const usersSnapshot = await getDocs(usersQuery);
                     const topUsersData = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
                     
-                    // The order from Firestore 'in' query is not guaranteed, so we re-sort based on the scores.
                     challenge.topParticipants = topUsersData.sort((a,b) => (challenge.scores[b.uid] || 0) - (challenge.scores[a.uid] || 0));
                 } else {
                      challenge.topParticipants = [];
@@ -127,29 +125,24 @@ export async function getChallengeDetails(challengeId: string): Promise<Challeng
         if (!challengeDoc.exists()) return null;
 
         const data = challengeDoc.data();
-        const createdAt = data.createdAt as Timestamp;
-        const endsAt = data.endsAt as Timestamp;
+        const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date();
+        const endsAt = data.endsAt instanceof Timestamp ? data.endsAt.toDate() : new Date();
 
         const challengeData: Challenge = {
             id: challengeDoc.id,
             ...data,
-            createdAt: createdAt?.toDate ? createdAt.toDate() : new Date(),
-            endsAt: endsAt?.toDate ? endsAt.toDate() : new Date(),
+            createdAt,
+            endsAt,
         } as Challenge;
 
-
-        // --- Optimization: Fetch only top 10 participants ---
         if (challengeData.scores && Object.keys(challengeData.scores).length > 0) {
             const sortedParticipantIds = Object.keys(challengeData.scores).sort((a, b) => (challengeData.scores[b] || 0) - (challengeData.scores[a] || 0));
             const top10Ids = sortedParticipantIds.slice(0, 10);
             
             if (top10Ids.length > 0) {
-                // Fetch only the user profiles for the top 10
                 const usersQuery = query(collection(db, 'users'), where('__name__', 'in', top10Ids));
                 const usersSnapshot = await getDocs(usersQuery);
                 const topUsersData = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
-
-                // Sort the fetched users again to ensure correct order
                 challengeData.participants = topUsersData.sort((a, b) => (challengeData.scores[b.uid] || 0) - (challengeData.scores[a.uid] || 0));
             } else {
                 challengeData.participants = [];
@@ -196,26 +189,22 @@ export async function joinChallenge(challengeId: string, userId: string): Promis
             throw new Error("أنت مشترك بالفعل في هذه البطولة.");
         }
 
-        // Handle entry fee
         if (challengeData.entryFee && challengeData.entryFee.value > 0) {
             const { type, value } = challengeData.entryFee;
             const userCurrency = type === 'coins' ? userData.coins : userData.leaderboardPoints;
             if ((userCurrency || 0) < value) {
                 throw new Error(`ليس لديك ما يكفي من ${type === 'coins' ? 'الكوينز' : 'نقاط الصدارة'} للانضمام (المطلوب: ${value}).`);
             }
-            // Deduct the fee
             transaction.update(userRef, { [type]: increment(-value) });
         }
 
 
-        // Add user to challenge
         transaction.update(challengeRef, {
             participantIds: arrayUnion(userId),
             participantCount: increment(1),
             [`scores.${userId}`]: 0,
         });
 
-        // Add challenge to user's profile
         transaction.update(userRef, {
             challenges: arrayUnion({
                 id: challengeId,
@@ -249,8 +238,8 @@ export async function updateChallenge(challengeId: string, data: Partial<Omit<Ch
         const challenge = docSnap.data() as Challenge;
         
         if (updateData.durationInHours) {
-            const createdAtMillis = (challenge.createdAt as Timestamp).toMillis();
-            updateData.endsAt = Timestamp.fromMillis(createdAtMillis + updateData.durationInHours * 60 * 60 * 1000);
+            const createdAt = challenge.createdAt instanceof Timestamp ? challenge.createdAt.toDate() : new Date();
+            updateData.endsAt = Timestamp.fromMillis(createdAt.getTime() + updateData.durationInHours * 60 * 60 * 1000);
             delete updateData.durationInHours;
         }
 
@@ -278,7 +267,6 @@ export async function deleteChallenge(challengeId: string): Promise<{ success: b
     }
 }
 
-// For admin to view all challenges, including expired ones
 export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
      try {
         const challengesCol = collection(db, 'challenges');
@@ -287,13 +275,13 @@ export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
         
         return snapshot.docs.map(doc => {
             const data = doc.data();
-            const createdAt = data.createdAt as Timestamp;
-            const endsAt = data.endsAt as Timestamp;
+            const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date();
+            const endsAt = data.endsAt instanceof Timestamp ? data.endsAt.toDate() : new Date();
             return {
                 id: doc.id,
                 ...data,
-                createdAt: createdAt?.toDate ? createdAt.toDate() : new Date(),
-                endsAt: endsAt?.toDate ? endsAt.toDate() : new Date(),
+                createdAt,
+                endsAt,
             } as Challenge;
         });
 
@@ -338,7 +326,7 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         
         if (sortedWinners.length > 0) {
             const firstPlace = sortedWinners[0];
-            const firstPlayerDoc = await transaction.get(doc(db, 'users', firstPlace[0]));
+            const firstPlayerDoc = await getDoc(doc(db, 'users', firstPlace[0]));
             if (firstPlayerDoc.exists()) {
                 winners.first = { id: firstPlace[0], name: firstPlayerDoc.data().name };
                 await applyPrizes(firstPlace[0], challengeData.firstPlacePrize);
@@ -348,7 +336,7 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         
         if (sortedWinners.length > 1) {
             const secondPlace = sortedWinners[1];
-             const secondPlayerDoc = await transaction.get(doc(db, 'users', secondPlace[0]));
+             const secondPlayerDoc = await getDoc(doc(db, 'users', secondPlace[0]));
              if (secondPlayerDoc.exists()) {
                 winners.second = { id: secondPlace[0], name: secondPlayerDoc.data().name };
                 await applyPrizes(secondPlace[0], challengeData.secondPlacePrize);
@@ -358,7 +346,7 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         
         if (sortedWinners.length > 2) {
             const thirdPlace = sortedWinners[2];
-            const thirdPlayerDoc = await transaction.get(doc(db, 'users', thirdPlace[0]));
+            const thirdPlayerDoc = await getDoc(doc(db, 'users', thirdPlace[0]));
             if (thirdPlayerDoc.exists()) {
                 winners.third = { id: thirdPlace[0], name: thirdPlayerDoc.data().name };
                 await applyPrizes(thirdPlace[0], challengeData.thirdPlacePrize);

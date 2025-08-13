@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import * as React from 'react';
@@ -11,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CircleDollarSign, Diamond, Swords, Calendar, Play, Users, DoorOpen, Trophy, Star, Shield, Flag, Loader2, ListOrdered, Crown } from 'lucide-react';
+import { CircleDollarSign, Diamond, Swords, Calendar, Play, Users, DoorOpen, Trophy, Star, Shield, Flag, Loader2, ListOrdered, Crown, User as UserIcon } from 'lucide-react';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
@@ -39,25 +38,35 @@ const PRIZE_COLORS: Record<ChallengePrize['type'], string> = {
     honorPoints: 'text-green-500'
 };
 
-const PrizeDisplay = ({ prizes }: { prizes: ChallengePrize[] }) => {
-    if (!prizes || prizes.length === 0) return <p className="text-sm text-gray-500">لا توجد جائزة</p>;
+const PrizeDisplay = ({ prizes, rank }: { prizes: ChallengePrize[], rank: '1st' | '2nd' | '3rd' }) => {
+    if (!prizes || prizes.length === 0) return <p className="text-sm text-gray-400">لا توجد جائزة</p>;
+    
+    const rankColors = {
+        '1st': 'text-yellow-300',
+        '2nd': 'text-slate-300',
+        '3rd': 'text-orange-400'
+    };
+    
     return (
-        <div className="flex flex-wrap gap-2">
-            {prizes.map((prize, index) => {
-                const Icon = PRIZE_ICONS[prize.type];
-                return (
-                    <div key={index} className="flex items-center gap-1 text-sm bg-black/20 px-2 py-1 rounded-md">
-                        <Icon className={cn("w-4 h-4", PRIZE_COLORS[prize.type])} />
-                        <span className="font-bold">{prize.value}</span>
-                    </div>
-                )
-            })}
+        <div className="flex flex-col gap-1 text-sm">
+             <h4 className={cn("font-bold", rankColors[rank])}>{rank === '1st' ? 'المركز الأول' : rank === '2nd' ? 'المركز الثاني' : 'المركز الثالث'}</h4>
+            <div className="flex flex-wrap gap-2">
+                {prizes.map((prize, index) => {
+                    const Icon = PRIZE_ICONS[prize.type];
+                    return (
+                        <div key={index} className="flex items-center gap-1.5 bg-black/40 px-2 py-1 rounded-md">
+                            <Icon className={cn("w-4 h-4", PRIZE_COLORS[prize.type])} />
+                            <span className="font-bold text-gray-200">{prize.value}</span>
+                        </div>
+                    )
+                })}
+            </div>
         </div>
     );
 };
 
 const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challenge, trigger: React.ReactNode }) => {
-    const { getSocialRankForUser, socialRanks } = useAuth();
+    const { getSocialRankForUser } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [participants, setParticipants] = useState<UserProfile[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -105,22 +114,24 @@ const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challen
                                         const rank = getSocialRankForUser(participant.leaderboardPoints);
                                         const isKingOfGames = kingOfGames?.uid === participant.uid;
                                         const gameKingTitle = Object.values(gameKings).find(k => k.kingId === participant.uid);
-                                        const rankIcon = rank?.icon as React.ElementType | undefined;
+                                        const RankIcon = rank?.icon as React.ElementType | undefined;
+                                        
+                                        const rankColorClass = index === 0 ? 'bg-yellow-500/20 border-yellow-400' : index === 1 ? 'bg-slate-500/20 border-slate-400' : index === 2 ? 'bg-orange-500/20 border-orange-400' : 'bg-gray-800 border-gray-700';
 
                                         return (
-                                        <div key={participant.uid} className="flex justify-between items-center bg-gray-800 p-2 rounded-lg">
+                                        <div key={participant.uid} className={cn("flex justify-between items-center p-2 rounded-lg border-l-4", rankColorClass)}>
                                             <div className="flex items-center gap-3">
                                                 <span className="font-bold text-lg w-6 text-center text-gray-400">{index + 1}</span>
                                                 <PlayerAvatar avatarId={participant.avatarId} className="w-10 h-10"/>
                                                 <div className="flex flex-col">
                                                     <p className="font-semibold flex items-center gap-1.5">
                                                         {participant.name}
-                                                        {isKingOfGames && <Crown className="w-4 h-4 text-yellow-300 fill-yellow-400" />}
-                                                        {gameKingTitle && !isKingOfGames && <Crown className="w-4 h-4 text-amber-400" />}
+                                                        {isKingOfGames && <Crown className="w-4 h-4 text-yellow-300 fill-yellow-400" title="ملك الملوك"/>}
+                                                        {gameKingTitle && !isKingOfGames && <Crown className="w-4 h-4 text-amber-400" title={`ملك لعبة ${GAME_TYPE_NAMES[gameKingTitle.gameType]}`}/>}
                                                     </p>
-                                                     {rank && rankIcon && (
+                                                     {rank && RankIcon && (
                                                         <Badge variant="secondary" className="w-fit text-xs">
-                                                            {React.createElement(rankIcon, {className: "w-3 h-3 ml-1"})}
+                                                            {React.createElement(RankIcon, {className: "w-3 h-3 ml-1"})}
                                                             {rank.name}
                                                         </Badge>
                                                     )}
@@ -172,13 +183,8 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
         }
         const calculateProgress = () => {
             if (!challenge.createdAt || !challenge.endsAt) return;
-            // Safe conversion for both Timestamp and Date objects
-            const createdAt = challenge.createdAt instanceof Timestamp 
-                ? challenge.createdAt.toDate() 
-                : new Date(challenge.createdAt);
-            const endsAt = challenge.endsAt instanceof Timestamp 
-                ? challenge.endsAt.toDate() 
-                : new Date(challenge.endsAt);
+            const createdAt = challenge.createdAt instanceof Timestamp ? challenge.createdAt.toDate() : new Date(challenge.createdAt);
+            const endsAt = challenge.endsAt instanceof Timestamp ? challenge.endsAt.toDate() : new Date(challenge.endsAt);
 
             if (!createdAt || !endsAt || isNaN(createdAt.getTime()) || isNaN(endsAt.getTime())) return;
             const totalDuration = endsAt.getTime() - createdAt.getTime();
@@ -239,24 +245,12 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow space-y-4 pt-4">
-                    <div>
+                     <div>
                         <h4 className="font-semibold text-gray-300 mb-2 text-sm">الجوائز:</h4>
                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                                <Trophy className="w-5 h-5 text-yellow-400 shrink-0"/>
-                                <span className="font-bold text-xs w-16">المركز الأول:</span>
-                                <PrizeDisplay prizes={challenge.firstPlacePrize} />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Trophy className="w-5 h-5 text-slate-400 shrink-0"/>
-                                 <span className="font-bold text-xs w-16">المركز الثاني:</span>
-                                <PrizeDisplay prizes={challenge.secondPlacePrize} />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                 <Trophy className="w-5 h-5 text-orange-400 shrink-0"/>
-                                 <span className="font-bold text-xs w-16">المركز الثالث:</span>
-                                <PrizeDisplay prizes={challenge.thirdPlacePrize} />
-                            </div>
+                            <PrizeDisplay prizes={challenge.firstPlacePrize} rank="1st"/>
+                            <PrizeDisplay prizes={challenge.secondPlacePrize} rank="2nd" />
+                            <PrizeDisplay prizes={challenge.thirdPlacePrize} rank="3rd" />
                         </div>
                      </div>
                      
@@ -334,8 +328,6 @@ export default function SocietyChallenges({ filter = 'active' }: { filter?: 'act
     useEffect(() => {
         const fetchChallenges = async () => {
             setIsLoading(true);
-            // This component is used in multiple places, so we fetch all challenges
-            // and filter them on the client side. This is simpler than passing down a fetch function.
             const fetchedChallenges = await getAllChallengesForAdmin();
             setChallenges(fetchedChallenges);
             setIsLoading(false);
