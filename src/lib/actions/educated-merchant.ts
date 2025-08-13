@@ -195,7 +195,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     const gameRef = doc(db, 'games', gameId);
     let questionForFine: EducatedMerchantQuestion | null = null;
     let precalculatedLandingProperty: Property | null = null;
-    let diceRollResult = 0;
     
     // Step 1: Pre-Transaction - Fetch game state and perform non-deterministic actions
     const initialGameDoc = await getDoc(gameRef);
@@ -207,9 +206,8 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     const turnOrder = ensure(gameForPreCalc.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود.');
     const currentTurnIndex = ensure(gameForPreCalc.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
     if (turnOrder[currentTurnIndex] !== playerId) throw new Error('ليس دورك الآن.');
-    // --- End of checks ---
-
-    diceRollResult = randomDiceRoll();
+    
+    const diceRollResult = randomDiceRoll();
     const playerForPreCalc = ensure(gameForPreCalc.players.find(p => p.id === playerId), 'اللاعب غير موجود.');
     const newPosition = (playerForPreCalc.position + diceRollResult) % BOARD_SIZE;
     precalculatedLandingProperty = ensure(gameForPreCalc.educatedMerchantState?.board?.[newPosition], 'خانة غير موجودة على اللوح');
@@ -255,7 +253,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         } else if (precalculatedLandingProperty!.type === 'property') {
             if (!precalculatedLandingProperty!.ownerId) {
                 finalUpdates.gameState = 'property_action';
-                finalUpdates.activityLog = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
+                finalUpdates['educatedMerchantState.activityLog'] = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
             } else if (precalculatedLandingProperty!.ownerId !== playerId) {
                 const ownerIndex = getPlayerIndexById(updatedPlayers, precalculatedLandingProperty!.ownerId);
                 const rent = precalculatedLandingProperty!.rent || 0;
@@ -283,7 +281,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             }
         } else if (precalculatedLandingProperty!.type === 'fine') {
             finalUpdates.gameState = 'question';
-            finalUpdates.activityLog = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
+            finalUpdates['educatedMerchantState.activityLog'] = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
             finalUpdates['educatedMerchantState.currentQuestion'] = questionForFine;
             finalUpdates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: precalculatedLandingProperty!.fineAmount ?? DEFAULT_FINE };
         } else {
@@ -298,12 +296,10 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
 export async function purchaseProperty(gameId: string, playerId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
   
-  // Step 1: Pre-transaction - Get current state and fetch random question
   const initialGameDoc = await getDoc(gameRef);
   if (!initialGameDoc.exists()) throw new Error('اللعبة غير موجودة.');
   const gameForPreCalc = initialGameDoc.data() as Game;
 
-  // --- Pre-calculation checks ---
   if (gameForPreCalc.gameState !== 'property_action') throw new Error('ليس وقت شراء العقارات.');
   if (gameForPreCalc.educatedMerchantState?.turnOrder?.[gameForPreCalc.educatedMerchantState?.currentTurnIndex] !== playerId) {
     throw new Error('ليس دورك للشراء.');
@@ -312,20 +308,15 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
   const propertyToBuy = ensure(gameForPreCalc.educatedMerchantState?.board?.[currentPlayer.position], 'Property disappeared');
   if (propertyToBuy.type !== 'property' || propertyToBuy.ownerId) throw new Error('هذا العقار غير متاح للشراء.');
   if ((currentPlayer.money || 0) < propertyToBuy.price) throw new Error('رصيدك لا يكفي لشراء هذا العقار.');
-  // --- End checks ---
-
+  
   const question = await fetchRandomQuestion(propertyToBuy.category);
 
-  // Step 2: Transaction - Perform deterministic updates
   await runTransaction(db, async (tx) => {
-    // Re-fetch inside transaction for consistency
     const snap = await tx.get(gameRef);
     if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
     const game = snap.data() as Game;
     
-    // Re-validate critical conditions
     if (game.gameState !== 'property_action' || game.educatedMerchantState?.turnOrder?.[game.educatedMerchantState?.currentTurnIndex] !== playerId) {
-      // The state changed between pre-calc and transaction start, so we abort.
       return;
     }
 
@@ -654,3 +645,5 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
     tx.update(gameRef, updates);
   });
 }
+
+    
