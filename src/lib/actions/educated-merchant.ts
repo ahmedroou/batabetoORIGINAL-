@@ -110,7 +110,7 @@ export async function generateBoard(categories: string[]): Promise<Property[]> {
       id: pos,
       type: 'fine',
       name: 'غرامة',
-      category: 'قسم الغرامات', // Fixed: Assign correct category to fine tiles
+      category: 'قسم الغرامات', 
       price: 0,
       rent: 0,
       ownerId: null,
@@ -128,7 +128,7 @@ export async function generateBoard(categories: string[]): Promise<Property[]> {
 
     const name = availablePropertyNames.pop() || `عقار ${i}`;
     const price = Math.round((Math.random() * (500 - 100) + 100) / 10) * 10;
-    const category = propertyCategories.length ? propertyCategories[Math.floor(Math.random() * propertyCategories.length)] : '';
+    const category = propertyCategories.length > 0 ? propertyCategories[Math.floor(Math.random() * propertyCategories.length)] : '';
 
     board[i] = {
       id: i,
@@ -186,6 +186,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
       'educatedMerchantState.timerEndsAt': addActionTimer(),
       'educatedMerchantState.movesThisRound': 0,
       'educatedMerchantState.settings': { maxRounds: DEFAULT_MAX_ROUNDS, categories: categoriesResult.categories, diceMax: DICE_MAX },
+      'educatedMerchantState.rollAnimationNonce': Date.now(), // Initialize the nonce
     });
   });
 }
