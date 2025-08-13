@@ -232,39 +232,53 @@ export function _rollDice(game: Game, playerId: string) {
     const updates: any = { players, 'educatedMerchantState.lastDiceRoll': diceRollResult, 'educatedMerchantState.displayingRollResult': { number: diceRollResult, nonce: Date.now() }, 'educatedMerchantState.rollAnimationNonce': Date.now() };
 
     let needsQuestion: { category: string; token: string } | null = null;
+    
+    // Determine next state
+    if (landingProperty.type === 'property') {
+        if (landingProperty.ownerId && landingProperty.ownerId !== playerId) {
+            // Landed on owned property
+            const ownerIndex = getPlayerIndexById(players, landingProperty.ownerId);
+            const rent = landingProperty.rent || 0;
+            if ((player.money || 0) < rent) {
+                const payAll = player.money || 0;
+                players[ownerIndex].money = (players[ownerIndex].money || 0) + payAll;
+                player.money = 0;
+                player.status = 'bankrupt';
+                player.bankruptAt = nowTimestamp();
+                logEvents.push({ message: `${player.name} أفلس لأنه لم يستطع دفع الإيجار لـ ${players[ownerIndex].name}.`, timestamp: nowTimestamp() });
+            } else {
+                player.money -= rent;
+                players[ownerIndex].money += rent;
+                logEvents.push({ message: `${player.name} دفع ${rent} دينار إيجار لـ ${players[ownerIndex].name}.`, timestamp: nowTimestamp() });
+            }
+            updates['educatedMerchantState.lastRentPayment'] = { payer: player.name, owner: players[ownerIndex].name, amount: rent, nonce: Date.now() };
+            // After rent payment, the turn always ends.
+            const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, null, { players, educatedMerchantState: { board } });
+            Object.assign(updates, endUpdates);
+            if (logEvents.length > 0) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+            return { updates, needsQuestion: null, isGameOver, finalGame };
 
-    if (landingProperty.type === 'property' && landingProperty.ownerId && landingProperty.ownerId !== playerId) {
-        const ownerIndex = getPlayerIndexById(players, landingProperty.ownerId);
-        const rent = landingProperty.rent || 0;
-        if ((player.money || 0) < rent) {
-            const payAll = player.money || 0;
-            players[ownerIndex].money = (players[ownerIndex].money || 0) + payAll;
-            player.money = 0;
-            player.status = 'bankrupt';
-            player.bankruptAt = nowTimestamp();
-            logEvents.push({ message: `${player.name} أفلس لأنه لم يستطع دفع الإيجار لـ ${players[ownerIndex].name}.`, timestamp: nowTimestamp() });
-        } else {
-            player.money -= rent;
-            players[ownerIndex].money += rent;
-            logEvents.push({ message: `${player.name} دفع ${rent} دينار إيجار لـ ${players[ownerIndex].name}.`, timestamp: nowTimestamp() });
+        } else if (landingProperty.ownerId === playerId) {
+             // Landed on own property, end turn.
+            const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, null, { players, educatedMerchantState: { board } });
+            Object.assign(updates, endUpdates);
+            if (logEvents.length > 0) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+            return { updates, needsQuestion: null, isGameOver, finalGame };
         }
-        updates['educatedMerchantState.lastRentPayment'] = { payer: player.name, owner: players[ownerIndex].name, amount: rent, nonce: Date.now() };
+        else {
+            // Landed on unowned property, go to action phase.
+            updates.gameState = 'property_action';
+            updates['educatedMerchantState.timerEndsAt'] = addActionTimer(ACTION_TIME_SECONDS);
+        }
+    } else if (landingProperty.type === 'start') {
+        // Landed on start, end turn.
+        const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, null, { players, educatedMerchantState: { board } });
+        Object.assign(updates, endUpdates);
+        if (logEvents.length > 0) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+        return { updates, needsQuestion: null, isGameOver, finalGame };
         
-        const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, null, { players, educatedMerchantState: { board } });
-        Object.assign(updates, endUpdates);
-        if (logEvents.length > 0) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
-        return { updates, needsQuestion: null, isGameOver, finalGame };
-
-    } else if (landingProperty.type === 'start' || (landingProperty.type === 'property' && landingProperty.ownerId === playerId)) {
-        const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, null, { players, educatedMerchantState: { board } });
-        Object.assign(updates, endUpdates);
-        if (logEvents.length > 0) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
-        return { updates, needsQuestion: null, isGameOver, finalGame };
-
-    } else if (landingProperty.type === 'property') {
-        updates.gameState = 'property_action';
-        updates['educatedMerchantState.timerEndsAt'] = addActionTimer(ACTION_TIME_SECONDS);
     } else if (landingProperty.type === 'fine') {
+        // Landed on fine, go to question phase.
         const token = newQuestionToken();
         updates.gameState = 'question';
         updates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE };
