@@ -115,9 +115,9 @@ export async function _getInitialGameState(players: Player[]) {
 }
 
 
-function _endTurnInternal(game: Game, playerId: string, extraMessage: string | null = null, extraUpdates?: { players?: Player[], educatedMerchantState?: { board?: Property[] } }): { updates: any, isGameOver: boolean, finalGame: Game | null } {
+function _endTurnInternal(game: Game, playerId: string, extraMessage: string | null = null, extraUpdates?: { players?: Player[], board?: Property[] }): { updates: any, isGameOver: boolean, finalGame: Game | null } {
   const players = extraUpdates?.players ? clonePlayers(extraUpdates.players) : clonePlayers(game.players);
-  const board = extraUpdates?.educatedMerchantState?.board ? cloneBoard(extraUpdates.educatedMerchantState.board!) : cloneBoard(ensure(game.educatedMerchantState?.board));
+  const board = extraUpdates?.board ? cloneBoard(extraUpdates.board) : cloneBoard(ensure(game.educatedMerchantState?.board));
   
   const logEvents: { message: string, timestamp: Timestamp }[] = extraMessage ? [{ message: extraMessage, timestamp: nowTimestamp() }] : [];
 
@@ -255,7 +255,7 @@ export function _rollDice(game: Game, playerId: string) {
                 logEvents.push({ message: `${player.name} دفع ${rent} دينار إيجار لـ ${players[ownerIndex].name}.`, timestamp: nowTimestamp() });
             }
             updates['educatedMerchantState.lastRentPayment'] = { payer: player.name, owner: players[ownerIndex].name, amount: rent, nonce: Date.now() };
-            const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, null, { players, educatedMerchantState: { board } });
+            const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, null, { players, board });
             Object.assign(updates, endUpdates);
             if (logEvents.length > 0 && !updates['educatedMerchantState.activityLog']) {
                 updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
@@ -263,7 +263,7 @@ export function _rollDice(game: Game, playerId: string) {
             return { updates, needsQuestion: null, isGameOver, finalGame };
 
         } else if (landingProperty.ownerId === playerId) {
-            const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, `${player.name} هبط على ملكيته.`, { players, educatedMerchantState: { board } });
+            const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, `${player.name} هبط على ملكيته.`, { players, board });
             Object.assign(updates, endUpdates);
              if (logEvents.length > 0 && !updates['educatedMerchantState.activityLog']) {
                 updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
@@ -275,7 +275,7 @@ export function _rollDice(game: Game, playerId: string) {
             updates['educatedMerchantState.timerEndsAt'] = addActionTimer(ACTION_TIME_SECONDS);
         }
     } else if (landingProperty.type === 'start') {
-        const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, `${player.name} استراح عند نقطة البداية.`, { players, educatedMerchantState: { board } });
+        const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, `${player.name} استراح عند نقطة البداية.`, { players, board });
         Object.assign(updates, endUpdates);
         if (logEvents.length > 0 && !updates['educatedMerchantState.activityLog']) {
             updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
@@ -368,7 +368,7 @@ export function _answerQuestion(game: Game, playerId: string, answer: string) {
         }
     }
 
-    const { updates, isGameOver, finalGame } = _endTurnInternal(game, playerId, activityMessage, { players, educatedMerchantState: { board } });
+    const { updates, isGameOver, finalGame } = _endTurnInternal(game, playerId, activityMessage, { players, board });
     
     Object.assign(updates, {
       ...extraUpdates,
@@ -411,5 +411,3 @@ export function _handleTimeout(game: Game) {
   // Fallback for safety
   return _endTurnInternal(game, currentPlayerId, `انتهى وقت اللاعب ${game.players.find(p => p.id === currentPlayerId)?.name} وتخطى دوره.`);
 }
-
-    
