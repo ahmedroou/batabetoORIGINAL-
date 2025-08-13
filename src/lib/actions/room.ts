@@ -420,3 +420,4 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
         }
     });
 }
+
