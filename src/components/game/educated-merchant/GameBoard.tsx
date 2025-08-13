@@ -5,7 +5,6 @@ import type { Game, Player, Property } from '@/types';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { PropertyCard } from './PropertyCard';
-import { QuestionModal } from './QuestionModal';
 import { DiceRoll } from './DiceRoll';
 import { PlayerHUD } from './PlayerHUD';
 import { ActivityLog } from './ActivityLog';
@@ -13,7 +12,6 @@ import { cn } from '@/lib/utils';
 import { Banknote, Building, HelpCircle, Trophy } from 'lucide-react';
 import { endTurn } from '@/lib/actions/educated-merchant';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
-import { DiceResultOverlay } from './DiceResultOverlay';
 import { RentPaidOverlay } from './RentPaidOverlay';
 
 interface GameBoardProps {
@@ -403,8 +401,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
 
   return (
     <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
-      <QuestionModal game={game} self={self} />
-      <DiceResultOverlay rollResult={game.educatedMerchantState?.displayingRollResult ?? null} />
       <RentPaidOverlay rentInfo={game.educatedMerchantState?.lastRentPayment ?? null} />
 
       <div className="w-full md:w-1/4 xl:w-1/5 space-y-4 shrink-0 flex flex-col">
