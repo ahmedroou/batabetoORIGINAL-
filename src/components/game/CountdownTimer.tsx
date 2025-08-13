@@ -14,9 +14,8 @@ interface CountdownTimerProps {
     gameId: string;
     gameType: Game['gameType'];
     expiryTimestamp: number;
-    onExpire?: () => void;
-    isHost: boolean;
     selfId: string;
+    isHost: boolean;
 }
 
 /**
@@ -24,7 +23,7 @@ interface CountdownTimerProps {
  * @param {object} props - Component props.
  * @param {number} props.expiryTimestamp - The timestamp (in milliseconds) when the timer should expire.
  */
-export const CountdownTimer = ({ gameId, gameType, expiryTimestamp, onExpire, isHost, selfId }: CountdownTimerProps) => {
+export const CountdownTimer = ({ gameId, gameType, expiryTimestamp, selfId, isHost }: CountdownTimerProps) => {
     const calculateTimeLeft = useCallback(() => expiryTimestamp ? Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000) : 0, [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
     
@@ -38,9 +37,6 @@ export const CountdownTimer = ({ gameId, gameType, expiryTimestamp, onExpire, is
             setTimeLeft(remaining);
             if (remaining <= 0) {
                  clearInterval(timer);
-                 if (onExpire) {
-                    onExpire();
-                 }
                  // Host is responsible for triggering the server-side timeout logic.
                  if (isHost && !timeoutProcessed.current) {
                     timeoutProcessed.current = true;
@@ -61,7 +57,7 @@ export const CountdownTimer = ({ gameId, gameType, expiryTimestamp, onExpire, is
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [expiryTimestamp, onExpire, isHost, gameId, selfId, gameType, calculateTimeLeft]);
+    }, [expiryTimestamp, isHost, gameId, selfId, gameType, calculateTimeLeft]);
 
     if (!expiryTimestamp || timeLeft <= 0) return null;
 
@@ -77,5 +73,3 @@ export const CountdownTimer = ({ gameId, gameType, expiryTimestamp, onExpire, is
         </div>
     );
 };
-
-    

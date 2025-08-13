@@ -378,4 +378,3 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   );
 }
 
-    
