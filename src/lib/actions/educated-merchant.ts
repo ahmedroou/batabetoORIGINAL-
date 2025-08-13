@@ -194,14 +194,12 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
 export async function rollDice(gameId: string, playerId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
     let questionForFine: EducatedMerchantQuestion | null = null;
-    let precalculatedLandingProperty: Property | null = null;
-    
-    // Step 1: Pre-Transaction - Fetch game state and perform non-deterministic actions
+
+    // --- Pre-transaction logic ---
     const initialGameDoc = await getDoc(gameRef);
     if (!initialGameDoc.exists()) throw new Error('اللعبة غير موجودة.');
     const gameForPreCalc = initialGameDoc.data() as Game;
 
-    // --- Pre-calculation checks ---
     if (gameForPreCalc.gameState !== 'rolling') throw new Error('ليس وقت رمي النرد.');
     const turnOrder = ensure(gameForPreCalc.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود.');
     const currentTurnIndex = ensure(gameForPreCalc.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
@@ -210,86 +208,92 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     const diceRollResult = randomDiceRoll();
     const playerForPreCalc = ensure(gameForPreCalc.players.find(p => p.id === playerId), 'اللاعب غير موجود.');
     const newPosition = (playerForPreCalc.position + diceRollResult) % BOARD_SIZE;
-    precalculatedLandingProperty = ensure(gameForPreCalc.educatedMerchantState?.board?.[newPosition], 'خانة غير موجودة على اللوح');
+    const board = ensure(gameForPreCalc.educatedMerchantState?.board, 'اللوح غير موجود.');
+    const precalculatedLandingProperty = ensure(board[newPosition], 'خانة غير موجودة على اللوح');
 
+    let activityMessage = `${playerForPreCalc.name} رمى ${diceRollResult} وتحرك إلى "${precalculatedLandingProperty.name}".`;
+    
     if (precalculatedLandingProperty.type === 'fine') {
         questionForFine = await fetchRandomQuestion('قسم الغرامات');
     }
 
-    // Step 2: Transaction - Perform all database writes deterministically
+    // --- Transaction logic ---
     await runTransaction(db, async (tx) => {
         const snap = await tx.get(gameRef);
         if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
-        let game = snap.data() as Game;
+        const game = snap.data() as Game;
 
         const playerIndex = getPlayerIndexById(game.players, playerId);
         const player = game.players[playerIndex];
         const oldPosition = player.position;
         
-        let updatedPlayers = [...game.players];
-        updatedPlayers[playerIndex] = { ...player, position: newPosition };
+        let localPlayers = [...game.players];
+        localPlayers[playerIndex] = { ...player, position: newPosition };
 
-        let activityMessage = `${player.name} رمى ${diceRollResult} وتحرك إلى "${precalculatedLandingProperty!.name}".`;
-        
         if (newPosition < oldPosition) {
-            updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + PASS_GO_REWARD;
+            localPlayers[playerIndex].money = (localPlayers[playerIndex].money || 0) + PASS_GO_REWARD;
             activityMessage += ` ومر بنقطة البداية، وحصل على ${PASS_GO_REWARD} دينار.`
         }
         
-        const baseUpdates: any = {
-            players: updatedPlayers,
+        const firestoreUpdates: any = {
+            players: localPlayers,
             'educatedMerchantState.rollAnimationNonce': Date.now(),
             'educatedMerchantState.lastDiceRoll': diceRollResult,
             'educatedMerchantState.timerEndsAt': addActionTimer(),
         };
 
-        game = {...game, ...baseUpdates, players: updatedPlayers};
-        
-        let finalUpdates: any = {};
-        
-        if (precalculatedLandingProperty!.type === 'start') {
-            const { updates } = endTurnInternal(game, playerId, activityMessage, baseUpdates);
-            Object.assign(finalUpdates, updates);
-        } else if (precalculatedLandingProperty!.type === 'property') {
-            if (!precalculatedLandingProperty!.ownerId) {
-                finalUpdates.gameState = 'property_action';
-                finalUpdates['educatedMerchantState.activityLog'] = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
-            } else if (precalculatedLandingProperty!.ownerId !== playerId) {
-                const ownerIndex = getPlayerIndexById(updatedPlayers, precalculatedLandingProperty!.ownerId);
-                const rent = precalculatedLandingProperty!.rent || 0;
+        const localGameForNextStep: Game = {
+            ...game,
+            players: localPlayers,
+            educatedMerchantState: {
+                ...game.educatedMerchantState!,
+                lastDiceRoll: diceRollResult,
+            }
+        };
+
+        if (precalculatedLandingProperty.type === 'start') {
+            const { updates } = endTurnInternal(localGameForNextStep, playerId, activityMessage, {});
+            Object.assign(firestoreUpdates, updates);
+        } else if (precalculatedLandingProperty.type === 'property') {
+            if (!precalculatedLandingProperty.ownerId) {
+                firestoreUpdates.gameState = 'property_action';
+                firestoreUpdates['educatedMerchantState.activityLog'] = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
+            } else if (precalculatedLandingProperty.ownerId !== playerId) {
+                const ownerIndex = getPlayerIndexById(localPlayers, precalculatedLandingProperty.ownerId);
+                const rent = precalculatedLandingProperty.rent || 0;
                 let rentMessage = '';
 
-                if ((updatedPlayers[playerIndex].money || 0) < rent) {
-                    updatedPlayers[ownerIndex].money = (updatedPlayers[ownerIndex].money || 0) + (updatedPlayers[playerIndex].money || 0);
-                    updatedPlayers[playerIndex].money = 0;
-                    updatedPlayers[playerIndex].status = 'bankrupt';
-                    updatedPlayers[playerIndex].bankruptAt = nowTimestamp();
-                    rentMessage = `${activityMessage} لكنه أفلس لأنه لم يستطع دفع الإيجار لـ ${updatedPlayers[ownerIndex].name}.`;
+                if ((localPlayers[playerIndex].money || 0) < rent) {
+                    localPlayers[ownerIndex].money = (localPlayers[ownerIndex].money || 0) + (localPlayers[playerIndex].money || 0);
+                    localPlayers[playerIndex].money = 0;
+                    localPlayers[playerIndex].status = 'bankrupt';
+                    localPlayers[playerIndex].bankruptAt = nowTimestamp();
+                    rentMessage = `${activityMessage} لكنه أفلس لأنه لم يستطع دفع الإيجار لـ ${localPlayers[ownerIndex].name}.`;
                 } else {
-                    updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) - rent;
-                    updatedPlayers[ownerIndex].money = (updatedPlayers[ownerIndex].money || 0) + rent;
-                    rentMessage = `${activityMessage} ودفع ${rent} دينار إيجار لـ ${updatedPlayers[ownerIndex].name}.`;
+                    localPlayers[playerIndex].money = (localPlayers[playerIndex].money || 0) - rent;
+                    localPlayers[ownerIndex].money = (localPlayers[ownerIndex].money || 0) + rent;
+                    rentMessage = `${activityMessage} ودفع ${rent} دينار إيجار لـ ${localPlayers[ownerIndex].name}.`;
                 }
                 
-                baseUpdates.players = updatedPlayers;
-                game = {...game, ...baseUpdates};
-                const { updates } = endTurnInternal(game, playerId, rentMessage, baseUpdates);
-                Object.assign(finalUpdates, updates);
+                firestoreUpdates.players = localPlayers;
+                localGameForNextStep.players = localPlayers; // Update local copy for endTurnInternal
+                const { updates } = endTurnInternal(localGameForNextStep, playerId, rentMessage, {});
+                Object.assign(firestoreUpdates, updates);
             } else {
-                const { updates } = endTurnInternal(game, playerId, `${activityMessage} فهو يملكها بالفعل.`, baseUpdates);
-                Object.assign(finalUpdates, updates);
+                const { updates } = endTurnInternal(localGameForNextStep, playerId, `${activityMessage} فهو يملكها بالفعل.`, {});
+                Object.assign(firestoreUpdates, updates);
             }
-        } else if (precalculatedLandingProperty!.type === 'fine') {
-            finalUpdates.gameState = 'question';
-            finalUpdates['educatedMerchantState.activityLog'] = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
-            finalUpdates['educatedMerchantState.currentQuestion'] = questionForFine;
-            finalUpdates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: precalculatedLandingProperty!.fineAmount ?? DEFAULT_FINE };
+        } else if (precalculatedLandingProperty.type === 'fine') {
+            firestoreUpdates.gameState = 'question';
+            firestoreUpdates['educatedMerchantState.activityLog'] = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
+            firestoreUpdates['educatedMerchantState.currentQuestion'] = questionForFine;
+            firestoreUpdates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: precalculatedLandingProperty.fineAmount ?? DEFAULT_FINE };
         } else {
-            const { updates } = endTurnInternal(game, playerId, activityMessage, baseUpdates);
-            Object.assign(finalUpdates, updates);
+            const { updates } = endTurnInternal(localGameForNextStep, playerId, activityMessage, {});
+            Object.assign(firestoreUpdates, updates);
         }
         
-        tx.update(gameRef, {...baseUpdates, ...finalUpdates});
+        tx.update(gameRef, firestoreUpdates);
     });
 }
 
@@ -364,60 +368,57 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     const question = ensure(game.educatedMerchantState?.currentQuestion, 'السؤال الحالي مفقود.');
     const isCorrect = answer === question.answer;
 
-    let board = [...ensure(game.educatedMerchantState?.board, 'اللوح مفقود.')];
-    let players = [...game.players];
-    const playerIndex = getPlayerIndexById(players, playerId);
+    let localBoard = [...ensure(game.educatedMerchantState?.board, 'اللوح مفقود.')];
+    let localPlayers = [...game.players];
+    const playerIndex = getPlayerIndexById(localPlayers, playerId);
     let activityMessage = '';
-    let extraUpdates: any = {
-      'educatedMerchantState.currentQuestion': deleteField(),
-      'educatedMerchantState.timerEndsAt': deleteField(),
-    };
+    
+    // This will hold the final state of the game for endTurnInternal
+    let gameForNextStep: Game = { ...game }; 
 
     if (pendingPurchase) {
-      extraUpdates['educatedMerchantState.pendingPurchase'] = deleteField();
       const propertyName = pendingPurchase.propertyName || 'عقار مجهول';
 
       if (isCorrect) {
-        const propertyIndex = board.findIndex((p) => p.id === pendingPurchase.propertyId);
+        const propertyIndex = localBoard.findIndex((p) => p.id === pendingPurchase.propertyId);
         if (propertyIndex !== -1) {
-          board[propertyIndex] = {
-            ...board[propertyIndex],
+          localBoard[propertyIndex] = {
+            ...localBoard[propertyIndex],
             ownerId: playerId,
-            color: players[playerIndex].color,
+            color: localPlayers[playerIndex].color,
           } as Property;
         }
-        activityMessage = `${players[playerIndex].name} أجاب بشكل صحيح وامتلك "${propertyName}"!`;
-        extraUpdates['educatedMerchantState.newlyBoughtPropertyId'] = pendingPurchase.propertyId;
-        players[playerIndex].propertiesCount = (players[playerIndex].propertiesCount || 0) + 1;
-
+        activityMessage = `${localPlayers[playerIndex].name} أجاب بشكل صحيح وامتلك "${propertyName}"!`;
+        localPlayers[playerIndex].propertiesCount = (localPlayers[playerIndex].propertiesCount || 0) + 1;
       } else {
         const refund = Math.round(pendingPurchase.price / 4);
-        players[playerIndex] = { ...players[playerIndex], money: (players[playerIndex].money || 0) + refund };
-        activityMessage = `${players[playerIndex].name} أجاب بشكل خاطئ على سؤال "${propertyName}" واسترد ${refund} دينار.`;
-        extraUpdates['educatedMerchantState.newlyBoughtPropertyId'] = deleteField();
+        localPlayers[playerIndex] = { ...localPlayers[playerIndex], money: (localPlayers[playerIndex].money || 0) + refund };
+        activityMessage = `${localPlayers[playerIndex].name} أجاب بشكل خاطئ على سؤال "${propertyName}" واسترد ${refund} دينار.`;
       }
     } else if (pendingFine) {
-      extraUpdates['educatedMerchantState.pendingFine'] = deleteField();
       if (isCorrect) {
-        activityMessage = `${players[playerIndex].name} أجاب بشكل صحيح ونجا من الغرامة!`;
+        activityMessage = `${localPlayers[playerIndex].name} أجاب بشكل صحيح ونجا من الغرامة!`;
       } else {
         const fine = pendingFine.fineAmount ?? DEFAULT_FINE;
-        if ((players[playerIndex].money || 0) < fine) {
-          players[playerIndex].money = 0;
-          players[playerIndex].status = 'bankrupt';
-          players[playerIndex].bankruptAt = nowTimestamp();
-          activityMessage = `${players[playerIndex].name} أجاب خطأ وأفلس لأنه لم يستطع دفع الغرامة.`;
+        if ((localPlayers[playerIndex].money || 0) < fine) {
+          localPlayers[playerIndex].money = 0;
+          localPlayers[playerIndex].status = 'bankrupt';
+          localPlayers[playerIndex].bankruptAt = nowTimestamp();
+          activityMessage = `${localPlayers[playerIndex].name} أجاب خطأ وأفلس لأنه لم يستطع دفع الغرامة.`;
         } else {
-          players[playerIndex].money = (players[playerIndex].money || 0) - fine;
-          activityMessage = `${players[playerIndex].name} أجاب خطأ ودفع غرامة ${fine} دينار.`;
+          localPlayers[playerIndex].money = (localPlayers[playerIndex].money || 0) - fine;
+          activityMessage = `${localPlayers[playerIndex].name} أجاب خطأ ودفع غرامة ${fine} دينار.`;
         }
       }
     }
 
-    extraUpdates.players = players;
-    extraUpdates['educatedMerchantState.board'] = board;
-
-    const { updates, isGameOver } = endTurnInternal(game, playerId, activityMessage, extraUpdates);
+    // Construct a representation of the game state AFTER this action for endTurnInternal
+    gameForNextStep.players = localPlayers;
+    if (gameForNextStep.educatedMerchantState) {
+        gameForNextStep.educatedMerchantState.board = localBoard;
+    }
+    
+    const { updates, isGameOver } = endTurnInternal(gameForNextStep, playerId, activityMessage);
     gameEnded = isGameOver;
 
     if (isGameOver) {
@@ -451,45 +452,46 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
 
     let activityMessage = `انتهى وقت اللاعب ${currentPlayer?.name} وتخطى دوره.`;
     let updates: any;
+    let localGameCopy = {...game}; // Create a local copy to modify
 
     if (game.gameState === 'rolling' || game.gameState === 'property_action') {
       ({ updates } = endTurnInternal(game, currentPlayerId, activityMessage));
     } else if (game.gameState === 'question') {
-      const pendingPurchase = game.educatedMerchantState?.pendingPurchase;
-      const pendingFine = game.educatedMerchantState?.pendingFine;
-      if (pendingPurchase) {
-        const playerIndex = getPlayerIndexById(game.players, pendingPurchase.playerId);
-        const updatedPlayers = [...game.players];
-        const refund = Math.round((pendingPurchase.price || 0) / 4);
-        updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + refund;
-        activityMessage = `${currentPlayer?.name} لم يجب في الوقت واسترد ${refund} دينار.`;
-        const baseUpdates = {
-          players: updatedPlayers,
-          'educatedMerchantState.pendingPurchase': deleteField(),
-          'educatedMerchantState.currentQuestion': deleteField(),
-        };
-        ({ updates } = endTurnInternal(game, currentPlayerId, activityMessage, baseUpdates));
-      } else if (pendingFine) {
-        const playerIndex = getPlayerIndexById(game.players, pendingFine.playerId);
-        const updatedPlayers = [...game.players];
-        const fine = (pendingFine.fineAmount ?? DEFAULT_FINE);
-        if ((updatedPlayers[playerIndex].money || 0) < fine) {
-          updatedPlayers[playerIndex].money = 0;
-          updatedPlayers[playerIndex].status = 'bankrupt';
-          updatedPlayers[playerIndex].bankruptAt = nowTimestamp();
+        const pendingPurchase = game.educatedMerchantState?.pendingPurchase;
+        const pendingFine = game.educatedMerchantState?.pendingFine;
+        
+        let localPlayers = [...game.players];
+
+        if (pendingPurchase) {
+            const playerIndex = getPlayerIndexById(localPlayers, pendingPurchase.playerId);
+            const refund = Math.round((pendingPurchase.price || 0) / 4);
+            localPlayers[playerIndex].money = (localPlayers[playerIndex].money || 0) + refund;
+            activityMessage = `${currentPlayer?.name} لم يجب في الوقت واسترد ${refund} دينار.`;
+        } else if (pendingFine) {
+            const playerIndex = getPlayerIndexById(localPlayers, pendingFine.playerId);
+            const fine = (pendingFine.fineAmount ?? DEFAULT_FINE);
+            if ((localPlayers[playerIndex].money || 0) < fine) {
+                localPlayers[playerIndex].money = 0;
+                localPlayers[playerIndex].status = 'bankrupt';
+                localPlayers[playerIndex].bankruptAt = nowTimestamp();
+            } else {
+                localPlayers[playerIndex].money = (localPlayers[playerIndex].money || 0) - fine;
+            }
+            activityMessage = `${currentPlayer?.name} لم يجب في الوقت وتم تطبيق الغرامة.`;
         } else {
-          updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) - fine;
+            return;
         }
-        activityMessage = `${currentPlayer?.name} لم يجب في الوقت وتم تطبيق الغرامة.`;
-        const baseUpdates = {
-          players: updatedPlayers,
-          'educatedMerchantState.pendingFine': deleteField(),
-          'educatedMerchantState.currentQuestion': deleteField(),
-        };
-        ({ updates } = endTurnInternal(game, currentPlayerId, activityMessage, baseUpdates));
-      } else {
-        return;
-      }
+        
+        // Update local copy of game with player changes before passing to endTurnInternal
+        localGameCopy.players = localPlayers;
+        
+        const { updates: turnEndUpdates } = endTurnInternal(localGameCopy, currentPlayerId, activityMessage);
+        updates = turnEndUpdates;
+        // Clean up the pending states after processing them
+        updates['educatedMerchantState.pendingPurchase'] = deleteField();
+        updates['educatedMerchantState.pendingFine'] = deleteField();
+        updates['educatedMerchantState.currentQuestion'] = deleteField();
+
     } else {
       return; // No action needed for other states on timeout
     }
@@ -503,22 +505,21 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
 function endTurnInternal(
   game: Game,
   playerId: string,
-  extraMessage = '',
-  extraUpdates: any = {}
+  extraMessage: string = '',
 ): { isGameOver: boolean; updates: any } {
-  let mergedGameData = { ...game, ...extraUpdates };
-  if (extraUpdates.players) mergedGameData.players = [...extraUpdates.players];
+  let updatedBoard = [...(game.educatedMerchantState?.board || [])];
+  let updatedPlayers = [...game.players];
 
   // Release properties of any newly bankrupted players
-  const updatedBoard = (mergedGameData.educatedMerchantState?.board || []).map((prop) => {
-    const owner = mergedGameData.players.find((p) => p.id === prop.ownerId);
+  updatedBoard = updatedBoard.map((prop) => {
+    const owner = updatedPlayers.find((p) => p.id === prop.ownerId);
     if (owner && owner.status === 'bankrupt') {
       return { ...prop, ownerId: null, color: undefined } as Property;
     }
     return prop;
   });
 
-  const updatedPlayers = mergedGameData.players.map((p) => {
+  updatedPlayers = updatedPlayers.map((p) => {
     if (p.status === 'bankrupt' && (p.money || 0) > 0) return { ...p, money: 0 };
     return p;
   });
@@ -546,9 +547,9 @@ function endTurnInternal(
     return { isGameOver: true, updates: finalGameData };
   }
 
-  const turnOrder = ensure(mergedGameData.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود أثناء إنهاء الدور.');
+  const turnOrder = ensure(game.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود أثناء إنهاء الدور.');
   const currentTurnIndex = ensure(
-    mergedGameData.educatedMerchantState?.currentTurnIndex,
+    game.educatedMerchantState?.currentTurnIndex,
     'فهرس الدور الحالي مفقود.'
   );
 
@@ -571,16 +572,16 @@ function endTurnInternal(
     return { isGameOver: true, updates: finalGameData };
   }
 
-  const currentMoves = mergedGameData.educatedMerchantState?.movesThisRound || 0;
+  const currentMoves = game.educatedMerchantState?.movesThisRound || 0;
   let newMoves = currentMoves + 1;
-  let newRound = mergedGameData.round || 1;
+  let newRound = game.round || 1;
 
   if (newMoves >= activePlayers.length) {
     newRound++;
     newMoves = 0;
   }
 
-  const maxRounds = mergedGameData.educatedMerchantState?.settings?.maxRounds || DEFAULT_MAX_ROUNDS;
+  const maxRounds = game.educatedMerchantState?.settings?.maxRounds || DEFAULT_MAX_ROUNDS;
 
   if (newRound > maxRounds) {
     const contenders = updatedPlayers.filter((p) => p.status !== 'bankrupt');
@@ -603,7 +604,6 @@ function endTurnInternal(
   }
 
   const finalUpdates: any = {
-    ...extraUpdates,
     gameState: 'rolling',
     'educatedMerchantState.board': updatedBoard,
     'educatedMerchantState.currentTurnIndex': nextTurnIndex,
@@ -623,6 +623,7 @@ function endTurnInternal(
 
   return { isGameOver: false, updates: finalUpdates };
 }
+
 
 export async function endTurn(gameId: string, playerId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
@@ -646,4 +647,5 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
   });
 }
 
+    
     
