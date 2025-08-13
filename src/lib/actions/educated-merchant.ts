@@ -1,3 +1,4 @@
+
 'use server';
 
 // تمت إعادة كتابة الملف بمنهجية آمنة للمعاملات، مع توحيد بروتوكول الحركة،
@@ -37,7 +38,7 @@ const DEFAULT_FINE = 100;
 const DEFAULT_MAX_ROUNDS = 20;
 const COLORS = ['#F44336', '#2196F3', '#4CAF50', '#FFC107', '#9C27B0', '#009688', '#E91E63', '#607D8B'];
 const DICE_MIN = 1;
-const DICE_MAX = 6; // تم التصحيح إلى نرد قياسي 1..6
+const DICE_MAX = 6; 
 
 // -----------------------------
 // Helpers
@@ -91,24 +92,29 @@ function newQuestionToken(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-async function fetchRandomQuestion(category: string): Promise<EducatedMerchantQuestion> {
-  // ملاحظة: تُستدعى خارج المعاملة. لا تستخدم داخل runTransaction.
-  const questionsCol = collection(db, 'educated_merchant_questions');
-  const randomKey = Math.random();
-  let q = query(questionsCol, where('category', '==', category), where('randomKey', '>=', randomKey), limit(1));
-  let qs = await getDocs(q);
-  if (qs.empty) {
-    q = query(questionsCol, where('category', '==', category), where('randomKey', '<', randomKey), limit(1));
-    qs = await getDocs(q);
+async function fetchRandomQuestion(category: string): Promise<EducatedMerchantQuestion | null> {
+  try {
+      const questionsCol = collection(db, 'educated_merchant_questions');
+      const randomKey = Math.random();
+      let q = query(questionsCol, where('category', '==', category), where('randomKey', '>=', randomKey), limit(1));
+      let qs = await getDocs(q);
+      if (qs.empty) {
+        q = query(questionsCol, where('category', '==', category), where('randomKey', '<', randomKey), limit(1));
+        qs = await getDocs(q);
+      }
+      if (qs.empty) {
+          console.warn(`No questions found for category: "${category}". Returning null.`);
+          return null;
+      }
+      const questionDoc = qs.docs[0];
+      const questionData = { id: questionDoc.id, ...questionDoc.data() } as EducatedMerchantQuestion;
+      const options = shuffle([...(questionData.dummyAnswers || []), questionData.answer]);
+      questionData.options = options;
+      return questionData;
+  } catch(e) {
+      console.error(`Error fetching random question for category "${category}":`, e);
+      return null;
   }
-  if (qs.empty) throw new Error(`لا توجد أسئلة متاحة في قسم "${category}".`);
-
-  const questionDoc = qs.docs[0];
-  const questionData = { id: questionDoc.id, ...questionDoc.data() } as EducatedMerchantQuestion;
-  // خلط الخيارات على الخادم (ممتاز — يبقى عشوائياً)
-  const options = shuffle([...(questionData.dummyAnswers || []), questionData.answer]);
-  questionData.options = options;
-  return questionData;
 }
 
 // -----------------------------
@@ -422,6 +428,8 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
   const gameRef = doc(db, 'games', gameId);
   const qToken = newQuestionToken();
   let needFineQuestion: { category: string; token: string } | null = null;
+  let finalGameDataForLeagueUpdate: Game | null = null;
+  let gameEnded = false;
 
   await runTransaction(db, async (tx) => {
     let snap = await tx.get(gameRef);
@@ -432,6 +440,9 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     const timeoutResult = await applyTimeoutIfNeeded(tx, gameRef, game);
     if (timeoutResult.applied) {
       if (timeoutResult.needFineQuestion) needFineQuestion = timeoutResult.needFineQuestion;
+      if (timeoutResult.finalGameDataForLeagueUpdate) finalGameDataForLeagueUpdate = timeoutResult.finalGameDataForLeagueUpdate;
+      if (timeoutResult.gameEnded) gameEnded = true;
+
       // reload state after applying timeout
       snap = await tx.get(gameRef);
       if (!snap.exists()) throw new Error('اللعبة غير موجودة بعد تطبيق المؤقت.');
@@ -499,22 +510,30 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
       };
 
       // أنهِ الدور بعد دفع الإيجار
-      const { updates: endUpdates } = endTurnInternal(
+      const { updates: endUpdates, isGameOver } = endTurnInternal(
         { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board } } as Game,
         playerId,
         null,
         { players }
       );
       Object.assign(updates, endUpdates);
+      if (isGameOver) {
+        gameEnded = true;
+        finalGameDataForLeagueUpdate = { ...game, ...updates };
+      }
     } else if (landingProperty.type === 'start') {
       // إنهاء فوري
-      const { updates: endUpdates } = endTurnInternal(
+      const { updates: endUpdates, isGameOver } = endTurnInternal(
         { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board } } as Game,
         playerId,
         null,
         { players }
       );
       Object.assign(updates, endUpdates);
+       if (isGameOver) {
+        gameEnded = true;
+        finalGameDataForLeagueUpdate = { ...game, ...updates };
+      }
     } else if (landingProperty.type === 'property') {
       // قرار شراء
       updates.gameState = 'property_action';
@@ -548,11 +567,39 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         game.educatedMerchantState?.questionToken === needFineQuestion!.token &&
         game.educatedMerchantState?.pendingFine
       ) {
-        tx.update(doc(db, 'games', gameId), {
-          'educatedMerchantState.currentQuestion': question,
-        });
+        if(question) {
+            tx.update(doc(db, 'games', gameId), {
+              'educatedMerchantState.currentQuestion': question,
+            });
+        } else {
+             // If no question found, auto-fail (apply fine) and end turn
+            const players = clonePlayers(game.players);
+            const playerIndex = getPlayerIndexById(players, game.educatedMerchantState.pendingFine.playerId);
+            const player = players[playerIndex];
+            const fine = game.educatedMerchantState.pendingFine.fineAmount ?? DEFAULT_FINE;
+
+            if ((player.money || 0) < fine) {
+                player.money = 0;
+                player.status = 'bankrupt';
+                player.bankruptAt = nowTimestamp();
+            } else {
+                player.money = (player.money || 0) - fine;
+            }
+
+            const { updates: endUpdates, isGameOver } = endTurnInternal(game, player.id, `${player.name} فشل في الإجابة على سؤال الغرامة لعدم توفر سؤال.`, { players });
+            tx.update(gameRef, endUpdates);
+
+            if (isGameOver) {
+                finalGameDataForLeagueUpdate = { ...game, ...endUpdates };
+                gameEnded = true;
+            }
+        }
       }
     });
+  }
+
+  if (gameEnded && finalGameDataForLeagueUpdate) {
+    await updateLeagueScoresForGameEnd(finalGameDataForLeagueUpdate);
   }
 }
 
@@ -560,6 +607,9 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
   const gameRef = doc(db, 'games', gameId);
   const qToken = newQuestionToken();
   let pending: { category: string; token: string } | null = null;
+  let finalGameDataForLeagueUpdate: Game | null = null;
+  let gameEnded = false;
+
 
   await runTransaction(db, async (tx) => {
     let snap = await tx.get(gameRef);
@@ -570,7 +620,8 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
     const timeoutResult = await applyTimeoutIfNeeded(tx, gameRef, game);
     if (timeoutResult.applied) {
       if (timeoutResult.finalGameDataForLeagueUpdate) {
-        // we won't try to update league inside the transaction; it will be handled post-transaction
+        finalGameDataForLeagueUpdate = timeoutResult.finalGameDataForLeagueUpdate;
+        gameEnded = true;
       }
       // reload
       snap = await tx.get(gameRef);
@@ -626,12 +677,31 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
       const game = snap.data() as Game;
       const pp = game.educatedMerchantState?.pendingPurchase;
       if (game.gameState === 'question' && game.educatedMerchantState?.questionToken === pending!.token && pp && pp.playerId === playerId) {
-        tx.update(doc(db, 'games', gameId), {
-          'educatedMerchantState.currentQuestion': question,
-          'educatedMerchantState.pendingPurchase': { ...pp, questionId: question.id },
-        });
+        if(question) {
+            tx.update(doc(db, 'games', gameId), {
+              'educatedMerchantState.currentQuestion': question,
+              'educatedMerchantState.pendingPurchase': { ...pp, questionId: question.id },
+            });
+        } else {
+             // If no question found, auto-fail (refund) and end turn
+            const players = clonePlayers(game.players);
+            const playerIndex = getPlayerIndexById(players, playerId);
+            const refund = Math.round((pp.price || 0) / 4);
+            players[playerIndex].money = (players[playerIndex].money || 0) + refund;
+
+            const { updates: endUpdates, isGameOver } = endTurnInternal(game, playerId, `${players[playerIndex].name} فشل في شراء العقار لعدم توفر سؤال.`, { players });
+            tx.update(gameRef, endUpdates);
+             if (isGameOver) {
+                finalGameDataForLeagueUpdate = { ...game, ...endUpdates };
+                gameEnded = true;
+            }
+        }
       }
     });
+  }
+
+  if (gameEnded && finalGameDataForLeagueUpdate) {
+    await updateLeagueScoresForGameEnd(finalGameDataForLeagueUpdate);
   }
 }
 
@@ -769,7 +839,7 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
   if (needFineQuestion) {
     const question = await fetchRandomQuestion(needFineQuestion.category);
     await runTransaction(db, async (tx) => {
-      const snap = await tx.get(gameRef);
+      const snap = await tx.get(doc(db, 'games', gameId));
       if (!snap.exists()) return;
       const game = snap.data() as Game;
       if (
@@ -777,9 +847,33 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
         game.educatedMerchantState?.questionToken === needFineQuestion!.token &&
         game.educatedMerchantState?.pendingFine
       ) {
-        tx.update(gameRef, {
-          'educatedMerchantState.currentQuestion': question,
-        });
+         if(question) {
+            tx.update(doc(db, 'games', gameId), {
+              'educatedMerchantState.currentQuestion': question,
+            });
+        } else {
+             // If no question found, auto-fail (apply fine) and end turn
+            const players = clonePlayers(game.players);
+            const playerIndex = getPlayerIndexById(players, game.educatedMerchantState.pendingFine.playerId);
+            const player = players[playerIndex];
+            const fine = game.educatedMerchantState.pendingFine.fineAmount ?? DEFAULT_FINE;
+
+            if ((player.money || 0) < fine) {
+                player.money = 0;
+                player.status = 'bankrupt';
+                player.bankruptAt = nowTimestamp();
+            } else {
+                player.money = (player.money || 0) - fine;
+            }
+
+            const { updates: endUpdates, isGameOver } = endTurnInternal(game, player.id, `${player.name} فشل في الإجابة على سؤال الغرامة لعدم توفر سؤال.`, { players });
+            tx.update(gameRef, endUpdates);
+
+            if (isGameOver) {
+                finalGameDataForLeagueUpdate = { ...game, ...endUpdates };
+                gameEnded = true;
+            }
+        }
       }
     });
   }
@@ -822,7 +916,7 @@ function endTurnInternal(
     const ranking = [...players]
       .sort((a, b) => {
         if (a.status === 'alive' && b.status !== 'alive') return -1;
-        if (b.status === 'alive' && a.status !== 'alive') return 1;
+        if (b.status === 'alive' && a.status === 'alive') return (b.money || 0) - (a.money || 0);
         if (a.status === 'bankrupt' && b.status === 'bankrupt') return ((b.bankruptAt as Timestamp)?.toMillis() || 0) - ((a.bankruptAt as Timestamp)?.toMillis() || 0);
         return (b.money || 0) - (a.money || 0);
       })

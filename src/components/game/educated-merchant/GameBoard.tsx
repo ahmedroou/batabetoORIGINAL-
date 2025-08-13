@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -12,7 +13,6 @@ import { cn } from '@/lib/utils';
 import { Banknote, Building, HelpCircle, Trophy } from 'lucide-react';
 import { endTurn } from '@/lib/actions/educated-merchant';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
-import { RentPaidOverlay } from './RentPaidOverlay';
 import { QuestionModal } from './QuestionModal';
 
 interface GameBoardProps {
@@ -377,7 +377,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
         layout
       >
         <Banknote className="w-4 h-4 md:w-5 md:h-5 opacity-90" />
-        <div className="tabular-nums">{formatMoney(animatedSelfMoney)}<span className="text-xs md:text-sm font-normal opacity-80 mr-1"> دينار</span></div>
+        <div className="tabular-nums">{formatMoney(animatedSelfMoney)}<span className="text-xs md:text-sm font-normal mr-1"> دينار</span></div>
       </motion.div>
 
       <AnimatePresence>
@@ -385,11 +385,11 @@ export function GameBoard({ game, self }: GameBoardProps) {
           <motion.div
             key={moneyDeltaNonce[self.id]}
             initial={{ y: 8, opacity: 0 }}
-            animate={{ y: -14, opacity: 1 }}
-            exit={{ y: -26, opacity: 0 }}
+            animate={{ y: -18, opacity: 1 }}
+            exit={{ y: -30, opacity: 0 }}
             transition={{ duration: 0.6 }}
             className={cn(
-              'absolute -bottom-5 right-0 px-1.5 py-0.5 rounded text-[11px] font-semibold',
+              'absolute -bottom-5 right-0 px-1.5 py-0.5 rounded text-[11px] font-semibold shadow',
               selfDelta > 0 ? 'bg-emerald-600/90' : 'bg-rose-600/90'
             )}
           >
@@ -402,7 +402,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
 
   return (
     <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
-      <RentPaidOverlay rentInfo={game.educatedMerchantState?.lastRentPayment ?? null} />
       <QuestionModal game={game} self={self} />
 
       <div className="w-full md:w-1/4 xl:w-1/5 space-y-4 shrink-0 flex flex-col">
@@ -534,4 +533,18 @@ export function GameBoard({ game, self }: GameBoardProps) {
 }
 function pc(size: number, tile: number) {
   return size / tile;
+}
+
+function findNextAliveIndex(turnOrder: string[], players: Player[], startIndex: number): number {
+  if (!turnOrder || turnOrder.length === 0) return -1;
+  let idx = (startIndex + 1) % turnOrder.length;
+  let attempts = 0;
+  while (attempts < turnOrder.length) {
+    const pid = turnOrder[idx];
+    const p = players.find((x) => x.id === pid);
+    if (p && p.status === 'alive') return idx;
+    idx = (idx + 1) % turnOrder.length;
+    attempts++;
+  }
+  return -1;
 }
