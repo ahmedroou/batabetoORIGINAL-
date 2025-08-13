@@ -186,132 +186,148 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
       'educatedMerchantState.timerEndsAt': addActionTimer(),
       'educatedMerchantState.movesThisRound': 0,
       'educatedMerchantState.settings': { maxRounds: DEFAULT_MAX_ROUNDS, categories: categoriesResult.categories, diceMax: DICE_MAX },
-      'educatedMerchantState.rollAnimationNonce': Date.now(), // Initialize the nonce
+      'educatedMerchantState.rollAnimationNonce': Date.now(),
     });
   });
 }
 
 export async function rollDice(gameId: string, playerId: string): Promise<void> {
-  const gameRef = doc(db, 'games', gameId);
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(gameRef);
-    if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
-    let game = snap.data() as Game;
+    const gameRef = doc(db, 'games', gameId);
+    let questionForFine: EducatedMerchantQuestion | null = null;
+    let precalculatedLandingProperty: Property | null = null;
+    let diceRollResult = 0;
+    
+    // Step 1: Pre-Transaction - Fetch game state and perform non-deterministic actions
+    const initialGameDoc = await getDoc(gameRef);
+    if (!initialGameDoc.exists()) throw new Error('اللعبة غير موجودة.');
+    const gameForPreCalc = initialGameDoc.data() as Game;
 
-    if (game.gameState !== 'rolling') throw new Error('ليس وقت رمي النرد.');
-
-    const turnOrder = ensure(game.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود.');
-    const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
-
+    // --- Pre-calculation checks ---
+    if (gameForPreCalc.gameState !== 'rolling') throw new Error('ليس وقت رمي النرد.');
+    const turnOrder = ensure(gameForPreCalc.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود.');
+    const currentTurnIndex = ensure(gameForPreCalc.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
     if (turnOrder[currentTurnIndex] !== playerId) throw new Error('ليس دورك الآن.');
+    // --- End of checks ---
 
-    const playerIndex = getPlayerIndexById(game.players, playerId);
-    if (playerIndex === -1) throw new Error('اللاعب غير موجود.');
+    diceRollResult = randomDiceRoll();
+    const playerForPreCalc = ensure(gameForPreCalc.players.find(p => p.id === playerId), 'اللاعب غير موجود.');
+    const newPosition = (playerForPreCalc.position + diceRollResult) % BOARD_SIZE;
+    precalculatedLandingProperty = ensure(gameForPreCalc.educatedMerchantState?.board?.[newPosition], 'خانة غير موجودة على اللوح');
 
-    const player = game.players[playerIndex];
-    const diceRoll = randomDiceRoll();
-    const oldPosition = player.position;
-    const newPosition = (oldPosition + diceRoll) % BOARD_SIZE;
-    
-    const board = ensure(game.educatedMerchantState?.board, 'اللوح مفقود.');
-    const landingProperty = ensure(board[newPosition], 'خانة غير موجودة على اللوح');
-    let activityMessage = `${player.name} رمى ${diceRoll} وتحرك إلى "${landingProperty.name}".`;
-
-    let updatedPlayers = [...game.players];
-    updatedPlayers[playerIndex] = { ...player, position: newPosition };
-    
-    if (newPosition < oldPosition) {
-      updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + PASS_GO_REWARD;
-      activityMessage += ` ومر بنقطة البداية، وحصل على ${PASS_GO_REWARD} دينار.`
+    if (precalculatedLandingProperty.type === 'fine') {
+        questionForFine = await fetchRandomQuestion('قسم الغرامات');
     }
-    
-    const baseUpdates: any = {
-      players: updatedPlayers,
-      'educatedMerchantState.rollAnimationNonce': Date.now(),
-      'educatedMerchantState.lastDiceRoll': diceRoll,
-      'educatedMerchantState.timerEndsAt': addActionTimer(),
-    };
 
-    game = {...game, ...baseUpdates, players: updatedPlayers};
+    // Step 2: Transaction - Perform all database writes deterministically
+    await runTransaction(db, async (tx) => {
+        const snap = await tx.get(gameRef);
+        if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
+        let game = snap.data() as Game;
 
-    let nextGameState: Game['gameState'] | null = null;
-    let finalUpdates: any = {};
+        const playerIndex = getPlayerIndexById(game.players, playerId);
+        const player = game.players[playerIndex];
+        const oldPosition = player.position;
+        
+        let updatedPlayers = [...game.players];
+        updatedPlayers[playerIndex] = { ...player, position: newPosition };
 
-    if (landingProperty.type === 'start') {
-      const { updates } = endTurnInternal(game, playerId, activityMessage, baseUpdates);
-      Object.assign(finalUpdates, updates);
-    } else if (landingProperty.type === 'property') {
-      if (!landingProperty.ownerId) {
-        nextGameState = 'property_action';
-        finalUpdates.activityLog = arrayUnion({message: activityMessage, timestamp: Timestamp.now()})
-      } else if (landingProperty.ownerId !== playerId) {
-        const ownerIndex = getPlayerIndexById(updatedPlayers, landingProperty.ownerId);
-        const rent = landingProperty.rent || 0;
-        let rentMessage = '';
-
-        if ((updatedPlayers[playerIndex].money || 0) < rent) {
-          updatedPlayers[ownerIndex].money = (updatedPlayers[ownerIndex].money || 0) + (updatedPlayers[playerIndex].money || 0);
-          updatedPlayers[playerIndex].money = 0;
-          updatedPlayers[playerIndex].status = 'bankrupt';
-          updatedPlayers[playerIndex].bankruptAt = nowTimestamp();
-          rentMessage = `${activityMessage} لكنه أفلس لأنه لم يستطع دفع الإيجار لـ ${updatedPlayers[ownerIndex].name}.`;
-        } else {
-          updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) - rent;
-          updatedPlayers[ownerIndex].money = (updatedPlayers[ownerIndex].money || 0) + rent;
-          rentMessage = `${activityMessage} ودفع ${rent} دينار إيجار لـ ${updatedPlayers[ownerIndex].name}.`;
+        let activityMessage = `${player.name} رمى ${diceRollResult} وتحرك إلى "${precalculatedLandingProperty!.name}".`;
+        
+        if (newPosition < oldPosition) {
+            updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + PASS_GO_REWARD;
+            activityMessage += ` ومر بنقطة البداية، وحصل على ${PASS_GO_REWARD} دينار.`
         }
         
-        baseUpdates.players = updatedPlayers;
-        game = {...game, ...baseUpdates};
-        const { updates } = endTurnInternal(game, playerId, rentMessage, baseUpdates);
-        Object.assign(finalUpdates, updates);
+        const baseUpdates: any = {
+            players: updatedPlayers,
+            'educatedMerchantState.rollAnimationNonce': Date.now(),
+            'educatedMerchantState.lastDiceRoll': diceRollResult,
+            'educatedMerchantState.timerEndsAt': addActionTimer(),
+        };
 
-      } else {
-        const { updates } = endTurnInternal(game, playerId, `${activityMessage} فهو يملكها بالفعل.`, baseUpdates);
-        Object.assign(finalUpdates, updates);
-      }
-    } else if (landingProperty.type === 'fine') {
-      const question = await fetchRandomQuestion('قسم الغرامات');
-      nextGameState = 'question';
-      finalUpdates.activityLog = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
-      finalUpdates['educatedMerchantState.currentQuestion'] = question;
-      finalUpdates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE };
-    } else {
-      const { updates } = endTurnInternal(game, playerId, activityMessage, baseUpdates);
-      Object.assign(finalUpdates, updates);
-    }
-    
-    if (nextGameState) {
-        finalUpdates.gameState = nextGameState;
-    }
-    
-    tx.update(gameRef, {...baseUpdates, ...finalUpdates});
-  });
+        game = {...game, ...baseUpdates, players: updatedPlayers};
+        
+        let finalUpdates: any = {};
+        
+        if (precalculatedLandingProperty!.type === 'start') {
+            const { updates } = endTurnInternal(game, playerId, activityMessage, baseUpdates);
+            Object.assign(finalUpdates, updates);
+        } else if (precalculatedLandingProperty!.type === 'property') {
+            if (!precalculatedLandingProperty!.ownerId) {
+                finalUpdates.gameState = 'property_action';
+                finalUpdates.activityLog = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
+            } else if (precalculatedLandingProperty!.ownerId !== playerId) {
+                const ownerIndex = getPlayerIndexById(updatedPlayers, precalculatedLandingProperty!.ownerId);
+                const rent = precalculatedLandingProperty!.rent || 0;
+                let rentMessage = '';
+
+                if ((updatedPlayers[playerIndex].money || 0) < rent) {
+                    updatedPlayers[ownerIndex].money = (updatedPlayers[ownerIndex].money || 0) + (updatedPlayers[playerIndex].money || 0);
+                    updatedPlayers[playerIndex].money = 0;
+                    updatedPlayers[playerIndex].status = 'bankrupt';
+                    updatedPlayers[playerIndex].bankruptAt = nowTimestamp();
+                    rentMessage = `${activityMessage} لكنه أفلس لأنه لم يستطع دفع الإيجار لـ ${updatedPlayers[ownerIndex].name}.`;
+                } else {
+                    updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) - rent;
+                    updatedPlayers[ownerIndex].money = (updatedPlayers[ownerIndex].money || 0) + rent;
+                    rentMessage = `${activityMessage} ودفع ${rent} دينار إيجار لـ ${updatedPlayers[ownerIndex].name}.`;
+                }
+                
+                baseUpdates.players = updatedPlayers;
+                game = {...game, ...baseUpdates};
+                const { updates } = endTurnInternal(game, playerId, rentMessage, baseUpdates);
+                Object.assign(finalUpdates, updates);
+            } else {
+                const { updates } = endTurnInternal(game, playerId, `${activityMessage} فهو يملكها بالفعل.`, baseUpdates);
+                Object.assign(finalUpdates, updates);
+            }
+        } else if (precalculatedLandingProperty!.type === 'fine') {
+            finalUpdates.gameState = 'question';
+            finalUpdates.activityLog = arrayUnion({message: activityMessage, timestamp: Timestamp.now()});
+            finalUpdates['educatedMerchantState.currentQuestion'] = questionForFine;
+            finalUpdates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: precalculatedLandingProperty!.fineAmount ?? DEFAULT_FINE };
+        } else {
+            const { updates } = endTurnInternal(game, playerId, activityMessage, baseUpdates);
+            Object.assign(finalUpdates, updates);
+        }
+        
+        tx.update(gameRef, {...baseUpdates, ...finalUpdates});
+    });
 }
 
 export async function purchaseProperty(gameId: string, playerId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
+  
+  // Step 1: Pre-transaction - Get current state and fetch random question
+  const initialGameDoc = await getDoc(gameRef);
+  if (!initialGameDoc.exists()) throw new Error('اللعبة غير موجودة.');
+  const gameForPreCalc = initialGameDoc.data() as Game;
 
+  // --- Pre-calculation checks ---
+  if (gameForPreCalc.gameState !== 'property_action') throw new Error('ليس وقت شراء العقارات.');
+  if (gameForPreCalc.educatedMerchantState?.turnOrder?.[gameForPreCalc.educatedMerchantState?.currentTurnIndex] !== playerId) {
+    throw new Error('ليس دورك للشراء.');
+  }
+  const currentPlayer = ensure(gameForPreCalc.players.find((p) => p.id === playerId), 'Player disappeared');
+  const propertyToBuy = ensure(gameForPreCalc.educatedMerchantState?.board?.[currentPlayer.position], 'Property disappeared');
+  if (propertyToBuy.type !== 'property' || propertyToBuy.ownerId) throw new Error('هذا العقار غير متاح للشراء.');
+  if ((currentPlayer.money || 0) < propertyToBuy.price) throw new Error('رصيدك لا يكفي لشراء هذا العقار.');
+  // --- End checks ---
+
+  const question = await fetchRandomQuestion(propertyToBuy.category);
+
+  // Step 2: Transaction - Perform deterministic updates
   await runTransaction(db, async (tx) => {
+    // Re-fetch inside transaction for consistency
     const snap = await tx.get(gameRef);
     if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
     const game = snap.data() as Game;
-
-    if (game.gameState !== 'property_action') throw new Error('ليس وقت شراء العقارات.');
-    if (game.educatedMerchantState?.turnOrder?.[game.educatedMerchantState?.currentTurnIndex] !== playerId) {
-      throw new Error('ليس دورك للشراء.');
+    
+    // Re-validate critical conditions
+    if (game.gameState !== 'property_action' || game.educatedMerchantState?.turnOrder?.[game.educatedMerchantState?.currentTurnIndex] !== playerId) {
+      // The state changed between pre-calc and transaction start, so we abort.
+      return;
     }
-
-    const currentPlayer = ensure(game.players.find((p) => p.id === playerId), 'Player disappeared mid-transaction');
-    const propertyToBuy = ensure(
-      game.educatedMerchantState?.board?.[currentPlayer.position],
-      'Property disappeared mid-transaction'
-    );
-
-    if (propertyToBuy.type !== 'property' || propertyToBuy.ownerId) throw new Error('هذا العقار غير متاح للشراء.');
-    if ((currentPlayer.money || 0) < propertyToBuy.price) throw new Error('رصيدك لا يكفي لشراء هذا العقار.');
-
-    const question = await fetchRandomQuestion(propertyToBuy.category);
 
     const updatedPlayers = game.players.map((p) =>
       p.id === playerId ? { ...p, money: (p.money || 0) - propertyToBuy.price } : p
@@ -638,5 +654,3 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
     tx.update(gameRef, updates);
   });
 }
-
-    
