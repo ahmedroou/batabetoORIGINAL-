@@ -185,7 +185,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
       'educatedMerchantState.board': board,
       'educatedMerchantState.turnOrder': turnOrder,
       'educatedMerchantState.currentTurnIndex': 0,
-      'educatedMerchantState.activityLog': [{ message: 'بدأت اللعبة!', timestamp: serverTimestamp() }],
+      'educatedMerchantState.activityLog': [{ message: 'بدأت اللعبة!', timestamp: Timestamp.now() }],
       'educatedMerchantState.timerEndsAt': addActionTimer(),
       'educatedMerchantState.movesThisRound': 0,
       'educatedMerchantState.settings': { maxRounds: DEFAULT_MAX_ROUNDS, categories: categoriesResult.categories, diceMax: DICE_MAX },
@@ -233,7 +233,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
       'educatedMerchantState.lastDiceRoll': diceRoll,
       'educatedMerchantState.timerEndsAt': addActionTimer(),
       players: updatedPlayers,
-      'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: serverTimestamp() }),
+      'educatedMerchantState.activityLog': arrayUnion({ message: activityMessage, timestamp: Timestamp.now() }),
     };
 
     if (landingProperty.type === 'start') {
@@ -250,11 +250,11 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
           updatedPlayers[playerIndex].money = 0;
           updatedPlayers[playerIndex].status = 'bankrupt';
           updatedPlayers[playerIndex].bankruptAt = nowTimestamp();
-          extraUpdates['educatedMerchantState.activityLog'] = arrayUnion({ message: `${updatedPlayers[playerIndex].name} أفلس لأنه لم يستطع دفع الإيجار لـ ${updatedPlayers[ownerIndex].name}.`, timestamp: serverTimestamp() });
+          extraUpdates['educatedMerchantState.activityLog'] = arrayUnion({ message: `${updatedPlayers[playerIndex].name} أفلس لأنه لم يستطع دفع الإيجار لـ ${updatedPlayers[ownerIndex].name}.`, timestamp: Timestamp.now() });
         } else {
           updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) - rent;
           updatedPlayers[ownerIndex].money = (updatedPlayers[ownerIndex].money || 0) + rent;
-          extraUpdates['educatedMerchantState.activityLog'] = arrayUnion({ message: `${updatedPlayers[playerIndex].name} دفع ${rent} دينار إيجار لـ ${updatedPlayers[ownerIndex].name}.`, timestamp: serverTimestamp() });
+          extraUpdates['educatedMerchantState.activityLog'] = arrayUnion({ message: `${updatedPlayers[playerIndex].name} دفع ${rent} دينار إيجار لـ ${updatedPlayers[ownerIndex].name}.`, timestamp: Timestamp.now() });
         }
         const { updates: turnEndUpdates } = endTurnInternal(game, playerId, "", { ...extraUpdates, players: updatedPlayers });
         Object.assign(extraUpdates, turnEndUpdates);
@@ -560,7 +560,7 @@ function endTurnInternal(
   };
   
   if (extraMessage) {
-    finalUpdates['educatedMerchantState.activityLog'] = arrayUnion({ message: extraMessage, timestamp: serverTimestamp() });
+    finalUpdates['educatedMerchantState.activityLog'] = arrayUnion({ message: extraMessage, timestamp: Timestamp.now() });
   }
 
   return { isGameOver: false, updates: finalUpdates };
@@ -583,3 +583,5 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
     tx.update(gameRef, updates);
   });
 }
+
+    
