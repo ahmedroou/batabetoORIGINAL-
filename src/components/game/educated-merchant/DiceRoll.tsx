@@ -16,28 +16,6 @@ const DEFAULT_DICE_MAX = 5;
 const MIN_FACE_RENDER = 6;
 const FACE_HEIGHT = 80; // px, ensure consistency with CSS
 
-// Custom hook for a safer setTimeout that cleans up on unmount
-const useRafTimeout = () => {
-  const timeoutId = useRef<number | null>(null);
-
-  const set = useCallback((fn: () => void, ms: number) => {
-    timeoutId.current = window.setTimeout(fn, ms);
-  }, []);
-
-  const clear = useCallback(() => {
-    if (timeoutId.current) {
-      window.clearTimeout(timeoutId.current);
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => clear(); // Cleanup on unmount
-  }, [clear]);
-
-  return { set, clear };
-};
-
-
 function RollingNumber({ number, maxFace = MIN_FACE_RENDER, isAnimating = false }: { number: number; maxFace?: number; isAnimating?: boolean }) {
   const facesCount = Math.max(MIN_FACE_RENDER, maxFace);
   const faces = Array.from({ length: facesCount }, (_, i) => i + 1);
@@ -117,7 +95,6 @@ export function DiceRoll({ game, self }: DiceRollProps) {
                 </CardHeader>
                 <CardContent>
                     <RollingNumber number={lastRoll} maxFace={diceMax} isAnimating={isRolling} />
-                    <div className="mt-3 text-slate-300">{isRolling ? 'جارٍ التحرك...' : 'نتيجة مؤكدة من الخادم'}</div>
                 </CardContent>
              </>
          );

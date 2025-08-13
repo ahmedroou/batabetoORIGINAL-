@@ -43,7 +43,14 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
         setAnswerState(isCorrect ? 'correct' : 'incorrect');
 
         setTimeout(async () => {
-            await answerQuestion(game.id, self.id, selectedAnswer);
+            try {
+                await answerQuestion(game.id, self.id, selectedAnswer);
+            } catch (error) {
+                // If the server-side action fails, revert the state
+                console.error("Failed to submit answer:", error);
+                setAnswerState('pending');
+                setIsSubmitting(false);
+            }
         }, 1500); 
     };
 

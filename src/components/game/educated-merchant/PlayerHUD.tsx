@@ -80,7 +80,7 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
   const displayMoney = useAnimatedMoney(players);
 
   const ranking = useMemo(() => {
-    const sorted = [...players].slice().filter((p) => p.status === 'alive').sort((a, b) => (b.money || 0) - (a.money || 0));
+    const sorted = [...players].filter((p) => p.status === 'alive').sort((a, b) => (b.money || 0) - (a.money || 0));
     const map: Record<string, number> = {};
     sorted.forEach((p, i) => (map[p.id] = i + 1));
     return map;

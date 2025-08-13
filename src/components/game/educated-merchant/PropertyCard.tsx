@@ -28,7 +28,6 @@ export function PropertyCard({ game, self, property, allowActions = false }: Pro
     const currentPlayer = game?.players.find(p => p.id === currentTurnPlayerId);
     const isMyTurn = self?.id === currentTurnPlayerId;
 
-    // Only consider affordability for actual property tiles
     const canAfford = property.type === 'property' ? ((self?.money || 0) >= (property.price || 0)) : false;
     const owner = game?.players.find(p => p.id === property.ownerId);
 
@@ -70,7 +69,6 @@ export function PropertyCard({ game, self, property, allowActions = false }: Pro
             initial={{ opacity: 0, scale: 0.96 }} 
             animate={{ opacity: 1, scale: 1 }} 
             transition={{ type: "spring" }}
-            className="transform-style-3d"
         >
              <Card className={cn("w-64 text-center bg-slate-800 border-primary text-white")}>
                 <CardHeader className="pb-2">
@@ -97,7 +95,7 @@ export function PropertyCard({ game, self, property, allowActions = false }: Pro
                     ) : null}
                      {property.type === 'property' && <p className="text-sm text-slate-500 mt-1">الإيجار: {property.rent} دينار</p>}
                 </CardContent>
-            </Card>
+            
             {isMyTurn && allowActions ? (
                 <CardFooter className="flex gap-2 pt-3">
                     <Button className="flex-1" onClick={handlePurchase} disabled={isSubmitting || !canAfford || !!property.ownerId}>
