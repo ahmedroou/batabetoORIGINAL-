@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -110,7 +111,7 @@ export async function generateBoard(categories: string[]): Promise<Property[]> {
       id: pos,
       type: 'fine',
       name: 'غرامة',
-      category: '',
+      category: 'قسم الغرامات', // Fixed: Assign correct category to fine tiles
       price: 0,
       rent: 0,
       ownerId: null,
@@ -120,13 +121,17 @@ export async function generateBoard(categories: string[]): Promise<Property[]> {
   }
 
   const availablePropertyNames = shuffle([...PROPERTY_NAMES]);
+  // Filter out the 'Fine' category from being assigned to regular properties
+  const propertyCategories = categories.filter(c => c !== 'قسم الغرامات');
+
 
   for (let i = 1; i < BOARD_SIZE; i++) {
     if (board[i]) continue;
 
     const name = availablePropertyNames.pop() || `عقار ${i}`;
     const price = Math.round((Math.random() * (500 - 100) + 100) / 10) * 10;
-    const category = categories.length ? categories[Math.floor(Math.random() * categories.length)] : '';
+    // Assign a category from the filtered list
+    const category = propertyCategories.length ? propertyCategories[Math.floor(Math.random() * propertyCategories.length)] : '';
 
     board[i] = {
       id: i,
@@ -194,7 +199,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
-    const game = snap.data() as Game;
+    let game = snap.data() as Game;
 
     if (game.gameState !== 'rolling') throw new Error('ليس وقت رمي النرد.');
 
@@ -211,85 +216,80 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     const oldPosition = player.position;
     const newPosition = (oldPosition + diceRoll) % BOARD_SIZE;
 
-    const updatedPlayers = [...game.players];
-    updatedPlayers[playerIndex] = { ...player, position: newPosition };
-    
+    const board = ensure(game.educatedMerchantState?.board, 'اللوح مفقود.');
     const landingProperty = ensure(
-      game.educatedMerchantState?.board?.[newPosition],
+      board[newPosition],
       'خانة غير موجودة على اللوح'
     );
+
+    let updatedPlayers = [...game.players];
+    updatedPlayers[playerIndex] = { ...player, position: newPosition };
     
-    const logEvents: Array<{ message: string; timestamp: Timestamp }> = [];
-    logEvents.push({
-      message: `${player.name} رمى ${diceRoll} وتحرك إلى "${landingProperty.name}".`,
-      timestamp: Timestamp.now(),
-    });
+    let activityMessage = `${player.name} رمى ${diceRoll} وتحرك إلى "${landingProperty.name}".`;
 
     if (newPosition < oldPosition) {
       updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) + PASS_GO_REWARD;
-      logEvents.push({
-        message: `${player.name} مر بنقطة البداية، وحصل على ${PASS_GO_REWARD} دينار.`,
-        timestamp: Timestamp.now(),
-      });
+      activityMessage += ` ومر بنقطة البداية، وحصل على ${PASS_GO_REWARD} دينار.`
     }
-
-    const baseExtra: any = {
+    
+    let baseUpdates: any = {
       players: updatedPlayers,
       'educatedMerchantState.rollAnimationNonce': Date.now(),
       'educatedMerchantState.lastDiceRoll': diceRoll,
       'educatedMerchantState.timerEndsAt': addActionTimer(),
-      'educatedMerchantState.activityLog': arrayUnion(...logEvents),
     };
 
-    let updatesToWrite: any = null;
+    game = {...game, ...baseUpdates}; // Update the game object for internal logic
+
+    let finalUpdates: any;
 
     if (landingProperty.type === 'start') {
-      const { updates } = endTurnInternal(game, playerId, '', { ...baseExtra });
-      updatesToWrite = updates;
+      const { updates } = endTurnInternal(game, playerId, activityMessage);
+      finalUpdates = updates;
     } else if (landingProperty.type === 'property') {
       if (!landingProperty.ownerId) {
-        updatesToWrite = { ...baseExtra, gameState: 'property_action' };
+        finalUpdates = { ...baseUpdates, gameState: 'property_action', 'educatedMerchantState.activityLog': arrayUnion({message: activityMessage, timestamp: Timestamp.now()}) };
       } else if (landingProperty.ownerId !== playerId) {
         const ownerIndex = getPlayerIndexById(updatedPlayers, landingProperty.ownerId);
         const rent = landingProperty.rent || 0;
+        let rentMessage = '';
+
         if ((updatedPlayers[playerIndex].money || 0) < rent) {
-          updatedPlayers[ownerIndex].money =
-            (updatedPlayers[ownerIndex].money || 0) + (updatedPlayers[playerIndex].money || 0);
+          updatedPlayers[ownerIndex].money = (updatedPlayers[ownerIndex].money || 0) + (updatedPlayers[playerIndex].money || 0);
           updatedPlayers[playerIndex].money = 0;
           updatedPlayers[playerIndex].status = 'bankrupt';
           updatedPlayers[playerIndex].bankruptAt = nowTimestamp();
-          baseExtra['educatedMerchantState.activityLog'] = arrayUnion(
-            ...logEvents,
-            { message: `${updatedPlayers[playerIndex].name} أفلس لأنه لم يستطع دفع الإيجار لـ ${updatedPlayers[ownerIndex].name}.`, timestamp: Timestamp.now() }
-          );
+          rentMessage = `${activityMessage} لكنه أفلس لأنه لم يستطع دفع الإيجار لـ ${updatedPlayers[ownerIndex].name}.`;
         } else {
           updatedPlayers[playerIndex].money = (updatedPlayers[playerIndex].money || 0) - rent;
           updatedPlayers[ownerIndex].money = (updatedPlayers[ownerIndex].money || 0) + rent;
-          baseExtra['educatedMerchantState.activityLog'] = arrayUnion(
-            ...logEvents,
-            { message: `${updatedPlayers[playerIndex].name} دفع ${rent} دينار إيجار لـ ${updatedPlayers[ownerIndex].name}.`, timestamp: Timestamp.now() }
-          );
+          rentMessage = `${activityMessage} ودفع ${rent} دينار إيجار لـ ${updatedPlayers[ownerIndex].name}.`;
         }
-        const { updates } = endTurnInternal(game, playerId, '', { ...baseExtra, players: updatedPlayers });
-        updatesToWrite = updates;
+        
+        baseUpdates.players = updatedPlayers;
+        game = {...game, ...baseUpdates};
+        const { updates } = endTurnInternal(game, playerId, rentMessage);
+        finalUpdates = updates;
+
       } else {
-        const { updates } = endTurnInternal(game, playerId, `${player.name} وصل إلى عقاره.`, { ...baseExtra });
-        updatesToWrite = updates;
+        const { updates } = endTurnInternal(game, playerId, `${activityMessage} فهو يملكها بالفعل.`);
+        finalUpdates = updates;
       }
     } else if (landingProperty.type === 'fine') {
       const question = await fetchRandomQuestion('قسم الغرامات');
-      updatesToWrite = {
-        ...baseExtra,
+      finalUpdates = {
+        ...baseUpdates,
+        'educatedMerchantState.activityLog': arrayUnion({message: activityMessage, timestamp: Timestamp.now()}),
         gameState: 'question',
         'educatedMerchantState.currentQuestion': question,
         'educatedMerchantState.pendingFine': { playerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE },
       };
     } else {
-      const { updates } = endTurnInternal(game, playerId, '', { ...baseExtra });
-      updatesToWrite = updates;
+      const { updates } = endTurnInternal(game, playerId, activityMessage);
+      finalUpdates = updates;
     }
-
-    tx.update(gameRef, updatesToWrite);
+    
+    tx.update(gameRef, finalUpdates);
   });
 }
 
@@ -385,6 +385,8 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         }
         activityMessage = `${players[playerIndex].name} أجاب بشكل صحيح وامتلك "${propertyName}"!`;
         extraUpdates['educatedMerchantState.newlyBoughtPropertyId'] = pendingPurchase.propertyId;
+        players[playerIndex].propertiesCount = (players[playerIndex].propertiesCount || 0) + 1;
+
       } else {
         const refund = Math.round(pendingPurchase.price / 4);
         players[playerIndex] = { ...players[playerIndex], money: (players[playerIndex].money || 0) + refund };
@@ -508,7 +510,6 @@ function endTurnInternal(
   const updatedBoard = (mergedGameData.educatedMerchantState?.board || []).map((prop) => {
     const owner = mergedGameData.players.find((p) => p.id === prop.ownerId);
     if (owner && owner.status === 'bankrupt') {
-      // Only reset if owner is bankrupt
       const { ownerId, color, ...rest } = prop;
       return { ...rest, ownerId: null, color: undefined } as Property;
     }
