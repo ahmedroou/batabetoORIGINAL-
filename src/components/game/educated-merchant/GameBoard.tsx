@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -7,16 +5,14 @@ import type { Game, Player, Property } from '@/types';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { PropertyCard } from './PropertyCard';
-import { QuestionModal } from './QuestionModal';
 import { DiceRoll } from './DiceRoll';
 import { PlayerHUD } from './PlayerHUD';
 import { ActivityLog } from './ActivityLog';
 import { cn } from '@/lib/utils';
 import { Banknote, Building, HelpCircle, Trophy } from 'lucide-react';
-import { endTurn } from '@/lib/actions/educated-merchant';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
-import { DiceResultOverlay } from './DiceResultOverlay';
 import { RentPaidOverlay } from './RentPaidOverlay';
+import { QuestionModal } from './QuestionModal';
 
 interface GameBoardProps {
   game: Game;
@@ -26,32 +22,107 @@ interface GameBoardProps {
 const BOARD_SIZE = 28;
 const GRID_SIZE = 8;
 
-const JUMP_HEIGHT = 14; 
+const JUMP_HEIGHT = 14;
 const STEP_BASE_DELAY_MS = 200;
-const STEP_FINAL_EXTRA_DELAY_MS = 170; 
 const TRAIL_LIFETIME_MS = 420;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/* Tile extracted & memoized */
+const Tile = React.memo(({ property, isNewlyBought, isHighlighted }: { property: Property; isNewlyBought: boolean; isHighlighted?: boolean }) => {
+  let Icon = Building;
+  let baseBg = 'bg-slate-700';
+  let borderColor = 'border-slate-500';
+
+  if (property.type === 'start') { Icon = Trophy; baseBg = 'bg-yellow-500 text-black'; borderColor = 'border-yellow-300'; }
+  else if (property.type === 'fine') { Icon = Banknote; baseBg = 'bg-rose-700'; borderColor = 'border-rose-500'; }
+
+  const dynamicStyle: React.CSSProperties = {};
+  if (property.ownerId && property.color) {
+    dynamicStyle.backgroundColor = property.color;
+    borderColor = 'border-white/50';
+  }
+
+  return (
+    <motion.div
+      title={property.name}
+      className={cn(
+        'w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500 cursor-pointer',
+        baseBg, borderColor, isNewlyBought && 'animate-pulse-glow', isHighlighted && 'tile-highlight'
+      )}
+      style={dynamicStyle}
+      whileHover={{ scale: 1.03, zIndex: 10 }}
+      transition={{ duration: 0.22 }}
+    >
+      <Icon className="w-5 h-5 mb-1 flex-shrink-0" />
+      <p className="text-[10px] font-bold leading-tight line-clamp-2 text-center overflow-hidden" style={{ padding: '0 4px' }}>
+        {property.name}
+      </p>
+      {property.type === 'property' && <p className="text-[10px] font-mono mt-1">{property.price} دينار</p>}
+      {property.type === 'fine' && <p className="text-[10px] font-mono mt-1">{property.fineAmount} دينار</p>}
+    </motion.div>
+  );
+});
+Tile.displayName = 'Tile';
+
+/* helpers */
+function findNextAliveIndex(turnOrder: string[], players: Player[], startIndex: number): number {
+  if (!turnOrder || turnOrder.length === 0) return -1;
+  let idx = (startIndex + 1) % turnOrder.length;
+  let attempts = 0;
+  while (attempts < turnOrder.length) {
+    const pid = turnOrder[idx];
+    const p = players.find((x) => x.id === pid);
+    if (p && p.status === 'alive') return idx;
+    idx = (idx + 1) % turnOrder.length;
+    attempts++;
+  }
+  return -1;
+}
+
+/* layout presets for 1..4 players in a tile */
+function getLayoutsForCount(n: number) {
+  if (n <= 1) return [{ x: 0.5, y: 0.5 }];
+  if (n === 2) return [{ x: 0.3, y: 0.5 }, { x: 0.7, y: 0.5 }];
+  if (n === 3) return [{ x: 0.5, y: 0.25 }, { x: 0.25, y: 0.75 }, { x: 0.75, y: 0.75 }];
+  // 4 or more -> stable 2x2 grid
+  return [{ x: 0.25, y: 0.25 }, { x: 0.75, y: 0.25 }, { x: 0.25, y: 0.75 }, { x: 0.75, y: 0.75 }];
+}
 
 export function GameBoard({ game, self }: GameBoardProps) {
   const board = game.educatedMerchantState?.board || [];
   const shouldReduceMotion = useReducedMotion();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const timersRef = useRef<number[]>([]); // highlight timers
+  const resizeTimerRef = useRef<number | null>(null);
+
   const [tileSize, setTileSize] = useState(96);
   const [gapSize, setGapSize] = useState(6);
   const [playerPositions, setPlayerPositions] = useState<Record<string, number>>({});
-  const [animatingPlayers, setAnimatingPlayers] = useState<Record<string, boolean>>({});
-  const [isJumping, setIsJumping] = useState<Record<string, boolean>>({});
   const [tileHighlight, setTileHighlight] = useState<Record<number, boolean>>({});
   const lastRollNonceRef = useRef<number | null>(null);
 
+  /* initialize playerPositions from server when players list changes */
   useEffect(() => {
     const initialPositions: Record<string, number> = {};
-    (game.players || []).forEach((p) => (initialPositions[p.id] = p.position || 0));
+    (game.players || []).forEach((p) => (initialPositions[p.id] = p.position ?? 0));
     setPlayerPositions(initialPositions);
   }, [game.players]);
 
+  /* cleanup on unmount: cancel timers & resize timers */
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach(clearTimeout);
+      timersRef.current = [];
+      if (resizeTimerRef.current) {
+        clearTimeout(resizeTimerRef.current);
+        resizeTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  /* resize handling with debounce */
   useEffect(() => {
     const calculateSize = () => {
       if (!containerRef.current) return;
@@ -61,72 +132,92 @@ export function GameBoard({ game, self }: GameBoardProps) {
       setTileSize(newTile);
       setGapSize(Math.max(4, Math.floor(newTile * 0.045)));
     };
+
     calculateSize();
-    window.addEventListener('resize', calculateSize);
-    return () => window.removeEventListener('resize', calculateSize);
+
+    const onResize = () => {
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+      resizeTimerRef.current = window.setTimeout(() => {
+        calculateSize();
+        resizeTimerRef.current = null;
+      }, 120);
+    };
+
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (resizeTimerRef.current) {
+        clearTimeout(resizeTimerRef.current);
+        resizeTimerRef.current = null;
+      }
+    };
   }, []);
 
+  /* compute pixel coords for a board index */
   const getPositionStyles = useCallback(
-    (index: number): React.CSSProperties => {
+    (index: number): { top: number; left: number } => {
       const sideLength = GRID_SIZE - 1;
-      let top = 0,
-        left = 0;
+      let top = 0, left = 0;
       const step = tileSize + gapSize;
 
-      if (index >= 0 && index < sideLength) {
-        top = 0;
-        left = index * step;
-      } else if (index >= sideLength && index < sideLength * 2) {
-        top = (index - sideLength) * step;
-        left = sideLength * step;
-      } else if (index >= sideLength * 2 && index < sideLength * 3) {
-        top = sideLength * step;
-        left = (sideLength - (index - sideLength * 2)) * step;
-      } else {
-        top = (sideLength - (index - sideLength * 3)) * step;
-        left = 0;
-      }
+      if (index >= 0 && index < sideLength) { top = 0; left = index * step; }
+      else if (index >= sideLength && index < sideLength * 2) { top = (index - sideLength) * step; left = sideLength * step; }
+      else if (index >= sideLength * 2 && index < sideLength * 3) { top = sideLength * step; left = (sideLength - (index - sideLength * 2)) * step; }
+      else { top = (sideLength - (index - sideLength * 3)) * step; left = 0; }
 
-      return { top: `${top}px`, left: `${left}px`, position: 'absolute' };
+      return { top, left };
     },
     [tileSize, gapSize]
   );
-  
+
+  /* move a player's piece visually (UI-side)
+     - uses playerPositions to compute final pos and triggers a single state update at the end
+     - creates light "trail" highlights for steps (timers cleaned)
+  */
   const movePlayerPiece = useCallback(
     async (playerId: string, steps: number, startPos: number) => {
-      if (steps === 0) return;
+      // clear outstanding highlight timers to avoid buildup
+      timersRef.current.forEach(clearTimeout);
+      timersRef.current = [];
 
-      setAnimatingPlayers((s) => ({ ...s, [playerId]: true }));
+      // if no steps or user prefers reduced motion, just set final pos
+      if (steps === 0 || shouldReduceMotion) {
+        const finalPos = (startPos + steps) % BOARD_SIZE;
+        setPlayerPositions((prev) => ({ ...prev, [playerId]: finalPos }));
+        return;
+      }
+
+      // ensure UI starts from the given start position
+      setPlayerPositions((prev) => ({ ...prev, [playerId]: startPos }));
 
       let currentPos = startPos;
       for (let i = 0; i < steps; i++) {
-        const isLast = i === steps - 1;
-        setIsJumping((s) => ({ ...s, [playerId]: true }));
-
         currentPos = (currentPos + 1) % BOARD_SIZE;
-        setPlayerPositions((prev) => ({ ...prev, [playerId]: currentPos }));
 
+        // set highlight for this tile
         setTileHighlight((t) => ({ ...t, [currentPos]: true }));
-        setTimeout(() => setTileHighlight((t) => ({ ...t, [currentPos]: false })), TRAIL_LIFETIME_MS);
-        
-        if (!shouldReduceMotion) {
-          const delay = STEP_BASE_DELAY_MS + (isLast ? STEP_FINAL_EXTRA_DELAY_MS : 0);
-          await sleep(delay);
-        }
 
-        setIsJumping((s) => ({ ...s, [playerId]: false }));
-        if (!shouldReduceMotion) await sleep(50);
+        // schedule clear of the highlight (captured currentPos)
+        const tid = window.setTimeout(() => {
+          setTileHighlight((t) => {
+            const copy = { ...t };
+            delete copy[currentPos];
+            return copy;
+          });
+        }, TRAIL_LIFETIME_MS + i * STEP_BASE_DELAY_MS);
+        timersRef.current.push(tid);
+
+        // wait between steps to create trail effect (this does not update player position until end)
+        await sleep(STEP_BASE_DELAY_MS);
       }
-      
-      setAnimatingPlayers((s) => {
-        const copy = { ...s };
-        delete copy[playerId];
-        return copy;
-      });
+
+      // finally set the final position so motion / layout animates the avatar to new tile
+      setPlayerPositions((prev) => ({ ...prev, [playerId]: currentPos }));
     },
     [shouldReduceMotion]
   );
 
+  /* react to server nonce -> animate piece movement */
   useEffect(() => {
     const nonce = game.educatedMerchantState?.rollAnimationNonce;
     if (nonce === null || nonce === undefined || lastRollNonceRef.current === nonce) return;
@@ -140,12 +231,23 @@ export function GameBoard({ game, self }: GameBoardProps) {
 
     const steps = game.educatedMerchantState?.lastDiceRoll ?? 0;
     const serverPos = game.players.find((p) => p.id === movingPlayerId)?.position ?? 0;
-    const startPos = (serverPos - steps + BOARD_SIZE) % BOARD_SIZE;
 
-    movePlayerPiece(movingPlayerId, steps, startPos);
-  }, [game.educatedMerchantState?.rollAnimationNonce, game, movePlayerPiece]);
+    // prefer local tracked start if present (prevents visual jumps), fallback to server-derived start
+    const localStart = playerPositions[movingPlayerId];
+    const startPos = typeof localStart === 'number' ? localStart : (serverPos - steps + BOARD_SIZE) % BOARD_SIZE;
 
+    void movePlayerPiece(movingPlayerId, steps, startPos);
+  }, [
+    game.educatedMerchantState?.rollAnimationNonce,
+    game.players,
+    game.educatedMerchantState?.currentTurnIndex,
+    game.educatedMerchantState?.turnOrder,
+    game.educatedMerchantState?.lastDiceRoll,
+    movePlayerPiece,
+    playerPositions,
+  ]);
 
+  /* Render center panel content */
   const renderCenterContent = useCallback(() => {
     const turnOrder = game.educatedMerchantState?.turnOrder ?? [];
     const currentTurnIndex = game.educatedMerchantState?.currentTurnIndex ?? 0;
@@ -173,19 +275,20 @@ export function GameBoard({ game, self }: GameBoardProps) {
         );
       }
       case 'question': {
-        const playerOnQuestion = game.players.find(p => p.id === game.educatedMerchantState?.pendingPurchase?.playerId || p.id === game.educatedMerchantState?.pendingFine?.playerId);
+        const questionPlayerId = game.educatedMerchantState?.pendingPurchase?.playerId ?? game.educatedMerchantState?.pendingFine?.playerId;
+        const playerOnQuestion = game.players.find(p => p.id === questionPlayerId);
         if (!playerOnQuestion) return <div />;
         const property = board[playerOnQuestion.position];
         if (property && property.type === 'property') {
-            return <PropertyCard game={game} self={self} property={property} allowActions={false} />;
+          return <PropertyCard game={game} self={self} property={property} allowActions={false} />;
         }
         return (
-            <div className="text-center text-white space-y-4 p-4 bg-slate-800 rounded-lg">
-                <HelpCircle className="w-16 h-16 mx-auto mb-4 text-primary" />
-                <h2 className="text-2xl font-bold animate-pulse">
-                    في انتظار إجابة {playerOnQuestion.name}...
-                </h2>
-            </div>
+          <div className="text-center text-white space-y-4 p-4 bg-slate-800 rounded-lg">
+            <HelpCircle className="w-16 h-16 mx-auto mb-4 text-primary" />
+            <h2 className="text-2xl font-bold animate-pulse">
+              في انتظار إجابة {playerOnQuestion.name}...
+            </h2>
+          </div>
         );
       }
       default:
@@ -202,61 +305,40 @@ export function GameBoard({ game, self }: GameBoardProps) {
   const boardWidth = GRID_SIZE * tileSize + (GRID_SIZE - 1) * gapSize;
   const boardHeight = boardWidth;
 
+  /* group players by position, but sort each tile's players by turn order to keep deterministic UI */
   const playersGroupedByPosition = useMemo(() => {
     const map: Record<number, Player[]> = {};
+    const turnOrder = game.educatedMerchantState?.turnOrder ?? [];
+    const orderMap = new Map<string, number>();
+    turnOrder.forEach((id, i) => orderMap.set(id, i));
+
     game.players.forEach((player) => {
-      if (player.status === 'bankrupt') return;
       const pos = playerPositions[player.id] ?? player.position ?? 0;
       if (!map[pos]) map[pos] = [];
       map[pos].push(player);
     });
+
+    // sort each bucket by turnOrder index (fallback to name)
+    Object.keys(map).forEach((k) => {
+      map[parseInt(k, 10)].sort((a, b) => {
+        const ai = orderMap.get(a.id) ?? 9999;
+        const bi = orderMap.get(b.id) ?? 9999;
+        if (ai !== bi) return ai - bi;
+        return a.name.localeCompare(b.name);
+      });
+    });
+
     return map;
-  }, [game.players, playerPositions]);
+  }, [game.players, playerPositions, game.educatedMerchantState?.turnOrder]);
 
   const round = game.round ?? 1;
   const maxRounds = game.educatedMerchantState?.settings?.maxRounds ?? 20;
   const currentMoves = game.educatedMerchantState?.movesThisRound ?? 0;
   const aliveCount = game.players.filter((p) => p.status === 'alive').length;
 
-  const Tile = React.memo(({ property, isNewlyBought, isHighlighted }: { property: Property; isNewlyBought: boolean; isHighlighted?: boolean }) => {
-    let Icon = Building;
-    let baseBg = 'bg-slate-700';
-    let borderColor = 'border-slate-500';
-
-    if (property.type === 'start') { Icon = Trophy; baseBg = 'bg-yellow-500 text-black'; borderColor = 'border-yellow-300'; } 
-    else if (property.type === 'fine') { Icon = Banknote; baseBg = 'bg-rose-700'; borderColor = 'border-rose-500'; }
-
-    const dynamicStyle: React.CSSProperties = {};
-    if (property.ownerId && property.color) {
-      dynamicStyle.backgroundColor = property.color;
-      borderColor = 'border-white/50';
-    }
-
-    return (
-      <motion.div
-        className={cn(
-          'w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500 cursor-pointer',
-          baseBg, borderColor, isNewlyBought && 'animate-pulse-glow', isHighlighted && 'tile-highlight'
-        )}
-        style={dynamicStyle}
-        whileHover={{ scale: 1.03, zIndex: 10 }}
-        transition={{ duration: 0.22 }}
-      >
-        <Icon className="w-5 h-5 mb-1 flex-shrink-0" />
-        <p className="text-[10px] font-bold leading-tight line-clamp-2 text-center overflow-hidden" style={{ padding: '0 4px' }}>
-          {property.name}
-        </p>
-        {property.type === 'property' && <p className="text-[10px] font-mono mt-1">{property.price} دينار</p>}
-        {property.type === 'fine' && <p className="text-[10px] font-mono mt-1">{property.fineAmount} دينار</p>}
-      </motion.div>
-    );
-  });
-  Tile.displayName = 'Tile';
-
   return (
     <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
       <QuestionModal game={game} self={self} />
-      <DiceResultOverlay rollResult={game.educatedMerchantState?.displayingRollResult ?? null} />
       <RentPaidOverlay rentInfo={game.educatedMerchantState?.lastRentPayment ?? null} />
 
       <div className="w-full md:w-1/4 xl:w-1/5 space-y-4 shrink-0 flex flex-col">
@@ -299,59 +381,59 @@ export function GameBoard({ game, self }: GameBoardProps) {
               </motion.div>
             </AnimatePresence>
           </div>
-          {board.map((property, index) => (
-            <div key={index} style={{ ...getPositionStyles(index), width: tileSize, height: tileSize }}>
-              <Tile property={property} isNewlyBought={game.educatedMerchantState?.newlyBoughtPropertyId === property.id} isHighlighted={!!tileHighlight[index]} />
-            </div>
-          ))}
+
+          {/* Tiles */}
+          {board.map((property, index) => {
+            const { top, left } = getPositionStyles(index);
+            return (
+              <div key={index} style={{ top, left, width: tileSize, height: tileSize, position: 'absolute' }}>
+                <Tile property={property} isNewlyBought={game.educatedMerchantState?.newlyBoughtPropertyId === property.id} isHighlighted={!!tileHighlight[index]} />
+              </div>
+            );
+          })}
+
+          {/* Player pieces */}
           {Object.entries(playersGroupedByPosition).map(([positionStr, playersOnTile]) => {
             const position = parseInt(positionStr, 10);
-            const baseStyle = getPositionStyles(position);
+            const { top: baseTop, left: baseLeft } = getPositionStyles(position);
             const playerCount = playersOnTile.length;
+
+            // layout for this tile
+            const layout = getLayoutsForCount(Math.min(playerCount, 4));
 
             return playersOnTile.map((p, playerIndex) => {
               const pieceSize = playerCount > 1 ? tileSize * 0.34 : tileSize * 0.42;
-              let offsetX = (tileSize - pieceSize) / 2;
-              let offsetY = (tileSize - pieceSize) / 2;
 
-              if (playerCount === 2) offsetX = playerIndex === 0 ? tileSize * 0.12 : tileSize * 0.88 - pieceSize;
-              if (playerCount === 3) {
-                if (playerIndex === 0) { offsetX = (tileSize - pieceSize) / 2; offsetY = tileSize * 0.12; }
-                if (playerIndex === 1) { offsetX = tileSize * 0.12; offsetY = tileSize * 0.88 - pieceSize; }
-                if (playerIndex === 2) { offsetX = tileSize * 0.88 - pieceSize; offsetY = tileSize * 0.88 - pieceSize; }
-              }
-              if (playerCount >= 4) {
-                const layout = [ [0.12,0.12], [0.88-pc(pieceSize,tileSize),0.12], [0.12,0.88-pc(pieceSize,tileSize)], [0.88-pc(pieceSize,tileSize),0.88-pc(pieceSize,tileSize)] ];
-                const coords = layout[Math.min(playerIndex,3)];
-                offsetX = coords[0]*tileSize;
-                offsetY = coords[1]*tileSize;
-              }
+              // pick layout in deterministic way (if more players than layout slots, wrap)
+              const slot = layout[playerIndex % layout.length] ?? { x: 0.5, y: 0.5 };
+              const offsetX = slot.x * tileSize - (pieceSize / 2);
+              const offsetY = slot.y * tileSize - (pieceSize / 2);
 
-              const numericTop = parseFloat(String(baseStyle.top).replace('px','')) || 0;
-              const numericLeft = parseFloat(String(baseStyle.left).replace('px','')) || 0;
-
-              const finalStyle = {
-                top: `${numericTop + offsetY}px`,
-                left: `${numericLeft + offsetX}px`,
-                width: pieceSize,
-                height: pieceSize,
-                position: 'absolute',
-              };
+              const targetCoords = getPositionStyles(playerPositions[p.id] ?? p.position ?? 0);
 
               return (
                 <motion.div
                   key={p.id}
                   layoutId={`player-piece-${p.id}`}
                   className={cn('absolute z-10', p.id === game.educatedMerchantState?.turnOrder?.[game.educatedMerchantState.currentTurnIndex] && 'animate-pulse-glow')}
-                  initial={false}
-                  animate={{ ...finalStyle, y: isJumping[p.id] ? -JUMP_HEIGHT : 0, opacity: p.status === 'bankrupt' ? 0.36 : 1 }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+                  initial={{
+                    x: getPositionStyles(p.position).left,
+                    y: getPositionStyles(p.position).top,
+                  }}
+                  animate={{
+                    x: targetCoords.left + offsetX,
+                    y: targetCoords.top + offsetY,
+                    opacity: p.status === 'bankrupt' ? 0.4 : 1,
+                  }}
+                  transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+                  style={{ width: pieceSize, height: pieceSize }}
                   whileHover={{ scale: 1.05, zIndex: 50 }}
                 >
                   <div className="relative w-full h-full">
                     <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
                     {p.status === 'bankrupt' && (
-                      <div className="absolute -right-1 -top-1 bg-red-600 text-white text-[10px] px-1 rounded">
+                      <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                        X
                       </div>
                     )}
                   </div>
@@ -363,22 +445,4 @@ export function GameBoard({ game, self }: GameBoardProps) {
       </div>
     </div>
   );
-}
-function findNextAliveIndex(turnOrder: string[], players: Player[], startIndex: number): number {
-  if (!turnOrder || turnOrder.length === 0) return -1;
-  let idx = (startIndex + 1) % turnOrder.length;
-  let attempts = 0;
-  while (attempts < turnOrder.length) {
-    const pid = turnOrder[idx];
-    const p = players.find((x) => x.id === pid);
-    if (p && p.status === 'alive') return idx;
-    idx = (idx + 1) % turnOrder.length;
-    attempts++;
-  }
-  return -1;
-}
-
-
-function pc(size: number, tile: number) {
-  return size / tile;
 }

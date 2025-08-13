@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dices, Loader2, Volume, VolumeX, Smartphone } from 'lucide-react';
 import type { Game, Player } from '@/types';
@@ -66,6 +66,8 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const isMyTurn = self.id === currentTurnPlayerId;
   const lastRoll = game.educatedMerchantState?.lastDiceRoll;
   const rollNonce = game.educatedMerchantState?.rollAnimationNonce ?? null;
+  const displayingRoll = game.educatedMerchantState?.displayingRollResult;
+
 
   useEffect(() => {
     audio.current = createAudioHelpers();
@@ -117,10 +119,33 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   }, [handleRoll, isMyTurn, isRolling]);
 
   const toggleSound = () => setSoundOn((s) => !s);
+  
+    if (displayingRoll && typeof displayingRoll.number === 'number' && !isRolling) {
+        return (
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
+                <Card className="w-64 text-center bg-slate-800 border-primary text-white shadow-lg" tabIndex={0} onKeyDown={onKeyDown} aria-live="polite">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-primary">نتيجة النرد</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center justify-center min-h-[140px]">
+                        <div className="text-8xl font-mono font-bold text-yellow-300">
+                            {displayingRoll.number}
+                        </div>
+                        <div className="mt-3 text-slate-300 text-xs">نتيجة مؤكدة من الخادم</div>
+                    </CardContent>
+                     <CardFooter>
+                         <p className="text-xs text-slate-400 w-full text-center animate-pulse">
+                            جاري تحريك اللاعب...
+                         </p>
+                    </CardFooter>
+                </Card>
+            </motion.div>
+        );
+    }
 
   return (
     <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
-      <Card className="w-64 text-center bg-slate-800 border-primary text-white shadow-lg" tabIndex={0} onKeyDown={onKeyDown} aria-live="polite">
+      <Card className="w-64 text-center bg-slate-800 border-slate-700 text-white shadow-lg" tabIndex={0} onKeyDown={onKeyDown} aria-live="polite">
           <CardHeader className="pb-2 flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-primary">
