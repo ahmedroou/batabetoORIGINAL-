@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from 'react';
@@ -125,7 +126,7 @@ const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challen
                                                     )}
                                                 </div>
                                             </div>
-                                            <p className="font-bold text-lg text-yellow-400">{challenge.scores[participant.uid] || 0} نقطة</p>
+                                            <p className="font-bold text-lg text-yellow-400">{challenge.scores?.[participant.uid] || 0} نقطة</p>
                                         </div>
                                     )})
                                 ) : (
@@ -179,8 +180,12 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
                 ? challenge.endsAt.toDate() 
                 : new Date(challenge.endsAt);
 
-            if (!createdAt || !endsAt) return;
+            if (!createdAt || !endsAt || isNaN(createdAt.getTime()) || isNaN(endsAt.getTime())) return;
             const totalDuration = endsAt.getTime() - createdAt.getTime();
+            if(totalDuration <= 0) {
+                setProgress(100);
+                return;
+            }
             const elapsed = Date.now() - createdAt.getTime();
             const progressPercentage = Math.min(100, (elapsed / totalDuration) * 100);
             setProgress(progressPercentage);
@@ -329,6 +334,8 @@ export default function SocietyChallenges({ filter = 'active' }: { filter?: 'act
     useEffect(() => {
         const fetchChallenges = async () => {
             setIsLoading(true);
+            // This component is used in multiple places, so we fetch all challenges
+            // and filter them on the client side. This is simpler than passing down a fetch function.
             const fetchedChallenges = await getAllChallengesForAdmin();
             setChallenges(fetchedChallenges);
             setIsLoading(false);
@@ -338,7 +345,7 @@ export default function SocietyChallenges({ filter = 'active' }: { filter?: 'act
 
     const filteredChallenges = challenges.filter(c => {
         const endsAtTime = c.endsAt instanceof Timestamp ? c.endsAt.toDate().getTime() : new Date(c.endsAt).getTime();
-        const isEnded = !c.endsAt || endsAtTime < new Date().getTime();
+        const isEnded = !c.endsAt || isNaN(endsAtTime) || endsAtTime < Date.now();
         return filter === 'active' ? !isEnded : isEnded;
     });
 

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -74,35 +75,34 @@ export async function getChallenges(): Promise<Challenge[]> {
         
         const challenges = snapshot.docs.map(doc => {
             const data = doc.data();
+            const createdAt = data.createdAt as Timestamp;
+            const endsAt = data.endsAt as Timestamp;
             return {
                 id: doc.id,
                 ...data,
-                createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
-                endsAt: (data.endsAt as Timestamp)?.toDate(),
+                createdAt: createdAt?.toDate ? createdAt.toDate() : new Date(),
+                endsAt: endsAt?.toDate ? endsAt.toDate() : new Date(Date.now() + 24 * 60 * 60 * 1000), // Fallback
             } as Challenge;
         });
 
         // Fetch top 3 participants for each challenge
         for (const challenge of challenges) {
-            if (challenge.scores) {
+            if (challenge.scores && Object.keys(challenge.scores).length > 0) {
                 const sortedParticipantIds = Object.keys(challenge.scores).sort((a, b) => (challenge.scores[b] || 0) - (challenge.scores[a] || 0));
                 const top3Ids = sortedParticipantIds.slice(0, 3);
                 
                 if (top3Ids.length > 0) {
                     const usersQuery = query(collection(db, 'users'), where('__name__', 'in', top3Ids));
                     const usersSnapshot = await getDocs(usersQuery);
-                    const topUsersData = usersSnapshot.docs.map(doc => {
-                         const data = doc.data();
-                         // Convert Timestamps inside user profile to Dates
-                         const decrees = (data.decrees || []).map((d: any) => ({ ...d, until: d.until?.toDate ? d.until.toDate() : d.until }));
-                         const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
-                         const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
-                         return { uid: doc.id, ...data, decrees, humiliation, originalAvatarToRevert } as UserProfile;
-                    });
+                    const topUsersData = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
+                    
+                    // The order from Firestore 'in' query is not guaranteed, so we re-sort based on the scores.
                     challenge.topParticipants = topUsersData.sort((a,b) => (challenge.scores[b.uid] || 0) - (challenge.scores[a.uid] || 0));
                 } else {
                      challenge.topParticipants = [];
                 }
+            } else {
+                 challenge.topParticipants = [];
             }
         }
         
@@ -127,16 +127,19 @@ export async function getChallengeDetails(challengeId: string): Promise<Challeng
         if (!challengeDoc.exists()) return null;
 
         const data = challengeDoc.data();
+        const createdAt = data.createdAt as Timestamp;
+        const endsAt = data.endsAt as Timestamp;
+
         const challengeData: Challenge = {
             id: challengeDoc.id,
             ...data,
-            createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
-            endsAt: (data.endsAt as Timestamp)?.toDate(),
+            createdAt: createdAt?.toDate ? createdAt.toDate() : new Date(),
+            endsAt: endsAt?.toDate ? endsAt.toDate() : new Date(),
         } as Challenge;
 
 
         // --- Optimization: Fetch only top 10 participants ---
-        if (challengeData.scores) {
+        if (challengeData.scores && Object.keys(challengeData.scores).length > 0) {
             const sortedParticipantIds = Object.keys(challengeData.scores).sort((a, b) => (challengeData.scores[b] || 0) - (challengeData.scores[a] || 0));
             const top10Ids = sortedParticipantIds.slice(0, 10);
             
@@ -144,13 +147,7 @@ export async function getChallengeDetails(challengeId: string): Promise<Challeng
                 // Fetch only the user profiles for the top 10
                 const usersQuery = query(collection(db, 'users'), where('__name__', 'in', top10Ids));
                 const usersSnapshot = await getDocs(usersQuery);
-                const topUsersData = usersSnapshot.docs.map(d => {
-                     const data = d.data();
-                     const decrees = (data.decrees || []).map((dec: any) => ({ ...dec, until: dec.until?.toDate ? dec.until.toDate() : dec.until }));
-                     const humiliation = data.humiliation ? { ...data.humiliation, at: data.humiliation.at?.toDate(), until: data.humiliation.until?.toDate() } : null;
-                     const originalAvatarToRevert = data.originalAvatarToRevert ? { ...data.originalAvatarToRevert, until: data.originalAvatarToRevert.until?.toDate() } : null;
-                     return { uid: d.id, ...data, decrees, humiliation, originalAvatarToRevert } as UserProfile;
-                });
+                const topUsersData = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
 
                 // Sort the fetched users again to ensure correct order
                 challengeData.participants = topUsersData.sort((a, b) => (challengeData.scores[b.uid] || 0) - (challengeData.scores[a.uid] || 0));
@@ -290,17 +287,13 @@ export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
         
         return snapshot.docs.map(doc => {
             const data = doc.data();
-            const createdAt = data.createdAt;
-            const endsAt = data.endsAt;
-            // Ensure both are valid date-like objects before conversion
-            const safeCreatedAt = createdAt?.toDate ? createdAt.toDate() : (createdAt ? new Date(createdAt) : new Date());
-            const safeEndsAt = endsAt?.toDate ? endsAt.toDate() : (endsAt ? new Date(endsAt) : new Date());
-
+            const createdAt = data.createdAt as Timestamp;
+            const endsAt = data.endsAt as Timestamp;
             return {
                 id: doc.id,
                 ...data,
-                createdAt: safeCreatedAt,
-                endsAt: safeEndsAt,
+                createdAt: createdAt?.toDate ? createdAt.toDate() : new Date(),
+                endsAt: endsAt?.toDate ? endsAt.toDate() : new Date(),
             } as Challenge;
         });
 

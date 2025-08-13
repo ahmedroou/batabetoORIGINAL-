@@ -14,13 +14,14 @@ export default function ChallengesPage() {
     const { markChallengeAsSeen, activeChallenges } = useAuth();
 
     useEffect(() => {
-        if (markChallengeAsSeen && activeChallenges.length > 0 && activeChallenges[0]) {
-            const latestChallengeTimestamp = activeChallenges[0].createdAt;
-            if (latestChallengeTimestamp) {
-                // No need for instanceof check if type is consistent
-                const dateToMark = (latestChallengeTimestamp as Timestamp).toDate();
-                markChallengeAsSeen(dateToMark);
-            }
+        const latestChallenge = activeChallenges.find(c => c.createdAt);
+        if (markChallengeAsSeen && latestChallenge) {
+            const latestChallengeTimestamp = latestChallenge.createdAt;
+            // The object from useAuth might be a Date object or a Firestore Timestamp
+            const dateToMark = (latestChallengeTimestamp instanceof Timestamp) 
+                ? latestChallengeTimestamp.toDate() 
+                : new Date(latestChallengeTimestamp);
+            markChallengeAsSeen(dateToMark);
         }
     }, [markChallengeAsSeen, activeChallenges]);
 
