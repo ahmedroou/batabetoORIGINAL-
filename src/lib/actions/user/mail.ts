@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -14,7 +15,10 @@ export async function getMail(userId: string): Promise<Mail[]> {
         const q = query(mailRef, where('expiresAt', '>', now), orderBy('expiresAt', 'desc'));
         const snapshot = await getDocs(q);
 
-        deleteExpiredMail(userId);
+        // This operation is somewhat expensive if called frequently.
+        // It's better to run this as a scheduled background job (e.g., a daily cron job).
+        // For now, I'm commenting it out to reduce reads/writes on every mail check.
+        // deleteExpiredMail(userId); 
 
         return snapshot.docs.map(doc => {
             const data = doc.data();

@@ -5,7 +5,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserProfile, SocialRank, Decree, AvatarPrice, AllegianceRequest } from '@/types';
-import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank, searchUsers, liftPunishment } from '@/lib/actions/user';
+import { humiliatePlayer, issueDecree, begForMercy, forceAvatarChange, issueDuelChallenge, requestAllegiance, getUsersByRank, liftPunishment } from '@/lib/actions/user';
+import { adminSearchUsers } from '@/lib/actions/admin';
 import { Loader2, Crown, Shield, User, ThumbsDown, Handshake, ChevronDown, ChevronUp, Search, Gavel, Coins, HeartHandshake, Swords, VenetianMask, KeyRound, ShieldCheck, Gem, Star, Award, MessageCircleWarning, Users as UsersIcon, Link as LinkIcon, Edit, UserMinus, ScrollText, Drama, TowerControl, ShieldQuestion } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Button } from '@/components/ui/button';
@@ -246,14 +247,15 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     }, []);
 
     useEffect(() => {
-        if (socialRanks.length > 0) {
+        // This effect runs only once when the component mounts and socialRanks are available.
+        if (socialRanks.length > 0 && Object.keys(playersByRank).length === 0) {
             sortedRanksForIteration.forEach((rank, index) => {
                 const minPoints = rank.threshold;
                 const maxPoints = index < sortedRanksForIteration.length - 1 ? sortedRanksForIteration[index + 1].threshold : null;
                 fetchPlayersForRank(minPoints, maxPoints, rank.name);
             });
         }
-    }, [socialRanks, sortedRanksForIteration, fetchPlayersForRank]);
+    }, [socialRanks, sortedRanksForIteration, fetchPlayersForRank, playersByRank]);
     
     const handlePlayerClick = (player: UserProfile) => {
         if (player.uid !== userProfile?.uid) {
@@ -326,7 +328,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
             return;
         }
         setIsSearching(true);
-        const users = await searchUsers(searchTerm.trim());
+        const users = await adminSearchUsers(searchTerm.trim());
         setSearchedPlayers(users);
         setIsSearching(false);
     }, [searchTerm]);
@@ -450,6 +452,3 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         </>
     );
 }
-
-
-    

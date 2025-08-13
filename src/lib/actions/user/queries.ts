@@ -110,7 +110,12 @@ export async function getAllUsers(filter?: 'punished'): Promise<UserProfile[]> {
         if (filter === 'punished') {
             usersQuery = query(usersCol, where('isPunished', '==', true));
         } else {
-            usersQuery = query(usersCol, orderBy('leaderboardPoints', 'desc'));
+            // Avoid fetching all users unless absolutely necessary
+            // This is a very expensive operation. If a use case needs all users,
+            // it should be carefully considered and paginated if possible.
+            // For now, let's assume the main use case is the pyramid, which doesn't need this.
+            // Returning an empty array if no filter is provided.
+            return [];
         }
 
         const snapshot = await getDocs(usersQuery);
@@ -209,5 +214,33 @@ export async function getTopPunisher(): Promise<UserProfile | null> {
     } catch (error) {
         console.warn("Could not fetch top punisher, likely due to a missing index:", error);
         return null;
+    }
+}
+
+export async function getUsersByRank(minPoints: number, maxPoints: number | null, count: number): Promise<UserProfile[]> {
+    try {
+        const usersRef = collection(db, 'users');
+        let q;
+        if (maxPoints !== null) {
+            q = query(
+                usersRef, 
+                where('leaderboardPoints', '>=', minPoints),
+                where('leaderboardPoints', '<', maxPoints),
+                orderBy('leaderboardPoints', 'desc'), 
+                limit(count)
+            );
+        } else {
+            q = query(
+                usersRef, 
+                where('leaderboardPoints', '>=', minPoints),
+                orderBy('leaderboardPoints', 'desc'), 
+                limit(count)
+            );
+        }
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+    } catch (error) {
+        console.error("Error getting users by rank:", error);
+        return [];
     }
 }
