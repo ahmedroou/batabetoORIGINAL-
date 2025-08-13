@@ -7,6 +7,7 @@ import { PROPERTY_NAMES } from '@/data/properties';
 import { deleteField } from 'firebase/firestore';
 import { arrayUnion } from 'firebase/firestore';
 import { randomInt } from 'crypto';
+import { getEducatedMerchantCategories } from '../../actions/admin';
 
 // -----------------------------
 // Constants
@@ -80,9 +81,10 @@ export function _generateBoard(categories: string[]): Property[] {
 }
 
 
-export function _getInitialGameState(players: Player[]) {
+export async function _getInitialGameState(players: Player[]) {
     // This function can be expanded to fetch categories from admin settings if needed
-    const categories = ["علوم", "رياضيات", "برمجة", "أحياء", "كيمياء", "قسم الغرامات"];
+    const categoriesResult = await getEducatedMerchantCategories();
+    const categories = categoriesResult.categories || ["علوم", "رياضيات", "برمجة", "أحياء", "كيمياء", "قسم الغرامات"];
     const board = _generateBoard(categories);
     const turnOrder = shuffle(players.map(p => p.id));
     const assignedColors = shuffle([...COLORS]);
@@ -383,5 +385,3 @@ export function _handleTimeout(game: Game) {
   // Fallback for safety
   return _endTurnInternal(game, currentPlayerId, `انتهى وقت اللاعب ${game.players.find(p => p.id === currentPlayerId)?.name} وتخطى دوره.`);
 }
-
-    

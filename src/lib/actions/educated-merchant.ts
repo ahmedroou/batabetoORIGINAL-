@@ -27,9 +27,6 @@ import { updateLeagueScoresForGameEnd } from './user';
 export async function startGame(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
 
-  // Pre-transaction data fetching for game setup
-  const initialGameState = await _getInitialGameState();
-
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) throw new Error('Game not found.');
@@ -39,7 +36,8 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
     if (game.players.length < 2) throw new Error('The game requires at least 2 players.');
     if (game.gameState !== 'lobby') return; // Idempotency check
 
-    const { updates } = initialGameState;
+    // Pass the players array to the helper function
+    const { updates } = await _getInitialGameState(game.players);
     tx.update(gameRef, updates);
   });
 }
