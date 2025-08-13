@@ -521,7 +521,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         gameEnded = true;
         finalGameDataForLeagueUpdate = { ...game, ...updates };
       }
-    } else if (landingProperty.type === 'start') {
+    } else if (landingProperty.type === 'start' || (landingProperty.type === 'property' && landingProperty.ownerId === playerId)) {
       // إنهاء فوري
       const { updates: endUpdates, isGameOver } = endTurnInternal(
         { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board } } as Game,
@@ -946,7 +946,19 @@ function endTurnInternal(
   const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex, 'Current turn index missing.');
 
   let nextTurnIndex = findNextAliveIndex(turnOrder, players, currentTurnIndex);
-  if (nextTurnIndex === -1) nextTurnIndex = currentTurnIndex; // احتياط
+  if (nextTurnIndex === -1) {
+      const finalActivePlayers = players.filter(p => p.status === 'alive');
+      if (finalActivePlayers.length <= 1) {
+          const winner = finalActivePlayers[0];
+          const ranking = [...players]
+              .sort((a,b) => (b.money || 0) - (a.money || 0))
+              .map((p, i) => ({ playerId: p.id, name: p.name, rank: i+1 }));
+          return { isGameOver: true, updates: { gameState: 'final_results', gameResult: { winner: winner?.id || 'none', message: `اللاعب ${winner?.name || ''} هو الفائز الأخير!`, ranking }}};
+      }
+      // This should ideally not be reached if the logic is correct.
+      // But as a fallback, we reset to the first alive player.
+      nextTurnIndex = players.findIndex(p => p.status === 'alive');
+  }
 
   // إدارة الجولات بثبات عدد الأحياء عند بداية الجولة
   const movesThisRound = game.educatedMerchantState?.movesThisRound ?? 0;
