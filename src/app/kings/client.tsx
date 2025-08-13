@@ -1,6 +1,7 @@
 
 "use client";
 
+import * as React from "react";
 import { useState, useEffect, useMemo } from "react";
 import type { GameKing, Game, UserProfile, SocialRank } from "@/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
