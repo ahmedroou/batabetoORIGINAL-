@@ -1,5 +1,5 @@
 
-"use client"; // Add 'use client' to make the layout a client component wrapper
+"use client"; 
 
 import type { Metadata } from 'next';
 import './globals.css';
@@ -8,7 +8,7 @@ import { Cairo } from 'next/font/google';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Crown, Home, Swords, Briefcase, Newspaper, Users, Menu } from 'lucide-react';
+import { Crown, Home, Swords, Briefcase, Newspaper, Users, Menu, MessageSquarePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import {
@@ -95,6 +95,7 @@ const NavbarClient = () => {
 
 // This new component wraps the part of the layout that needs client-side context.
 function LayoutClient({ children }: { children: React.ReactNode }) {
+    const { userProfile } = useAuth();
     return (
         <div className="relative flex min-h-screen flex-col">
             <NavbarClient />

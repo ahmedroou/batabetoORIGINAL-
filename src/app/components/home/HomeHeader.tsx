@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 
-const ComplaintDialog = ({ userProfile }: { userProfile: UserProfile }) => {
+export const ComplaintDialog = ({ userProfile, trigger }: { userProfile: UserProfile, trigger: React.ReactNode }) => {
     const { toast } = useToast();
     const [isOpen, setIsOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,16 +91,7 @@ const ComplaintDialog = ({ userProfile }: { userProfile: UserProfile }) => {
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-                 <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                           <Button variant="ghost" size="icon">
-                                <MessageSquarePlus className="h-6 w-6 text-primary" />
-                            </Button>
-                        </TooltipTrigger>
-                         <TooltipContent><p>إرسال شكوى</p></TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
+                 {trigger}
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
                  <DialogHeader>
@@ -312,7 +303,6 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
                             </Tooltip>
                         </TooltipProvider>
                     )}
-                    <ComplaintDialog userProfile={userProfile} />
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>

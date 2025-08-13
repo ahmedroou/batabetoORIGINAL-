@@ -19,6 +19,7 @@ import WelcomeGuest from "./components/home/WelcomeGuest";
 import MainLoadingSkeleton from "./components/home/MainLoadingSkeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CompactChallengeList } from "./components/home/CompactChallengeList";
+import ComplaintBubble from "./components/home/ComplaintBubble";
 
 export default function Home() {
     const { user, userProfile, loading, socialRanks, getSocialRankForUser, activeChallenges, newChallengeAvailable, markChallengeAsSeen } = useAuth();
@@ -100,6 +101,7 @@ export default function Home() {
                 newChallengeAvailable={newChallengeAvailable}
                 markChallengeAsSeen={markChallengeAsSeen}
             />
+            <ComplaintBubble userProfile={userProfile} />
         </div>
     );
 }
