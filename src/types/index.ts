@@ -743,6 +743,8 @@ export interface Game {
     newlyBoughtPropertyId?: number;
     rollAnimationNonce?: number;
     movesThisRound?: number;
+    displayingRollResult?: { number: number, nonce: number } | null;
+    lastRentPayment?: { payer: string, owner: string, amount: number, nonce: number } | null;
   };
 }
 

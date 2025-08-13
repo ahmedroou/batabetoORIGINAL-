@@ -1,3 +1,5 @@
+
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -193,13 +195,11 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
 
 export async function rollDice(gameId: string, playerId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
-
+    
     // --- Pre-transaction logic ---
     const diceRollResult = randomDiceRoll();
     
     let questionForFine: EducatedMerchantQuestion | null = null;
-    
-    // We need to get the current state to determine if we need to fetch a question
     const preTxSnap = await getDoc(gameRef);
     if (preTxSnap.exists()) {
         const gameForPreCalc = preTxSnap.data() as Game;
@@ -231,14 +231,13 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         const newPosition = (oldPosition + diceRollResult) % BOARD_SIZE;
         const landingProperty = ensure(game.educatedMerchantState?.board[newPosition], 'خانة غير موجودة على اللوح');
         
-        // --- Prepare local and firestore updates ---
-        let localGameCopy = JSON.parse(JSON.stringify(game)); // Deep copy
+        let localGameCopy = JSON.parse(JSON.stringify(game));
         const firestoreUpdates: any = {
             'educatedMerchantState.rollAnimationNonce': Date.now(),
             'educatedMerchantState.lastDiceRoll': diceRollResult,
+            'educatedMerchantState.displayingRollResult': { number: diceRollResult, nonce: Date.now() },
         };
 
-        // --- Apply player movement and GO reward ---
         localGameCopy.players[playerIndex].position = newPosition;
         const logEvents = [];
         let activityMessage = `${player.name} رمى ${diceRollResult} وتحرك إلى "${landingProperty.name}".`;
@@ -249,10 +248,33 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             logEvents.push({ message: `${player.name} مر بنقطة البداية، وحصل على ${PASS_GO_REWARD} دينار.`, timestamp: Timestamp.now() });
         }
         
-        // Use the local copy for further calculations within this transaction
         const nestedExtra = { players: localGameCopy.players };
 
-        // --- Determine next game state based on landing tile ---
+        if (landingProperty.type === 'property' && landingProperty.ownerId && landingProperty.ownerId !== playerId) {
+            const ownerIndex = getPlayerIndexById(localGameCopy.players, landingProperty.ownerId);
+            const rent = landingProperty.rent || 0;
+            let rentMessage = '';
+
+            if ((localGameCopy.players[playerIndex].money || 0) < rent) {
+                localGameCopy.players[ownerIndex].money = (localGameCopy.players[ownerIndex].money || 0) + (localGameCopy.players[playerIndex].money || 0);
+                localGameCopy.players[playerIndex].money = 0;
+                localGameCopy.players[playerIndex].status = 'bankrupt';
+                localGameCopy.players[playerIndex].bankruptAt = nowTimestamp();
+                rentMessage = `${player.name} أفلس لأنه لم يستطع دفع الإيجار لـ ${localGameCopy.players[ownerIndex].name}.`;
+            } else {
+                localGameCopy.players[playerIndex].money = (localGameCopy.players[playerIndex].money || 0) - rent;
+                localGameCopy.players[ownerIndex].money = (localGameCopy.players[ownerIndex].money || 0) + rent;
+                rentMessage = `${player.name} دفع ${rent} دينار إيجار لـ ${localGameCopy.players[ownerIndex].name}.`;
+            }
+            logEvents.push({ message: rentMessage, timestamp: Timestamp.now() });
+            firestoreUpdates['educatedMerchantState.lastRentPayment'] = {
+                payer: player.name,
+                owner: localGameCopy.players[ownerIndex].name,
+                amount: rent,
+                nonce: Date.now()
+            };
+        }
+
         if (landingProperty.type === 'start') {
             const { updates } = endTurnInternal(localGameCopy, playerId, null, nestedExtra);
             Object.assign(firestoreUpdates, updates);
@@ -260,27 +282,8 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             if (!landingProperty.ownerId) {
                 firestoreUpdates.gameState = 'property_action';
                 firestoreUpdates['educatedMerchantState.timerEndsAt'] = addActionTimer();
-            } else if (landingProperty.ownerId !== playerId) {
-                const ownerIndex = getPlayerIndexById(localGameCopy.players, landingProperty.ownerId);
-                const rent = landingProperty.rent || 0;
-                let rentMessage = '';
-
-                if ((localGameCopy.players[playerIndex].money || 0) < rent) {
-                    localGameCopy.players[ownerIndex].money = (localGameCopy.players[ownerIndex].money || 0) + (localGameCopy.players[playerIndex].money || 0);
-                    localGameCopy.players[playerIndex].money = 0;
-                    localGameCopy.players[playerIndex].status = 'bankrupt';
-                    localGameCopy.players[playerIndex].bankruptAt = nowTimestamp();
-                    rentMessage = `${player.name} أفلس لأنه لم يستطع دفع الإيجار لـ ${localGameCopy.players[ownerIndex].name}.`;
-                } else {
-                    localGameCopy.players[playerIndex].money = (localGameCopy.players[playerIndex].money || 0) - rent;
-                    localGameCopy.players[ownerIndex].money = (localGameCopy.players[ownerIndex].money || 0) + rent;
-                    rentMessage = `${player.name} دفع ${rent} دينار إيجار لـ ${localGameCopy.players[ownerIndex].name}.`;
-                }
-                
-                const { updates } = endTurnInternal(localGameCopy, playerId, rentMessage);
-                Object.assign(firestoreUpdates, updates);
             } else {
-                const { updates } = endTurnInternal(localGameCopy, playerId);
+                const { updates } = endTurnInternal(localGameCopy, playerId, null, {players: localGameCopy.players});
                 Object.assign(firestoreUpdates, updates);
             }
         } else if (landingProperty.type === 'fine') {
@@ -290,7 +293,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
             firestoreUpdates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE };
         }
         
-        // Add final player and log updates
         firestoreUpdates.players = localGameCopy.players;
         firestoreUpdates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
         
@@ -298,11 +300,9 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     });
 }
 
-
 export async function purchaseProperty(gameId: string, playerId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
   
-  // Pre-transaction logic
   const initialGameDoc = await getDoc(gameRef);
   if (!initialGameDoc.exists()) throw new Error('اللعبة غير موجودة.');
   const game = initialGameDoc.data() as Game;
@@ -318,7 +318,6 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
   
   const question = await fetchRandomQuestion(propertyToBuy.category);
 
-  // Transaction logic
   await runTransaction(db, async (tx) => {
     const updatedPlayers = game.players.map((p) =>
       p.id === playerId ? { ...p, money: (p.money || 0) - propertyToBuy.price } : p
@@ -364,7 +363,6 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     const question = ensure(game.educatedMerchantState?.currentQuestion, 'السؤال الحالي مفقود.');
     const isCorrect = answer === question.answer;
 
-    // Create a deep copy for local manipulation
     const localGameCopy = JSON.parse(JSON.stringify(game));
     const playerIndex = getPlayerIndexById(localGameCopy.players, playerId);
     let activityMessage = '';
@@ -376,6 +374,7 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
         if (propertyIndex !== -1) {
           localGameCopy.educatedMerchantState.board[propertyIndex].ownerId = playerId;
           localGameCopy.educatedMerchantState.board[propertyIndex].color = localGameCopy.players[playerIndex].color;
+          localGameCopy.educatedMerchantState.newlyBoughtPropertyId = pendingPurchase.propertyId;
         }
         activityMessage = `${localGameCopy.players[playerIndex].name} أجاب بشكل صحيح وامتلك "${propertyName}"!`;
         localGameCopy.players[playerIndex].propertiesCount = (localGameCopy.players[playerIndex].propertiesCount || 0) + 1;
@@ -409,7 +408,6 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
       finalGameDataForLeagueUpdate = { ...localGameCopy, ...updates };
     }
 
-    // Always clear pending states
     updates['educatedMerchantState.pendingPurchase'] = deleteField();
     updates['educatedMerchantState.pendingFine'] = deleteField();
     updates['educatedMerchantState.currentQuestion'] = deleteField();
@@ -447,7 +445,6 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
     let localGameCopy = JSON.parse(JSON.stringify(game)); 
 
     if (game.gameState === 'rolling') {
-        // Auto-roll dice for the player
         const diceRollResult = randomDiceRoll();
         const playerIndex = getPlayerIndexById(localGameCopy.players, currentPlayerId);
         const oldPosition = localGameCopy.players[playerIndex].position;
@@ -542,7 +539,6 @@ function endTurnInternal(
       logEvents.push({ message: extraMessage, timestamp: Timestamp.now() });
   }
 
-  // Release properties of any newly bankrupted players
   localGameCopy.educatedMerchantState.board = localGameCopy.educatedMerchantState.board.map((prop: Property) => {
     const owner = localGameCopy.players.find((p: Player) => p.id === prop.ownerId);
     if (owner && owner.status === 'bankrupt') {
@@ -577,6 +573,8 @@ function endTurnInternal(
       players: localGameCopy.players,
       'educatedMerchantState.timerEndsAt': deleteField(),
       'educatedMerchantState.board': localGameCopy.educatedMerchantState.board,
+      'educatedMerchantState.displayingRollResult': deleteField(),
+      'educatedMerchantState.lastRentPayment': deleteField(),
     };
     if (logEvents.length > 0) {
         finalGameData['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
@@ -611,6 +609,8 @@ function endTurnInternal(
       gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.`, ranking },
       players: localGameCopy.players,
       'educatedMerchantState.board': localGameCopy.educatedMerchantState.board,
+      'educatedMerchantState.displayingRollResult': deleteField(),
+      'educatedMerchantState.lastRentPayment': deleteField(),
     };
     if (logEvents.length > 0) {
         finalGameData['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
@@ -626,6 +626,8 @@ function endTurnInternal(
     round: newRound,
     players: localGameCopy.players,
     'educatedMerchantState.movesThisRound': newMoves,
+    'educatedMerchantState.displayingRollResult': deleteField(),
+    'educatedMerchantState.lastRentPayment': deleteField(),
   };
   
   if (logEvents.length > 0) {
@@ -634,7 +636,6 @@ function endTurnInternal(
 
   return { isGameOver: false, updates: finalUpdates };
 }
-
 
 export async function endTurn(gameId: string, playerId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);

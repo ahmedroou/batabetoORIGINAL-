@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils';
 import { Banknote, Building, HelpCircle, Trophy } from 'lucide-react';
 import { endTurn } from '@/lib/actions/educated-merchant';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
+import { DiceResultOverlay } from './DiceResultOverlay';
+import { RentPaidOverlay } from './RentPaidOverlay';
 
 interface GameBoardProps {
   game: Game;
@@ -254,6 +256,8 @@ export function GameBoard({ game, self }: GameBoardProps) {
   return (
     <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
       <QuestionModal game={game} self={self} />
+      <DiceResultOverlay rollResult={game.educatedMerchantState?.displayingRollResult ?? null} />
+      <RentPaidOverlay rentInfo={game.educatedMerchantState?.lastRentPayment ?? null} />
 
       <div className="w-full md:w-1/4 xl:w-1/5 space-y-4 shrink-0 flex flex-col">
         <div className="p-2 bg-slate-900/40 rounded-lg">
@@ -360,6 +364,20 @@ export function GameBoard({ game, self }: GameBoardProps) {
     </div>
   );
 }
+function findNextAliveIndex(turnOrder: string[], players: Player[], startIndex: number): number {
+  if (!turnOrder || turnOrder.length === 0) return -1;
+  let idx = (startIndex + 1) % turnOrder.length;
+  let attempts = 0;
+  while (attempts < turnOrder.length) {
+    const pid = turnOrder[idx];
+    const p = players.find((x) => x.id === pid);
+    if (p && p.status === 'alive') return idx;
+    idx = (idx + 1) % turnOrder.length;
+    attempts++;
+  }
+  return -1;
+}
+
 
 function pc(size: number, tile: number) {
   return size / tile;
