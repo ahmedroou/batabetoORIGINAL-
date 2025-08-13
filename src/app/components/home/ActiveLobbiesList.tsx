@@ -10,17 +10,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { collection, query, where, orderBy, Timestamp, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { GAME_ICONS, GAME_TYPE_NAMES } from "@/data/icons";
-import { Users, Star } from "lucide-react";
+import { Users, Star, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ActiveLobbiesListProps {
-    onJoin: (id: string) => void;
+    onJoin: (id: string) => Promise<void>; // Make onJoin async
 }
 
 export default function ActiveLobbiesList({ onJoin }: ActiveLobbiesListProps) {
     const { toast } = useToast();
     const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
     const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
+    const [joiningLobbyId, setJoiningLobbyId] = useState<string | null>(null);
 
     useEffect(() => {
         const q = query(
@@ -46,6 +47,18 @@ export default function ActiveLobbiesList({ onJoin }: ActiveLobbiesListProps) {
 
         return () => unsubscribe();
     }, [toast]);
+    
+    const handleJoinClick = async (lobbyId: string) => {
+        setJoiningLobbyId(lobbyId);
+        await onJoin(lobbyId);
+        // The parent will handle routing, but if it fails, we should reset the loading state.
+        // It's better to let the component unmount on successful navigation.
+        // If the component is still mounted after a timeout, it means navigation failed.
+        setTimeout(() => {
+            setJoiningLobbyId(null);
+        }, 3000); // Reset after 3 seconds if navigation fails.
+    }
+
 
     return (
         <Card>
@@ -66,6 +79,7 @@ export default function ActiveLobbiesList({ onJoin }: ActiveLobbiesListProps) {
                         ) : (
                             activeLobbies.map(lobby => {
                                 const GameIcon = GAME_ICONS[lobby.gameType] || Star;
+                                const isJoiningThisLobby = joiningLobbyId === lobby.id;
                                 return (
                                     <div key={lobby.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                                         <div className="flex items-center gap-3">
@@ -80,8 +94,8 @@ export default function ActiveLobbiesList({ onJoin }: ActiveLobbiesListProps) {
                                                 <Users className="mx-auto" />
                                                 <span className="text-sm font-bold">{lobby.players.length}/8</span>
                                             </div>
-                                            <Button onClick={() => onJoin(lobby.id)} size="sm">
-                                                انضمام
+                                            <Button onClick={() => handleJoinClick(lobby.id)} size="sm" disabled={!!joiningLobbyId}>
+                                                {isJoiningThisLobby ? <Loader2 className="animate-spin"/> : 'انضمام'}
                                             </Button>
                                         </div>
                                     </div>
