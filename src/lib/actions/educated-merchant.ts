@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -27,7 +26,7 @@ import { updateLeagueScoresForGameEnd } from './user';
 const BOARD_SIZE = 28;
 const START_MONEY = 1000;
 const PASS_GO_REWARD = 200;
-const ACTION_TIME_SECONDS = 35; 
+const ACTION_TIME_SECONDS = 35;
 const MAX_FINES = 3;
 const DEFAULT_FINE = 100;
 const DEFAULT_MAX_ROUNDS = 20;
@@ -212,7 +211,7 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     const diceRoll = randomDiceRoll();
     const oldPosition = player.position;
     const newPosition = (oldPosition + diceRoll) % BOARD_SIZE;
-
+    
     const board = ensure(game.educatedMerchantState?.board, 'اللوح مفقود.');
     const landingProperty = ensure(board[newPosition], 'خانة غير موجودة على اللوح');
     let activityMessage = `${player.name} رمى ${diceRoll} وتحرك إلى "${landingProperty.name}".`;
@@ -232,10 +231,10 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
       'educatedMerchantState.timerEndsAt': addActionTimer(),
     };
 
-    game = {...game, ...baseUpdates, players: updatedPlayers}; // Update the game object for internal logic
+    game = {...game, ...baseUpdates, players: updatedPlayers};
 
-    let finalUpdates: any = {};
     let nextGameState: Game['gameState'] | null = null;
+    let finalUpdates: any = {};
 
     if (landingProperty.type === 'start') {
       const { updates } = endTurnInternal(game, playerId, activityMessage, baseUpdates);
@@ -281,7 +280,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
       Object.assign(finalUpdates, updates);
     }
     
-    // Only set gameState if it's not determined by endTurnInternal (which returns final_results)
     if (nextGameState) {
         finalUpdates.gameState = nextGameState;
     }
@@ -507,8 +505,7 @@ function endTurnInternal(
   const updatedBoard = (mergedGameData.educatedMerchantState?.board || []).map((prop) => {
     const owner = mergedGameData.players.find((p) => p.id === prop.ownerId);
     if (owner && owner.status === 'bankrupt') {
-      const { ownerId, color, ...rest } = prop;
-      return { ...rest, ownerId: null, color: undefined } as Property;
+      return { ...prop, ownerId: null, color: undefined } as Property;
     }
     return prop;
   });
@@ -640,3 +637,5 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
     tx.update(gameRef, updates);
   });
 }
+
+    
