@@ -30,7 +30,6 @@ import {
     collectionGroup,
     aggregate,
     sum,
-    average,
     count,
 } from 'firebase/firestore';
 import { isFirebaseError,  getSimilaritySignature } from './helpers';
@@ -221,7 +220,8 @@ export async function uploadPrisonQuestionsFromJson(questions: { text: string }[
             if (q && typeof q.text === 'string' && q.text.trim() !== '') {
                 const docRef = doc(questionsCol);
                 batch.set(docRef, { 
-                    text: q.text.trim()
+                    text: q.text.trim(),
+                    similaritySignature: getSimilaritySignature(q.text),
                 });
                 validQuestionsCount++;
             }
@@ -302,7 +302,7 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
              // Fallback for non-indexed queries (like search) which are slow and costly.
              // This part should be used sparingly.
             if (criteria.searchTerm) {
-                const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') ? 'question' : 'text';
+                const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant' || criteria.game === 'prison') ? 'question' : 'text';
                 const searchTerm = criteria.searchTerm.trim();
                 const snapshot = await getDocs(query(itemsCol, where(textFieldName, '>=', searchTerm), where(textFieldName, '<=', searchTerm + '\uf8ff')));
                 return { success: true, count: snapshot.size };
@@ -345,7 +345,7 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
         } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
             q = query(itemsCol, where('category', '==', criteria.category.trim()));
         } else if (criteria.searchTerm) {
-            const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') ? 'question' : 'text';
+            const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant' || criteria.game === 'prison') ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
             q = query(itemsCol, where(textFieldName, '>=', searchTerm), where(textFieldName, '<=', searchTerm + '\uf8ff'));
         } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
@@ -371,10 +371,16 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
     }
 };
 
-async function findDuplicateQuestionGroups(game: 'trap-answer' | 'educated-merchant', category?: string): Promise<Map<string, { id: string; createdAt: Timestamp }[]>> {
-    const collectionName = game === 'trap-answer' ? 'trap_answer_questions' : 'educated_merchant_questions';
+async function findDuplicateQuestionGroups(game: 'trap-answer' | 'educated-merchant' | 'prison', category?: string): Promise<Map<string, { id: string; createdAt: Timestamp }[]>> {
+    let collectionName: string;
+    switch(game) {
+        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
+        case 'educated-merchant': collectionName = 'educated_merchant_questions'; break;
+        case 'prison': collectionName = 'prison_questions'; break;
+    }
+    
     let q = query(collection(db, collectionName));
-    if (category) {
+    if (category && (game === 'trap-answer' || game === 'educated-merchant')) {
         q = query(q, where("category", "==", category));
     }
     
@@ -393,6 +399,7 @@ async function findDuplicateQuestionGroups(game: 'trap-answer' | 'educated-merch
 
     return groups;
 }
+
 
 export async function deleteSimilarQuestions(game: 'trap-answer' | 'educated-merchant', category?: string): Promise<{ success: boolean; count?: number; error?: string; message?: string }> {
     try {
@@ -435,6 +442,42 @@ export async function deleteSimilarQuestions(game: 'trap-answer' | 'educated-mer
         return { success: false, error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
     }
 };
+
+export async function deleteSimilarPrisonQuestions(): Promise<{ success: boolean; count?: number; error?: string; message?: string }> {
+    try {
+        const duplicateGroups = await findDuplicateQuestionGroups('prison');
+        if (duplicateGroups.size === 0) {
+            return { success: true, count: 0, message: 'لم يتم العثور على أسئلة مكررة في السجن.' };
+        }
+
+        const batch = writeBatch(db);
+        let deletedCount = 0;
+
+        for (const items of duplicateGroups.values()) {
+            if (items.length > 1) {
+                items.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+                const itemsToDelete = items.slice(1);
+                
+                itemsToDelete.forEach(item => {
+                    const docRef = doc(db, 'prison_questions', item.id);
+                    batch.delete(docRef);
+                    deletedCount++;
+                });
+            }
+        }
+
+        if (deletedCount > 0) {
+            await batch.commit();
+        }
+        
+        return { success: true, count: deletedCount };
+
+    } catch (error: any) {
+        console.error("Error deleting similar prison questions:", error);
+        return { success: false, error: error.message || 'فشل حذف أسئلة السجن المكررة.' };
+    }
+}
+
 
 async function findDuplicateWords() {
     const wordsCol = collection(db, 'word_war_words');

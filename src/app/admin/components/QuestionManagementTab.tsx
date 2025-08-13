@@ -31,6 +31,7 @@ import {
   uploadPrisonQuestionsFromJson,
   deleteSimilarQuestions,
   uploadEducatedMerchantQuestionsFromJson,
+  deleteSimilarPrisonQuestions,
 } from '@/lib/actions/admin';
 import type { Game } from '@/types';
 
@@ -332,30 +333,6 @@ export default function QuestionManagementTab() {
         if (!isValid) return;
 
         setDeletionParams(params);
-        
-        if (params.duplicates) {
-            setIsDialogOpen(true);
-            return;
-        }
-        
-        setIsDeleting(true);
-        const countResult = await countQuestions(params as any);
-        setIsDeleting(false);
-
-        if (!countResult.success) {
-            toast({ title: "خطأ", description: countResult.error, variant: "destructive" });
-            return;
-        }
-
-        if (countResult.count === 0) {
-            toast({
-                title: "لا يوجد ما يمكن حذفه",
-                description: "لم يتم العثور على عناصر تطابق المعايير المحددة.",
-            });
-            return;
-        }
-        
-        setDeletionCount(countResult.count);
         setIsDialogOpen(true);
     };
 
@@ -363,10 +340,14 @@ export default function QuestionManagementTab() {
         if (!deletionParams) return;
         setIsDeleting(true);
         setIsDialogOpen(false);
-        let result;
+        let result: { success?: boolean; count?: number; error?: string; message?: string } | undefined;
 
-        if (deletionParams.duplicates && (deletionParams.game === 'trap-answer' || deletionParams.game === 'educated-merchant')) {
-            result = await deleteSimilarQuestions(deletionParams.game, deletionParams.category);
+        if (deletionParams.duplicates) {
+            if (deletionParams.game === 'trap-answer' || deletionParams.game === 'educated-merchant') {
+                result = await deleteSimilarQuestions(deletionParams.game, deletionParams.category);
+            } else if (deletionParams.game === 'prison') {
+                 result = await deleteSimilarPrisonQuestions();
+            }
         } else {
             result = await deleteQuestions(deletionParams as any);
         }
@@ -381,7 +362,6 @@ export default function QuestionManagementTab() {
              toast({ title: "خطأ", description: "حدث خطأ غير متوقع أثناء الحذف.", variant: "destructive" });
         }
         setDeletionParams(null);
-        setDeletionCount(null);
     };
 
     const renderUploadForm = () => (
@@ -555,7 +535,7 @@ export default function QuestionManagementTab() {
 
     const renderPrisonDelete = () => (
          <div className="space-y-4">
-             <div className="space-y-2">
+             <div className="p-3 border rounded-lg space-y-2">
                  <h4 className="font-bold">حذف كل أسئلة السجن</h4>
                  <p className="text-sm text-destructive text-center p-2 bg-destructive/10 rounded-md">تحذير! هذا الإجراء سيحذف جميع أسئلة لعبة السجن.</p>
                  <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'prison', all: true })} disabled={isDeleting}>
@@ -563,28 +543,39 @@ export default function QuestionManagementTab() {
                     {isDeleting ? 'جاري حذف الكل...' : 'تأكيد حذف جميع الأسئلة'}
                 </Button>
             </div>
+             <div className="p-3 border rounded-lg space-y-2">
+                 <h4 className="font-bold">حذف أسئلة السجن المكررة</h4>
+                 <p className="text-sm text-muted-foreground">سيقوم هذا الإجراء بفحص الأسئلة المتشابهة وحذفها مع الإبقاء على أحدث نسخة.</p>
+                 <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'prison', duplicates: true })} disabled={isDeleting}>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    {isDeleting ? 'جاري الفحص...' : 'حذف المكررات من السجن'}
+                 </Button>
+            </div>
          </div>
     );
 
     const getDialogDescription = () => {
         if (!deletionParams) return '';
         if (deletionParams.duplicates) {
+             if (deletionParams.game === 'prison') {
+                return 'سيقوم هذا الإجراء بفحص جميع أسئلة السجن وحذف المتشابه منها بناءً على بصمة النص. هل أنت متأكد؟';
+            }
             const gameName = deletionParams.game === 'trap-answer' ? "الجواب المفخخ" : "التاجر المتعلم";
             return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" للعبة "${gameName}" وحذف المتشابه منها بناءً على بصمة النص. هل أنت متأكد؟`;
         }
         if (deletionParams.all) {
-             return `تحذير شديد! هذا الإجراء سيحذف جميع العناصر (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
+             return `تحذير شديد! هذا الإجراء سيحذف جميع العناصر (${deletionCount || 'الكل'}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
         }
         if (deletionParams.category) {
-            return `سيقوم هذا الإجراء بحذف جميع الأسئلة (${deletionCount}) من قسم "${deletionParams.category}" بشكل دائم.`;
+            return `سيقوم هذا الإجراء بحذف جميع الأسئلة (${deletionCount || 'الكل'}) من قسم "${deletionParams.category}" بشكل دائم.`;
         }
          if (deletionParams.searchTerm) {
-            return `سيتم حذف كل الأسئلة التي تحتوي على "${deletionParams.searchTerm}" (${deletionCount} سؤال). هل أنت متأكد؟`;
+            return `سيتم حذف كل الأسئلة التي تحتوي على "${deletionParams.searchTerm}" (${deletionCount || 'الكل'} سؤال). هل أنت متأكد؟`;
         }
         if (deletionParams.answerSearchTerm) {
-            return `سيتم حذف كل الأسئلة التي جوابها يحتوي على "${deletionParams.answerSearchTerm}" (${deletionCount} سؤال). هل أنت متأكد؟`;
+            return `سيتم حذف كل الأسئلة التي جوابها يحتوي على "${deletionParams.answerSearchTerm}" (${deletionCount || 'الكل'} سؤال). هل أنت متأكد؟`;
         }
-        return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount} عنصر بشكل دائم بناءً على المعيار الذي حددته.`
+        return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount || 'الكل'} عنصر بشكل دائم بناءً على المعيار الذي حددته.`
     };
     
     return (
