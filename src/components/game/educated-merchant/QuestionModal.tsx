@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import type { Game, Player } from '@/types';
 import { useState, useEffect, useCallback } from 'react';
 import { answerQuestion } from '@/lib/actions/educated-merchant';
-import { Loader2, Check, X, HelpCircle } from 'lucide-react';
+import { Loader2, Check, X, HelpCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
@@ -20,13 +20,15 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
     
     const question = game.educatedMerchantState?.currentQuestion;
     const pendingPurchase = game.educatedMerchantState?.pendingPurchase;
-    const isMyTurnToAnswer = pendingPurchase?.playerId === self.id;
+    const pendingFine = game.educatedMerchantState?.pendingFine;
+    
+    const isMyTurnToAnswer = pendingPurchase?.playerId === self.id || pendingFine?.playerId === self.id;
     const isOpen = game.gameState === 'question';
 
     const isHost = game.hostId === self.id;
+    const isFineQuestion = !!pendingFine;
 
     useEffect(() => {
-        // Reset state only when the question modal becomes relevant for the current user
         if (isOpen && isMyTurnToAnswer) {
             setSelectedAnswer(null);
             setIsSubmitting(false);
@@ -40,16 +42,15 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
         const isCorrect = selectedAnswer === question.answer;
         setAnswerState(isCorrect ? 'correct' : 'incorrect');
 
-        // Wait a moment for the user to see the feedback before the modal closes
         setTimeout(async () => {
             await answerQuestion(game.id, self.id, selectedAnswer);
-            // The modal will close automatically when the game state changes on the server.
-            // No need to set isSubmitting back to false if the component unmounts.
         }, 1500); 
     };
 
-    if (!isOpen || !pendingPurchase || !question) return null;
+    if (!isOpen || (!pendingPurchase && !pendingFine) || !question) return null;
     
+    const playerOnQuestion = game.players.find(p => p.id === (pendingPurchase?.playerId || pendingFine?.playerId));
+
     return (
         <Dialog open={isOpen}>
             <DialogContent className="max-w-xl bg-gray-900/80 backdrop-blur-md border-primary/30 text-white" onInteractOutside={(e) => e.preventDefault()}>
@@ -60,7 +61,7 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
                         </motion.div>
                     )}
                      {answerState === 'incorrect' && isMyTurnToAnswer && (
-                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                         <motion.div initial={{ opacity: 0, rotate: -30, scale: 0.8 }} animate={{ opacity: 1, rotate: 0, scale: 1.2 }} className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
                            <X className="w-48 h-48 text-red-500/50" />
                         </motion.div>
                     )}
@@ -77,11 +78,12 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
                     </div>
                  )}
                 <DialogHeader className="text-center pt-12 md:pt-20">
-                     <HelpCircle className="w-12 h-12 mx-auto text-primary" />
-                    <DialogTitle className="text-2xl">{question.question}</DialogTitle>
+                     {isFineQuestion ? <AlertTriangle className="w-12 h-12 mx-auto text-red-400"/> : <HelpCircle className="w-12 h-12 mx-auto text-primary" />}
+                    <DialogTitle className="text-2xl">{isFineQuestion ? 'سؤال الغرامة!' : question.question}</DialogTitle>
+                     {isFineQuestion && <p className="text-yellow-300 font-bold">أجب بشكل صحيح لتنجو من الغرامة!</p>}
                     {!isMyTurnToAnswer && (
                         <DialogDescription className="text-base text-yellow-300 animate-pulse">
-                            في انتظار {game.players.find(p => p.id === pendingPurchase.playerId)?.name || 'اللاعب'} للإجابة...
+                            في انتظار {playerOnQuestion?.name || 'اللاعب'} للإجابة...
                         </DialogDescription>
                     )}
                 </DialogHeader>
@@ -97,9 +99,12 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
                                     <Label key={i} htmlFor={`option-${i}`} className={cn(
                                         'flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all',
                                         'disabled:cursor-not-allowed disabled:opacity-50',
-                                        answerState !== 'pending' ? 'pointer-events-none opacity-50' : '', // Disable all options after answering
+                                        answerState !== 'pending' ? 'pointer-events-none opacity-50' : '',
                                         selectedAnswer === option ? 'border-primary bg-primary/20' : 'border-slate-700 bg-slate-800/50 hover:bg-slate-700/50',
-                                        answerState === 'incorrect' && selectedAnswer === option && 'border-red-500 bg-red-500/20' // Highlight wrong selection
+                                        // When showing feedback, only highlight the selected answer
+                                        answerState === 'incorrect' && selectedAnswer === option && 'border-red-500 bg-red-500/20',
+                                        // Do not reveal the correct answer if another option was chosen
+                                        answerState === 'correct' && selectedAnswer === option && 'border-green-500 bg-green-500/20'
                                     )}>
                                         <RadioGroupItem value={option} id={`option-${i}`} disabled={answerState !== 'pending'}/>
                                         <span className="text-base font-semibold">{option}</span>

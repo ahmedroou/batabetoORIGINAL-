@@ -250,7 +250,8 @@ export const DEFAULT_EDUCATED_MERCHANT_CATEGORIES = [
     "رياضيات",
     "برمجة",
     "أحياء",
-    "كيمياء"
+    "كيمياء",
+    "قسم الغرامات"
 ];
 
 export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
@@ -570,6 +571,7 @@ export interface Game {
   gameResult?: {
     winner: PlayerTeam | 'draw' | 'game_over' | string;
     message: string;
+    ranking?: any[];
   };
   
   // king-of-genius specific fields
@@ -718,6 +720,7 @@ export interface Game {
     settings: { 
         maxRounds: number,
         categories: string[],
+        diceMax?: number,
      };
     board: Property[];
     turnOrder: string[];
@@ -732,9 +735,13 @@ export interface Game {
         price: number;
         questionId: string;
     };
+    pendingFine?: {
+        playerId: string;
+        fineAmount: number;
+    };
     newlyBoughtPropertyId?: number;
     rollAnimationNonce?: number;
-    diceMax?: number;
+    movesThisRound?: number;
   };
 }
 

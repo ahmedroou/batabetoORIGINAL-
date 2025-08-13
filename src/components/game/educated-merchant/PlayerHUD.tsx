@@ -16,50 +16,43 @@ interface PlayerHUDProps {
   currentTurnIndex: number;
 }
 
-// Small animated number helper: animates from prev to next using requestAnimationFrame
+// Custom hook to animate money changes smoothly
 function useAnimatedMoney(players: Player[]) {
   const [display, setDisplay] = useState<Record<string, number>>(() => {
-    const r: Record<string, number> = {};
-    players.forEach((p) => (r[p.id] = p.money || 0));
-    return r;
+    const initialDisplay: Record<string, number> = {};
+    players.forEach((p) => (initialDisplay[p.id] = p.money || 0));
+    return initialDisplay;
   });
 
-  // refs to cancel animations per player
   const rafs = useRef<Record<string, number | null>>({});
-  const prevValues = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    // initialize prevValues for new players
-    players.forEach((p) => {
-      if (prevValues.current[p.id] === undefined) prevValues.current[p.id] = p.money || 0;
-    });
-
     players.forEach((p) => {
       const id = p.id;
       const target = p.money || 0;
-      const start = display[id] ?? prevValues.current[id] ?? 0;
-      if (start === target) return; // no animation
+      const start = display[id] ?? target;
 
-      // cancel any existing
+      if (start === target) return; 
+
       if (rafs.current[id]) {
         window.cancelAnimationFrame(rafs.current[id] as number);
-        rafs.current[id] = null;
       }
 
-      const duration = 420; // ms
+      const duration = 400; // ms
       const startTime = performance.now();
 
       const step = (now: number) => {
         const t = Math.min(1, (now - startTime) / duration);
-        // easeOutCubic
+        // Ease-out function for a smoother animation
         const eased = 1 - Math.pow(1 - t, 3);
         const value = Math.round(start + (target - start) * eased);
+        
         setDisplay((d) => ({ ...d, [id]: value }));
+
         if (t < 1) {
           rafs.current[id] = window.requestAnimationFrame(step);
         } else {
           rafs.current[id] = null;
-          prevValues.current[id] = target;
         }
       };
 
@@ -67,10 +60,11 @@ function useAnimatedMoney(players: Player[]) {
     });
 
     return () => {
-      // cancel on unmount
-      Object.values(rafs.current).forEach((r) => r && window.cancelAnimationFrame(r));
+      Object.values(rafs.current).forEach((rafId) => {
+        if (rafId) window.cancelAnimationFrame(rafId);
+      });
     };
-  }, [players]);
+  }, [players]); // Rerun when the authoritative players prop changes
 
   return display;
 }

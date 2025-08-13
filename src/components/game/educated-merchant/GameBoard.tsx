@@ -15,7 +15,6 @@ import { Banknote, Building, HelpCircle, Trophy } from 'lucide-react';
 import { handlePropertyLanding, endTurn } from '@/lib/actions/educated-merchant';
 import { Button } from '@/components/ui/button';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface GameBoardProps {
   game: Game;
@@ -135,8 +134,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
         setIsJumping((s) => ({ ...s, [playerId]: false }));
       }
       
-      // The server will now immediately end the turn if needed, and the game state will update.
-      // We only need to call this on the client moving to trigger the server-side logic.
       if (playerId === self.id) {
           try {
             await handlePropertyLanding(game.id, playerId);
@@ -212,9 +209,9 @@ export function GameBoard({ game, self }: GameBoardProps) {
         );
       }
       case 'question': {
-        const player = game.players.find((p) => p.id === currentPlayerId);
-        if (!player) return <div />;
-        const property = board[player.position];
+        const playerOnQuestion = game.players.find(p => p.id === game.educatedMerchantState?.pendingPurchase?.playerId || p.id === game.educatedMerchantState?.pendingFine?.playerId);
+        if (!playerOnQuestion) return <div />;
+        const property = board[playerOnQuestion.position];
         if (property && property.type === 'property') {
             return <PropertyCard game={game} self={self} property={property} allowActions={false} />;
         }
@@ -222,7 +219,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
             <div className="text-center text-white space-y-4 p-4 bg-slate-800 rounded-lg">
                 <HelpCircle className="w-16 h-16 mx-auto mb-4 text-primary" />
                 <h2 className="text-2xl font-bold animate-pulse">
-                    في انتظار إجابة {game.players.find(p => p.id === game.educatedMerchantState?.pendingPurchase?.playerId)?.name}...
+                    في انتظار إجابة {playerOnQuestion.name}...
                 </h2>
             </div>
         );
@@ -286,11 +283,9 @@ export function GameBoard({ game, self }: GameBoardProps) {
       }
 
       return (
-        <Popover>
-          <PopoverTrigger asChild>
             <motion.div
               className={cn(
-                'w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500 cursor-pointer',
+                'w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500',
                 baseBg,
                 borderColor,
                 isNewlyBought && 'animate-pulse-glow',
@@ -307,17 +302,11 @@ export function GameBoard({ game, self }: GameBoardProps) {
               {property.type === 'property' && <p className="text-[10px] font-mono mt-1">{property.price} دينار</p>}
               {property.type === 'fine' && <p className="text-[10px] font-mono mt-1">{property.fineAmount} دينار</p>}
             </motion.div>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" side="bottom" align="center">
-            {/* The popover content is now just informational. Actions are in the center. */}
-            <PropertyCard game={game} self={self} property={property} isPopover={true} allowActions={false} />
-          </PopoverContent>
-        </Popover>
       );
     };
 
     return React.memo(Inner);
-  }, [game, self]);
+  }, []);
 
   return (
     <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
