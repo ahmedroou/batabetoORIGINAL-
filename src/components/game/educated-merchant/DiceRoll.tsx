@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -9,7 +8,6 @@ import type { Game, Player } from '@/types';
 import { rollDice } from '@/lib/actions/educated-merchant';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
-
 
 /* ---------------- audio helpers ---------------- */
 function createAudioHelpers() {
@@ -47,7 +45,7 @@ function createAudioHelpers() {
         osc.stop(now + 0.22);
       }
     } catch (e) {
-      // silently fail audio issues (iOS/autoplay restrictions etc.)
+      // fail silently for audio problems (iOS autoplay, etc.)
     }
   };
 
@@ -78,11 +76,13 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const currentTurnPlayerId = turnOrder[currentTurnIndex];
   const isMyTurn = self.id === currentTurnPlayerId;
 
+  // IMPORTANT: server writes an object like { number, nonce } into educatedMerchantState.displayingRollResult
   const displaying = (game.educatedMerchantState as any)?.displayingRollResult as { number: number; nonce: number } | undefined;
 
   useEffect(() => {
     audio.current = createAudioHelpers();
     return () => {
+      // cleanup any pending fallback timer when unmounting
       if (serverResponseTimerRef.current) {
         clearTimeout(serverResponseTimerRef.current);
         serverResponseTimerRef.current = null;
@@ -94,31 +94,60 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     try { localStorage.setItem('dice.sound', soundOn ? '1' : '0'); } catch { /* ignore */ }
   }, [soundOn]);
 
+  // If game state changed to QUESTION (or anything else), we should reset showResultNumber and handled nonce
+  useEffect(() => {
+    // Whenever the overall gameState becomes 'question', ensure we don't render the roll result UI
+    if (game.gameState === 'question') {
+      setShowResultNumber(null);
+      // keep handledNonceRef as-is to avoid re-displaying old nonce — but it's safe to clear it if you prefer:
+      // handledNonceRef.current = null;
+      setIsRolling(false);
+      if (serverResponseTimerRef.current) {
+        clearTimeout(serverResponseTimerRef.current);
+        serverResponseTimerRef.current = null;
+      }
+    }
+  }, [game.gameState]);
+
+  // React to server's displayingRollResult — but guard against question state to avoid the "double show" problem.
   useEffect(() => {
     if (!displaying) return;
+
+    // If the game is in question state, do not display the dice result (defensive)
+    if (game.gameState === 'question') {
+      // Optionally update history but do not show number
+      const { number, nonce } = displaying;
+      // still push to history once (so "last rolls" remains accurate)
+      setLocalHistory((prev) => [number, ...prev].slice(0, 5));
+      // mark nonce handled so we won't show it later accidentally
+      handledNonceRef.current = nonce;
+      return;
+    }
 
     const { number, nonce } = displaying;
     if (nonce === undefined || nonce === null) return;
 
-    if (handledNonceRef.current === nonce) {
-      return;
-    }
-
+    // avoid processing the same nonce multiple times
+    if (handledNonceRef.current === nonce) return;
     handledNonceRef.current = nonce;
+
+    // show to user
     setIsRolling(false);
     if (soundOn) audio.current?.playSound('result');
     setLocalHistory((prev) => [number, ...prev].slice(0, 5));
     setShowResultNumber(number);
+
+    // Hide after a short delay
     const hideTimer = window.setTimeout(() => setShowResultNumber(null), 2500);
 
+    // Clear any fallback timer since server responded
     if (serverResponseTimerRef.current) {
       clearTimeout(serverResponseTimerRef.current);
       serverResponseTimerRef.current = null;
     }
 
     return () => clearTimeout(hideTimer);
-  }, [displaying, soundOn]);
-
+  }, [displaying, game.gameState, soundOn]);
 
   // handle roll action
   const handleRoll = useCallback(async () => {
@@ -133,6 +162,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
       } catch {}
     }
 
+    // fallback: if server doesn't respond within X ms — stop spinner and notify user
     if (serverResponseTimerRef.current) {
       clearTimeout(serverResponseTimerRef.current);
       serverResponseTimerRef.current = null;
@@ -145,7 +175,9 @@ export function DiceRoll({ game, self }: DiceRollProps) {
 
     try {
       await rollDice(game.id, self.id);
+      // do not set isRolling=false here — wait for server's displayingRollResult to arrive (handled in effect)
     } catch (err: any) {
+      // network/server error — clear fallback timer and stop spinner
       if (serverResponseTimerRef.current) {
         clearTimeout(serverResponseTimerRef.current);
         serverResponseTimerRef.current = null;
@@ -189,7 +221,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
               </motion.div>
             ) : showResultNumber !== null ? (
                <motion.div key="result" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
-                 <div className="text-8xl font-mono font-extrabold text-white" style={{ textShadow: '0 0 20px hsl(var(--primary))' }}>
+                 <div className="text-8xl font-mono font-extrabold text-white" style={{ textShadow: '0 0 20px rgba(59,130,246,0.6)' }}>
                    {showResultNumber}
                  </div>
                </motion.div>

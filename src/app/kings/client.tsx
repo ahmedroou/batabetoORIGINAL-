@@ -10,6 +10,7 @@ import { GAME_ICONS } from "@/data/icons";
 import { Crown, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { getGameKings, getKingOfGames } from "@/lib/actions/user";
+import { cn } from "@/lib/utils";
 
 const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'king-of-genius': 'ساحة العباقرة',
@@ -108,7 +109,7 @@ export default function KingsClient() {
                             <CardContent className="p-4 md:p-6 flex flex-col md:flex-row items-center gap-6">
                                 <PlayerAvatar avatarId={kingOfGames.avatarId} className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-yellow-300 shadow-lg" />
                                 <div className="text-center md:text-right flex-grow">
-                                    <h2 className="text-2xl font-bold text-yellow-200">ملك بطابيطو</h2>
+                                    <h2 className="text-2xl font-bold text-yellow-200">ملك الملوك</h2>
                                     <h3 className="text-4xl md:text-5xl font-extrabold mt-1" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.6)' }}>{kingOfGames.name}</h3>
                                     <p className="text-xl font-semibold text-yellow-100/90 mt-2">{kingOfGames.leaderboardPoints} نقطة صدارة</p>
                                 </div>

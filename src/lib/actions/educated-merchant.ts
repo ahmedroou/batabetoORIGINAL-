@@ -102,6 +102,7 @@ async function fetchRandomQuestion(category: string): Promise<EducatedMerchantQu
 
   const questionDoc = qs.docs[0];
   const questionData = { id: questionDoc.id, ...questionDoc.data() } as EducatedMerchantQuestion;
+  // خلط الخيارات على الخادم (ممتاز — يبقى عشوائياً)
   const options = shuffle([...(questionData.dummyAnswers || []), questionData.answer]);
   questionData.options = options;
   return questionData;
@@ -312,6 +313,9 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
       updates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE };
       updates['educatedMerchantState.timerEndsAt'] = addActionTimer(QUESTION_TIME_SECONDS);
       updates['educatedMerchantState.questionToken'] = qToken;
+      // مهم: امسح عرض نتيجة الرمية الحالية حتى لا تظهر أثناء المودال
+      updates['educatedMerchantState.displayingRollResult'] = deleteField();
+      updates['educatedMerchantState.rollAnimationNonce'] = deleteField(); // اختياري لكن مفيد للسلامة
       needFineQuestion = { category: 'قسم الغرامات', token: qToken };
     }
 
@@ -383,6 +387,9 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
       },
       'educatedMerchantState.questionToken': qToken,
       'educatedMerchantState.currentQuestion': deleteField(),
+      // مهم: امسح عرض نتيجة الرمية السابقة حتى لا تبقى معروضة أثناء مودال السؤال
+      'educatedMerchantState.displayingRollResult': deleteField(),
+      'educatedMerchantState.rollAnimationNonce': deleteField(),
     };
 
     // سنحتاج سؤالًا من نفس تصنيف العقار
@@ -593,6 +600,9 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
           'educatedMerchantState.pendingFine': { playerId: currentPlayerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE },
           'educatedMerchantState.timerEndsAt': addActionTimer(QUESTION_TIME_SECONDS),
           'educatedMerchantState.questionToken': qToken,
+          // حذف نتيجة العرض عند الانتقال إلى السؤال (يمنع الواجهة من قراءة النتيجة القديمة)
+          'educatedMerchantState.displayingRollResult': deleteField(),
+          'educatedMerchantState.rollAnimationNonce': deleteField(),
         };
         needFineQuestion = { category: 'قسم الغرامات', token: qToken };
       }
