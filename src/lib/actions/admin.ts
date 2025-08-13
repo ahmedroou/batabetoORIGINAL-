@@ -1058,7 +1058,7 @@ export async function backfillUserPermissions(): Promise<{ success: boolean; cou
 
         const batch = writeBatch(db);
 
-        const getRankForPoints = (points: number, ranks: SocialRank[]): SocialRank | null => {
+        const getRank = (points: number, ranks: SocialRank[]): SocialRank | null => {
             const sortedRanks = [...ranks].sort((a, b) => b.threshold - a.threshold);
             for (const rank of sortedRanks) {
                 if (points >= rank.threshold) return rank;
@@ -1069,7 +1069,7 @@ export async function backfillUserPermissions(): Promise<{ success: boolean; cou
         usersSnapshot.forEach(userDoc => {
             const userData = userDoc.data() as UserProfile;
             const currentPoints = userData.leaderboardPoints || 0;
-            const currentRank = getRankForPoints(currentPoints, allRanks);
+            const currentRank = getRank(currentPoints, allRanks);
             const newPermissions = currentRank?.permissions || [];
             
             // Compare arrays to see if an update is needed

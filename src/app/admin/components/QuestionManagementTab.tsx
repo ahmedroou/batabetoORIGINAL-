@@ -39,7 +39,7 @@ type DeletionParams = {
     game: 'trap-answer' | 'word_war' | 'prison' | 'educated-merchant'; 
     category?: string; 
     all?: boolean; 
-    duplicates?: { threshold: number } | 'word_war_duplicates';
+    duplicates?: { threshold: number };
     searchTerm?: string;
     answerSearchTerm?: string;
 };
@@ -328,10 +328,16 @@ export default function QuestionManagementTab() {
     };
 
     const handleDeleteClick = async (params: DeletionParams) => {
-        let isValid = params.all || params.category || params.duplicates || params.searchTerm || params.answerSearchTerm;
+        let isValid = params.all || params.category || params.searchTerm || params.answerSearchTerm;
         if (!isValid) return;
 
         setDeletionParams(params);
+
+        if (params.duplicates) {
+             setIsDialogOpen(true);
+             return;
+        }
+
         setIsDeleting(true);
         const countResult = await countQuestions(params as any);
         setIsDeleting(false);
@@ -364,10 +370,11 @@ export default function QuestionManagementTab() {
         setIsDialogOpen(false);
         let result;
 
-        if ((deletionParams.game === 'trap-answer' || deletionParams.game === 'educated-merchant') && typeof deletionParams.duplicates === 'object') {
+        if (deletionParams.duplicates && (deletionParams.game === 'trap-answer' || deletionParams.game === 'educated-merchant')) {
             result = await deleteSimilarQuestions(deletionParams.game, deletionParams.duplicates.threshold, deletionParams.category);
-        } else if (deletionParams.game === 'word_war' && deletionParams.duplicates) {
-            result = await deleteDuplicateWords();
+        } else if (deletionParams.game === 'word_war' && deletionParams.all) {
+             // Word War duplicates has a separate dedicated button
+            result = await deleteQuestions(deletionParams as any);
         } else {
             result = await deleteQuestions(deletionParams as any);
         }
@@ -542,7 +549,16 @@ export default function QuestionManagementTab() {
             <div className="space-y-2 border-t pt-4">
                  <h4 className="font-bold">حذف الكلمات المكررة</h4>
                  <p className="text-sm text-muted-foreground">سيقوم هذا الإجراء بفحص جميع الكلمات وحذف أي نسخ متطابقة 100%.</p>
-                 <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: 'word_war', duplicates: 'word_war_duplicates' as any })} disabled={isDeleting}>
+                 <Button variant="destructive" className="w-full" onClick={async () => {
+                     setIsDeleting(true);
+                     const result = await deleteDuplicateWords();
+                     if (result.success) {
+                         toast({ title: "نجاح", description: `تم حذف ${result.count} كلمة مكررة.`});
+                     } else {
+                         toast({ title: "خطأ", description: result.error, variant: 'destructive'});
+                     }
+                     setIsDeleting(false);
+                 }} disabled={isDeleting}>
                     <Sparkles className="mr-2 h-4 w-4" />
                     {isDeleting ? 'جاري الفحص والحذف...' : 'حذف الكلمات المكررة 100%'}
                 </Button>
@@ -566,7 +582,7 @@ export default function QuestionManagementTab() {
     const getDialogDescription = () => {
         if (!deletionParams) return '';
         if (deletionParams.duplicates) {
-            return `سيقوم هذا الإجراء بحذف جميع الأسئلة المكررة (وعددها ${deletionCount}) من قسم "${deletionParams.category}" بنسبة تشابه ${deletionParams.duplicates.threshold * 100}%. هل أنت متأكد؟`;
+            return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" وحذف المتشابه منها بنسبة ${deletionParams.duplicates.threshold * 100}%. هل أنت متأكد؟ هذه العملية قد تستغرق بعض الوقت.`;
         }
         if (deletionParams.all) {
              return `تحذير شديد! هذا الإجراء سيحذف جميع العناصر (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
