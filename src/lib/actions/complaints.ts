@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -38,6 +39,7 @@ export async function submitComplaint(data: Omit<Complaint, 'id' | 'status' | 'c
 export async function getComplaints(): Promise<{ success: boolean; complaints?: Complaint[]; error?: string }> {
     try {
         const complaintsCol = collection(db, 'complaints');
+        // This query requires a composite index on (status, createdAt)
         const q = query(complaintsCol, where('status', '==', 'pending'), orderBy('createdAt', 'asc'));
         const snapshot = await getDocs(q);
 
@@ -53,7 +55,7 @@ export async function getComplaints(): Promise<{ success: boolean; complaints?: 
         return { success: true, complaints };
     } catch (error) {
         console.error("Error fetching complaints:", error);
-        return { success: false, error: 'فشل جلب الشكاوى.' };
+        return { success: false, error: 'فشل جلب الشكاوى. قد تحتاج إلى إنشاء فهرس مركب في Firestore.' };
     }
 }
 
