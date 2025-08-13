@@ -101,6 +101,19 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
     }
 }
 
+export async function getKingsPageData(): Promise<{ kings: Record<string, GameKing>, kingOfGames: UserProfile | null }> {
+    try {
+        const [kings, kingOfGames] = await Promise.all([
+            getGameKings(),
+            getKingOfGames()
+        ]);
+        return { kings, kingOfGames };
+    } catch (error) {
+        console.error("Error fetching kings page data:", error);
+        return { kings: {}, kingOfGames: null };
+    }
+}
+
 
 export async function getAllUsers(filter?: 'punished', queryLimit?: number): Promise<UserProfile[]> {
     try {

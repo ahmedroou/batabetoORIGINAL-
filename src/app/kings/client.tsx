@@ -3,14 +3,14 @@
 
 import * as React from "react";
 import { useState, useEffect, useMemo } from "react";
-import type { GameKing, Game, UserProfile, SocialRank } from "@/types";
+import type { GameKing, Game, UserProfile, SocialRank } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { GAME_ICONS } from "@/data/icons";
 import { Crown, Star, Trophy, Shield } from "lucide-react";
 import { motion } from "framer-motion";
-import { getGameKings, getKingOfGames } from "@/lib/actions/user";
+import { getKingsPageData } from "@/lib/actions/user";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -33,10 +33,7 @@ export default function KingsClient() {
     useEffect(() => {
         const fetchKingsData = async () => {
             setIsLoading(true);
-            const [fetchedKings, fetchedKingOfGames] = await Promise.all([
-                getGameKings(),
-                getKingOfGames()
-            ]);
+            const { kings: fetchedKings, kingOfGames: fetchedKingOfGames } = await getKingsPageData();
             setKings(fetchedKings);
             setKingOfGames(fetchedKingOfGames);
             setIsLoading(false);
