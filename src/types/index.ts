@@ -734,6 +734,7 @@ export interface Game {
         propertyId: number;
         price: number;
         questionId: string;
+        propertyName: string;
     };
     pendingFine?: {
         playerId: string;

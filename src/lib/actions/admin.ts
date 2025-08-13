@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -788,7 +789,7 @@ export async function deleteEducatedMerchantCategory(categoryToDelete: string): 
         
         return { success: true, count: 0 }; // count refers to deleted questions, which is 0 here.
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error deleting category:", error);
         return { success: false, error: 'فشل حذف قسم التاجر المتعلم.' };
     }
