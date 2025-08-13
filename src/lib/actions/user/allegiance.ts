@@ -1,3 +1,5 @@
+
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -65,7 +67,6 @@ export async function respondToAllegianceRequest(actorId: string, request: Alleg
     const actorRef = doc(db, 'users', actorId); // The one accepting/rejecting (the liege lord)
     const requesterRef = doc(db, 'users', request.fromId); // The one who sent the request
 
-    const LOYALTY_COST_MAP: Record<number, number> = { 1: 3, 2: 6, 3: 8 };
     const loyaltyCost = LOYALTY_COST_MAP[request.durationInDays] || 3;
 
     return runTransaction(db, async (transaction) => {
@@ -82,11 +83,10 @@ export async function respondToAllegianceRequest(actorId: string, request: Alleg
         if (requestIndex === -1) throw new Error("لم يتم العثور على طلب الولاء هذا.");
         const updatedRequests = [...requests];
         updatedRequests.splice(requestIndex, 1);
-
-        transaction.update(actorRef, { allegianceRequests: updatedRequests });
         
         if (response === 'rejected') {
             await sendSystemMail(request.fromId, { subject: 'تم رفض طلب الولاء', body: `للأسف، قام اللاعب ${actorData.name} برفض طلب ولائك.` }, transaction);
+            transaction.update(actorRef, { allegianceRequests: updatedRequests }); // Keep the update for rejection as well
             return { success: true };
         }
         
@@ -106,6 +106,9 @@ export async function respondToAllegianceRequest(actorId: string, request: Alleg
             until: new Date(Date.now() + request.durationInDays * 24 * 60 * 60 * 1000)
         };
 
+        // All writes must be after all reads.
+        transaction.update(actorRef, { allegianceRequests: updatedRequests });
+        
         // Update requester: deduct resources, set allegiance
         transaction.update(requesterRef, {
             loyaltyPoints: increment(-loyaltyCost),
