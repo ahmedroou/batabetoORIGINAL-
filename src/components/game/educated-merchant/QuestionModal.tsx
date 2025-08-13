@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -7,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import type { Game, Player } from '@/types';
 import { useState, useEffect, useCallback } from 'react';
-import { answerQuestion } from '@/lib/actions/educated-merchant';
+import { answerQuestion, handleTimeout } from '@/lib/actions/educated-merchant';
 import { Loader2, Check, X, HelpCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -188,3 +189,5 @@ export function QuestionModal({ game, self }: { game: Game; self: Player }) {
     </Dialog>
   );
 }
+
+    

@@ -227,6 +227,7 @@ async function applyTimeoutIfNeeded(tx: any, gameRef: any, game: Game): Promise<
         'educatedMerchantState.timerEndsAt': addActionTimer(),
       };
     } else if (landingProperty.type === 'fine') {
+      // سؤال غرامة — لا نجلِب السؤال داخل المعاملة
       updates = {
         ...updates,
         players,
@@ -1049,3 +1050,5 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
     tx.update(gameRef, updates);
   });
 }
+
+    
