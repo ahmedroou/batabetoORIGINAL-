@@ -238,10 +238,8 @@ export default function QuestionManagementTab() {
         setDeleteSearchTerm('');
         setDeleteAnswerSearchTerm('');
         setDeleteSimilarityCategory('');
-        if(game === 'trap-answer') {
-            setActiveCategoryManager('trap-answer');
-        } else if (game === 'educated-merchant') {
-             setActiveCategoryManager('educated-merchant');
+        if(game === 'trap-answer' || game === 'educated-merchant') {
+            setActiveCategoryManager(game);
         } else {
              setActiveCategoryManager(null);
         }
@@ -338,6 +336,11 @@ export default function QuestionManagementTab() {
         const countResult = await countQuestions(params as any);
         setIsDeleting(false);
 
+        if (!countResult) {
+            toast({ title: "خطأ", description: "فشل الاتصال بالخادم عند محاولة عد العناصر.", variant: "destructive" });
+            return;
+        }
+
         if (countResult.error) {
             toast({ title: "خطأ", description: countResult.error, variant: "destructive" });
             return;
@@ -361,8 +364,8 @@ export default function QuestionManagementTab() {
         setIsDialogOpen(false);
         let result;
 
-        if (deletionParams.game === 'trap-answer' && typeof deletionParams.duplicates === 'object') {
-            result = await deleteSimilarQuestions('trap-answer', deletionParams.duplicates.threshold, deletionParams.category);
+        if ((deletionParams.game === 'trap-answer' || deletionParams.game === 'educated-merchant') && typeof deletionParams.duplicates === 'object') {
+            result = await deleteSimilarQuestions(deletionParams.game, deletionParams.duplicates.threshold, deletionParams.category);
         } else if (deletionParams.game === 'word_war' && deletionParams.duplicates) {
             result = await deleteDuplicateWords();
         } else {
@@ -462,7 +465,7 @@ export default function QuestionManagementTab() {
          }
         
          if (selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') {
-             return renderTrapAnswerDelete();
+             return renderCategorizedGameDelete();
          }
          if (selectedGame === 'word_war') {
              return renderWordWarDelete();
@@ -473,7 +476,7 @@ export default function QuestionManagementTab() {
          return null;
     };
     
-    const renderTrapAnswerDelete = () => (
+    const renderCategorizedGameDelete = () => (
         <div className="space-y-4">
              <div className="p-3 border rounded-lg space-y-2">
                 <Label>حذف حسب النص</Label>
@@ -500,25 +503,29 @@ export default function QuestionManagementTab() {
                      <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: deleteCategory })} disabled={!deleteCategory || isDeleting} variant="destructive">حذف</Button>
                 </div>
             </div>
-             {selectedGame === 'trap-answer' && (
              <div className="p-3 border rounded-lg space-y-2">
                  <h4 className="font-bold">حذف الأسئلة المكررة</h4>
                  <p className="text-sm text-muted-foreground">سيقوم هذا الإجراء بفحص الأسئلة المتشابهة وحذفها مع الإبقاء على أحدث نسخة.</p>
                  <div className="flex items-center gap-2">
-                  <Select onValueChange={setDeleteSimilarityCategory} value={deleteSimilarityCategory}>
-                     <SelectTrigger>
-                        <SelectValue placeholder="اختر قسمًا لفحص التكرارات فيه..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {trapAnswerCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-                <Button onClick={() => handleDeleteClick({ game: 'trap-answer', category: deleteSimilarityCategory, duplicates: { threshold: 0.85 } })} disabled={!deleteSimilarityCategory || isDeleting} variant="destructive">
-                    <Sparkles className="ml-2 h-4 w-4" /> فحص وحذف
-                </Button>
-                </div>
+                    <Select onValueChange={setDeleteSimilarityCategory} value={deleteSimilarityCategory}>
+                        <SelectTrigger><SelectValue placeholder="اختر قسمًا لفحص التكرارات فيه..." /></SelectTrigger>
+                        <SelectContent>
+                            {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                 </div>
+                 <div className='grid grid-cols-3 gap-2'>
+                    <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: deleteSimilarityCategory, duplicates: { threshold: 1.0 } })} disabled={!deleteSimilarityCategory || isDeleting} variant="destructive">
+                        <Sparkles className="ml-1 h-4 w-4" /> متطابق (100%)
+                    </Button>
+                     <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: deleteSimilarityCategory, duplicates: { threshold: 0.9 } })} disabled={!deleteSimilarityCategory || isDeleting} variant="destructive">
+                        <Sparkles className="ml-1 h-4 w-4" /> شبه متطابق (90%)
+                    </Button>
+                     <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: deleteSimilarityCategory, duplicates: { threshold: 0.8 } })} disabled={!deleteSimilarityCategory || isDeleting} variant="destructive">
+                        <Sparkles className="ml-1 h-4 w-4" /> متشابه (80%)
+                    </Button>
+                 </div>
             </div>
-            )}
         </div>
     );
 
@@ -559,10 +566,7 @@ export default function QuestionManagementTab() {
     const getDialogDescription = () => {
         if (!deletionParams) return '';
         if (deletionParams.duplicates) {
-            if (deletionParams.game === 'trap-answer') {
-                 return `سيقوم هذا الإجراء بحذف جميع الأسئلة المكررة (${deletionCount}) من قسم "${deletionParams.category}"، مع الإبقاء على نسخة واحدة فقط من كل سؤال. هل أنت متأكد؟`;
-            }
-            return `سيقوم هذا الإجراء بحذف جميع العناصر المكررة (${deletionCount}) من قاعدة البيانات، مع الإبقاء على نسخة واحدة فقط من كل عنصر. هل أنت متأكد؟`;
+            return `سيقوم هذا الإجراء بحذف جميع الأسئلة المكررة (وعددها ${deletionCount}) من قسم "${deletionParams.category}" بنسبة تشابه ${deletionParams.duplicates.threshold * 100}%. هل أنت متأكد؟`;
         }
         if (deletionParams.all) {
              return `تحذير شديد! هذا الإجراء سيحذف جميع العناصر (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
@@ -600,24 +604,14 @@ export default function QuestionManagementTab() {
             </Card>
 
             <div className="md:col-span-1">
-                {activeCategoryManager === 'trap-answer' && (
+                {activeCategoryManager && (
                     <CategoryManager
-                        gameType="trap-answer"
-                        categories={trapAnswerCategories}
-                        setCategories={setTrapAnswerCategories}
-                        onAdd={addTrapAnswerCategory}
-                        onEdit={editTrapAnswerCategory}
-                        onDelete={deleteTrapAnswerCategory}
-                    />
-                )}
-                 {activeCategoryManager === 'educated-merchant' && (
-                    <CategoryManager
-                        gameType="educated-merchant"
-                        categories={merchantCategories}
-                        setCategories={setMerchantCategories}
-                        onAdd={addEducatedMerchantCategory}
-                        onEdit={editEducatedMerchantCategory}
-                        onDelete={deleteEducatedMerchantCategory}
+                        gameType={activeCategoryManager}
+                        categories={activeCategoryManager === 'trap-answer' ? trapAnswerCategories : merchantCategories}
+                        setCategories={activeCategoryManager === 'trap-answer' ? setTrapAnswerCategories : setMerchantCategories}
+                        onAdd={activeCategoryManager === 'trap-answer' ? addTrapAnswerCategory : addEducatedMerchantCategory}
+                        onEdit={activeCategoryManager === 'trap-answer' ? editTrapAnswerCategory : editEducatedMerchantCategory}
+                        onDelete={activeCategoryManager === 'trap-answer' ? deleteTrapAnswerCategory : deleteEducatedMerchantCategory}
                     />
                 )}
             </div>

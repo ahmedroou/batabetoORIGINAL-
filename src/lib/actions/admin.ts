@@ -287,7 +287,7 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
             return { success: true, count: querySnapshot.size };
         }
 
-        if (criteria.category && criteria.duplicates && typeof criteria.duplicates === 'object' && criteria.game === 'trap-answer') {
+        if (criteria.duplicates && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') && typeof criteria.duplicates === 'object') {
             const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
             return { success: true, count: duplicateCount };
         }
@@ -369,11 +369,11 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
     }
 };
 
-async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
+async function findSimilarQuestions(game: 'trap-answer' | 'educated-merchant', similarityThreshold: number, category?: string) {
     if (!category) {
         throw new Error("يجب تحديد قسم للبحث عن التكرارات.");
     }
-    const collectionName = 'trap_answer_questions';
+    const collectionName = game === 'trap-answer' ? 'trap_answer_questions' : 'educated_merchant_questions';
     const textFieldName = 'question';
 
     const q = query(collection(db, collectionName), where("category", "==", category));
@@ -425,7 +425,7 @@ async function findSimilarQuestions(game: 'trap-answer', similarityThreshold: nu
 }
 
 
-export async function deleteSimilarQuestions(game: 'trap-answer', similarityThreshold: number, category?: string) {
+export async function deleteSimilarQuestions(game: 'trap-answer' | 'educated-merchant', similarityThreshold: number, category?: string) {
     try {
         const { groups, count: deletedCount } = await findSimilarQuestions(game, similarityThreshold, category);
 
@@ -434,13 +434,14 @@ export async function deleteSimilarQuestions(game: 'trap-answer', similarityThre
         }
 
         const batch = writeBatch(db);
+        const collectionName = game === 'trap-answer' ? 'trap_answer_questions' : 'educated_merchant_questions';
         
         groups.forEach(group => {
             group.sort();
             group.pop();
 
             group.forEach(idToDelete => {
-                const docRef = doc(db, 'trap_answer_questions', idToDelete);
+                const docRef = doc(db, collectionName, idToDelete);
                 batch.delete(docRef);
             });
         });
