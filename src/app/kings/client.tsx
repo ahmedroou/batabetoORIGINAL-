@@ -111,7 +111,7 @@ export default function KingsClient() {
                                 <div className="text-center md:text-right flex-grow">
                                     <h2 className="text-2xl font-bold text-yellow-900 flex items-center justify-center md:justify-start gap-2" style={{ textShadow: '1px 1px 2px rgba(255,255,255,0.3)' }}>
                                         <Crown className="w-8 h-8 text-yellow-800 drop-shadow-lg"/>
-                                        ملك الملوك
+                                        ملك بطابيطو
                                     </h2>
                                     <h3 className="text-4xl md:text-5xl font-extrabold mt-1" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.6)' }}>{kingOfGames.name}</h3>
                                     <p className="text-xl font-semibold text-yellow-100/90 mt-2 flex items-center justify-center md:justify-start gap-2"><Trophy className="w-5 h-5"/>{kingOfGames.leaderboardPoints} نقطة صدارة</p>
