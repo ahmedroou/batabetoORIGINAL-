@@ -1,5 +1,4 @@
 
-
 'use server';
 
 /**
@@ -425,8 +424,11 @@ async function findSimilarQuestions(game: 'trap-answer' | 'educated-merchant', s
 }
 
 
-export async function deleteSimilarQuestions(game: 'trap-answer' | 'educated-merchant', similarityThreshold: number, category?: string) {
+export async function deleteSimilarQuestions(game: 'trap-answer' | 'educated-merchant', similarityThreshold: number, category?: string): Promise<{ success: boolean; count?: number; error?: string; message?: string }> {
     try {
+        if (!category) {
+            return { success: false, error: "يجب تحديد قسم لحذف الأسئلة المكررة منه." };
+        }
         const { groups, count: deletedCount } = await findSimilarQuestions(game, similarityThreshold, category);
 
         if (groups.length === 0) {
@@ -455,9 +457,9 @@ export async function deleteSimilarQuestions(game: 'trap-answer' | 'educated-mer
     } catch (error) {
         console.error("Error deleting similar questions:", error);
         if (isFirebaseError(error)) {
-            return { error: `فشل حذف الأسئلة المكررة: ${error.message}` };
+            return { success: false, error: `فشل حذف الأسئلة المكررة: ${error.message}` };
         }
-        return { error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
+        return { success: false, error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
     }
 };
 

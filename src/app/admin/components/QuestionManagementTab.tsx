@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Upload, Trash2, Sparkles, Edit, Save } from 'lucide-react';
+import { Upload, Trash2, Sparkles, Edit, Save, Loader2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import {
@@ -328,24 +328,19 @@ export default function QuestionManagementTab() {
     };
 
     const handleDeleteClick = async (params: DeletionParams) => {
-        let isValid = params.all || params.category || params.searchTerm || params.answerSearchTerm;
+        let isValid = params.all || params.category || params.searchTerm || params.answerSearchTerm || params.duplicates;
         if (!isValid) return;
 
         setDeletionParams(params);
 
         if (params.duplicates) {
-             setIsDialogOpen(true);
-             return;
+            setIsDialogOpen(true);
+            return;
         }
 
         setIsDeleting(true);
         const countResult = await countQuestions(params as any);
         setIsDeleting(false);
-
-        if (!countResult) {
-            toast({ title: "خطأ", description: "فشل الاتصال بالخادم عند محاولة عد العناصر.", variant: "destructive" });
-            return;
-        }
 
         if (countResult.error) {
             toast({ title: "خطأ", description: countResult.error, variant: "destructive" });
@@ -372,18 +367,18 @@ export default function QuestionManagementTab() {
 
         if (deletionParams.duplicates && (deletionParams.game === 'trap-answer' || deletionParams.game === 'educated-merchant')) {
             result = await deleteSimilarQuestions(deletionParams.game, deletionParams.duplicates.threshold, deletionParams.category);
-        } else if (deletionParams.game === 'word_war' && deletionParams.all) {
-             // Word War duplicates has a separate dedicated button
-            result = await deleteQuestions(deletionParams as any);
         } else {
             result = await deleteQuestions(deletionParams as any);
         }
+        
         setIsDeleting(false);
-        if (result.error) {
+        if (result && result.error) {
             toast({ title: "خطأ", description: result.error, variant: "destructive" });
-        } else if (result.success) {
+        } else if (result && result.success) {
             const message = `تم بنجاح حذف ${result.count} عنصر. ${result.message || ''}`;
             toast({ title: "نجاح", description: message });
+        } else {
+             toast({ title: "خطأ", description: "حدث خطأ غير متوقع أثناء الحذف.", variant: "destructive" });
         }
         setDeletionParams(null);
         setDeletionCount(null);
@@ -642,7 +637,7 @@ export default function QuestionManagementTab() {
                 <AlertDialogFooter>
                   <AlertDialogCancel onClick={() => { setIsDialogOpen(false); }}>إلغاء</AlertDialogCancel>
                   <AlertDialogAction onClick={confirmDelete} className={buttonVariants({ variant: "destructive" })} disabled={isDeleting}>
-                    {isDeleting ? 'جاري العمل...' : 'نعم، قم بالتأكيد'}
+                    {isDeleting ? <Loader2 className="animate-spin" /> : 'نعم، قم بالتأكيد'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
