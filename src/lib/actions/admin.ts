@@ -31,11 +31,18 @@ import { isFirebaseError,  safeCompareStrings } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
-import { sendSystemMail } from './user/mail';
-import { giveReward, applyPunishment } from './user/social';
-import { getRanks, getUsersByRank, getTopUsers as queryTopUsers, getTopPunisher } from './user/queries';
 import { generateGeniusChallenge as generateGeniusChallengeFlow } from '@/ai/flows/generate-genius-challenge';
 import type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput } from '@/ai/flows/generate-genius-challenge';
+
+// Import from the central user actions index
+import { 
+    giveReward, 
+    applyPunishment, 
+    getTopUsers as queryTopUsers,
+    getRanks as queryRanks,
+    getUsersByRank as queryUsersByRank,
+    getTopPunisher as queryTopPunisher
+} from './user';
 
 
 // Server-side user search for admin actions
@@ -1067,7 +1074,7 @@ export async function backfillUserPermissions(): Promise<{ success: boolean; cou
     const usersRef = collection(db, 'users');
     try {
         const [allRanks, usersSnapshot] = await Promise.all([
-            getRanks(),
+            queryRanks(),
             getDocs(usersRef)
         ]);
 
@@ -1110,15 +1117,18 @@ export async function backfillUserPermissions(): Promise<{ success: boolean; cou
 }
 
 
-export const adminGiveReward = giveReward;
-export const adminApplyPunishment = applyPunishment;
-export const getTopUsers = queryTopUsers;
+export async function adminGiveReward(actorId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
+    return giveReward(actorId, targetId, reward, reason);
+}
 
-// New server-only functions
-export { getRanks, getUsersByRank };
-export { getTopPunisher };
+export async function adminApplyPunishment(actorId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
+    return applyPunishment(actorId, targetId, penalty, reason);
+}
 
-// AI Flows
+export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
+    return queryTopUsers(field, count);
+}
+
 export async function generateGeniusChallenge(input: GenerateGeniusChallengeInput): Promise<GenerateGeniusChallengeOutput> {
     return generateGeniusChallengeFlow(input);
 }
