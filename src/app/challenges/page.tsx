@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Swords, CheckCircle } from "lucide-react";
 import type { Timestamp } from 'firebase/firestore';
+import { Timestamp as FBTimestamp } from 'firebase/firestore';
 
 
 export default function ChallengesPage() {
@@ -17,7 +18,7 @@ export default function ChallengesPage() {
             const latestChallengeTimestamp = activeChallenges[0].createdAt;
             if (latestChallengeTimestamp) {
                 // Ensure we pass a Date object to markChallengeAsSeen
-                const dateToMark = latestChallengeTimestamp instanceof Timestamp 
+                const dateToMark = latestChallengeTimestamp instanceof FBTimestamp 
                     ? latestChallengeTimestamp.toDate() 
                     : new Date(latestChallengeTimestamp);
                 markChallengeAsSeen(dateToMark);
