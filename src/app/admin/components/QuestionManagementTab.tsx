@@ -39,7 +39,7 @@ type DeletionParams = {
     game: 'trap-answer' | 'word_war' | 'prison' | 'educated-merchant'; 
     category?: string; 
     all?: boolean; 
-    duplicates?: { threshold: number };
+    duplicates?: boolean;
     searchTerm?: string;
     answerSearchTerm?: string;
 };
@@ -332,17 +332,17 @@ export default function QuestionManagementTab() {
         if (!isValid) return;
 
         setDeletionParams(params);
-
+        
         if (params.duplicates) {
             setIsDialogOpen(true);
             return;
         }
-
+        
         setIsDeleting(true);
         const countResult = await countQuestions(params as any);
         setIsDeleting(false);
 
-        if (countResult.error) {
+        if (!countResult.success) {
             toast({ title: "خطأ", description: countResult.error, variant: "destructive" });
             return;
         }
@@ -366,7 +366,7 @@ export default function QuestionManagementTab() {
         let result;
 
         if (deletionParams.duplicates && (deletionParams.game === 'trap-answer' || deletionParams.game === 'educated-merchant')) {
-            result = await deleteSimilarQuestions(deletionParams.game, deletionParams.duplicates.threshold, deletionParams.category);
+            result = await deleteSimilarQuestions(deletionParams.game, deletionParams.category);
         } else {
             result = await deleteQuestions(deletionParams as any);
         }
@@ -507,7 +507,7 @@ export default function QuestionManagementTab() {
             </div>
              <div className="p-3 border rounded-lg space-y-2">
                  <h4 className="font-bold">حذف الأسئلة المكررة</h4>
-                 <p className="text-sm text-muted-foreground">سيقوم هذا الإجراء بفحص الأسئلة المتشابهة وحذفها مع الإبقاء على أحدث نسخة.</p>
+                 <p className="text-sm text-muted-foreground">سيقوم هذا الإجراء بفحص الأسئلة المتشابهة في قسم معين وحذفها مع الإبقاء على أحدث نسخة.</p>
                  <div className="flex items-center gap-2">
                     <Select onValueChange={setDeleteSimilarityCategory} value={deleteSimilarityCategory}>
                         <SelectTrigger><SelectValue placeholder="اختر قسمًا لفحص التكرارات فيه..." /></SelectTrigger>
@@ -515,16 +515,8 @@ export default function QuestionManagementTab() {
                             {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                 </div>
-                 <div className='grid grid-cols-3 gap-2'>
-                    <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: deleteSimilarityCategory, duplicates: { threshold: 1.0 } })} disabled={!deleteSimilarityCategory || isDeleting} variant="destructive">
-                        <Sparkles className="ml-1 h-4 w-4" /> متطابق (100%)
-                    </Button>
-                     <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: deleteSimilarityCategory, duplicates: { threshold: 0.9 } })} disabled={!deleteSimilarityCategory || isDeleting} variant="destructive">
-                        <Sparkles className="ml-1 h-4 w-4" /> شبه متطابق (90%)
-                    </Button>
-                     <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: deleteSimilarityCategory, duplicates: { threshold: 0.8 } })} disabled={!deleteSimilarityCategory || isDeleting} variant="destructive">
-                        <Sparkles className="ml-1 h-4 w-4" /> متشابه (80%)
+                    <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: deleteSimilarityCategory, duplicates: true })} disabled={!deleteSimilarityCategory || isDeleting} variant="destructive">
+                        <Sparkles className="ml-1 h-4 w-4" /> حذف المكررات
                     </Button>
                  </div>
             </div>
@@ -577,7 +569,8 @@ export default function QuestionManagementTab() {
     const getDialogDescription = () => {
         if (!deletionParams) return '';
         if (deletionParams.duplicates) {
-            return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" وحذف المتشابه منها بنسبة ${deletionParams.duplicates.threshold * 100}%. هل أنت متأكد؟ هذه العملية قد تستغرق بعض الوقت.`;
+            const gameName = deletionParams.game === 'trap-answer' ? "الجواب المفخخ" : "التاجر المتعلم";
+            return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" للعبة "${gameName}" وحذف المتشابه منها بناءً على بصمة النص. هل أنت متأكد؟`;
         }
         if (deletionParams.all) {
              return `تحذير شديد! هذا الإجراء سيحذف جميع العناصر (${deletionCount}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;

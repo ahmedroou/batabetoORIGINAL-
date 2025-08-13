@@ -61,66 +61,29 @@ export function getPlayerNumberMap(players: Player[]): Record<string, string> {
     return playerMap;
 }
 
-function diceCoefficient(s1: string, s2: string): number {
-    if (!s1 || !s2) return 0;
-    const pairs = (str: string) => {
-        const p = new Set<string>();
-        for (let i = 0; i < str.length - 1; i++) {
-            p.add(str.substring(i, i + 2));
-        }
-        return p;
-    };
-    const s1_pairs = pairs(s1);
-    const s2_pairs = pairs(s2);
-
-    if (s1_pairs.size === 0 && s2_pairs.size === 0) return 1.0;
-    if (s1_pairs.size === 0 || s2_pairs.size === 0) return 0;
-    
-    const intersection = new Set([...s1_pairs].filter(x => s2_pairs.has(x)));
-    return (2.0 * intersection.size) / (s1_pairs.size + s2_pairs.size);
+const normalizeForSignature = (s: string): string => {
+    return s
+        .toLowerCase()
+        .replace(/[.,/#!$%^&*;:{}=\-_`~()؟?،؛]/g, "")
+        .replace(/[\u064B-\u065F\u0670]/g, "")
+        .replace(/[أإآ]/g, "ا")
+        .replace(/[يى]/g, "ي")
+        .replace(/[ة]/g, "ه")
+        .replace(/\s+/g, ' ')
+        .trim();
 };
 
-export function safeCompareStrings(a: string, b: string): number {
+export function getSimilaritySignature(text: string): string {
     try {
-        if (typeof a !== 'string' || typeof b !== 'string' || !a.trim() || !b.trim()) {
-            return 0;
+        if (typeof text !== 'string' || !text.trim()) {
+            return '';
         }
-
-        const normalize = (s: string) => {
-            return s
-                .toLowerCase()
-                // Remove punctuation (including Arabic punctuation like ؟ ، ؛)
-                .replace(/[.,/#!$%^&*;:{}=\-_`~()؟?،؛]/g, "")
-                // Remove Arabic diacritics (Tashkeel)
-                .replace(/[\u064B-\u065F\u0670]/g, "")
-                // Normalize specific Arabic characters
-                .replace(/[أإآ]/g, "ا")
-                .replace(/[يى]/g, "ي")
-                .replace(/[ة]/g, "ه")
-                .replace(/\s+/g, ' ')
-                .trim();
-        };
-
-        const s1_norm = normalize(a);
-        const s2_norm = normalize(b);
-
-        if (s1_norm === s2_norm) return 1.0;
-        
-        const isNumeric1 = /^-?\d+(\.\d+)?$/.test(s1_norm);
-        const isNumeric2 = /^-?\d+(\.\d+)?$/.test(s2_norm);
-
-        if (isNumeric1 && isNumeric2) {
-            return s1_norm === s2_norm ? 1.0 : 0.0;
-        }
-        
-        if (isNumeric1 || isNumeric2) {
-            return 0.0;
-        }
-        
-        return diceCoefficient(s1_norm, s2_norm);
-
+        const normalized = normalizeForSignature(text);
+        // Sort words alphabetically to handle different word orders
+        const words = normalized.split(' ').sort();
+        return words.join(' ');
     } catch (e) {
-        console.error("Error in safeCompareStrings:", e, {a, b});
-        return 0;
+        console.error("Error generating similarity signature:", e, { text });
+        return text; // Fallback to the original text
     }
 }

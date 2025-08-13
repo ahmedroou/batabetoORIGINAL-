@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -25,8 +26,14 @@ import {
     Timestamp,
     addDoc,
     serverTimestamp,
+    getCountFromServer,
+    collectionGroup,
+    aggregate,
+    sum,
+    average,
+    count,
 } from 'firebase/firestore';
-import { isFirebaseError,  safeCompareStrings } from './helpers';
+import { isFirebaseError,  getSimilaritySignature } from './helpers';
 import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, Decree } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
@@ -132,6 +139,7 @@ export async function uploadEducatedMerchantQuestionsFromJson(questions: { quest
                     answer: q.answer.trim(),
                     category: category.trim(),
                     randomKey: Math.random(),
+                    similaritySignature: getSimilaritySignature(q.question),
                     ...(hasDummyAnswers && { dummyAnswers: q.dummyAnswers!.map(da => da.trim()) }),
                 };
                 
@@ -172,11 +180,12 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: { question: s
                 const hasDummyAnswers = Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '');
 
                 const docRef = doc(questionsCol);
-                const questionData: Partial<TrapQuestion> = {
+                const questionData: Partial<TrapQuestion> & {similaritySignature: string} = {
                     question: q.question.trim(),
                     answer: q.answer.trim(),
                     category: category.trim(),
                     randomKey: Math.random(),
+                    similaritySignature: getSimilaritySignature(q.question),
                     ...(hasDummyAnswers && { dummyAnswers: q.dummyAnswers!.map(da => da.trim()) }),
                 };
                 
@@ -264,7 +273,7 @@ export async function uploadWordWarWordsFromJson(words: string[]) {
 
 export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'educated-merchant' , category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
     if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
-        return { error: 'يجب تحديد معيار للعد.' };
+        return { success: false, error: 'يجب تحديد معيار للعد.' };
     }
 
     let collectionName: string;
@@ -273,48 +282,42 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
         case 'educated-merchant': collectionName = 'educated_merchant_questions'; break;
         case 'prison': collectionName = 'prison_questions'; break;
         case 'word_war': collectionName = 'word_war_words'; break;
-        default: return { error: "نوع لعبة غير مدعوم." };
+        default: return { success: false, error: "نوع لعبة غير مدعوم." };
     }
-
 
     try {
         const itemsCol = collection(db, collectionName);
         let q;
         
         if (criteria.all) {
-            const querySnapshot = await getDocs(itemsCol);
-            return { success: true, count: querySnapshot.size };
-        }
-
-        if (criteria.duplicates && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') && typeof criteria.duplicates === 'object') {
-            const { count: duplicateCount } = await findSimilarQuestions(criteria.game, criteria.duplicates.threshold, criteria.category);
-            return { success: true, count: duplicateCount };
-        }
-
-        if (criteria.duplicates === 'word_war_duplicates' && criteria.game === 'word_war') {
-            const { count: duplicateCount } = await findDuplicateWords();
-            return { success: true, count: duplicateCount };
+            const snapshot = await getCountFromServer(itemsCol);
+            return { success: true, count: snapshot.data().count };
         }
         
         if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
             q = query(itemsCol, where('category', '==', criteria.category.trim()));
-        } else if (criteria.searchTerm) {
-            const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') ? 'question' : 'text';
-            const searchTerm = criteria.searchTerm.trim();
-            q = query(itemsCol, where(textFieldName, '>=', searchTerm), where(textFieldName, '<=', searchTerm + '\uf8ff'));
-        } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
-            const searchTerm = criteria.answerSearchTerm.trim();
-            q = query(itemsCol, where('answer', '>=', searchTerm), where('answer', '<=', searchTerm + '\uf8ff'));
+            const snapshot = await getCountFromServer(q);
+            return { success: true, count: snapshot.data().count };
         } else {
-            return { error: "معايير العد غير صالحة." };
+             // Fallback for non-indexed queries (like search) which are slow and costly.
+             // This part should be used sparingly.
+            if (criteria.searchTerm) {
+                const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') ? 'question' : 'text';
+                const searchTerm = criteria.searchTerm.trim();
+                const snapshot = await getDocs(query(itemsCol, where(textFieldName, '>=', searchTerm), where(textFieldName, '<=', searchTerm + '\uf8ff')));
+                return { success: true, count: snapshot.size };
+            } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
+                const searchTerm = criteria.answerSearchTerm.trim();
+                 const snapshot = await getDocs(query(itemsCol, where('answer', '>=', searchTerm), where('answer', '<=', searchTerm + '\uf8ff')));
+                return { success: true, count: snapshot.size };
+            }
         }
         
-        const querySnapshot = await getDocs(q);
-        return { success: true, count: querySnapshot.size };
+        return { success: false, error: "معايير العد غير صالحة." };
 
     } catch (error) {
         console.error("Error counting items:", error);
-        return { error: 'حدث خطأ أثناء عد العناصر. قد تحتاج إلى إنشاء فهرس في قاعدة البيانات.' };
+        return { success: false, error: 'حدث خطأ أثناء عد العناصر. قد تحتاج إلى إنشاء فهرس في قاعدة البيانات.' };
     }
 };
 
@@ -368,85 +371,55 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
     }
 };
 
-async function findSimilarQuestions(game: 'trap-answer' | 'educated-merchant', similarityThreshold: number, category?: string) {
-    if (!category) {
-        throw new Error("يجب تحديد قسم للبحث عن التكرارات.");
-    }
+async function findDuplicateQuestionGroups(game: 'trap-answer' | 'educated-merchant', category?: string): Promise<Map<string, { id: string; createdAt: Timestamp }[]>> {
     const collectionName = game === 'trap-answer' ? 'trap_answer_questions' : 'educated_merchant_questions';
-    const textFieldName = 'question';
-
-    const q = query(collection(db, collectionName), where("category", "==", category));
+    let q = query(collection(db, collectionName));
+    if (category) {
+        q = query(q, where("category", "==", category));
+    }
+    
     const querySnapshot = await getDocs(q);
+    const groups = new Map<string, { id: string; createdAt: Timestamp }[]>();
 
-    const questions = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        text: doc.data()[textFieldName] as string,
-        docRef: doc.ref
-    }));
-
-    if (questions.length < 2) {
-        return { groups: [], count: 0 }; // Need at least two questions to find duplicates
-    }
-
-    const groups: string[][] = [];
-    const processedIds = new Set<string>(); // Keep track of IDs already processed to avoid redundant comparisons
-    let deletedCount = 0;
-
-    for (let i = 0; i < questions.length; i++) {
-        if (processedIds.has(questions[i].id)) {
-            continue; // Skip if already part of a group
-        }
-
-        const currentGroup = [questions[i].id];
-        processedIds.add(questions[i].id);
-
-        const mainString = questions[i].text;
+    querySnapshot.forEach(doc => {
+        const data = doc.data();
+        const signature = data.similaritySignature;
+        if (!signature) return;
         
-        for (let j = i + 1; j < questions.length; j++) {
-            if (processedIds.has(questions[j].id)) {
-                continue;
-            }
+        const group = groups.get(signature) || [];
+        group.push({ id: doc.id, createdAt: doc.data().createdAt || Timestamp.now() });
+        groups.set(signature, group);
+    });
 
-            const similarity = safeCompareStrings(mainString, questions[j].text);
-            if (similarity >= similarityThreshold) {
-                currentGroup.push(questions[j].id);
-                processedIds.add(questions[j].id);
-            }
-        }
-
-        if (currentGroup.length > 1) {
-            groups.push(currentGroup);
-            currentGroup.sort();
-            deletedCount += currentGroup.length - 1;
-        }
-    }
-    return { groups, count: deletedCount };
+    return groups;
 }
 
-
-export async function deleteSimilarQuestions(game: 'trap-answer' | 'educated-merchant', similarityThreshold: number, category?: string): Promise<{ success: boolean; count?: number; error?: string; message?: string }> {
+export async function deleteSimilarQuestions(game: 'trap-answer' | 'educated-merchant', category?: string): Promise<{ success: boolean; count?: number; error?: string; message?: string }> {
     try {
-        if (!category) {
-            return { success: false, error: "يجب تحديد قسم لحذف الأسئلة المكررة منه." };
-        }
-        const { groups, count: deletedCount } = await findSimilarQuestions(game, similarityThreshold, category);
-
-        if (groups.length === 0) {
+        const duplicateGroups = await findDuplicateQuestionGroups(game, category);
+        if (duplicateGroups.size === 0) {
             return { success: true, count: 0, message: 'لم يتم العثور على أسئلة مكررة.' };
         }
 
         const batch = writeBatch(db);
         const collectionName = game === 'trap-answer' ? 'trap_answer_questions' : 'educated_merchant_questions';
-        
-        groups.forEach(group => {
-            group.sort();
-            group.pop();
+        let deletedCount = 0;
 
-            group.forEach(idToDelete => {
-                const docRef = doc(db, collectionName, idToDelete);
-                batch.delete(docRef);
-            });
-        });
+        for (const [signature, items] of duplicateGroups.entries()) {
+            if (items.length > 1) {
+                // Sort by createdAt timestamp descending (newest first)
+                items.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+                
+                // Keep the newest one (at index 0), delete the rest
+                const itemsToDelete = items.slice(1);
+                
+                itemsToDelete.forEach(item => {
+                    const docRef = doc(db, collectionName, item.id);
+                    batch.delete(docRef);
+                    deletedCount++;
+                });
+            }
+        }
 
         if (deletedCount > 0) {
             await batch.commit();
