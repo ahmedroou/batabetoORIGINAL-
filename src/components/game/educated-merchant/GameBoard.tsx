@@ -12,7 +12,7 @@ import { PlayerHUD } from './PlayerHUD';
 import { ActivityLog } from './ActivityLog';
 import { cn } from '@/lib/utils';
 import { Banknote, Building, HelpCircle, Trophy } from 'lucide-react';
-import { handlePropertyLanding, endTurn } from '@/lib/actions/educated-merchant';
+import { handlePropertyLanding, endTurn, rollDice } from '@/lib/actions/educated-merchant';
 import { Button } from '@/components/ui/button';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
 
@@ -24,12 +24,14 @@ interface GameBoardProps {
 const BOARD_SIZE = 28;
 const GRID_SIZE = 8;
 
+// Animation Constants
 const JUMP_HEIGHT = 14; 
-const STEP_BASE_DELAY = 200;
-const STEP_EXTRA_FINAL = 170; 
-const TRAIL_LIFETIME = 420;
+const STEP_BASE_DELAY_MS = 200;
+const STEP_FINAL_EXTRA_DELAY_MS = 170; 
+const TRAIL_LIFETIME_MS = 420;
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Utility to create a delay
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function GameBoard({ game, self }: GameBoardProps) {
   const board = game.educatedMerchantState?.board || [];
@@ -39,6 +41,8 @@ export function GameBoard({ game, self }: GameBoardProps) {
   const [tileSize, setTileSize] = useState(96);
   const [gapSize, setGapSize] = useState(6);
 
+  // This state now serves as the "source of truth" for piece positions on the board.
+  // It is initialized from the game state but updated locally during animations.
   const [playerPositions, setPlayerPositions] = useState<Record<string, number>>(() => {
     const map: Record<string, number> = {};
     (game.players || []).forEach((p) => (map[p.id] = p.position || 0));
@@ -50,16 +54,22 @@ export function GameBoard({ game, self }: GameBoardProps) {
   const [tileHighlight, setTileHighlight] = useState<Record<number, boolean>>({});
   const lastRollNonceRef = useRef<number | null>(null);
 
+  // Effect to reset local positions to server state when not animating
   useEffect(() => {
-    setPlayerPositions((prev) => {
-      const next = { ...prev };
-      (game.players || []).forEach((p) => {
-        if (!animatingPlayers[p.id]) next[p.id] = p.position ?? 0;
-      });
-      return next;
+    setPlayerPositions((prevPositions) => {
+      const nextPositions = { ...prevPositions };
+      let changed = false;
+      for (const player of game.players) {
+        if (!animatingPlayers[player.id] && (nextPositions[player.id] !== player.position)) {
+          nextPositions[player.id] = player.position ?? 0;
+          changed = true;
+        }
+      }
+      return changed ? nextPositions : prevPositions;
     });
   }, [game.players, animatingPlayers]);
 
+  // Effect to handle resizing the board
   useEffect(() => {
     const calculateSize = () => {
       if (!containerRef.current) return;
@@ -74,6 +84,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
     return () => window.removeEventListener('resize', calculateSize);
   }, []);
 
+  // Returns the CSS properties for a tile at a given index
   const getPositionStyles = useCallback(
     (index: number): React.CSSProperties => {
       const sideLength = GRID_SIZE - 1;
@@ -99,64 +110,50 @@ export function GameBoard({ game, self }: GameBoardProps) {
     },
     [tileSize, gapSize]
   );
-
+  
+  // This is the core animation logic. It's now purely visual.
+  // It no longer calls a server action at the end.
   const movePlayerPiece = useCallback(
     async (playerId: string, steps: number, startPos: number) => {
-      const actualSteps = Math.max(0, Math.floor(steps));
-      if (actualSteps === 0) return;
+      if (steps === 0) return;
 
       setAnimatingPlayers((s) => ({ ...s, [playerId]: true }));
 
       let currentPos = startPos;
-
-      for (let i = 0; i < actualSteps; i++) {
-        const isLast = i === actualSteps - 1;
+      for (let i = 0; i < steps; i++) {
+        const isLast = i === steps - 1;
         setIsJumping((s) => ({ ...s, [playerId]: true }));
 
         currentPos = (currentPos + 1) % BOARD_SIZE;
         setPlayerPositions((prev) => ({ ...prev, [playerId]: currentPos }));
 
         setTileHighlight((t) => ({ ...t, [currentPos]: true }));
-        setTimeout(() => setTileHighlight((t) => ({ ...t, [currentPos]: false })), TRAIL_LIFETIME);
-
+        setTimeout(() => setTileHighlight((t) => ({ ...t, [currentPos]: false })), TRAIL_LIFETIME_MS);
+        
         if (!shouldReduceMotion) {
-          const delay = STEP_BASE_DELAY + (isLast ? STEP_EXTRA_FINAL : Math.min(120, i * 25));
+          const delay = STEP_BASE_DELAY_MS + (isLast ? STEP_FINAL_EXTRA_DELAY_MS : 0);
           await sleep(delay);
         }
 
         setIsJumping((s) => ({ ...s, [playerId]: false }));
         if (!shouldReduceMotion) await sleep(50);
       }
-
-      if (!shouldReduceMotion) {
-        setIsJumping((s) => ({ ...s, [playerId]: true }));
-        await sleep(140);
-        setIsJumping((s) => ({ ...s, [playerId]: false }));
-      }
       
-      if (playerId === self.id) {
-          try {
-            await handlePropertyLanding(game.id, playerId);
-          } catch (err) {
-            console.error('handlePropertyLanding failed', err);
-          }
-      }
-
       setAnimatingPlayers((s) => {
         const copy = { ...s };
         delete copy[playerId];
         return copy;
       });
     },
-    [game.id, self.id, shouldReduceMotion]
+    [shouldReduceMotion]
   );
-  
-  const handleServerMovement = useCallback(() => {
-    const nonce = game.educatedMerchantState?.rollAnimationNonce ?? null;
-    if (nonce === null || lastRollNonceRef.current === nonce) return;
-    
+
+  // This effect listens for a new roll from the server and triggers the animation
+  useEffect(() => {
+    const nonce = game.educatedMerchantState?.rollAnimationNonce;
+    if (nonce === null || nonce === undefined || lastRollNonceRef.current === nonce) return;
+
     lastRollNonceRef.current = nonce;
-    if (game.gameState !== 'movement') return;
 
     const currentTurnIndex = game.educatedMerchantState?.currentTurnIndex ?? 0;
     const turnOrder = game.educatedMerchantState?.turnOrder ?? [];
@@ -164,17 +161,11 @@ export function GameBoard({ game, self }: GameBoardProps) {
     if (!movingPlayerId) return;
 
     const steps = game.educatedMerchantState?.lastDiceRoll ?? 0;
-    const playerFromServer = game.players.find((p) => p.id === movingPlayerId);
-    const serverPos = playerFromServer?.position ?? 0;
+    const serverPos = game.players.find((p) => p.id === movingPlayerId)?.position ?? 0;
     const startPos = (serverPos - steps + BOARD_SIZE) % BOARD_SIZE;
 
     movePlayerPiece(movingPlayerId, steps, startPos);
-
-  }, [game.educatedMerchantState?.rollAnimationNonce, game.gameState, game.players, movePlayerPiece]);
-
-  useEffect(() => {
-    handleServerMovement();
-  }, [handleServerMovement]);
+  }, [game.educatedMerchantState?.rollAnimationNonce, game, movePlayerPiece]);
 
 
   const renderCenterContent = useCallback(() => {
@@ -184,7 +175,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
 
     switch (game.gameState) {
       case 'rolling':
-      case 'movement':
         return <DiceRoll game={game} self={self} />;
       case 'property_action': {
         const player = game.players.find((p) => p.id === currentPlayerId);
@@ -235,12 +225,6 @@ export function GameBoard({ game, self }: GameBoardProps) {
     }
   }, [board, game, self]);
 
-  const turnOrder = game.educatedMerchantState?.turnOrder ?? [];
-  const currentTurnIndex = game.educatedMerchantState?.currentTurnIndex ?? 0;
-  const currentPlayerId = turnOrder[currentTurnIndex];
-  const isMyTurn = self.id === currentPlayerId;
-  const isHost = game.hostId === self.id;
-
   const boardWidth = GRID_SIZE * tileSize + (GRID_SIZE - 1) * gapSize;
   const boardHeight = boardWidth;
 
@@ -260,53 +244,40 @@ export function GameBoard({ game, self }: GameBoardProps) {
   const currentMoves = game.educatedMerchantState?.movesThisRound ?? 0;
   const aliveCount = game.players.filter((p) => p.status === 'alive').length;
 
-  const Tile = React.useMemo(() => {
-    const Inner = ({ property, isNewlyBought, isHighlighted }: { property: Property; isNewlyBought: boolean; isHighlighted?: boolean }) => {
-      let Icon = Building;
-      let baseBg = 'bg-slate-700';
-      let borderColor = 'border-slate-500';
+  const Tile = React.memo(({ property, isNewlyBought, isHighlighted }: { property: Property; isNewlyBought: boolean; isHighlighted?: boolean }) => {
+    let Icon = Building;
+    let baseBg = 'bg-slate-700';
+    let borderColor = 'border-slate-500';
 
-      if (property.type === 'start') {
-        Icon = Trophy;
-        baseBg = 'bg-yellow-500 text-black';
-        borderColor = 'border-yellow-300';
-      } else if (property.type === 'fine') {
-        Icon = Banknote;
-        baseBg = 'bg-rose-700';
-        borderColor = 'border-rose-500';
-      }
+    if (property.type === 'start') { Icon = Trophy; baseBg = 'bg-yellow-500 text-black'; borderColor = 'border-yellow-300'; } 
+    else if (property.type === 'fine') { Icon = Banknote; baseBg = 'bg-rose-700'; borderColor = 'border-rose-500'; }
 
-      const dynamicStyle: React.CSSProperties = {};
-      if (property.ownerId && property.color) {
-        dynamicStyle.backgroundColor = property.color;
-        borderColor = 'border-white/50';
-      }
+    const dynamicStyle: React.CSSProperties = {};
+    if (property.ownerId && property.color) {
+      dynamicStyle.backgroundColor = property.color;
+      borderColor = 'border-white/50';
+    }
 
-      return (
-            <motion.div
-              className={cn(
-                'w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500',
-                baseBg,
-                borderColor,
-                isNewlyBought && 'animate-pulse-glow',
-                isHighlighted && 'tile-highlight'
-              )}
-              style={dynamicStyle}
-              whileHover={{ scale: 1.03 }}
-              transition={{ duration: 0.22 }}
-            >
-              <Icon className="w-5 h-5 mb-1 flex-shrink-0" />
-              <p className="text-[10px] font-bold leading-tight line-clamp-2 text-center overflow-hidden" style={{ padding: '0 4px' }}>
-                {property.name}
-              </p>
-              {property.type === 'property' && <p className="text-[10px] font-mono mt-1">{property.price} دينار</p>}
-              {property.type === 'fine' && <p className="text-[10px] font-mono mt-1">{property.fineAmount} دينار</p>}
-            </motion.div>
-      );
-    };
-
-    return React.memo(Inner);
-  }, []);
+    return (
+      <motion.div
+        className={cn(
+          'w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500',
+          baseBg, borderColor, isNewlyBought && 'animate-pulse-glow', isHighlighted && 'tile-highlight'
+        )}
+        style={dynamicStyle}
+        whileHover={{ scale: 1.03 }}
+        transition={{ duration: 0.22 }}
+      >
+        <Icon className="w-5 h-5 mb-1 flex-shrink-0" />
+        <p className="text-[10px] font-bold leading-tight line-clamp-2 text-center overflow-hidden" style={{ padding: '0 4px' }}>
+          {property.name}
+        </p>
+        {property.type === 'property' && <p className="text-[10px] font-mono mt-1">{property.price} دينار</p>}
+        {property.type === 'fine' && <p className="text-[10px] font-mono mt-1">{property.fineAmount} دينار</p>}
+      </motion.div>
+    );
+  });
+  Tile.displayName = 'Tile';
 
   return (
     <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
@@ -325,7 +296,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
             </div>
           </div>
         </div>
-        <PlayerHUD players={game.players} turnOrder={turnOrder} currentTurnIndex={currentTurnIndex} />
+        <PlayerHUD players={game.players} turnOrder={game.educatedMerchantState?.turnOrder ?? []} currentTurnIndex={game.educatedMerchantState?.currentTurnIndex ?? 0} />
         <ActivityLog log={game.educatedMerchantState?.activityLog || []} />
       </div>
 
@@ -395,7 +366,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
                 <motion.div
                   key={p.id}
                   layoutId={`player-piece-${p.id}`}
-                  className={cn('absolute z-10', p.id === currentPlayerId && 'animate-pulse-glow')}
+                  className={cn('absolute z-10', p.id === game.educatedMerchantState?.turnOrder?.[game.educatedMerchantState.currentTurnIndex] && 'animate-pulse-glow')}
                   initial={false}
                   animate={{ ...finalStyle, y: isJumping[p.id] ? -JUMP_HEIGHT : 0, opacity: p.status === 'bankrupt' ? 0.36 : 1 }}
                   transition={{ type: 'spring', stiffness: 380, damping: 34 }}

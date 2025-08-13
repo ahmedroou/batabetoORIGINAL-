@@ -109,14 +109,14 @@ export function DiceRoll({ game, self }: DiceRollProps) {
 
 
   const renderContent = () => {
-    if (game.gameState === 'movement' || (typeof lastRoll === 'number' && !isRolling)) {
+    if (typeof lastRoll === 'number') {
          return (
              <>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-primary">نتيجة النرد</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <RollingNumber number={lastRoll || 1} maxFace={diceMax} isAnimating={isRolling} />
+                    <RollingNumber number={lastRoll} maxFace={diceMax} isAnimating={isRolling} />
                     <div className="mt-3 text-slate-300">{isRolling ? 'جارٍ التحرك...' : 'نتيجة مؤكدة من الخادم'}</div>
                 </CardContent>
              </>

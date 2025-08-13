@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { motion, AnimatePresence } from 'framer-motion';
-import { PlayerAvatar } from '@/components/game/PlayerAvatar';
+import { PlayerAvatar } from '../PlayerAvatar';
 import { HandCoins, Crown, Home, Building } from 'lucide-react';
 import type { Player } from '@/types';
 import { cn } from '@/lib/utils';
@@ -16,7 +16,6 @@ interface PlayerHUDProps {
   currentTurnIndex: number;
 }
 
-// Custom hook to animate money changes smoothly
 function useAnimatedMoney(players: Player[]) {
   const [display, setDisplay] = useState<Record<string, number>>(() => {
     const initialDisplay: Record<string, number> = {};
@@ -43,7 +42,6 @@ function useAnimatedMoney(players: Player[]) {
 
       const step = (now: number) => {
         const t = Math.min(1, (now - startTime) / duration);
-        // Ease-out function for a smoother animation
         const eased = 1 - Math.pow(1 - t, 3);
         const value = Math.round(start + (target - start) * eased);
         
@@ -64,7 +62,7 @@ function useAnimatedMoney(players: Player[]) {
         if (rafId) window.cancelAnimationFrame(rafId);
       });
     };
-  }, [players]); // Rerun when the authoritative players prop changes
+  }, [players]); 
 
   return display;
 }
@@ -72,7 +70,6 @@ function useAnimatedMoney(players: Player[]) {
 export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDProps) {
   const currentPlayerId = turnOrder[currentTurnIndex];
 
-  // compute leader (alive player with max money)
   const leaderId = useMemo(() => {
     const alive = players.filter((p) => p.status === 'alive');
     if (alive.length === 0) return null;
@@ -80,10 +77,8 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
     return top.id;
   }, [players]);
 
-  // animated money values
   const displayMoney = useAnimatedMoney(players);
 
-  // compute lightweight ranking for badges (1,2,3) by money among alive players
   const ranking = useMemo(() => {
     const sorted = [...players].slice().filter((p) => p.status === 'alive').sort((a, b) => (b.money || 0) - (a.money || 0));
     const map: Record<string, number> = {};
@@ -91,7 +86,6 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
     return map;
   }, [players]);
 
-  // readable formatting for money
   const nf = useMemo(() => new Intl.NumberFormat('ar-EG'), []);
 
   return (
