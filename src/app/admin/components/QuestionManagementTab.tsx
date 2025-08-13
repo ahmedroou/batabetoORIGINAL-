@@ -30,8 +30,8 @@ import {
   deleteDuplicateWords,
   uploadPrisonQuestionsFromJson,
   deleteSimilarQuestions,
-  uploadEducatedMerchantQuestionsFromJson,
   deleteSimilarPrisonQuestions,
+  uploadEducatedMerchantQuestionsFromJson,
 } from '@/lib/actions/admin';
 import type { Game } from '@/types';
 
@@ -206,7 +206,7 @@ export default function QuestionManagementTab() {
     const [deleteSearchTerm, setDeleteSearchTerm] = useState('');
     const [deleteAnswerSearchTerm, setDeleteAnswerSearchTerm] = useState('');
     const [deleteSimilarityCategory, setDeleteSimilarityCategory] = useState('');
-
+    const [isLoadingCount, setIsLoadingCount] = useState(false);
 
     const currentCategoryList = useMemo(() => {
         if(selectedGame === 'trap-answer' || selectedGame === 'educated-merchant') {
@@ -336,6 +336,23 @@ export default function QuestionManagementTab() {
         setIsDialogOpen(true);
     };
 
+     const handleCategoryDeleteClick = async (category: string) => {
+        if (!selectedGame || !category) return;
+        setIsLoadingCount(true);
+        const countResult = await countQuestions({ game: selectedGame, category });
+        setIsLoadingCount(false);
+
+        if (!countResult.success) {
+            toast({ title: 'خطأ', description: `فشل حساب عدد الأسئلة: ${countResult.error}`, variant: 'destructive' });
+            return;
+        }
+        
+        setDeletionCount(countResult.count || 0);
+        setDeletionParams({ game: selectedGame, category });
+        setIsDialogOpen(true);
+    };
+
+
     const confirmDelete = async () => {
         if (!deletionParams) return;
         setIsDeleting(true);
@@ -343,7 +360,7 @@ export default function QuestionManagementTab() {
         let result: { success?: boolean; count?: number; error?: string; message?: string } | undefined;
 
         if (deletionParams.duplicates) {
-            if (deletionParams.game === 'trap-answer' || deletionParams.game === 'educated-merchant') {
+             if (deletionParams.game === 'trap-answer' || deletionParams.game === 'educated-merchant') {
                 result = await deleteSimilarQuestions(deletionParams.game, deletionParams.category);
             } else if (deletionParams.game === 'prison') {
                  result = await deleteSimilarPrisonQuestions();
@@ -362,6 +379,7 @@ export default function QuestionManagementTab() {
              toast({ title: "خطأ", description: "حدث خطأ غير متوقع أثناء الحذف.", variant: "destructive" });
         }
         setDeletionParams(null);
+        setDeletionCount(null);
     };
 
     const renderUploadForm = () => (
@@ -417,9 +435,9 @@ export default function QuestionManagementTab() {
     const getUploadHelperText = () => {
         switch(selectedGame) {
             case 'trap-answer':
-                return "يجب أن يكون الملف مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `question` و `answer`.";
+                return "الملف يجب أن يكون مصفوفة من الكائنات. كل كائن يجب أن يحتوي على `question`، `answer`، و `dummyAnswers` (مصفوفة من جوابين خاطئين).";
              case 'educated-merchant':
-                return "يجب أن يكون الملف مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `question` و `answer` وحقل اختياري `dummyAnswers` (مصفوفة من الإجابات الخاطئة).";
+                return "الملف يجب أن يكون مصفوفة من الكائنات. كل كائن يجب أن يحتوي على `question` و `answer` وحقل اختياري `dummyAnswers` (مصفوفة من الإجابات الخاطئة).";
             case 'word_war': return "الملف يجب أن يكون مصفوفة من الكلمات (strings).";
             case 'prison': return "الملف يجب أن يكون مصفوفة من الأسئلة. كل سؤال يجب أن يكون كائنًا يحتوي على `text`.";
             default: return "اختر لعبة لرؤية تعليمات الرفع.";
@@ -482,7 +500,9 @@ export default function QuestionManagementTab() {
                             {currentCategoryList.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                     <Button onClick={() => handleDeleteClick({ game: selectedGame as 'trap-answer' | 'educated-merchant', category: deleteCategory })} disabled={!deleteCategory || isDeleting} variant="destructive">حذف</Button>
+                     <Button onClick={() => handleCategoryDeleteClick(deleteCategory)} disabled={!deleteCategory || isDeleting || isLoadingCount} variant="destructive">
+                        {isLoadingCount ? <Loader2 className="animate-spin" /> : 'حذف'}
+                    </Button>
                 </div>
             </div>
              <div className="p-3 border rounded-lg space-y-2">
@@ -564,18 +584,18 @@ export default function QuestionManagementTab() {
             return `سيقوم هذا الإجراء بفحص جميع الأسئلة في قسم "${deletionParams.category}" للعبة "${gameName}" وحذف المتشابه منها بناءً على بصمة النص. هل أنت متأكد؟`;
         }
         if (deletionParams.all) {
-             return `تحذير شديد! هذا الإجراء سيحذف جميع العناصر (${deletionCount || 'الكل'}) من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
+             return `تحذير شديد! هذا الإجراء سيحذف جميع العناصر من قاعدة البيانات بشكل دائم للعبة المحددة. لا يمكن التراجع عن هذا الإجراء.`;
         }
         if (deletionParams.category) {
-            return `سيقوم هذا الإجراء بحذف جميع الأسئلة (${deletionCount || 'الكل'}) من قسم "${deletionParams.category}" بشكل دائم.`;
+            return `سيقوم هذا الإجراء بحذف ${deletionCount ?? 'جميع'} الأسئلة من قسم "${deletionParams.category}" بشكل دائم.`;
         }
          if (deletionParams.searchTerm) {
-            return `سيتم حذف كل الأسئلة التي تحتوي على "${deletionParams.searchTerm}" (${deletionCount || 'الكل'} سؤال). هل أنت متأكد؟`;
+            return `سيتم حذف كل الأسئلة التي تحتوي على "${deletionParams.searchTerm}". هل أنت متأكد؟`;
         }
         if (deletionParams.answerSearchTerm) {
-            return `سيتم حذف كل الأسئلة التي جوابها يحتوي على "${deletionParams.answerSearchTerm}" (${deletionCount || 'الكل'} سؤال). هل أنت متأكد؟`;
+            return `سيتم حذف كل الأسئلة التي جوابها يحتوي على "${deletionParams.answerSearchTerm}". هل أنت متأكد؟`;
         }
-        return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف ${deletionCount || 'الكل'} عنصر بشكل دائم بناءً على المعيار الذي حددته.`
+        return `هذا الإجراء لا يمكن التراجع عنه. سيتم حذف العناصر بشكل دائم بناءً على المعيار الذي حددته.`
     };
     
     return (
@@ -629,3 +649,4 @@ export default function QuestionManagementTab() {
         </>
     );
 }
+

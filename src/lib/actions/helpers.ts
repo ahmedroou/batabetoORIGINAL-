@@ -79,11 +79,23 @@ export function getSimilaritySignature(text: string): string {
             return '';
         }
         const normalized = normalizeForSignature(text);
-        // Sort words alphabetically to handle different word orders
         const words = normalized.split(' ').sort();
         return words.join(' ');
     } catch (e) {
         console.error("Error generating similarity signature:", e, { text });
-        return text; // Fallback to the original text
+        return text; 
+    }
+}
+
+
+// This function is for client-side comparison and might differ from server signature logic
+export function safeCompareStrings(str1: string, str2: string): number {
+    try {
+        if (!str1 || !str2) return 0;
+        const s = require('string-similarity');
+        return s.compareTwoStrings(normalizeForSignature(str1), normalizeForSignature(str2));
+    } catch (e) {
+        // Fallback for environments where require is not available
+        return normalizeForSignature(str1) === normalizeForSignature(str2) ? 1 : 0;
     }
 }

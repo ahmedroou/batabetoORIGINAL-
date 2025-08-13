@@ -133,7 +133,7 @@ export async function uploadEducatedMerchantQuestionsFromJson(questions: { quest
                 const hasDummyAnswers = Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '');
 
                 const docRef = doc(questionsCol);
-                const questionData: Partial<TrapQuestion> = {
+                const questionData: Partial<TrapQuestion> & {similaritySignature: string} = {
                     question: q.question.trim(),
                     answer: q.answer.trim(),
                     category: category.trim(),
@@ -277,11 +277,25 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
     }
 
     let collectionName: string;
+    let textFieldName = 'text';
+
     switch(criteria.game) {
-        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
-        case 'educated-merchant': collectionName = 'educated_merchant_questions'; break;
-        case 'prison': collectionName = 'prison_questions'; break;
-        case 'word_war': collectionName = 'word_war_words'; break;
+        case 'trap-answer': 
+            collectionName = 'trap_answer_questions'; 
+            textFieldName = 'question';
+            break;
+        case 'educated-merchant': 
+            collectionName = 'educated_merchant_questions'; 
+            textFieldName = 'question';
+            break;
+        case 'prison': 
+            collectionName = 'prison_questions'; 
+            textFieldName = 'text';
+            break;
+        case 'word_war': 
+            collectionName = 'word_war_words'; 
+            textFieldName = 'text';
+            break;
         default: return { success: false, error: "نوع لعبة غير مدعوم." };
     }
 
@@ -298,19 +312,18 @@ export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' 
             q = query(itemsCol, where('category', '==', criteria.category.trim()));
             const snapshot = await getCountFromServer(q);
             return { success: true, count: snapshot.data().count };
-        } else {
-             // Fallback for non-indexed queries (like search) which are slow and costly.
-             // This part should be used sparingly.
-            if (criteria.searchTerm) {
-                const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant' || criteria.game === 'prison') ? 'question' : 'text';
-                const searchTerm = criteria.searchTerm.trim();
-                const snapshot = await getDocs(query(itemsCol, where(textFieldName, '>=', searchTerm), where(textFieldName, '<=', searchTerm + '\uf8ff')));
-                return { success: true, count: snapshot.size };
-            } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
-                const searchTerm = criteria.answerSearchTerm.trim();
-                 const snapshot = await getDocs(query(itemsCol, where('answer', '>=', searchTerm), where('answer', '<=', searchTerm + '\uf8ff')));
-                return { success: true, count: snapshot.size };
-            }
+        } 
+        
+        if (criteria.searchTerm) {
+            const searchTerm = criteria.searchTerm.trim();
+            const snapshot = await getDocs(query(itemsCol, where(textFieldName, '>=', searchTerm), where(textFieldName, '<=', searchTerm + '\uf8ff')));
+            return { success: true, count: snapshot.size };
+        }
+        
+        if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
+            const searchTerm = criteria.answerSearchTerm.trim();
+             const snapshot = await getDocs(query(itemsCol, where('answer', '>=', searchTerm), where('answer', '<=', searchTerm + '\uf8ff')));
+            return { success: true, count: snapshot.size };
         }
         
         return { success: false, error: "معايير العد غير صالحة." };
@@ -339,13 +352,14 @@ export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison'
         const batch = writeBatch(db);
         const itemsCol = collection(db, collectionName);
         let q;
+        const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') ? 'question' : 'text';
+
 
         if (criteria.all) {
             q = query(itemsCol);
         } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
             q = query(itemsCol, where('category', '==', criteria.category.trim()));
         } else if (criteria.searchTerm) {
-            const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant' || criteria.game === 'prison') ? 'question' : 'text';
             const searchTerm = criteria.searchTerm.trim();
             q = query(itemsCol, where(textFieldName, '>=', searchTerm), where(textFieldName, '<=', searchTerm + '\uf8ff'));
         } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
@@ -772,8 +786,12 @@ export async function editEducatedMerchantCategory(oldCategory: string, newCateg
         const updatedCategories = categories.map(c => c === oldCategory ? newCategory.trim() : c);
         batch.update(settingsRef, { list: updatedCategories });
         
-        // Note: This does NOT update questions. If questions need to be re-categorized,
-        // it must be done manually or with a separate script.
+        const questionsQuery = query(collection(db, 'educated_merchant_questions'), where("category", "==", oldCategory));
+        const questionsSnapshot = await getDocs(questionsQuery);
+
+        questionsSnapshot.forEach(doc => {
+            batch.update(doc.ref, { category: newCategory.trim() });
+        });
         
         await batch.commit();
         return { success: true };
@@ -785,11 +803,11 @@ export async function editEducatedMerchantCategory(oldCategory: string, newCateg
 };
 
 export async function deleteEducatedMerchantCategory(categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> {
-    // This function only deletes the category name, not the questions associated with it.
     if (!categoryToDelete || categoryToDelete.trim() === '') {
         return { error: 'يجب تحديد قسم للحذف.' };
     }
     
+    const batch = writeBatch(db);
     const settingsRef = doc(db, 'game_settings', 'educated_merchant_categories');
 
     try {
@@ -804,13 +822,21 @@ export async function deleteEducatedMerchantCategory(categoryToDelete: string): 
             return { error: "القسم المحدد للحذف غير موجود." };
         }
         
-        await updateDoc(settingsRef, { list: arrayRemove(categoryToDelete) });
-        
-        return { success: true, count: 0 }; // count refers to deleted questions, which is 0 here.
+        batch.update(settingsRef, { list: arrayRemove(categoryToDelete) });
 
-    } catch (error: any) {
+        const questionsQuery = query(collection(db, 'educated_merchant_questions'), where("category", "==", categoryToDelete));
+        const questionsSnapshot = await getDocs(questionsQuery);
+
+        questionsSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        await batch.commit();
+        return { success: true, count: questionsSnapshot.size };
+
+    } catch (error) {
         console.error("Error deleting category:", error);
-        return { success: false, error: 'فشل حذف قسم التاجر المتعلم.' };
+        return { success: false, error: 'فشل حذف قسم التاجر المتعلم والأسئلة المرتبطة به.' };
     }
 };
 
