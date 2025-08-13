@@ -27,7 +27,7 @@ import ComplaintsTab from './components/ComplaintsTab';
 
 
 // Server Actions
-import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
+import { generateGeniusChallenge } from '@/lib/actions/admin';
 import { useToast } from '@/hooks/use-toast';
 
 

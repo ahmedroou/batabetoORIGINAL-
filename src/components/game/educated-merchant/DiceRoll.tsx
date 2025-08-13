@@ -56,7 +56,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const isMyTurn = self.id === currentTurnPlayerId;
   const lastRoll = game.educatedMerchantState?.lastDiceRoll;
   const rollNonce = game.educatedMerchantState?.rollAnimationNonce ?? null;
-  const diceMax = game.educatedMerchantState?.diceMax ?? DEFAULT_DICE_MAX;
+  const diceMax = game.educatedMerchantState?.settings?.diceMax ?? DEFAULT_DICE_MAX;
   const lastNonceRef = useRef<number | null>(null);
 
   const startLocalSpin = useCallback(() => {

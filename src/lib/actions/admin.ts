@@ -1,5 +1,7 @@
 
 
+'use server';
+
 /**
  * @fileoverview Admin-only actions for managing game content.
  */
@@ -32,6 +34,8 @@ import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { sendSystemMail } from './user/mail';
 import { giveReward, applyPunishment } from './user/social';
 import { getRanks, getUsersByRank, getTopUsers as queryTopUsers, getTopPunisher } from './user/queries';
+import { generateGeniusChallenge as generateGeniusChallengeFlow } from '@/ai/flows/generate-genius-challenge';
+import type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput } from '@/ai/flows/generate-genius-challenge';
 
 
 // Server-side user search for admin actions
@@ -1113,3 +1117,8 @@ export const getTopUsers = queryTopUsers;
 // New server-only functions
 export { getRanks, getUsersByRank };
 export { getTopPunisher };
+
+// AI Flows
+export async function generateGeniusChallenge(input: GenerateGeniusChallengeInput): Promise<GenerateGeniusChallengeOutput> {
+    return generateGeniusChallengeFlow(input);
+}

@@ -13,13 +13,12 @@ import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown, Bot, RotateCcw, BrainCircuit } from 'lucide-react';
-import { createArticle, getArticlesForAdmin, updateArticle, deleteArticle, getAudienceGroups, createAudienceGroup, addPlayerToAudienceGroup, deleteAudienceGroup, removePlayerFromAudienceGroup, runAiJournalist, deleteOldArticles } from '@/lib/actions/news';
 import type { Article, AudienceGroup, UserProfile } from '@/types';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { searchUsers } from '@/lib/actions/user';
+import { adminSearchUsers } from '@/lib/actions/admin';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import {
   Collapsible,
@@ -27,7 +26,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogHeader as AlertDialogHeaderAlt, AlertDialogTitle as AlertDialogTitleAlt, AlertDialogDescription as AlertDialogDescriptionAlt, AlertDialogContent as AlertDialogContentAlt, AlertDialogFooter as AlertDialogFooterAlt } from '@/components/ui/alert-dialog';
-
+import { createArticle, getArticlesForAdmin, updateArticle, deleteArticle, getAudienceGroups, createAudienceGroup, addPlayerToAudienceGroup, deleteAudienceGroup, removePlayerFromAudienceGroup, runAiJournalist, deleteOldArticles } from '@/lib/actions/news';
 
 export default function NewsTab() {
     const { toast } = useToast();
@@ -194,7 +193,7 @@ export default function NewsTab() {
             return;
         }
         setIsLoadingUsers(true);
-        const users = await searchUsers(term);
+        const users = await adminSearchUsers(term);
         setSearchedUsers(users);
         setIsLoadingUsers(false);
     };

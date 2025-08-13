@@ -18,8 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { AvatarPrice, SocialRank, UserProfile } from '@/types';
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { setAvatarPrices, setPunishmentAvatarPrices, setDefaultAvatar, setSocialRanks, addPermissionToRank, removePermissionFromRank, getAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar } from '@/lib/actions/admin';
-import { getRanks, getTopUsers as queryTopUsers } from '@/lib/actions/user';
+import { setAvatarPrices, setPunishmentAvatarPrices, setDefaultAvatar, setSocialRanks, addPermissionToRank, removePermissionFromRank, getAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar, getTopUsers } from '@/lib/actions/admin';
+import { getRanks } from '@/lib/actions/user';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ALL_PERMISSIONS } from '@/data/permissions';
@@ -66,8 +66,8 @@ export default function AdminStoreClient() {
             getPunishmentAvatarPrices(),
             getRanks(),
             getDefaultAvatar(),
-            queryTopUsers('coins', 5),
-            queryTopUsers('leaderboardPoints', 5),
+            getTopUsers('coins', 5),
+            getTopUsers('leaderboardPoints', 5),
         ]);
 
 

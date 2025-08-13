@@ -6,8 +6,8 @@ import { db } from '@/lib/firebase';
 import { doc, runTransaction, getDoc, Timestamp, deleteField } from 'firebase/firestore';
 import type { Game, Player, ChallengeResult, PlayerProgress, GridPosition, PathTile } from '@/types';
 import { GENIUS_CHALLENGES } from '@/data/genius-challenges';
-import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 import { updateLeagueScoresForGameEnd } from './user';
+import { generateGeniusChallenge } from './admin';
 
 const STARTING_POINTS_MAZE = 10;
 const INTRO_COUNTDOWN_SECONDS = 5;
