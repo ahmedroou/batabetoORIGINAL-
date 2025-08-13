@@ -39,7 +39,7 @@ type DeletionParams = {
     game: 'trap-answer' | 'word_war' | 'prison' | 'educated-merchant'; 
     category?: string; 
     all?: boolean; 
-    duplicates?: { threshold: number };
+    duplicates?: { threshold: number } | 'word_war_duplicates';
     searchTerm?: string;
     answerSearchTerm?: string;
 };
@@ -559,6 +559,9 @@ export default function QuestionManagementTab() {
     const getDialogDescription = () => {
         if (!deletionParams) return '';
         if (deletionParams.duplicates) {
+            if (deletionParams.game === 'trap-answer') {
+                 return `سيقوم هذا الإجراء بحذف جميع الأسئلة المكررة (${deletionCount}) من قسم "${deletionParams.category}"، مع الإبقاء على نسخة واحدة فقط من كل سؤال. هل أنت متأكد؟`;
+            }
             return `سيقوم هذا الإجراء بحذف جميع العناصر المكررة (${deletionCount}) من قاعدة البيانات، مع الإبقاء على نسخة واحدة فقط من كل عنصر. هل أنت متأكد؟`;
         }
         if (deletionParams.all) {
