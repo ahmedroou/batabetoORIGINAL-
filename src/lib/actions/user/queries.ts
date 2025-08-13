@@ -253,3 +253,5 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
         return [];
     }
 }
+
+    
