@@ -482,12 +482,14 @@ export interface TrapQuestion {
     answer: string;
     category: string;
     dummyAnswers?: string[];
-    randomKey?: number; // Add this field for efficient random fetching
+    randomKey?: number;
+    createdAt?: Timestamp;
 }
 
 export interface PrisonQuestion {
     id: string;
     text: string;
+    createdAt?: Timestamp;
 }
 
 export interface AvatarPrice {
@@ -539,6 +541,7 @@ export interface EducatedMerchantQuestion {
     answer: string;
     category: string;
     dummyAnswers?: string[];
+    createdAt?: Timestamp;
 }
 
 export interface Game {

@@ -13,7 +13,8 @@ import {
     writeBatch,
     query,
     where,
-    getCountFromServer
+    getCountFromServer,
+    serverTimestamp,
 } from 'firebase/firestore';
 import type { TrapQuestion } from '@/types';
 import { isFirebaseError, getSimilaritySignature } from '../helpers';
@@ -75,6 +76,7 @@ export async function uploadEducatedMerchantQuestionsFromJson(questions: QAJson[
                 randomKey: Math.random(),
                 similaritySignature: getSimilaritySignature(normalize(q.question)),
                 ...(hasDummy && { dummyAnswers: q.dummyAnswers!.map(d => normalize(d)) }),
+                createdAt: serverTimestamp(),
             };
             ops.push(b => b.set(docRef, data));
             valid++;
@@ -109,6 +111,7 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: QAJson[], cat
                 randomKey: Math.random(),
                 similaritySignature: getSimilaritySignature(normalize(q.question)),
                 ...(hasDummy && { dummyAnswers: q.dummyAnswers!.map(d => normalize(d)) }),
+                createdAt: serverTimestamp(),
             };
             ops.push(b => b.set(docRef, data));
             valid++;
@@ -134,7 +137,11 @@ export async function uploadPrisonQuestionsFromJson(questions: PrisonJson[]) {
         const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
         for (const q of cleaned) {
             const docRef = doc(questionsCol);
-            ops.push(b => b.set(docRef, { text: normalize(q.text), similaritySignature: getSimilaritySignature(normalize(q.text)) }));
+            ops.push(b => b.set(docRef, { 
+                text: normalize(q.text), 
+                similaritySignature: getSimilaritySignature(normalize(q.text)),
+                createdAt: serverTimestamp(),
+            }));
             valid++;
         }
         await commitChunks(ops);
@@ -157,7 +164,7 @@ export async function uploadWordWarWordsFromJson(words: string[]) {
         const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
         for (const word of unique) {
             const ref = doc(wordsCol);
-            ops.push(b => b.set(ref, { text: word }));
+            ops.push(b => b.set(ref, { text: word, createdAt: serverTimestamp() }));
         }
         await commitChunks(ops);
         return { success: true, count: unique.length };
