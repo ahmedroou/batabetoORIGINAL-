@@ -985,7 +985,7 @@ export async function seasonalReset(topN = 3) {
  * -----------------------------------------------------------------------*/
 
 // Kept to avoid breaking imports in existing codebases, mapped to new getClans
-export async function getClansLegacy(): Promise<Clan[]> {
-  const { clans } = await getClans();
-  return clans;
+export async function getClansLegacy(): Promise<{clans: Clan[]}> {
+  const clans = await getClans();
+  return {clans};
 }

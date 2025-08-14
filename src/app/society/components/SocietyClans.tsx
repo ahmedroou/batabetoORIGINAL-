@@ -121,7 +121,7 @@ export default function SocietyClans() {
   const fetchClans = useCallback(async () => {
     setIsLoading(true);
     const fetchedClans = await getClans();
-    setClans(fetchedClans.clans);
+    setClans(fetchedClans);
     setIsLoading(false);
   }, []);
 
