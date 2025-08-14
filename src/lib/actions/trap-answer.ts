@@ -581,7 +581,7 @@ async function _advanceToResults(
  * Minimal Transaction type (to keep helpers typed)
  * ----------------------------------------------------------- */
 // نستعمل واجهة بسيطة لتجنّب استيراد نوع داخلي غير عام.
-interface FirebaseFirestoreLikeTransaction {
+type FirebaseFirestoreLikeTransaction = {
   get: (ref: any) => Promise<any>;
   update: (ref: any, data: any) => void;
-}
+};
