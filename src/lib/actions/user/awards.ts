@@ -130,11 +130,11 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     // --- New Permissions Calculation ---
     // This part is crucial for the optimization.
     const getRank = (points: number) => {
-        const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
+        const sortedRanks = allRanks ? [...allRanks].sort((a, b) => b.threshold - a.threshold) : [];
         for (const rank of sortedRanks) {
             if (points >= rank.threshold) return rank;
         }
-        return sortedRanks[sortedRanks.length - 1] || null;
+        return sortedRanks.length > 0 ? sortedRanks[sortedRanks.length - 1] : null;
     };
 
     Object.keys(updates).forEach(playerId => {

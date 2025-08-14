@@ -66,7 +66,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
 
     // Scenario 3: Player votes for their own trap answer and gets penalized.
     test('should penalize a player for voting for their own answer', () => {
-        const playerAnswers = { p1: 'كوبي', p2: 'ناغويا', p3: 'تشيبا', p4: 'سaitama' };
+        const playerAnswers = { p1: 'كوبي', p2: 'ناغويا', p3: 'تشيبا', p4: 'saitama' };
         const playerGuesses = {
             p1: 'كوبي', // Alice voted for her own answer, gets -1
             p2: 'طوكيو',
@@ -74,7 +74,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p4: 'طوكيو',
         };
 
-        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, [], ['طوكيو', 'كوبي', 'ناغويا', 'تشيبا', 'سaitama']);
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, [], ['طوكيو', 'كوبي', 'ناغويا', 'تشيبا', 'saitama']);
 
         expect(roundScores['p1'].points).toBe(-1); // Penalty for self-vote
         expect(roundScores['p2'].points).toBe(2);
