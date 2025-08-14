@@ -38,9 +38,6 @@ const nextConfig = {
     // تقدر تزود deviceSizes أو imageSizes حسب احتياجك
   },
 
-  // البديل المستقر بدل الإعداد التجريبي القديم
-  serverExternalPackages: ['@opentelemetry/instrumentation'],
-
   experimental: {
     // يقلل حجم الحِزم ويحسّن سرعة التطوير والإنتاج مع مكتبات كبيرة
     optimizePackageImports: [
@@ -48,6 +45,8 @@ const nextConfig = {
       'date-fns',
       'lodash'
     ],
+    // The new correct way to handle this server package
+    serverComponentsExternalPackages: ['@opentelemetry/instrumentation'],
   },
 };
 
