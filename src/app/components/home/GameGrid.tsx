@@ -161,28 +161,28 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
               <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10" />
 
               <Card className="relative h-full border-none bg-transparent shadow-none flex flex-col">
-                <CardHeader className="relative text-center">
+                <CardHeader className="relative text-center pb-3">
                   {tag && (
                     <span className="absolute start-3 top-3 select-none rounded-full border border-white/10 bg-background/70 px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur inline-flex items-center gap-1">
                       <TagIcon className="w-3 h-3" /> {tag}
                     </span>
                   )}
-                  <div className="mx-auto mb-2 grid h-16 w-16 place-items-center rounded-2xl border border-white/15 bg-gradient-to-b from-background/70 to-background/40 shadow-inner">
-                    <Icon className="h-10 w-10 text-primary transition-transform duration-300 group-hover:scale-105" />
+                  <div className="mx-auto mb-2 grid h-14 w-14 place-items-center rounded-2xl border border-white/15 bg-gradient-to-b from-background/70 to-background/40 shadow-inner">
+                    <Icon className="h-8 w-8 text-primary transition-transform duration-300 group-hover:scale-105" />
                   </div>
-                  <CardTitle className="text-xl font-bold tracking-tight">{game.title}</CardTitle>
-                  <CardDescription className="mx-auto max-w-[28ch] leading-relaxed">
+                  <CardTitle className="text-lg font-bold tracking-tight">{game.title}</CardTitle>
+                  <CardDescription className="mx-auto max-w-[28ch] leading-relaxed text-xs">
                     {game.description}
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="flex-grow">
+                <CardContent className="flex-grow px-4 py-2">
                     <div className="border-t border-white/10 my-2"></div>
                     <div className="space-y-1 text-center">
-                         <h4 className="text-sm font-bold text-muted-foreground flex items-center justify-center gap-1"><Trophy className="w-4 h-4 text-amber-400"/> الجوائز</h4>
+                         <h4 className="text-xs font-bold text-muted-foreground flex items-center justify-center gap-1"><Trophy className="w-3 h-3 text-amber-400"/> الجوائز</h4>
                          {game.prizes.map((prize, pIdx) => (
                              <div key={pIdx} className="text-xs flex justify-center items-center gap-2">
                                  <span className="font-semibold">{prize.rank}:</span>
-                                 <div className="flex items-center gap-2">
+                                 <div className="flex items-center gap-1">
                                      <span className="flex items-center gap-1"><Star className="w-3 h-3 text-primary"/> {prize.points}</span>
                                      {prize.coins > 0 && <span className="flex items-center gap-1"><Coins className="w-3 h-3 text-yellow-400"/> {prize.coins}</span>}
                                  </div>
@@ -190,7 +190,7 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
                          ))}
                     </div>
                 </CardContent>
-                <CardFooter className="relative mt-auto pt-4">
+                <CardFooter className="relative mt-auto pt-3 pb-4 px-4">
                   <Button
                     className="w-full rounded-xl bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg transition-transform hover:opacity-90 focus-visible:translate-y-[1px]"
                     onClick={() => handleCreate(game.type)}
