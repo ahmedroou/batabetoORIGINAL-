@@ -109,16 +109,18 @@ describe('Educated Merchant - Game Logic Helpers', () => {
     let game = createMockGame(mockPlayers, { board: mockBoard, turnOrder: mockPlayers.map(p => p.id) });
     
     // Setup state as if purchase has been initiated
-    game.gameState = 'question';
-    game.players[0].money = 1000 - property.price; // Money is deducted before question
-    game.players[0].position = 1;
-    game.educatedMerchantState = {
-      ...game.educatedMerchantState,
-      currentQuestion: { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] },
-      pendingPurchase: { playerId: 'p1', propertyId: 1, price: property.price, questionId: 'q1', propertyName: property.name },
+    const gameAfterPurchaseInit: Game = {
+        ...game,
+        gameState: 'question',
+        players: game.players.map(p => p.id === 'p1' ? { ...p, money: 1000 - property.price, position: 1 } : p),
+        educatedMerchantState: {
+          ...game.educatedMerchantState,
+          currentQuestion: { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] },
+          pendingPurchase: { playerId: 'p1', propertyId: 1, price: property.price, questionId: 'q1', propertyName: property.name },
+        },
     };
 
-    const { updates: finalUpdates } = _answerQuestion(game, 'p1', 'Correct');
+    const { updates: finalUpdates } = _answerQuestion(gameAfterPurchaseInit, 'p1', 'Correct');
     const finalBoard = finalUpdates['educatedMerchantState.board'];
     const finalPlayers = finalUpdates.players;
 
@@ -133,16 +135,18 @@ describe('Educated Merchant - Game Logic Helpers', () => {
     let game = createMockGame(mockPlayers, { board: mockBoard, turnOrder: mockPlayers.map(p => p.id) });
 
     // Setup state as if purchase has been initiated
-    game.gameState = 'question';
-    game.players[0].money = 1000 - property.price; // Money deducted before question
-    game.players[0].position = 1;
-    game.educatedMerchantState = {
-      ...game.educatedMerchantState,
-      currentQuestion: { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] },
-      pendingPurchase: { playerId: 'p1', propertyId: 1, price: property.price, questionId: 'q1', propertyName: property.name },
+    const gameAfterPurchaseInit: Game = {
+        ...game,
+        gameState: 'question',
+        players: game.players.map(p => p.id === 'p1' ? { ...p, money: 1000 - property.price, position: 1 } : p),
+        educatedMerchantState: {
+          ...game.educatedMerchantState,
+          currentQuestion: { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] },
+          pendingPurchase: { playerId: 'p1', propertyId: 1, price: property.price, questionId: 'q1', propertyName: property.name },
+        },
     };
 
-    const { updates: finalUpdates } = _answerQuestion(game, 'p1', 'Wrong');
+    const { updates: finalUpdates } = _answerQuestion(gameAfterPurchaseInit, 'p1', 'Wrong');
     const finalBoard = finalUpdates['educatedMerchantState.board'];
     const finalPlayers = finalUpdates.players;
 
@@ -261,4 +265,3 @@ describe('Educated Merchant - End of Game Awards', () => {
     });
 });
     
-
