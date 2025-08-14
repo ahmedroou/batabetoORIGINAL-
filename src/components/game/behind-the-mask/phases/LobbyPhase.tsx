@@ -17,6 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
 import { startGame, updateMafiaSettings } from '@/lib/actions/behind-the-mask';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 
 interface LobbyPhaseProps {
@@ -27,6 +28,7 @@ interface LobbyPhaseProps {
 export function LobbyPhase({ game, self }: LobbyPhaseProps) {
     const { toast } = useToast();
     const router = useRouter();
+    const { getSocialRankForUser } = useAuth(); // <-- Get rank function
     const isHost = game.hostId === self.id;
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
@@ -147,19 +149,31 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
             <div className="space-y-2">
               <Label>اللاعبون ({activePlayers.length})</Label>
               <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
-                {activePlayers.map(p => (
-                  <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
-                    <div className="flex items-center gap-3">
-                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
-                        <p className="font-bold text-lg">{p.name}</p>
-                    </div>
-                     {isHost && p.id !== self?.id && (
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
-                            <UserX className="w-4 h-4" />
-                        </Button>
-                     )}
-                  </div>
-                ))}
+                {activePlayers.map(p => {
+                    const rank = getSocialRankForUser(p.leaderboardPoints);
+                    const RankIcon = rank?.icon;
+                    return (
+                        <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
+                            <div className="flex items-center gap-3">
+                                <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
+                                <div>
+                                    <p className="font-bold text-lg">{p.name}</p>
+                                    {rank && RankIcon && (
+                                        <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                                            <RankIcon className="w-3 h-3 text-amber-500" />
+                                            {rank.name}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                             {isHost && p.id !== self?.id && (
+                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
+                                    <UserX className="w-4 h-4" />
+                                </Button>
+                             )}
+                        </div>
+                    );
+                })}
               </div>
             </div>
           </CardContent>

@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import * as roomActions from '@/lib/actions/room';
 import * as merchantActions from '@/lib/actions/educated-merchant';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -17,6 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/hooks/useAuth';
 
 interface LobbyPhaseProps {
     game: Game;
@@ -26,6 +27,7 @@ interface LobbyPhaseProps {
 export function EducatedMerchantLobby({ game, self }: LobbyPhaseProps) {
     const { toast } = useToast();
     const router = useRouter();
+    const { getSocialRankForUser } = useAuth(); // <-- Get rank function
     const [isCopying, setIsCopying] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
@@ -58,6 +60,7 @@ export function EducatedMerchantLobby({ game, self }: LobbyPhaseProps) {
             await merchantActions.startGame(game.id, self.id);
         } catch (error: any) {
             toast({ title: "خطأ في بدء اللعبة", description: error.message, variant: "destructive" });
+        } finally {
             setIsSubmitting(false);
         }
     };
@@ -100,19 +103,31 @@ export function EducatedMerchantLobby({ game, self }: LobbyPhaseProps) {
                     <div className="space-y-2">
                         <Label>اللاعبون ({activePlayers.length})</Label>
                         <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
-                            {activePlayers.map(p => (
-                                <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
-                                    <div className="flex items-center gap-3">
-                                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
-                                        <p className="font-bold text-lg">{p.name}</p>
+                            {activePlayers.map(p => {
+                                const rank = getSocialRankForUser(p.leaderboardPoints);
+                                const RankIcon = rank?.icon;
+                                return (
+                                    <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
+                                        <div className="flex items-center gap-3">
+                                            <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
+                                            <div>
+                                                <p className="font-bold text-lg">{p.name}</p>
+                                                {rank && RankIcon && (
+                                                    <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                                                        <RankIcon className="w-3 h-3 text-amber-500" />
+                                                        {rank.name}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {isHost && p.id !== self.id && (
+                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
+                                                <UserX className="w-4 h-4" />
+                                            </Button>
+                                        )}
                                     </div>
-                                    {isHost && p.id !== self.id && (
-                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
-                                            <UserX className="w-4 h-4" />
-                                        </Button>
-                                    )}
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 </CardContent>
@@ -140,7 +155,7 @@ export function EducatedMerchantLobby({ game, self }: LobbyPhaseProps) {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
+                    <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={buttonVariants({ variant: "destructive" })}>
                     {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
                     </AlertDialogAction>
                 </AlertDialogFooter>

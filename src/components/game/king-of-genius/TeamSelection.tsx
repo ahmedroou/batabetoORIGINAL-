@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -16,6 +17,7 @@ import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { useToast } from '@/hooks/use-toast';
 import { Users, Swords, Loader2, Shuffle } from 'lucide-react';
 import { selectTeam, startKingOfGeniusGame, randomizeTeams } from '@/lib/actions/king-of-genius';
+import { useAuth } from '@/hooks/useAuth';
 
 interface TeamSelectionProps {
   game: Game;
@@ -40,8 +42,9 @@ const TeamColumn = ({
   maxTeamSize: number;
   disabled: boolean;
 }) => {
-  const isFull = players.length >= maxTeamSize && maxTeamSize > 0;
-  const isInTeam = players.some((p) => p.id === self.id);
+    const { getSocialRankForUser } = useAuth(); // <-- Get rank function
+    const isFull = players.length >= maxTeamSize && maxTeamSize > 0;
+    const isInTeam = players.some((p) => p.id === self.id);
 
   return (
     <div className="flex flex-col gap-4 p-4 bg-muted/50 rounded-lg border">
@@ -54,28 +57,38 @@ const TeamColumn = ({
       </h3>
       <div className="space-y-3 min-h-[160px] bg-background/70 p-2 rounded-md">
         <AnimatePresence>
-          {players.map((p) => (
-            <motion.div
-              key={p.id}
-              layoutId={`player-${p.id}`}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              className="flex items-center gap-3 p-2 bg-card rounded-md shadow-sm border-l-4"
-              style={{
-                borderColor:
-                  teamId === 'A' ? 'hsl(var(--primary))' : 'rgb(236 72 153)',
-              }}
-            >
-              <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12" />
-              <div>
-                <p className="font-bold text-lg">{p.name}</p>
-                {p.id === self.id && (
-                  <p className="text-xs text-primary font-bold">(أنت)</p>
-                )}
-              </div>
-            </motion.div>
-          ))}
+          {players.map((p) => {
+              const rank = getSocialRankForUser(p.leaderboardPoints);
+              const RankIcon = rank?.icon;
+              return (
+                <motion.div
+                  key={p.id}
+                  layoutId={`player-${p.id}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  className="flex items-center gap-3 p-2 bg-card rounded-md shadow-sm border-l-4"
+                  style={{
+                    borderColor:
+                      teamId === 'A' ? 'hsl(var(--primary))' : 'rgb(236 72 153)',
+                  }}
+                >
+                  <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12" />
+                  <div>
+                    <p className="font-bold text-lg">{p.name}</p>
+                    {rank && RankIcon && (
+                        <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                            <RankIcon className="w-3 h-3 text-amber-500" />
+                            {rank.name}
+                        </p>
+                    )}
+                    {p.id === self.id && (
+                      <p className="text-xs text-primary font-bold">(أنت)</p>
+                    )}
+                  </div>
+                </motion.div>
+              );
+          })}
         </AnimatePresence>
       </div>
       <Button
@@ -101,6 +114,7 @@ const TeamColumn = ({
 export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { getSocialRankForUser } = useAuth(); // <-- Get rank function
 
   const handleSelectTeam = async (team: 'A' | 'B') => {
     if (self.team === team) return;
@@ -212,16 +226,26 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
                 لاعبون في الانتظار
               </h4>
               <div className="flex justify-center flex-wrap gap-4 mt-2">
-                {unassigned.map((p) => (
-                  <motion.div
-                    key={p.id}
-                    layoutId={`player-${p.id}`}
-                    className="flex flex-col items-center"
-                  >
-                    <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12" />
-                    <p className="text-sm font-medium">{p.name}</p>
-                  </motion.div>
-                ))}
+                {unassigned.map((p) => {
+                    const rank = getSocialRankForUser(p.leaderboardPoints);
+                    const RankIcon = rank?.icon;
+                    return (
+                        <motion.div
+                            key={p.id}
+                            layoutId={`player-${p.id}`}
+                            className="flex flex-col items-center"
+                        >
+                            <PlayerAvatar avatarId={p.avatarId} className="w-12 h-12" />
+                            <p className="text-sm font-medium">{p.name}</p>
+                            {rank && RankIcon && (
+                                <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                                    <RankIcon className="w-3 h-3 text-amber-500" />
+                                    {rank.name}
+                                </p>
+                            )}
+                        </motion.div>
+                    )
+                })}
               </div>
             </motion.div>
           )}
