@@ -81,8 +81,6 @@ interface WordWarGameProps {
 const asAny = (fn: any) => fn as any;
 
 const k = {
-  boardColsSm: 5,
-  boardColsMd: 8,
   maxHintLen: 8,
 };
 
@@ -745,7 +743,7 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
           </div>
         </header>
 
-        <main className={cn("w-full flex-grow grid gap-1 sm:gap-2 p-1 md:p-2 max-w-7xl mx-auto", `grid-cols-${k.boardColsSm} md:grid-cols-${k.boardColsMd}`)}>
+        <main className={cn("w-full flex-grow grid gap-1 sm:gap-2 p-1 md:p-2 max-w-7xl mx-auto", "grid-cols-4 sm:grid-cols-5 lg:grid-cols-8")}>
           {cards.map((card, index) => {
             const susp = (ww.suspicions?.[card.text] || []) as string[];
             const isSuspectedAny = susp.length > 0;
@@ -766,7 +764,7 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
                   onClick={() => revealCard(card.text)}
                   aria-label={`بطاقة: ${card.text}`}
                 >
-                  <span className={cn(card.revealed && "opacity-20")}>{card.text}</span>
+                  <span className={cn("text-base md:text-lg", card.revealed && "opacity-20")}>{card.text}</span>
 
                   {/* Suspicions bubble */}
                   {isSuspectedAny && !card.revealed && (
@@ -838,7 +836,7 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
           <h1 className="text-3xl md:text-4xl font-extrabold text-zinc-900">كشف اللوحة!</h1>
           <p className="text-zinc-500">هذه هي أماكن الكلمات الحقيقية.</p>
         </header>
-        <main className={cn("w-full flex-grow grid gap-2 p-2 max-w-7xl mx-auto", `grid-cols-${k.boardColsSm} md:grid-cols-${k.boardColsMd}`)}>
+        <main className={cn("w-full flex-grow grid gap-2 p-2 max-w-7xl mx-auto", "grid-cols-4 sm:grid-cols-5 lg:grid-cols-8")}>
           {cards.map((card, index) => (
             <motion.div key={card.text + index} initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.02, type: "spring" }} className={cn("w-full h-20 md:h-24 rounded-md flex items-center justify-center p-2 text-center font-bold text-base md:text-lg border shadow-sm", getCardColorStyles(card, true, game.gameState, false))}>
               {card.text}
