@@ -542,7 +542,7 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
 
         {/* Center: App Name (visible on medium screens and up) */}
         <div className="hidden md:block">
-            <span className="text-2xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-fuchsia-500">
+            <span className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-fuchsia-500">
                 بطابيطو
             </span>
         </div>
