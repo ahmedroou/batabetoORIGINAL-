@@ -36,34 +36,52 @@ const numberOnly = (raw: string) => raw.replace(/[^0-9]/g, "");
 const currencyIcon = (t: ChallengePrize["type"]) => {
   switch (t) {
     case "coins":
-      return <CircleDollarSign className="w-4 h-4" />;
+      return <CircleDollarSign className="w-4 h-4 text-yellow-400" />;
     case "diamonds":
-      return <Gem className="w-4 h-4" />;
+      return <Gem className="w-4 h-4 text-sky-400" />;
     case "honorPoints":
-      return <Shield className="w-4 h-4" />;
+      return <Shield className="w-4 h-4 text-emerald-400" />;
     default:
       return null;
   }
 };
 
 // -------------------------------
-// PrizeInput
+// PrizeInput (Improved Version)
 // -------------------------------
 const PrizeInput = ({ prize, onUpdate, onRemove }: { prize: ChallengePrize; onUpdate: (p: ChallengePrize) => void; onRemove: () => void }) => {
   return (
     <div className="flex gap-2 items-center bg-muted/70 p-2 rounded-lg border border-border/50">
       <Select value={prize.type} onValueChange={(v) => onUpdate({ ...prize, type: v as any })}>
-        <SelectTrigger className="w-[140px]">
+        <SelectTrigger className="w-[140px] bg-background">
           <SelectValue placeholder="نوع الجائزة" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="coins" className="flex items-center gap-2">كوينز</SelectItem>
-          <SelectItem value="diamonds">ألماس</SelectItem>
-          <SelectItem value="honorPoints">نقاط شرف</SelectItem>
+          <SelectItem value="coins">
+            <div className="flex items-center gap-2">
+              <CircleDollarSign className="w-4 h-4 text-yellow-500" />
+              كوينز
+            </div>
+          </SelectItem>
+          <SelectItem value="diamonds">
+            <div className="flex items-center gap-2">
+              <Gem className="w-4 h-4 text-sky-500" />
+              ألماس
+            </div>
+          </SelectItem>
+          <SelectItem value="honorPoints">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-emerald-500" />
+              نقاط شرف
+            </div>
+          </SelectItem>
         </SelectContent>
       </Select>
 
       <div className="relative flex-1">
+        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none opacity-80">
+            {currencyIcon(prize.type)}
+        </div>
         <Input
           type="text"
           inputMode="numeric"
@@ -72,16 +90,17 @@ const PrizeInput = ({ prize, onUpdate, onRemove }: { prize: ChallengePrize; onUp
           onChange={(e) => onUpdate({ ...prize, value: Number(numberOnly(e.target.value)) || 0 })}
           placeholder="القيمة"
           aria-label="قيمة الجائزة"
+          className="pl-9 bg-background"
         />
-        <div className="absolute left-2 top-1/2 -translate-y-1/2 opacity-70">{currencyIcon(prize.type)}</div>
       </div>
 
-      <Button size="icon" variant="ghost" className="text-destructive" onClick={onRemove} aria-label="حذف الجائزة">
+      <Button size="icon" variant="ghost" className="text-destructive shrink-0" onClick={onRemove} aria-label="حذف الجائزة">
         <Trash2 className="w-4 h-4" />
       </Button>
     </div>
   );
 };
+
 
 // -------------------------------
 // ChallengeForm
@@ -687,4 +706,3 @@ export default function ChallengesTab() {
     </div>
   );
 }
-
