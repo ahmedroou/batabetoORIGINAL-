@@ -12,6 +12,7 @@ import { GAME_ICONS } from '@/data/icons';
 import type { Game } from '@/types';
 import { Star, Loader2, Heart, TrendingUp, Trophy, Coins } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 type LoadingState =
   | 'create-king-of-genius'
@@ -175,20 +176,32 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
                     {game.description}
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="flex-grow px-4 py-2">
-                    <div className="border-t border-white/10 my-2"></div>
-                    <div className="space-y-1 text-center">
-                         <h4 className="text-xs font-bold text-muted-foreground flex items-center justify-center gap-1"><Trophy className="w-3 h-3 text-amber-400"/> الجوائز</h4>
-                         {game.prizes.map((prize, pIdx) => (
-                             <div key={pIdx} className="text-xs flex justify-center items-center gap-2">
-                                 <span className="font-semibold">{prize.rank}:</span>
-                                 <div className="flex items-center gap-1">
-                                     <span className="flex items-center gap-1"><Star className="w-3 h-3 text-primary"/> {prize.points}</span>
-                                     {prize.coins > 0 && <span className="flex items-center gap-1"><Coins className="w-3 h-3 text-yellow-400"/> {prize.coins}</span>}
-                                 </div>
-                             </div>
-                         ))}
-                    </div>
+                <CardContent className="flex-grow px-4 py-2 flex flex-col items-center justify-center">
+                    <div className="border-t border-white/10 my-2 w-full"></div>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                             <Button variant="ghost" size="sm" className="inline-flex items-center gap-1 text-muted-foreground hover:text-primary">
+                                <Trophy className="w-4 h-4 text-amber-400"/>
+                                <span>عرض الجوائز</span>
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="center">
+                             <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-violet-900/50 via-background/60 to-violet-900/50 p-3 text-sm text-foreground shadow-lg backdrop-blur">
+                                <h4 className="font-bold text-center mb-2">الجوائز</h4>
+                                <div className="space-y-2">
+                                {game.prizes.map((prize, pIdx) => (
+                                    <div key={pIdx} className="flex items-center justify-between gap-4 rounded-md bg-black/30 p-2">
+                                        <span className="font-semibold">{prize.rank}:</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="inline-flex items-center gap-1.5"><Star className="w-4 h-4 text-primary"/> {prize.points}</span>
+                                            {prize.coins > 0 && <span className="inline-flex items-center gap-1.5"><Coins className="w-4 h-4 text-yellow-400"/> {prize.coins}</span>}
+                                        </div>
+                                    </div>
+                                ))}
+                                </div>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
                 </CardContent>
                 <CardFooter className="relative mt-auto pt-3 pb-4 px-4">
                   <Button
