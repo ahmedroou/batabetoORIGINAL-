@@ -1,8 +1,7 @@
-
 'use server';
 
 /**
- * @fileOverview AI flow to generate a daily news article summarizing game events.
+ * @fileOverview AI flow to generate a daily news article summarizing game events, including a unique cover image.
  *
  * - generateNewsArticle - The main function that orchestrates the generation.
  */
@@ -91,7 +90,7 @@ Today's Date: {{{date}}}
 {{/if}}
 ---
 Based on ALL of this information, provide a summary. Select only the key events that would make for a juicy news story. Connect new events to older stories if possible. Ignore minor events unless they contribute to a larger narrative (e.g., a top player losing a duel).
-`,
+`
 });
 
 // 2. Define the Writer Prompt (using a more creative model)
@@ -121,10 +120,10 @@ Your task is to write a news article in Arabic.
 - Use a satirical, humorous, and slightly mocking tone.
 - Do not just list the events. Create a story around them.
 - The article should be engaging and make the players feel like their actions have consequences and are being watched.
-`,
+`
 });
 
-// 3. Define the main Flow that orchestrates the two steps
+// 3. Define the main Flow that orchestrates all steps
 const newsGeneratorFlow = ai.defineFlow(
   {
     name: 'newsGeneratorFlow',
@@ -144,12 +143,33 @@ const newsGeneratorFlow = ai.defineFlow(
       throw new Error('AI Writer failed to produce an article.');
     }
 
+    // Step 3: Generate an image based on the headline
+    let imageUrl = "";
+    try {
+        const imagePrompt = `Generate a symbolic, high-contrast, digital art style image representing the following news headline: "${draftArticle.headline}". The style should be like a dramatic newspaper illustration, using dark tones with highlights of purple and red.`;
+        const { media } = await ai.generate({
+            model: 'googleai/gemini-2.0-flash-preview-image-generation',
+            prompt: imagePrompt,
+            config: {
+                responseModalities: ['TEXT', 'IMAGE'],
+            },
+        });
+        
+        if (media?.url) {
+            imageUrl = media.url;
+        } else {
+             console.warn("Image generation succeeded but returned no media URL.");
+        }
+    } catch (error) {
+        // Log the error but don't fail the entire flow if image generation fails
+        console.error("AI Image Generation failed:", error);
+    }
+
     return {
       headline: draftArticle.headline,
       body: draftArticle.body,
       category: 'أخبار اللعبة',
-      // Image generation can be added here if needed in the future
-      imageUrl: "", 
+      imageUrl: imageUrl, 
     };
   }
 );

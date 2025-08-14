@@ -112,6 +112,8 @@ export default async function ArticlePage({ params }: Props) {
 
   // Prepare paragraphs (to allow drop-cap on first paragraph)
   const paragraphs = article.content.split(/\n\s*\n/);
+  
+  const isAiGeneratedImage = article.imageUrl?.startsWith('data:image');
 
   return (
     <div className="min-h-screen bg-[url('data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'100\\' height=\\'100\\'><rect width=\\'100%\\' height=\\'100%\\' fill=\\'%23f8fafc\\'/><path d=\\'M0 0 H100\\' stroke=\\'%23eef2f7\\' stroke-width=\\'1\\'/></svg>')] bg-repeat text-neutral-900">
@@ -162,7 +164,7 @@ export default async function ArticlePage({ params }: Props) {
                     />
                   </div>
                   <figcaption className="mt-3 text-sm text-neutral-500 border-t border-dashed border-neutral-200 pt-2">
-                    {article.title}
+                    {article.title} {isAiGeneratedImage && '(صورة مُولّدة بالذكاء الاصطناعي)'}
                   </figcaption>
                 </figure>
               )}
