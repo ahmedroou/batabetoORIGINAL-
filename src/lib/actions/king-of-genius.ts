@@ -62,12 +62,11 @@ export async function randomizeTeams(gameId: string, hostId: string) {
 
 // --- Game Flow ---
 
-async function prepareNextChallenge(transaction: any, gameRef: any, game: Game) {
+async function _prepareNextChallenge(game: Game): Promise<Partial<Game>> {
     const currentChallengeIndex = game.currentChallengeIndex ?? -1;
     const nextChallengeIndex = currentChallengeIndex + 1;
-    const challengeId = game.challengeOrder?.[nextChallengeIndex];
     
-    if (!challengeId) {
+    if (nextChallengeIndex >= (game.challengeOrder?.length || 0)) {
         // No more challenges, end the game
         const teamAScore = game.teamScores?.A || 0;
         const teamBScore = game.teamScores?.B || 0;
@@ -81,30 +80,30 @@ async function prepareNextChallenge(transaction: any, gameRef: any, game: Game) 
             message = "الفريق الأحمر ينتصر!";
         }
 
-        const finalGameData = { ...game, gameState: 'final_results', gameResult: { winner, message } } as Game;
-
-        transaction.update(gameRef, {
+        return {
             gameState: 'final_results',
             gameResult: { winner, message },
-            'challengeState.timerEndsAt': deleteField(),
-        });
-
-        return { gameEnded: true, finalGameData: finalGameData };
+            challengeState: {
+                ...game.challengeState,
+                timerEndsAt: deleteField() as any,
+            },
+        };
     }
-
-    // This part is now outside the transaction. It will be called after the transaction commits.
-    // We just set the state to prepare for it.
-    transaction.update(gameRef, {
+    
+    // Prepare for the next challenge intro
+    return {
         gameState: 'challenge_intro',
         currentChallengeIndex: nextChallengeIndex,
-        'challengeState.puzzle': null, // Clear old puzzle
-        'challengeState.results': [],
-        'challengeState.playerProgress': {},
-        'challengeState.timerEndsAt': Timestamp.fromMillis(Date.now() + INTRO_DURATION_S * 1000)
-    });
-    
-    return { gameEnded: false, finalGameData: null };
+        challengeState: {
+            duration: INTRO_DURATION_S, // Duration for the intro
+            challengeEndsAt: Timestamp.fromMillis(Date.now() + INTRO_DURATION_S * 1000),
+            puzzle: null, // Clear old puzzle
+            results: [],
+            playerProgress: {},
+        },
+    };
 }
+
 
 export async function startKingOfGeniusGame(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId);
@@ -120,32 +119,130 @@ export async function startKingOfGeniusGame(gameId: string, hostId: string) {
 
         const challengeOrder = shuffle(GENIUS_CHALLENGES.map(c => c.id));
         
-        // This is the key change: only set up the game for the intro.
-        // The puzzle generation happens later in the timeout handler.
-        transaction.update(gameRef, { 
-            gameState: 'challenge_intro',
-            challengeOrder: challengeOrder, 
-            currentChallengeIndex: -1, // Start at -1, prepareNextChallenge will increment to 0
+        // Prepare the first challenge state by calling the helper
+        const firstChallengeUpdates = await _prepareNextChallenge({ ...game, currentChallengeIndex: -1, challengeOrder });
+
+        transaction.update(gameRef, {
+            ...firstChallengeUpdates,
+            challengeOrder: challengeOrder,
             teamScores: { A: 0, B: 0 },
-            'challengeState.timerEndsAt': Timestamp.fromMillis(Date.now() + INTRO_DURATION_S * 1000)
         });
     });
 }
 
 
-async function advanceToNextState(transaction: any, gameRef: any, game: Game) {
-    const challengeId = game.challengeOrder?.[game.currentChallengeIndex ?? -1];
-    const currentChallenge = challengeId ? GENIUS_CHALLENGE_MAP.get(challengeId) : null;
-    const duration = currentChallenge?.timeLimit ?? 60;
-    
-    transaction.update(gameRef, {
-        gameState: 'challenge_active',
-        'challengeState.timerEndsAt': Timestamp.fromMillis(Date.now() + duration * 1000)
+async function _calculateScoresAndProceed(game: Game): Promise<Partial<Game>> {
+    const results = game.challengeState?.results || [];
+    const pointsMap = [10, 5, 3, 1];
+    const teamScores = { ...(game.teamScores || { A: 0, B: 0 }) };
+
+    const sortedResults = results.filter(r => r.isCorrect).sort((a, b) => {
+        if ((b.score ?? 0) !== (a.score ?? 0)) return (b.score ?? 0) - (a.score ?? 0);
+        return a.time - b.time;
     });
+
+    sortedResults.forEach((result, index) => {
+        const player = game.players.find(p => p.id === result.playerId);
+        if (!player?.team) return;
+
+        const rankPoints = pointsMap[index] ?? 0;
+        const performancePoints = result.score ?? 0;
+        teamScores[player.team] += (rankPoints + performancePoints);
+    });
+
+    const resultsDisplayDuration = 10;
+    
+    const nextChallengeUpdates = await _prepareNextChallenge(game);
+
+    return {
+        gameState: 'challenge_results',
+        teamScores,
+        challengeState: {
+            ...game.challengeState,
+            timerEndsAt: Timestamp.fromMillis(Date.now() + resultsDisplayDuration * 1000),
+        },
+        ...nextChallengeUpdates, // This will be applied after the results phase
+    };
 }
 
-// --- Player Actions ---
 
+export async function handleTimeout(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    let finalGameDataForLeagueUpdate: Game | null = null;
+    
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) return;
+        const game = gameDoc.data() as Game;
+
+        if (game.hostId !== hostId) return;
+        const timerEndsAt = game.challengeState?.timerEndsAt?.toMillis();
+        if (timerEndsAt && Date.now() < timerEndsAt) return;
+
+        let updates: Partial<Game> = {};
+
+        switch (game.gameState) {
+            case 'challenge_intro': {
+                const challengeId = game.challengeOrder?.[game.currentChallengeIndex ?? 0];
+                if (!challengeId) {
+                    throw new Error("Cannot find next challenge ID.");
+                }
+                const { puzzle } = await generateGeniusChallenge({ challengeId });
+                const currentChallenge = GENIUS_CHALLENGE_MAP.get(challengeId);
+                const duration = currentChallenge?.timeLimit ?? 60;
+                
+                updates = {
+                    gameState: 'challenge_active',
+                    challengeState: {
+                        ...game.challengeState,
+                        puzzle: puzzle,
+                        timerEndsAt: Timestamp.fromMillis(Date.now() + duration * 1000),
+                        duration: duration
+                    }
+                };
+                break;
+            }
+            case 'challenge_active': {
+                const activePlayers = game.players.filter(p => p.status === 'alive');
+                const currentResults = game.challengeState?.results || [];
+                const playersWhoDidNotFinish = activePlayers.filter(p => !currentResults.some(r => r.playerId === p.id));
+                const forfeitResults: ChallengeResult[] = playersWhoDidNotFinish.map(p => ({
+                    playerId: p.id,
+                    team: p.team!,
+                    isCorrect: false,
+                    time: 999,
+                    score: 0,
+                }));
+                
+                const allResults = [...currentResults, ...forfeitResults];
+                const tempUpdatedGame = { ...game, challengeState: { ...game.challengeState, results: allResults } } as Game;
+                
+                updates = await _calculateScoresAndProceed(tempUpdatedGame);
+                 if(updates.gameState === 'final_results') {
+                     finalGameDataForLeagueUpdate = { ...game, ...updates };
+                 }
+
+                break;
+            }
+            case 'challenge_results': {
+                updates = await _prepareNextChallenge(game);
+                if (updates.gameState === 'final_results') {
+                    finalGameDataForLeagueUpdate = { ...game, ...updates };
+                }
+                break;
+            }
+        }
+        
+        transaction.update(gameRef, updates);
+    });
+
+    if (finalGameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(finalGameDataForLeagueUpdate);
+    }
+}
+
+
+// --- Player Actions ---
 export async function submitChallengeResult(gameId: string, playerId: string, result: Omit<ChallengeResult, 'playerId' | 'team'>) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
@@ -160,7 +257,6 @@ export async function submitChallengeResult(gameId: string, playerId: string, re
 
         const newResult: ChallengeResult = { ...result, playerId, team: player.team };
         
-        // Use arrayUnion to prevent duplicates if this action is somehow called twice
         transaction.update(gameRef, { 'challengeState.results': arrayUnion(newResult) });
     });
 }
@@ -170,87 +266,4 @@ export async function updateChallengeProgress(gameId: string, playerId: string, 
     await updateDoc(gameRef, {
         [`challengeState.playerProgress.${playerId}`]: progress
     });
-}
-
-async function _calculateScoresAndProceed(transaction: any, gameRef: any, game: Game) {
-    const results = game.challengeState?.results || [];
-    const pointsMap = [10, 5, 3, 1];
-    const teamScores = { ...(game.teamScores || { A: 0, B: 0 }) } as { A: number, B: number };
-
-    const sortedResults = results.filter(r => r.isCorrect).sort((a, b) => {
-        if ((b.score ?? 0) !== (a.score ?? 0)) return (b.score ?? 0) - (a.score ?? 0);
-        return a.time - b.time;
-    });
-
-    sortedResults.forEach((result, index) => {
-        const player = game.players.find(p => p.id === result.playerId);
-        if (!player || !player.team) return;
-
-        const rankPoints = pointsMap[index] ?? 0;
-        const performancePoints = result.score ?? 0;
-        teamScores[player.team] += (rankPoints + performancePoints);
-    });
-
-    const resultsDisplayDuration = 10;
-    transaction.update(gameRef, {
-        gameState: 'challenge_results',
-        teamScores,
-        'challengeState.timerEndsAt': Timestamp.fromMillis(Date.now() + resultsDisplayDuration * 1000)
-    });
-    
-    return prepareNextChallenge(transaction, gameRef, { ...game, teamScores });
-}
-
-export async function handleTimeout(gameId: string, hostId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    let finalGameDataForLeagueUpdate: Game | null = null;
-
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) return;
-        const game = gameDoc.data() as Game;
-        
-        if (game.hostId !== hostId) return;
-        const timerEndsAt = game.challengeState?.timerEndsAt?.toMillis();
-        if (timerEndsAt && Date.now() < timerEndsAt) return;
-
-        if (game.gameState === 'challenge_intro') {
-            const { gameEnded, finalGameData } = await prepareNextChallenge(transaction, gameRef, game);
-             if(gameEnded){
-                finalGameDataForLeagueUpdate = finalGameData;
-            } else {
-                 await advanceToNextState(transaction, gameRef, { ...game, currentChallengeIndex: (game.currentChallengeIndex ?? -1) + 1});
-            }
-
-        } else if (game.gameState === 'challenge_active') {
-             const activePlayers = game.players.filter(p => p.status === 'alive');
-             const currentResults = game.challengeState?.results || [];
-
-             const playersWhoDidNotFinish = activePlayers.filter(p => !currentResults.some(r => r.playerId === p.id));
-             const forfeitResults: ChallengeResult[] = playersWhoDidNotFinish.map(p => ({
-                 playerId: p.id,
-                 team: p.team!,
-                 isCorrect: false,
-                 time: 999,
-                 score: 0,
-             }));
-
-             const allResults = [...currentResults, ...forfeitResults];
-             const tempUpdatedGame = { ...game, challengeState: { ...game.challengeState, results: allResults } } as Game;
-
-             const { gameEnded, finalGameData } = await _calculateScoresAndProceed(transaction, gameRef, tempUpdatedGame);
-             if(gameEnded){
-                finalGameDataForLeagueUpdate = finalGameData;
-            }
-        } else if (game.gameState === 'challenge_results') {
-            const { gameEnded, finalGameData } = await prepareNextChallenge(transaction, gameRef, game);
-             if(gameEnded){
-                finalGameDataForLeagueUpdate = finalGameData;
-            }
-        }
-    });
-
-     if (finalGameDataForLeagueUpdate) {
-        await updateLeagueScoresForGameEnd(finalGameDataForLeagueUpdate);
-    }
 }
