@@ -220,7 +220,7 @@ export async function submitChallengeResult(
   });
 }
 
-export async function updateChallengeProgress(
+export async function updateKingOfGeniusProgress(
   gameId: string,
   playerId: string,
   progress: Partial<PlayerProgress>

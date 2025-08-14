@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
@@ -47,7 +48,7 @@ export function KingOfGeniusGame({
         return <TeamSelection game={game} self={self} isHost={isHost} />;
 
       case 'challenge_intro':
-        if (!currentChallenge || !game.puzzles?.[game.currentChallengeIndex ?? 0])
+        if (!currentChallenge)
           return <LoadingState text="جاري تجهيز التحدي..." />;
         return (
           <ChallengeIntro
