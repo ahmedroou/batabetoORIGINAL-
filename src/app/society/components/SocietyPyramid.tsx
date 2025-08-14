@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -325,7 +326,7 @@ const InteractionModal = ({
 };
 
 // —— Player card ——
-const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile; rank: SocialRank | null; onPlayerClick: (player: UserProfile) => void }) => {
+const PlayerCard = ({ player, rank, onPlayerClick, colorClass }: { player: UserProfile; rank: SocialRank | null; onPlayerClick: (player: UserProfile) => void; colorClass: string }) => {
   const isHumiliated = !!(player.humiliation?.until && new Date(player.humiliation.until) > new Date());
   const hasPunishmentAvatar = !!(player.originalAvatarToRevert?.until && new Date(player.originalAvatarToRevert.until) > new Date());
   const currentDecree = (player.decrees || []).find((d) => d.until && new Date(d.until) > new Date());
@@ -350,10 +351,13 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile; rank
       whileTap={{ scale: 0.98 }}
       onClick={() => onPlayerClick(player)}
       onKeyDown={handleKey}
-      className="group relative cursor-pointer aspect-[3/4.5] bg-slate-800/60 border border-purple-400/30 rounded-xl flex flex-col items-center justify-center p-2 text-center shadow-lg text-white overflow-hidden"
+      className="group/card relative cursor-pointer aspect-[3/4.5] bg-slate-800/60 border border-purple-400/30 rounded-xl flex flex-col items-center justify-center p-2 text-center shadow-lg text-white overflow-hidden"
     >
       {/* Glow ring on hover */}
-      <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-b from-purple-500/10 to-transparent" />
+      <div
+          className={cn("pointer-events-none absolute -inset-1 rounded-2xl opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 blur-md bg-gradient-to-tr via-transparent to-transparent", colorClass)}
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-900/10 to-slate-900/50 opacity-50 group-hover/card:opacity-100 transition-opacity" />
 
       {isPunished && <Gavel className="w-5 h-5 text-destructive absolute top-1 left-1" title="خاضع لعقوبة" />}
 
@@ -391,7 +395,7 @@ const PlayerCard = ({ player, rank, onPlayerClick }: { player: UserProfile; rank
       </div>
 
       {/* Hover overlay CTA */}
-      <div className="absolute inset-x-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute inset-x-2 bottom-2 opacity-0 group-hover/card:opacity-100 transition-opacity">
         <Button className="w-full" size="sm" variant="secondary">التفاعل</Button>
       </div>
     </motion.div>
@@ -540,7 +544,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                   className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
                 >
                   {searchedPlayers.map((p) => (
-                    <PlayerCard key={p.uid} player={p} rank={getSocialRankForUser(p.leaderboardPoints)} onPlayerClick={handlePlayerClick} />
+                    <PlayerCard key={p.uid} player={p} rank={getSocialRankForUser(p.leaderboardPoints)} onPlayerClick={handlePlayerClick} colorClass="from-purple-500"/>
                   ))}
                 </motion.div>
               ) : (
@@ -564,6 +568,12 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
 
             const borderStyle =
               index === 0 ? 'border-yellow-400/50' : index === 1 ? 'border-slate-400/50' : index === 2 ? 'border-amber-500/50' : 'border-purple-500/30';
+
+            const colorClass = 
+                index === 0 ? 'from-yellow-400' :
+                index === 1 ? 'from-slate-400' :
+                index === 2 ? 'from-orange-500' :
+                'from-purple-500';
 
             return (
               <motion.div
@@ -596,7 +606,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                         className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
                       >
                         {playersInRank.map((p) => (
-                          <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} />
+                          <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} colorClass={colorClass} />
                         ))}
                       </motion.div>
                     ) : (
