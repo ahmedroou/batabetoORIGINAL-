@@ -491,10 +491,10 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
           </TooltipProvider>
         </div>
 
-        {/* وسط: عبارة ترحيب واضحة */}
-        <div className="hidden md:block rounded-full bg-background/50 border border-border/50 px-4 py-1 shadow-sm">
-            <span className="font-bold text-lg tracking-tight text-amber-200">
-                أهلاً بك يا {userProfile.name}!
+        {/* وسط: شعار بطابيطو */}
+        <div className="hidden md:block">
+            <span className="text-2xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-fuchsia-500">
+                بطابيطو
             </span>
         </div>
 
