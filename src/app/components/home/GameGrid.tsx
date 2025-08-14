@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useMemo, useState } from 'react';
@@ -98,11 +99,76 @@ function PrizeRow({ rank, points, coins }: { rank: string; points: number; coins
 }
 
 // -----------------------------
+// Static data for game cards
+// -----------------------------
+const gameCardsData = [
+  {
+    type: 'trap-answer',
+    title: 'الجواب المفخخ',
+    description: 'اصنع فخًا بإجابة خاطئة ومقنعة، وخدع بها الآخرين لتفوز.',
+    accent: { from: 'from-fuchsia-500/30', to: 'to-transparent' },
+    defaultTag: 'خداع',
+    prizes: [
+      { rank: 'المركز 1', points: 3, coins: 2 },
+      { rank: 'المركز 2', points: 2, coins: 1 },
+      { rank: 'المركز 3', points: 1, coins: 0 },
+    ],
+  },
+  {
+    type: 'king-of-genius',
+    title: 'ساحة العباقرة',
+    description: 'تحديات ذهنية سريعة لاختبار ذكائك وتركيزك في سباق ضد الزمن.',
+    accent: { from: 'from-amber-500/30', to: 'to-transparent' },
+    prizes: [
+      { rank: 'الفريق الفائز', points: 3, coins: 2 },
+      { rank: 'الفريق الخاسر', points: 0, coins: 0 },
+    ],
+  },
+  {
+    type: 'word_war',
+    title: 'حرب الكلمات',
+    description: 'لعبة جماعية للربط بين الكلمات والتخمين بذكاء. هل ستكون مرشدًا أم مخمنًا؟',
+    accent: { from: 'from-emerald-500/30', to: 'to-transparent' },
+    prizes: [
+      { rank: 'الفريق الفائز', points: 3, coins: 2 },
+      { rank: 'الفريق الخاسر', points: 0, coins: 0 },
+    ],
+  },
+  {
+    type: 'behind-the-mask',
+    title: 'خلف القناع',
+    description: 'لعبة مافيا كلاسيكية بكشف الأدوار، التحقيق، الحماية والخداع. اكشف القاتل أو تخلّص من الأبرياء.',
+    accent: { from: 'from-rose-500/30', to: 'to-transparent' },
+    prizes: [
+      { rank: 'الفريق الفائز', points: 3, coins: 2 },
+      { rank: 'الفريق الخاسر', points: 0, coins: 0 },
+    ],
+  },
+  {
+    type: 'prison',
+    title: 'السجن',
+    description: 'مزايدات مفتوحة ومغلقة، وتحديات معرفية. الفشل يعني قضاء ليلة في السجن مع عقوبات قاسية.',
+    accent: { from: 'from-sky-500/30', to: 'to-transparent' },
+    prizes: [
+      { rank: 'المركز 1', points: 3, coins: 2 },
+      { rank: 'المركز 2', points: 2, coins: 1 },
+      { rank: 'المركز 3', points: 1, coins: 0 },
+    ],
+  },
+   {
+    type: 'educated-merchant',
+    title: 'التاجر المتعلم',
+    description: 'لعبة مونوبولي ولكن بأسلوب مختلف. جاوب على الأسئلة لتمتلك العقارات وتفلس خصومك!',
+    accent: { from: 'from-lime-500/30', to: 'to-transparent' },
+    prizes: [
+      { rank: 'الناجي الوحيد', points: 4, coins: 3 },
+    ],
+  },
+];
+
+
+// -----------------------------
 // Main improved GameGrid component
-// - Premium black/gold/white theme
-// - Accessible interactive cards (keyboard + focus)
-// - Fancy SVG prizes + hover animations
-// - Stable rendering & clear loading states per-card
 // -----------------------------
 
 type LoadingState =
