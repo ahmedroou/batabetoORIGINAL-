@@ -20,38 +20,28 @@ const INTRO_COUNTDOWN_SECONDS = 5;
 export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntroProps) {
   const [countdown, setCountdown] = useState(INTRO_COUNTDOWN_SECONDS);
   const { user } = useAuth();
-  
+  const timeoutCalledRef = useRef(false);
+
   useEffect(() => {
-    if (!game.challengeState?.timerEndsAt || !game.challengeState.duration) return;
+    if (!game.challengeState?.timerEndsAt) return;
 
-    const challengeActiveTime = game.challengeState.duration;
-    // Calculate the intro end time by subtracting the challenge duration from the total end time.
-    const introEndTime = game.challengeState.challengeEndsAt.toMillis() - (challengeActiveTime * 1000);
-
+    const introEndTime = game.challengeState.timerEndsAt.toMillis();
+    
     const updateCountdown = () => {
       const remaining = Math.max(0, Math.ceil((introEndTime - Date.now()) / 1000));
       setCountdown(remaining);
+      
+      if (remaining <= 0 && isHost && user && !timeoutCalledRef.current) {
+        timeoutCalledRef.current = true;
+        handleTimeout(game.id, user.uid).catch(e => console.error("Error in timeout handler:", e));
+      }
     };
     
     updateCountdown();
     const timer = setInterval(updateCountdown, 1000);
 
     return () => clearInterval(timer);
-  }, [game.challengeState?.challengeEndsAt, game.challengeState?.duration]);
-
-  // Effect for the host to automatically trigger the next state when the timer ends.
-  useEffect(() => {
-    let timerId: NodeJS.Timeout | null = null;
-    if(countdown <= 0 && isHost && user) {
-        // Use a very short timeout to ensure this runs after the state has settled
-        timerId = setTimeout(() => {
-            handleTimeout(game.id, user.uid);
-        }, 100); 
-    }
-    return () => {
-        if(timerId) clearTimeout(timerId);
-    };
-  }, [countdown, isHost, game.id, user]);
+  }, [game.challengeState?.timerEndsAt, isHost, game.id, user]);
 
   return (
     <div className="w-full max-w-2xl">

@@ -107,7 +107,6 @@ export async function randomizeTeams(gameId: string, hostId: string) {
 export async function startKingOfGeniusGame(gameId: string, userId: string) {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
 
-  // First transaction: Set up the game to start the intro
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
@@ -130,16 +129,18 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
     const shuffledChallenges = [...GENIUS_CHALLENGES].sort(() => 0.5 - Math.random());
     const challengeOrder = shuffledChallenges.map((c) => c.id);
     
-    // Set timer for the intro phase. The handleTimeout will then call prepareNextChallenge.
     const introEndsAt = Timestamp.fromMillis(Date.now() + INTRO_COUNTDOWN_SECONDS * 1000);
 
     transaction.update(gameRef, {
       gameState: 'challenge_intro',
       challengeOrder,
-      puzzles: [], // Puzzles will be generated on-demand
+      puzzles: [],
       currentChallengeIndex: 0,
       teamScores: { A: 0, B: 0 },
-      challengeState: { timerEndsAt: introEndsAt },
+      'challengeState.timerEndsAt': introEndsAt,
+      'challengeState.puzzle': deleteField(),
+      'challengeState.results': [],
+      'challengeState.playerProgress': {},
     });
   });
 }
@@ -147,33 +148,37 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
 // Generates puzzle for the current index and prepares the game state for the intro countdown.
 async function prepareNextChallenge(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId.toUpperCase());
+    const gameDoc = await getDoc(gameRef);
+    if(!gameDoc.exists()) throw new Error("Game not found during puzzle generation.");
+    const game = gameDoc.data() as Game;
 
-    const challengeIndex = (await getDoc(gameRef)).data()?.currentChallengeIndex ?? 0;
-    const challengeId = (await getDoc(gameRef)).data()?.challengeOrder?.[challengeIndex];
+    const challengeIndex = game.currentChallengeIndex ?? 0;
+    const challengeId = game.challengeOrder?.[challengeIndex];
     if (!challengeId) {
-        // This case should ideally be handled by advancing to final_results, but as a safeguard:
         throw new Error("No more challenges left or challenge order is missing.");
     }
-
+    
+    // Generate the puzzle outside of a transaction to avoid timeout issues.
     const { puzzle } = await generateGeniusChallenge({ challengeId });
     const puzzleString = JSON.stringify(puzzle);
 
+    // Update the game with the generated puzzle in a new transaction/update.
     await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) return;
-        const game = gameDoc.data() as Game;
-        if(game.hostId !== hostId) return;
+        const docToUpdate = await transaction.get(gameRef);
+        if (!docToUpdate.exists()) return;
 
-        const puzzles = game.puzzles || [];
-        puzzles[challengeIndex] = puzzleString;
+        const currentPuzzles = docToUpdate.data()?.puzzles || [];
+        currentPuzzles[challengeIndex] = puzzleString;
 
         const challengeDetails = GENIUS_CHALLENGE_MAP.get(challengeId);
         const duration = challengeDetails?.timeLimit || 90;
 
-        const challengeEndsAt = Timestamp.fromMillis(Date.now() + (duration + INTRO_COUNTDOWN_SECONDS) * 1000);
+        // The intro has already finished, so we set the timer for the active phase.
+        const challengeEndsAt = Timestamp.fromMillis(Date.now() + duration * 1000);
 
         transaction.update(gameRef, {
-            puzzles,
+            puzzles: currentPuzzles,
+            'challengeState.puzzle': puzzle,
             'challengeState.duration': duration,
             'challengeState.challengeEndsAt': challengeEndsAt,
         });
@@ -312,7 +317,7 @@ async function advanceToNextChallengeIntro(game: Game, transaction: Transaction)
     });
 }
 
-export async function nextRound(gameId: string, hostId: string) {
+export async function nextKingOfGenius(gameId: string, hostId: string) {
     let gameDataForLeagueUpdate: Game | null = null;
     let requiresNextChallengePrep = false;
 
@@ -341,6 +346,7 @@ export async function nextRound(gameId: string, hostId: string) {
     }
 }
 
+
 export async function handleTimeout(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId.toUpperCase());
     
@@ -360,14 +366,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
             }
             
             if (game.gameState === 'challenge_intro') {
-                // If the puzzle isn't ready yet, it means prepareNextChallenge hasn't run. Let's run it.
-                // This state can happen if the host starts the game, and the intro timer finishes before
-                // the server could generate and write the first puzzle.
-                const puzzleIsMissing = !game.puzzles || !game.puzzles[game.currentChallengeIndex ?? 0];
-                if (puzzleIsMissing) {
-                    await prepareNextChallenge(gameId, hostId);
-                }
-                // Now that the puzzle is guaranteed to be there, we can transition to active.
                 await beginChallenge(gameId, hostId, transaction);
             } else if (game.gameState === 'challenge_active') {
                 const activePlayers = game.players.filter(p => p.status === 'alive');
@@ -385,7 +383,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
                     transaction.update(gameRef, {'challengeState.results': arrayUnion(...resultsToAdd) });
                 }
                 
-                // Read the updated game state within the transaction to pass to advanceFromActive
                 const updatedGameDoc = await transaction.get(gameRef);
                 const updatedGame = updatedGameDoc.data() as Game;
                 await advanceFromActive(updatedGame, transaction);
@@ -401,6 +398,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
             }
         });
 
+        // Run these heavy operations *after* the main transaction
         if (gameDataForLeagueUpdate) {
             await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
         }

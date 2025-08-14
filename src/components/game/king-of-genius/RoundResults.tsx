@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import { Award, Star, ArrowLeft, Plus, RefreshCcw } from 'lucide-react';
 import { nextKingOfGenius } from '@/lib/actions/king-of-genius';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { handleTimeout } from '@/lib/actions/king-of-genius';
+import { useAuth } from '@/hooks/useAuth';
 
 interface RoundResultsProps {
   game: Game;
@@ -34,29 +35,31 @@ export function RoundResults({
 }: RoundResultsProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const timeoutCalledRef = useRef(false);
+  const { user } = useAuth();
 
-  // Automatically proceed after a delay
+
+  // Automatically proceed after a delay, only by host
   useEffect(() => {
-      if (isHost) {
-          const timer = setTimeout(() => {
-              handleTimeout(game.id, self.id);
-          }, 15000); // 15 seconds to view results
-          return () => clearTimeout(timer);
+    if (isHost && user && game.challengeState?.timerEndsAt) {
+      const endTime = game.challengeState.timerEndsAt.toMillis();
+      const delay = endTime - Date.now();
+      
+      if (delay > 0) {
+        const timer = setTimeout(() => {
+            if (!timeoutCalledRef.current) {
+                timeoutCalledRef.current = true;
+                handleTimeout(game.id, user.uid).catch(e => console.error("Error in timeout handler:", e));
+            }
+        }, delay);
+        return () => clearTimeout(timer);
+      } else if (!timeoutCalledRef.current) {
+          // If timer has already expired, call it immediately
+          timeoutCalledRef.current = true;
+          handleTimeout(game.id, user.uid).catch(e => console.error("Error in timeout handler:", e));
       }
-  }, [isHost, game.id, self.id]);
-  
-   const handleNextRound = async () => {
-        if (!isHost) return;
-        setIsSubmitting(true);
-        try {
-            await nextKingOfGenius(game.id, self.id);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
     }
-
+  }, [isHost, game.id, user, game.challengeState?.timerEndsAt]);
 
   const results = game.challengeState?.results || [];
 
@@ -166,15 +169,9 @@ export function RoundResults({
           </div>
         </CardContent>
          <CardFooter>
-            {isHost ? (
-                <Button onClick={handleNextRound} disabled={isSubmitting} className="w-full">
-                    {isSubmitting ? '...' : 'المتابعة'}
-                </Button>
-            ) : (
-                <p className="w-full text-center text-muted-foreground animate-pulse">
-                في انتظار المضيف لبدء الجولة التالية...
-                </p>
-            )}
+           <p className="w-full text-center text-muted-foreground animate-pulse">
+            في انتظار الانتقال للجولة التالية...
+           </p>
         </CardFooter>
       </Card>
     </div>
