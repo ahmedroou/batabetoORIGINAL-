@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -5,11 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { createGameRoom } from '@/lib/actions/room';
-import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardDescription, CardFooter, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { GAME_ICONS } from '@/data/icons';
 import type { Game } from '@/types';
-import { Star, Loader2, Heart, TrendingUp } from 'lucide-react';
+import { Star, Loader2, Heart, TrendingUp, Trophy, Coins } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 type LoadingState =
@@ -26,14 +27,70 @@ const gameCardsData: Array<{
   title: string;
   description: string;
   defaultTag?: 'جديد';
-  accent: { from: string; via?: string; to: string };
+  accent: { from: string; via?: string; to:string };
+  prizes: { rank: string; points: number; coins: number }[];
 }> = [
-  { type: 'king-of-genius', title: 'ساحة العباقرة', description: 'تحديات ذكاء وسرعة بديهة بين فريقين.', accent: { from: 'from-fuchsia-500/25', to: 'to-violet-500/25' } },
-  { type: 'word_war', title: 'حرب الكلمات', description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.', accent: { from: 'from-emerald-500/25', to: 'to-teal-500/25' } },
-  { type: 'trap-answer', title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.', accent: { from: 'from-amber-500/25', to: 'to-orange-500/25' } },
-  { type: 'behind-the-mask', title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.', defaultTag: 'جديد', accent: { from: 'from-rose-500/25', to: 'to-red-500/25' } },
-  { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات الصحيحة لتفوز بالمزاد أو تخاطر بالعقوبة.', accent: { from: 'from-cyan-500/25', to: 'to-sky-500/25' } },
-  { type: 'educated-merchant', title: 'التاجر المتعلم', description: 'اشترِ العقارات، أجب على الأسئلة، وأفلس خصومك.', accent: { from: 'from-purple-500/25', to: 'to-indigo-500/25' } },
+  { 
+    type: 'king-of-genius', 
+    title: 'ساحة العباقرة', 
+    description: 'تحديات ذكاء وسرعة بديهة بين فريقين.', 
+    accent: { from: 'from-fuchsia-500/25', to: 'to-violet-500/25' },
+    prizes: [
+        { rank: 'الفريق الفائز', points: 3, coins: 2 }
+    ]
+  },
+  { 
+    type: 'word_war', 
+    title: 'حرب الكلمات', 
+    description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.', 
+    accent: { from: 'from-emerald-500/25', to: 'to-teal-500/25' },
+    prizes: [
+        { rank: 'الفريق الفائز', points: 3, coins: 2 }
+    ]
+  },
+  { 
+    type: 'trap-answer', 
+    title: 'الجواب المفخخ', 
+    description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.', 
+    accent: { from: 'from-amber-500/25', to: 'to-orange-500/25' },
+    prizes: [
+        { rank: 'المركز الأول', points: 3, coins: 2 },
+        { rank: 'المركز الثاني', points: 2, coins: 1 },
+        { rank: 'المركز الثالث', points: 1, coins: 0 },
+    ]
+  },
+  { 
+    type: 'behind-the-mask', 
+    title: 'خلف القناع', 
+    description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.', 
+    defaultTag: 'جديد', 
+    accent: { from: 'from-rose-500/25', to: 'to-red-500/25' },
+    prizes: [
+        { rank: 'الفريق الفائز', points: 3, coins: 2 }
+    ]
+  },
+  { 
+    type: 'prison', 
+    title: 'السجن', 
+    description: 'اجمع أكبر عدد من الإجابات الصحيحة لتفوز بالمزاد أو تخاطر بالعقوبة.', 
+    accent: { from: 'from-cyan-500/25', to: 'to-sky-500/25' },
+    prizes: [
+        { rank: 'المركز الأول', points: 3, coins: 2 },
+        { rank: 'المركز الثاني', points: 2, coins: 1 },
+        { rank: 'المركز الثالث', points: 1, coins: 0 },
+    ]
+  },
+  { 
+    type: 'educated-merchant', 
+    title: 'التاجر المتعلم', 
+    description: 'اشترِ العقارات، أجب على الأسئلة، وأفلس خصومك.', 
+    accent: { from: 'from-purple-500/25', to: 'to-indigo-500/25' },
+    prizes: [
+        { rank: 'المركز الأول', points: 4, coins: 3 },
+        { rank: 'المركز الثاني', points: 2, coins: 1 },
+        { rank: 'المركز الثالث', points: 1, coins: 1 },
+    ]
+  },
 ];
 
 interface GameGridProps {
@@ -103,7 +160,7 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
               <div aria-hidden className={`pointer-events-none absolute -inset-1 opacity-70 blur-2xl bg-gradient-to-br ${game.accent.from} ${game.accent.via ?? ''} ${game.accent.to}`} />
               <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10" />
 
-              <Card className="relative h-full border-none bg-transparent shadow-none">
+              <Card className="relative h-full border-none bg-transparent shadow-none flex flex-col">
                 <CardHeader className="relative text-center">
                   {tag && (
                     <span className="absolute start-3 top-3 select-none rounded-full border border-white/10 bg-background/70 px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur inline-flex items-center gap-1">
@@ -118,7 +175,22 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
                     {game.description}
                   </CardDescription>
                 </CardHeader>
-                <CardFooter className="relative mt-auto">
+                <CardContent className="flex-grow">
+                    <div className="border-t border-white/10 my-2"></div>
+                    <div className="space-y-1 text-center">
+                         <h4 className="text-sm font-bold text-muted-foreground flex items-center justify-center gap-1"><Trophy className="w-4 h-4 text-amber-400"/> الجوائز</h4>
+                         {game.prizes.map((prize, pIdx) => (
+                             <div key={pIdx} className="text-xs flex justify-center items-center gap-2">
+                                 <span className="font-semibold">{prize.rank}:</span>
+                                 <div className="flex items-center gap-2">
+                                     <span className="flex items-center gap-1"><Star className="w-3 h-3 text-primary"/> {prize.points}</span>
+                                     {prize.coins > 0 && <span className="flex items-center gap-1"><Coins className="w-3 h-3 text-yellow-400"/> {prize.coins}</span>}
+                                 </div>
+                             </div>
+                         ))}
+                    </div>
+                </CardContent>
+                <CardFooter className="relative mt-auto pt-4">
                   <Button
                     className="w-full rounded-xl bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg transition-transform hover:opacity-90 focus-visible:translate-y-[1px]"
                     onClick={() => handleCreate(game.type)}
@@ -140,7 +212,7 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
               </Card>
               <button
                 className="absolute inset-0 -z-10 cursor-pointer"
-                tabIndex={0}
+                tabIndex={-1} // Changed from 0 to -1 to avoid being focusable but still clickable
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
