@@ -77,7 +77,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
         <div className="absolute -inset-20 opacity-20 blur-2xl bg-[conic-gradient(var(--tw-gradient-stops))] animate-[spin_12s_linear_infinite]" />
       </div>
 
-      <Card className="rounded-[22px] overflow-hidden backdrop-blur-xl bg-background/50 border-transparent">
+      <Card className="rounded-[22px] overflow-hidden backdrop-blur-xl bg-background/70 border-transparent">
         <div className="absolute -top-24 -left-20 h-64 w-64 rounded-full opacity-20 blur-3xl bg-gradient-to-br from-primary/40 to-purple-500/40" />
         <div className="absolute -bottom-24 -right-20 h-64 w-64 rounded-full opacity-20 blur-3xl bg-gradient-to-br from-amber-400/30 to-fuchsia-500/30" />
 
@@ -104,7 +104,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
           <div className="flex-grow text-center md:text-right w-full">
             <div className="flex items-center justify-center md:justify-start gap-3 flex-wrap">
               <p className="text-xl">أهلاً بك يا</p>
-              <CardTitle className="text-3xl font-serif font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-200 to-pink-300">
+              <CardTitle className="text-3xl font-serif font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-300 to-slate-100">
                 {userProfile.name}!
               </CardTitle>
               {currentRank && (
@@ -125,7 +125,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-yellow-500/30 px-3 py-1.5 bg-black/20 backdrop-blur-sm hover:shadow-md cursor-default">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-yellow-500/30 px-3 py-1.5 bg-black/40 backdrop-blur-sm hover:shadow-md cursor-default">
                       <CircleDollarSign className="w-5 h-5 text-yellow-400" />
                       <span className="text-white">{nf.format(userProfile.coins || 0)} كوينز</span>
                     </div>
@@ -137,7 +137,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 px-3 py-1.5 bg-black/20 backdrop-blur-sm hover:shadow-md cursor-default">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 px-3 py-1.5 bg-black/40 backdrop-blur-sm hover:shadow-md cursor-default">
                       <Diamond className="w-5 h-5 text-blue-400" />
                       <span className="text-white">{nf.format(userProfile.diamonds || 0)} ألماس</span>
                     </div>
@@ -149,7 +149,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 px-3 py-1.5 bg-black/20 backdrop-blur-sm hover:shadow-md cursor-default">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 px-3 py-1.5 bg-black/40 backdrop-blur-sm hover:shadow-md cursor-default">
                       <Trophy className="w-5 h-5 text-amber-400" />
                       <span className="text-white">{nf.format(userProfile.leaderboardPoints || 0)} نقاط</span>
                     </div>

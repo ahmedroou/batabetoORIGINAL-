@@ -228,7 +228,6 @@ export default function Home() {
 function AmbientBackground() {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-      <div className="absolute -top-40 -start-40 h-[38rem] w-[38rem] rounded-full bg-primary/25 blur-3xl opacity-40" />
       <div className="absolute -bottom-40 -end-40 h-[32rem] w-[32rem] rounded-full bg-fuchsia-500/20 blur-3xl" />
       <div className="absolute top-1/2 -translate-y-1/2 start-1/2 -translate-x-1/2 h-[28rem] w-[28rem] rounded-full bg-emerald-500/10 blur-3xl" />
       <div className="absolute inset-0 opacity-40 [mask-image:radial-gradient(60%_60%_at_50%_30%,black,transparent)]">
