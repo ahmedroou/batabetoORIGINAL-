@@ -40,6 +40,8 @@ const clampInt = (val: string | number, min = 0, fallback = 0) => {
 
 const formatNumber = (n?: number) => new Intl.NumberFormat('ar-EG').format(n ?? 0);
 
+const LOYALTY_COST_MAP: Record<number, number> = { 1: 3, 2: 6, 3: 8 };
+
 // —— Modal for interactions ——
 const InteractionModal = ({
   isOpen,
@@ -52,6 +54,7 @@ const InteractionModal = ({
   onIssueDecree,
   onForceAvatar,
   onLiftPunishment,
+  onRequestAllegiance,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -63,6 +66,7 @@ const InteractionModal = ({
   onIssueDecree: (targetId: string, title: string, durationInDays: number) => Promise<void>;
   onForceAvatar: (targetId: string, avatarId: string, durationInDays: number, taxToLift: number) => Promise<void>;
   onLiftPunishment: (targetId: string) => Promise<void>;
+  onRequestAllegiance: (targetId: string, durationInDays: number, offerAmount: number) => Promise<void>;
 }) => {
   // States for Punishments
   const [decreeTitle, setDecreeTitle] = useState("");
@@ -75,6 +79,10 @@ const InteractionModal = ({
   const [avatarPunishmentTax, setAvatarPunishmentTax] = useState("10");
   const [selectedPunishmentAvatar, setSelectedPunishmentAvatar] = useState("");
   const [availablePunishmentAvatars, setAvailablePunishmentAvatars] = useState<string[]>([]);
+  
+  // States for Allegiance
+  const [allegianceDuration, setAllegianceDuration] = useState(1);
+  const [allegianceOffer, setAllegianceOffer] = useState("5");
 
   useEffect(() => {
     if (isOpen) {
@@ -87,19 +95,25 @@ const InteractionModal = ({
       setAvatarPunishmentDuration(1);
       setAvatarPunishmentTax("10");
       setSelectedPunishmentAvatar("");
+      setAllegianceDuration(1);
+      setAllegianceOffer("5");
     }
   }, [isOpen, actor]);
 
   if (!actorRank || !targetRank) return null;
 
   const canPunish = actorRank.threshold > targetRank.threshold;
+  const canRequestAllegiance = actorRank.threshold < targetRank.threshold;
   const isAlreadyHumiliated = !!(target.humiliation?.until && new Date(target.humiliation.until) > new Date());
   const isAlreadyPunishedWithAvatar = !!(target.originalAvatarToRevert?.until && new Date(target.originalAvatarToRevert.until) > new Date());
   const isPunishedByMe = (target.humiliation?.by === actor.uid && isAlreadyHumiliated) || (target.originalAvatarToRevert?.by === actor.uid && isAlreadyPunishedWithAvatar);
 
   const getHonorCost = (duration: number) => duration * 3;
   const getAvatarHonorCost = (duration: number) => duration * 2;
+  const getAllegianceLoyaltyCost = (duration: number) => LOYALTY_COST_MAP[duration] || 3;
   const canAfford = (cost: number) => (actor.honorPoints || 0) >= cost;
+  const canAffordLoyalty = (cost: number) => (actor.loyaltyPoints || 0) >= cost;
+  const canAffordCoins = (amount: number) => (actor.coins || 0) >= amount;
 
   const InfoRow = ({ label, value }: { label: string; value: string | number }) => (
     <div className="flex items-center justify-between text-xs bg-slate-800/60 border border-slate-700 rounded px-2 py-1">
@@ -184,19 +198,56 @@ const InteractionModal = ({
           <Section title="بيانات سريعة">
             <div className="grid grid-cols-3 gap-2">
               <InfoRow label="شرفك" value={formatNumber(honorLeft)} />
-              <InfoRow label="ولاؤه" value={formatNumber(target.loyaltyPoints || 0)} />
-              <InfoRow label="تمرده" value={formatNumber(target.rebellionPoints || 0)} />
+              <InfoRow label="ولاءك" value={formatNumber(actor.loyaltyPoints || 0)} />
+              <InfoRow label="كوينز" value={formatNumber(actor.coins || 0)} />
             </div>
           </Section>
 
-          {!canPunish && (
-            <div className="p-3 rounded border border-slate-700 bg-slate-900/40 text-sm text-slate-300">
-              لا يمكنك معاقبة لاعب من نفس طبقتك أو أعلى. ارفع مستواك أولًا.
-            </div>
-          )}
-
           <ScrollArea className="max-h-[50vh] pr-1">
             <div className="space-y-3">
+              
+              {canRequestAllegiance && (
+                  <Section title="طلب الولاء">
+                      <p className="text-xs text-slate-300">اطلب الحماية من لاعب أعلى منك رتبة مقابل نقاط ولاء وكوينز.</p>
+                      <div className="flex gap-2 items-center">
+                        <Label className="text-xs shrink-0">المدة</Label>
+                        <Select value={String(allegianceDuration)} onValueChange={(v) => setAllegianceDuration(Number(v))}>
+                            <SelectTrigger className="bg-slate-800 border-slate-600"><SelectValue /></SelectTrigger>
+                            <SelectContent className="bg-slate-900 text-white border-purple-500">
+                                <SelectItem value="1">يوم ({getAllegianceLoyaltyCost(1)} ولاء)</SelectItem>
+                                <SelectItem value="2">يومان ({getAllegianceLoyaltyCost(2)} ولاء)</SelectItem>
+                                <SelectItem value="3">3 أيام ({getAllegianceLoyaltyCost(3)} ولاء)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <Label className="text-xs shrink-0">عرض الكوينز</Label>
+                        <Input 
+                            type="number" 
+                            min={0}
+                            value={allegianceOffer} 
+                            onChange={(e) => setAllegianceOffer(e.target.value)} 
+                            className="bg-slate-800 border-slate-600"
+                        />
+                      </div>
+                      <Button
+                          className="w-full bg-blue-600 hover:bg-blue-700"
+                          onClick={() => onRequestAllegiance(target.uid, allegianceDuration, clampInt(allegianceOffer, 0))}
+                          disabled={!canAffordLoyalty(getAllegianceLoyaltyCost(allegianceDuration)) || !canAffordCoins(clampInt(allegianceOffer, 0))}
+                      >
+                          إرسال طلب الولاء
+                      </Button>
+                      {!canAffordLoyalty(getAllegianceLoyaltyCost(allegianceDuration)) && <p className="text-xs text-red-400">لا تملك نقاط ولاء كافية.</p>}
+                      {!canAffordCoins(clampInt(allegianceOffer, 0)) && <p className="text-xs text-red-400">لا تملك كوينز كافية لهذا العرض.</p>}
+                  </Section>
+              )}
+              
+              {!canPunish && !canRequestAllegiance && (
+                <div className="p-3 rounded border border-slate-700 bg-slate-900/40 text-sm text-slate-300">
+                  لا يمكنك معاقبة لاعب من نفس طبقتك. ارفع مستواك أو تفاعل مع لاعبين من طبقة أدنى.
+                </div>
+              )}
+
               {isPunishedByMe && (
                 <div className="p-3 border border-green-500/50 rounded-lg space-y-2 bg-green-900/20">
                   <h4 className="font-bold text-center text-green-300">رفع العقوبة</h4>
@@ -269,7 +320,7 @@ const InteractionModal = ({
 
               {renderPunishmentCard(
                 'فرض شخصية',
-                'can_force_name_change',
+                'can_force_avatar_change',
                 getAvatarHonorCost,
                 avatarPunishmentDuration,
                 setAvatarPunishmentDuration,
@@ -504,6 +555,17 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
     }
   };
 
+  const handleRequestAllegiance = async (targetId: string, durationInDays: number, offerAmount: number) => {
+      if (!userProfile) return;
+      const result = await requestAllegiance(userProfile.uid, targetId, durationInDays, offerAmount);
+      if (result.success) {
+        toast({ title: 'تم إرسال الطلب', description: 'تم إرسال طلب الولاء بنجاح.' });
+        handleCloseModal();
+      } else {
+        toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+      }
+  };
+
   // —— Search ——
   const handleSearch = useCallback(async () => {
     if (searchTerm.trim().length < 2) {
@@ -633,6 +695,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
           onIssueDecree={handleIssueDecree}
           onForceAvatar={handleForceAvatar}
           onLiftPunishment={handleLiftPunishment}
+          onRequestAllegiance={handleRequestAllegiance}
         />
       )}
     </>
