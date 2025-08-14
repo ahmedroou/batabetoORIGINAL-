@@ -1,8 +1,7 @@
-
 "use client";
 
 import * as React from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Challenge, ChallengePrize, UserProfile, EntryFee, GameKing, SocialRank } from '@/types';
 import { getChallenges, joinChallenge, getChallengeDetails, getAllChallengesForAdmin } from '@/lib/actions/challenges';
 import { getGameKings, getKingOfGames } from '@/lib/actions/user';
@@ -336,8 +335,14 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
     );
 }
 
+interface SocietyChallengesProps {
+  filter?: 'active' | 'ended';
+  query?: string;
+  sort?: 'newest' | 'reward' | 'popularity';
+  className?: string;
+}
 
-export default function SocietyChallenges({ filter = 'active' }: { filter?: 'active' | 'ended' }) {
+export default function SocietyChallenges({ filter = 'active', query = '', sort = 'newest', className }: SocietyChallengesProps) {
     const [challenges, setChallenges] = useState<Challenge[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -351,14 +356,42 @@ export default function SocietyChallenges({ filter = 'active' }: { filter?: 'act
         fetchChallenges();
     }, []);
 
-    const filteredChallenges = challenges.filter(c => {
-        const endsAtTime = c.endsAt instanceof Timestamp ? c.endsAt.toDate().getTime() : new Date(c.endsAt).getTime();
-        const isEnded = !c.endsAt || isNaN(endsAtTime) || endsAtTime < Date.now();
-        return filter === 'active' ? !isEnded : isEnded;
-    });
+    const filteredAndSortedChallenges = useMemo(() => {
+        const now = Date.now();
+        const lowercaseQuery = query.toLowerCase();
+
+        return challenges.filter(c => {
+            // Filter by active/ended
+            const endsAtTime = c.endsAt instanceof Timestamp ? c.endsAt.toDate().getTime() : new Date(c.endsAt).getTime();
+            const isEnded = !c.endsAt || isNaN(endsAtTime) || endsAtTime < now;
+            const matchesFilter = filter === 'active' ? !isEnded : isEnded;
+
+            // Filter by search query
+            const matchesQuery = lowercaseQuery === '' ||
+                c.title.toLowerCase().includes(lowercaseQuery) ||
+                (c.specificGameType && GAME_TYPE_NAMES[c.specificGameType as Game['gameType']].toLowerCase().includes(lowercaseQuery)) ||
+                c.firstPlacePrize.some(p => p.type.toLowerCase().includes(lowercaseQuery));
+
+            return matchesFilter && matchesQuery;
+        }).sort((a, b) => {
+            switch (sort) {
+                case 'reward':
+                    const totalRewardA = a.firstPlacePrize.reduce((sum, p) => sum + p.value, 0);
+                    const totalRewardB = b.firstPlacePrize.reduce((sum, p) => sum + p.value, 0);
+                    return totalRewardB - totalRewardA;
+                case 'popularity':
+                    return (b.participantCount || 0) - (a.participantCount || 0);
+                case 'newest':
+                default:
+                    const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : new Date(a.createdAt).getTime();
+                    const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : new Date(b.createdAt).getTime();
+                    return timeB - timeA;
+            }
+        });
+    }, [challenges, filter, query, sort]);
 
     return (
-        <div>
+        <div className={className}>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {isLoading ? (
                     [...Array(4)].map((_, i) => (
@@ -374,14 +407,14 @@ export default function SocietyChallenges({ filter = 'active' }: { filter?: 'act
                             </CardFooter>
                          </Card>
                     ))
-                ) : filteredChallenges.length > 0 ? (
-                    filteredChallenges.map((challenge, index) => (
+                ) : filteredAndSortedChallenges.length > 0 ? (
+                    filteredAndSortedChallenges.map((challenge, index) => (
                        <ChallengeCard key={challenge.id} challenge={challenge} index={index} isEnded={filter === 'ended'} />
                     ))
                 ) : (
                     <div className="col-span-full text-center py-16">
                         <p className="text-2xl text-gray-400">
-                           {filter === 'active' ? 'لا توجد تحديات نشطة حاليًا.' : 'لا توجد تحديات منتهية لعرضها.'}
+                           {filter === 'active' ? 'لا توجد تحديات نشطة حاليًا تطابق بحثك.' : 'لا توجد تحديات منتهية تطابق بحثك.'}
                         </p>
                         <p className="text-gray-500">
                            {filter === 'active' ? 'عد قريبًا للتحقق من جديد!' : ''}

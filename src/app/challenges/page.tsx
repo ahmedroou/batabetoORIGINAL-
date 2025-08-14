@@ -159,10 +159,6 @@ export default function ChallengesPage() {
           {/* Floating CTA + footer microcopy */}
           <div className="mt-6 flex items-center justify-between text-sm text-slate-400">
             <div>نصيحة: استخدم شريط البحث لتصفية البطولات بسرعة أو غيّر الترتيب لعرض الأهم أولاً.</div>
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-purple-700/30 text-purple-200">واجهة محسنة</span>
-              <span className="px-3 py-1 rounded-full bg-rose-600/20 text-rose-300">أنيميشن لطيف</span>
-            </div>
           </div>
         </div>
       </main>
