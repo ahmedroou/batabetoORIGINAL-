@@ -1,11 +1,12 @@
 
+
 import {
   startGame,
   revealCard,
   submitHint,
   endTurn,
 } from '@/lib/actions/word-war';
-// import { checkForWinnerInternal } from '@/lib/actions/helpers/word-war-helpers';
+import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
 import type { Game, Player, WordWarCard } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
@@ -177,4 +178,29 @@ describe('Word War - Game Logic', () => {
     expect(game.wordWarState?.turn).toBe('blue');
     expect(game.gameState).toBe('guide_turn');
   });
+});
+
+describe('Word War - End of Game Awards', () => {
+
+    test('should award points to the winning team and zero to the losing team', () => {
+        const game = createMockGame(mockPlayers, {red: 'p1', blue: 'p3'}, mockCards);
+        game.gameResult = { winner: 'red', message: 'الفريق الأحمر فاز!' };
+
+        const { updates, winUpdate } = calculateEndOfGameAwards(game, []);
+        
+        // Red team (winners)
+        expect(updates['p1'].leaderboardPoints).toBe(3);
+        expect(updates['p1'].coins).toBe(2);
+        expect(updates['p2'].leaderboardPoints).toBe(3);
+        expect(updates['p2'].coins).toBe(2);
+        
+        // Blue team (losers)
+        expect(updates['p3'].leaderboardPoints).toBe(0);
+        expect(updates['p3'].coins).toBe(0);
+        expect(updates['p4'].leaderboardPoints).toBe(0);
+        expect(updates['p4'].coins).toBe(0);
+
+        // No individual winner in team games
+        expect(winUpdate).toBeNull();
+    });
 });

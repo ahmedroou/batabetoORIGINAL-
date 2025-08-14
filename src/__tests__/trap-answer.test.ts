@@ -301,7 +301,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
 
 describe('Trap Answer Game - Away Player Feature', () => {
     const mockPlayers: Player[] = [{ id: 'p1', name: 'Alice', avatarId: 'a1', status: 'alive', score: 10, position: 0 }];
-    const mockQuestion: TrapQuestion = { id: 'q1', question: 'Q', answer: 'A' };
+    const mockQuestion: TrapQuestion = { id: 'q1', question: 'Q', answer: 'A', category: 'test' };
 
     test('should correctly identify a player who was away during the round', () => {
         const awayPlayerIds = ['p1'];
@@ -319,5 +319,3 @@ describe('Trap Answer Game - Away Player Feature', () => {
         expect(awayPlayerIdsDuringRound).toContain('p1');
     });
 });
-
-    

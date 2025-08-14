@@ -30,7 +30,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         { leaderboardPoints: 1, coins: 1 }, // 3rd place
     ];
 
-    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<Game['gameType'], number>, challengePoints?: number, permissions?: string[] }> = {};
+    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<string, number>, challengePoints?: number, permissions?: string[] }> = {};
     let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
     let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
     

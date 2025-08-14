@@ -10,6 +10,7 @@ import {
 } from '@/lib/actions/helpers/educated-merchant-helpers';
 import type { Game, Player, Property, EducatedMerchantQuestion } from '@/types';
 import { Timestamp } from 'firebase/firestore';
+import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
 
 
 // This is a simplified mock of the game state for testing pure functions.
@@ -188,4 +189,49 @@ describe('Educated Merchant - Board Generation', () => {
     });
 });
 
+
+describe('Educated Merchant - End of Game Awards', () => {
+    
+    test('should distribute awards correctly for 1st, 2nd, and 3rd place', () => {
+        const game = createMockGame(mockPlayers);
+        game.playerScores = { p1: 5000, p2: 3000, p3: 1000 };
+        game.gameResult = { winner: 'p1', message: 'Game Over' };
+
+        const { updates, winUpdate } = calculateEndOfGameAwards(game, []);
+        
+        // P1 (1st)
+        expect(updates['p1'].leaderboardPoints).toBe(4);
+        expect(updates['p1'].coins).toBe(3);
+        
+        // P2 (2nd)
+        expect(updates['p2'].leaderboardPoints).toBe(2);
+        expect(updates['p2'].coins).toBe(1);
+
+        // P3 (3rd)
+        expect(updates['p3'].leaderboardPoints).toBe(1);
+        expect(updates['p3'].coins).toBe(1);
+
+        expect(winUpdate?.userId).toBe('p1');
+    });
+
+    test('should handle ties in ranking correctly', () => {
+        const game = createMockGame(mockPlayers);
+        game.playerScores = { p1: 5000, p2: 3000, p3: 3000 }; // p2 and p3 tied for 2nd
+        game.gameResult = { winner: 'p1', message: 'Game Over' };
+
+        const { updates } = calculateEndOfGameAwards(game, []);
+        
+        // P1 (1st)
+        expect(updates['p1'].leaderboardPoints).toBe(4);
+        expect(updates['p1'].coins).toBe(3);
+
+        // P2 (Tied 2nd)
+        expect(updates['p2'].leaderboardPoints).toBe(2);
+        expect(updates['p2'].coins).toBe(1);
+        
+        // P3 (Tied 2nd)
+        expect(updates['p3'].leaderboardPoints).toBe(2);
+        expect(updates['p3'].coins).toBe(1);
+    });
+});
     
