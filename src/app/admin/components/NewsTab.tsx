@@ -19,7 +19,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogContent, AlertDialogFooter } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
@@ -102,6 +102,8 @@ function ArticleRow({
   onEdit: (a: Article) => void;
   onDelete: (a: Article) => void;
 }) {
+  const createdAtDate = article.createdAt instanceof Timestamp ? article.createdAt.toDate() : new Date(article.createdAt);
+
   return (
     <div className="group relative overflow-hidden rounded-xl border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60 hover:shadow-md transition-shadow">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/60 via-purple-500/60 to-pink-500/60 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -131,7 +133,7 @@ function ArticleRow({
             )}
           </div>
           <p className="mt-1 text-xs text-muted-foreground truncate">
-            بواسطة {article.authorName} • {format(article.createdAt, "d MMM yyyy, h:mm a", { locale: ar })} • {formatDistanceToNow(article.createdAt, { addSuffix: true, locale: ar })}
+            بواسطة {article.authorName} • {format(createdAtDate, "d MMM yyyy, h:mm a", { locale: ar })} • {formatDistanceToNow(createdAtDate, { addSuffix: true, locale: ar })}
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -168,6 +170,7 @@ function ArticleRow({
     </div>
   );
 }
+
 
 function AudienceMultiSelect({
   value,
@@ -279,12 +282,19 @@ export default function NewsTab() {
   const fetchAllData = useCallback(async () => {
     setIsFetching(true);
     const [articlesResult, groupsResult] = await Promise.all([getArticlesForAdmin(), getAudienceGroups()]);
-    if (articlesResult.success && articlesResult.articles) {
-      setArticles(articlesResult.articles);
+
+    if (articlesResult.success && articlesResult.data) {
+      setArticles(articlesResult.data);
     } else {
       toast({ title: "خطأ", description: articlesResult.error, variant: "destructive" });
     }
-    setAudienceGroups(groupsResult);
+
+    if (groupsResult.success && groupsResult.data) {
+      setAudienceGroups(groupsResult.data);
+    } else {
+       toast({ title: "خطأ", description: groupsResult.error, variant: "destructive" });
+    }
+    
     setIsFetching(false);
   }, [toast]);
 
@@ -323,7 +333,7 @@ export default function NewsTab() {
       return;
     }
     setIsSubmitting(true);
-    const articleData = {
+    const articleData: Omit<Article, 'id' | 'createdAt'> = {
       title: title.trim(),
       content: content.trim(),
       category: category.trim(),
@@ -333,7 +343,9 @@ export default function NewsTab() {
       authorName: userProfile.name,
       authorId: userProfile.uid,
     };
-    const result = editingArticle ? await updateArticle(editingArticle.id, articleData) : await createArticle(articleData);
+    
+    const result = editingArticle ? await updateArticle(editingArticle.id, userProfile.uid, articleData) : await createArticle(articleData);
+
     if (result.success) {
       toast({ title: editingArticle ? "تم تحديث المقال بنجاح" : "تم إنشاء المقال بنجاح" });
       setIsDialogOpen(false);
@@ -348,7 +360,7 @@ export default function NewsTab() {
   const handleDeleteArticle = async () => {
     if (!articleToDelete) return;
     setIsSubmitting(true);
-    const result = await deleteArticle(articleToDelete.id);
+    const result = await deleteArticle(articleToDelete.id, userProfile?.uid);
     if (result.success) {
       toast({ title: "تم حذف المقال" });
       setArticleToDelete(null);
@@ -402,7 +414,7 @@ export default function NewsTab() {
     setIsGeneratingArticle(true);
     const result = await runAiJournalist(aiDirective.trim() || undefined);
     if (result.success) {
-      toast({ title: "نجاح", description: `تم إنشاء ونشر مقال جديد بعنوان: "${result.article?.headline}"` });
+      toast({ title: "نجاح", description: `تم إنشاء ونشر مقال جديد بعنوان: "${result.data?.headline}"` });
       fetchAllData();
     } else {
       toast({ title: "فشل إنشاء المقال", description: result.error, variant: "destructive" });
@@ -414,7 +426,7 @@ export default function NewsTab() {
     setIsDeletingOld(true);
     const result = await deleteOldArticles();
     if (result.success) {
-      toast({ title: "نجاح", description: `تم حذف ${result.deletedCount || 0} مقال قديم.` });
+      toast({ title: "نجاح", description: `تم حذف ${result.data?.deletedCount || 0} مقال قديم.` });
       fetchAllData();
     } else {
       toast({ title: "فشل الحذف", description: result.error, variant: "destructive" });
@@ -434,10 +446,10 @@ export default function NewsTab() {
     if (categoryFilter !== "all") list = list.filter((a) => (a.category || "") === categoryFilter);
     switch (sortBy) {
       case "newest":
-        list.sort((a, b) => b.createdAt - a.createdAt);
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         break;
       case "oldest":
-        list.sort((a, b) => a.createdAt - b.createdAt);
+        list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         break;
       case "title":
         list.sort((a, b) => a.title.localeCompare(b.title, "ar"));
@@ -466,13 +478,13 @@ export default function NewsTab() {
   const clearSelection = () => setSelectedIds([]);
 
   const bulkPublish = async (publish: boolean) => {
-    if (!selectedIds.length) return;
+    if (!selectedIds.length || !userProfile) return;
     setIsSubmitting(true);
     await Promise.all(
       selectedIds.map((id) => {
         const a = articles.find((x) => x.id === id);
         if (!a) return Promise.resolve();
-        return updateArticle(id, { ...a, isPublished: publish });
+        return updateArticle(id, userProfile.uid, { ...a, isPublished: publish });
       })
     );
     toast({ title: publish ? "تم نشر العناصر المحددة" : "تم تحويل العناصر لمسودات" });
@@ -484,7 +496,7 @@ export default function NewsTab() {
   const bulkDelete = async () => {
     if (!selectedIds.length) return;
     setIsSubmitting(true);
-    await Promise.all(selectedIds.map((id) => deleteArticle(id)));
+    await Promise.all(selectedIds.map((id) => deleteArticle(id, userProfile?.uid)));
     toast({ title: "تم حذف العناصر المحددة" });
     clearSelection();
     fetchAllData();
@@ -697,7 +709,7 @@ export default function NewsTab() {
                           </Button>
                           <CollapsibleTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedGroup(group)}>
-                              <ChevronsUpDown className="h-4 w-4" />
+                              <ChevronsUpDown className="h-4 h-4" />
                             </Button>
                           </CollapsibleTrigger>
                         </div>
