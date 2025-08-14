@@ -2,63 +2,11 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // By default, deny all reads and writes
-    // match /{document=**} {
-    //   allow read, write: if false;
-    // }
-
-    // Users can only read/write their own profile
-    match /users/{userId} {
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null;
+    // WARNING: These rules are not secure for a production environment.
+    // They allow any authenticated user to read and write to the entire database.
+    // Secure your data before launching your app.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
     }
-    
-    // Game Kings can be read by anyone authenticated
-    match /game_kings/{gameType} {
-      allow read: if request.auth != null;
-      // Write access should be handled by server-side admin functions
-      allow write: if false; 
-    }
-
-    // Game rooms general rules
-    match /games/{gameId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-
-      // Update rule with specific logic for Word War
-      allow update: if request.auth != null && (
-        // Allow updates if it's not a Word War game with a turnId (e.g., lobby state)
-        !('wordWarState' in resource.data) ||
-        !('turnId' in resource.data.wordWarState) ||
-        // If it IS a Word War game with a turnId, only allow update if the turnId matches.
-        // This prevents stale updates from a previous turn.
-        resource.data.wordWarState.turnId == request.resource.data.wordWarState.turnId ||
-        // Allow players array updates for joining/leaving lobby regardless of turnId
-        request.resource.data.players.size() != resource.data.players.size()
-      );
-    }
-    
-    // Articles can be read by anyone, but only created/updated by authenticated users.
-    // Deletion should be handled by server-side logic (e.g., actorId check).
-    match /articles/{articleId} {
-      allow read: if true;
-      allow create, update: if request.auth != null;
-      allow delete: if false; // Deletions must be handled by a secure server action
-    }
-    
-    // Game settings are generally readable by all, but writable only by admins (via server actions)
-    match /game_settings/{setting} {
-        allow read: if true;
-        allow write: if false; // Assume only admin can write via server-side functions
-    }
-    
-    // Other collections, secure as needed. Defaulting to authenticated read for now.
-    match /trap_answer_questions/{docId} { allow read: if request.auth != null; allow write: if false; }
-    match /word_war_words/{docId} { allow read: if request.auth != null; allow write: if false; }
-    match /prison_questions/{docId} { allow read: if request.auth != null; allow write: if false; }
-    match /challenges/{docId} { allow read: if request.auth != null; allow write: if false; }
-    match /clans/{docId} { allow read: if request.auth != null; allow write: if request.auth != null; } // Example: allow members to update
-    match /complaints/{docId} { allow create: if request.auth != null; allow read, write, delete: if false; } // Handled by server
   }
 }
