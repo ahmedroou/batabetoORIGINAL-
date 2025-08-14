@@ -30,7 +30,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         { leaderboardPoints: 1, coins: 1 }, // 3rd place
     ];
 
-    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: number, challengePoints?: number, permissions?: string[] }> = {};
+    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<Game['gameType'], number>, challengePoints?: number, permissions?: string[] }> = {};
     let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
     let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
     
@@ -47,7 +47,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             updates[player.id] = { 
                 leaderboardPoints: points, 
                 coins: player.team === winningTeam ? 2 : 0, 
-                gamesPlayed: 1,
+                gamesPlayed: { [game.gameType]: 1 },
                 challengePoints: points,
             };
         });
@@ -78,7 +78,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
                  const tier = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
                  playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
             }
-            updates[id] = { ...playerAwards, gamesPlayed: 1 };
+            updates[id] = { ...playerAwards, gamesPlayed: { [game.gameType]: 1 } };
         });
 
         if (playerRanks.length > 0 && playerRanks[0].rank === 1) {
@@ -107,7 +107,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
                         updates[deceiverId].leaderboardPoints += 1;
                         updates[deceiverId].challengePoints = (updates[deceiverId].challengePoints || 0) + 1;
                     } else {
-                        updates[deceiverId] = { leaderboardPoints: 1, coins: 0, gamesPlayed: 1, challengePoints: 1 };
+                        updates[deceiverId] = { leaderboardPoints: 1, coins: 0, gamesPlayed: { [game.gameType]: 1 }, challengePoints: 1 };
                     }
                 }
             }

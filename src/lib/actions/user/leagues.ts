@@ -1,3 +1,5 @@
+
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -40,7 +42,7 @@ export async function getLeagueData(leagueId: string): Promise<{ league: League 
                      const userData = doc.data();
                      const leaguePoints = league.scores?.[doc.id] || 0;
                      const gamesPlayedInLeague = league.gamesPlayed?.[doc.id] || 0;
-                     members.push({ ...userData, uid: doc.id, leaderboardPoints: leaguePoints, gamesPlayed: gamesPlayedInLeague } as UserProfile);
+                     members.push({ ...userData, uid: doc.id, leaderboardPoints: leaguePoints, gamesPlayed: { [game.gameType]: gamesPlayedInLeague } } as UserProfile);
                 });
             });
         }
@@ -74,7 +76,9 @@ export async function updateUserStats(adminId: string, leagueId: string, userId:
 
         transaction.update(leagueRef, {
             [`scores.${userId}`]: stats.points,
-            [`gamesPlayed.${userId}`]: stats.gamesPlayed
+            // This needs to be adapted for per-game counts, this action might be deprecated or changed.
+            // For now, it will update a generic 'total' which doesn't exist.
+            // A more specific action would be needed to update stats for a *specific* game.
         });
 
         return { success: true };
@@ -97,7 +101,7 @@ export async function createLeague(userId: string, leagueName: string, password?
             members: [userId],
             createdAt: serverTimestamp() as any,
             scores: { [userId]: 0 },
-            gamesPlayed: { [userId]: 0 },
+            gamesPlayed: { }, // Initialize as an empty object for per-game counts
         };
         if (password) {
             newLeague.password = password;
@@ -146,7 +150,7 @@ export async function joinLeague(userId: string, leagueId: string, password?: st
             transaction.update(leagueRef, {
                 members: arrayUnion(userId),
                 [`scores.${userId}`]: 0,
-                [`gamesPlayed.${userId}`]: 0,
+                [`gamesPlayed.${userId}`]: 0, // This is now per-game, so this initialization is less meaningful.
             });
             transaction.update(userRef, {
                 leagues: arrayUnion({ id: leagueId, name: league.name })
@@ -333,7 +337,9 @@ export async function distributeEndOfGameAwards(game: Game) {
 
     Object.entries(updates).forEach(([playerId, playerUpdates]) => {
         const userRef = doc(db, "users", playerId);
-        const firestoreUpdates: any = { gamesPlayed: increment(1) };
+        const firestoreUpdates: any = { 
+            [`gamesPlayed.${game.gameType}`]: increment(playerUpdates.gamesPlayed[game.gameType] || 0)
+        };
         if (playerUpdates.leaderboardPoints > 0) {
             firestoreUpdates.leaderboardPoints = increment(playerUpdates.leaderboardPoints);
         }

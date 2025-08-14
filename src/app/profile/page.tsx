@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
@@ -31,7 +32,8 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 
 import { updateUserAvatar, updateUserName, updateUserGender, payPunishmentTax } from "@/lib/actions/user";
-import type { SocialRank } from "@/types";
+import type { SocialRank, Game } from "@/types";
+import { GAME_TYPE_NAMES } from "@/data/icons";
 
 import {
   ArrowLeft,
@@ -262,6 +264,8 @@ export default function ProfilePage() {
     );
   }
 
+  const allPlayedGames = Object.keys(userProfile.gamesPlayed || {}) as (keyof typeof GAME_TYPE_NAMES)[];
+
   return (
     <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-gray-900 to-black py-8 px-4">
       <div className="mx-auto w-full max-w-5xl space-y-6">
@@ -284,7 +288,7 @@ export default function ProfilePage() {
                   )}
                 </div>
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <h1 className="text-2xl font-bold tracking-wide">{userProfile.name}</h1>
                     <Badge variant="secondary" className="gap-1">
                       {currentRank?.icon ? <currentRank.icon className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
@@ -320,13 +324,12 @@ export default function ProfilePage() {
         </motion.div>
 
         {/* Quick stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <StatPill icon={<CircleDollarSign className="h-4 w-4" />} label="كوينز" value={userProfile.coins ?? 0} />
           <StatPill icon={<Diamond className="h-4 w-4" />} label="ألماس" value={userProfile.diamonds ?? 0} />
+          <StatPill icon={<Trophy className="h-4 w-4" />} label="نقاط" value={userProfile.leaderboardPoints ?? 0} />
           <StatPill icon={<ShieldCheck className="h-4 w-4" />} label="الشرف" value={userProfile.honorPoints ?? 0} />
           <StatPill icon={<Handshake className="h-4 w-4" />} label="الولاء" value={userProfile.loyaltyPoints ?? 0} />
-          <StatPill icon={<Star className="h-4 w-4" />} label="التمرد" value={userProfile.rebellionPoints ?? 0} />
-          <StatPill icon={<Gamepad2 className="h-4 w-4" />} label="مباريات" value={userProfile.gamesPlayed ?? 0} />
         </div>
 
         <Card className="border-purple-500/20 bg-black/30 backdrop-blur-sm">
@@ -336,10 +339,11 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="customize" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 bg-gray-900/50">
+              <TabsList className="grid w-full grid-cols-4 bg-gray-900/50">
                 <TabsTrigger value="customize">التخصيص</TabsTrigger>
-                <TabsTrigger value="security">الحساب</TabsTrigger>
+                <TabsTrigger value="stats">الإحصائيات</TabsTrigger>
                 <TabsTrigger value="status">الحالة</TabsTrigger>
+                <TabsTrigger value="account">الحساب</TabsTrigger>
               </TabsList>
 
               {/* Customize */}
@@ -378,8 +382,27 @@ export default function ProfilePage() {
                     <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> جارٍ حفظ الشخصية…</div>
                   )}
                 </section>
+              </TabsContent>
+              
+              {/* Stats */}
+              <TabsContent value="stats" className="mt-6 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {allPlayedGames.map(gameType => (
+                          <div key={gameType} className="p-3 bg-muted/50 rounded-lg border">
+                              <h4 className="font-bold">{GAME_TYPE_NAMES[gameType]}</h4>
+                              <div className="flex justify-between items-center text-sm mt-1">
+                                  <span>مباريات: {userProfile.gamesPlayed?.[gameType] || 0}</span>
+                                  <span>انتصارات: {userProfile.winCounts?.[gameType] || 0}</span>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              </TabsContent>
 
-                <section className="space-y-2">
+
+              {/* Account / security */}
+              <TabsContent value="account" className="mt-6 space-y-4">
+                 <section className="space-y-2">
                   <h3 className="text-lg font-semibold">اسمك</h3>
                   <div className="flex items-center gap-2">
                     <Input
@@ -409,7 +432,7 @@ export default function ProfilePage() {
                       onClick={() => onChangeGender("male")}
                       className="gap-2"
                     >
-                      <VenetianMask className="h-4 w-4" /> ذكر
+                      <UserIcon className="h-4 w-4" /> ذكر
                     </Button>
                     <Button
                       type="button"
@@ -417,25 +440,10 @@ export default function ProfilePage() {
                       onClick={() => onChangeGender("female")}
                       className="gap-2"
                     >
-                      <VenetianMask className="h-4 w-4" /> أنثى
+                      <UserIcon className="h-4 w-4" /> أنثى
                     </Button>
                   </div>
                 </section>
-              </TabsContent>
-
-              {/* Account / security */}
-              <TabsContent value="security" className="mt-6 space-y-4">
-                <div className="flex items-center gap-3 text-lg">
-                  <Mail className="h-5 w-5 text-primary" />
-                  <span className="text-muted-foreground">{userProfile.email}</span>
-                </div>
-                {userProfile.clan && (
-                  <div className="flex items-center gap-3 text-lg">
-                    <UsersIcon className="h-5 w-5 text-primary" />
-                    <span className="font-semibold">{userProfile.clan.name}</span>
-                    <Button size="sm" variant="link" asChild><Link href="/society">الانتقال إلى المجتمع</Link></Button>
-                  </div>
-                )}
               </TabsContent>
 
               {/* Status */}
@@ -452,7 +460,7 @@ export default function ProfilePage() {
                         : `تم إذلالك بواسطة ${currentPunishment.details.byName ?? "—"}.`}
                     </p>
                     {currentPunishment.details?.until && (
-                      <p className="mt-1 text-xs text-muted-foreground">تنتهي {timeRemaining(currentPunishment.details.until)}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">تنتهي {timeRemaining(currentPunishment.details.until as any)}</p>
                     )}
                     {!!currentPunishment.details?.taxToLift && (
                       <div className="mt-3">

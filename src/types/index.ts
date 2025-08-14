@@ -393,7 +393,7 @@ export interface UserProfile {
   loyaltyPoints: number;
   rebellionPoints?: number;
   trophies: number;
-  gamesPlayed: number;
+  gamesPlayed?: Record<Game['gameType'], number>;
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
   winCounts?: Record<Game['gameType'], number>;
