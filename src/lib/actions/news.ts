@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -416,7 +417,7 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
 async function getRecentFinishedGames(count: number): Promise<Game[]> {
   try {
     const gamesCol = collection(db, GAMES_COLLECTION);
-    const q = query(gamesCol, where('gameState', '==', 'final_results'), orderBy('createdAt', 'desc'), limit(count));
+    const q = query(gamesCol, orderBy('createdAt', 'desc'), where('gameState', '==', 'final_results'), limit(count));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(d => d.data() as Game);
   } catch (err) {
