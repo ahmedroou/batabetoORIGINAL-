@@ -264,9 +264,9 @@ export default function KingsClient() {
                               <span className="flex items-center gap-1.5">
                                 <Star className="w-4 h-4" /> {king.winCount} انتصارات
                               </span>
-                              <span className="flex items-center gap-1.5">
-                                <Trophy className="w-4 h-4" /> {king.leaderboardPoints || 0} نقطة
-                              </span>
+                                <span className="flex items-center gap-1.5">
+                                    <Trophy className="w-4 h-4" /> {king.totalLeaderboardPoints || 0} إجمالي النقاط
+                                </span>
                             </div>
                           </div>
                         ) : (

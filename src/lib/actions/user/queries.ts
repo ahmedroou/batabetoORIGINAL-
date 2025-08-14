@@ -83,8 +83,7 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
           avatarId: data.avatarId,
           winCount: data.winCount,
           kingId: data.kingId,
-          // Fetch leaderboardPoints for the king from their user profile
-          leaderboardPoints: 0, // Placeholder, will be fetched next
+          totalLeaderboardPoints: 0, 
       } as GameKing;
     });
     
@@ -99,7 +98,7 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
             const king = kings[gameType];
             const kingUser = usersData.get(king.kingId);
             if (kingUser) {
-                king.leaderboardPoints = kingUser.leaderboardPoints || 0;
+                king.totalLeaderboardPoints = kingUser.leaderboardPoints || 0;
             }
         }
     }
@@ -281,4 +280,3 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
     
 
     
-
