@@ -3,17 +3,19 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, getDoc, Timestamp, deleteField } from 'firebase/firestore';
+import { doc, runTransaction, getDoc, Timestamp, deleteField, updateDoc } from 'firebase/firestore';
 import type { Game, Player, ChallengeResult, PlayerProgress, GridPosition, PathTile } from '@/types';
 import { GENIUS_CHALLENGES, GENIUS_CHALLENGE_MAP } from '@/data/genius-challenges';
 import { updateLeagueScoresForGameEnd } from './user';
 import { generateGeniusChallenge } from './admin';
 import { shuffle } from './helpers';
+import { arrayUnion } from 'firebase/firestore';
+
 
 const INTRO_COUNTDOWN_SECONDS = 5;
 
 
-export async function updateChallengeProgress(
+export async function updateKingOfGeniusProgress(
   gameId: string,
   playerId: string,
   progress: Partial<PlayerProgress>
@@ -242,56 +244,8 @@ export async function submitChallengeResult(
   });
 }
 
-export async function handleTimeout(gameId: string, hostId: string) {
-    const gameRef = doc(db, 'games', gameId.toUpperCase());
-    let gameDataForLeagueUpdate: Game | null = null;
 
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) return;
-        const game = gameDoc.data() as Game;
-        
-        if (game.hostId !== hostId) return;
-
-        if (!game.challengeState?.challengeEndsAt || Date.now() < game.challengeState.challengeEndsAt.toMillis()) {
-            return;
-        }
-
-        if (game.gameState === 'challenge_intro') {
-            await beginChallenge(gameId, hostId);
-        } else if (game.gameState === 'challenge_active') {
-            const activePlayers = game.players.filter(p => p.status === 'alive');
-            const submittedPlayers = game.challengeState?.results?.map(r => r.playerId) || [];
-            const missingSubmissions = activePlayers.filter(p => !submittedPlayers.includes(p.id));
-
-            if (missingSubmissions.length > 0) {
-                const resultsToAdd = missingSubmissions.map(p => ({
-                    playerId: p.id,
-                    team: p.team!,
-                    isCorrect: false,
-                    time: (game.challengeState.duration || 90) + 1,
-                    score: 0
-                }));
-                 transaction.update(gameRef, {'challengeState.results': arrayUnion(...resultsToAdd) });
-            }
-            // After adding missing results, call logic to advance state
-            await advanceFromActive(transaction, gameRef);
-
-        } else if (game.gameState === 'challenge_results') {
-            gameDataForLeagueUpdate = await advanceFromResults(transaction, gameRef, game);
-        }
-    });
-
-    if (gameDataForLeagueUpdate) {
-        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
-    }
-}
-
-async function advanceFromActive(transaction: Transaction, gameRef: any) {
-    const gameDoc = await transaction.get(gameRef);
-    if (!gameDoc.exists()) throw new Error("Game not found during advanceFromActive");
-    const game = gameDoc.data() as Game;
-    
+async function advanceFromActive(game: Game) {
     const results = game.challengeState?.results || [];
     
     const sortedCorrectResults = results
@@ -311,14 +265,15 @@ async function advanceFromActive(transaction: Transaction, gameRef: any) {
         }
     });
 
-    transaction.update(gameRef, {
+    const updates = {
         teamScores: newScores,
         gameState: 'challenge_results',
         'challengeState.timerEndsAt': Timestamp.fromMillis(Date.now() + 15 * 1000)
-    });
+    };
+    return {updates, finalGame: null};
 }
 
-async function advanceFromResults(transaction: Transaction, gameRef: any, game: Game): Promise<Game | null> {
+async function advanceFromResults(game: Game): Promise<{ updates: any, finalGame: Game | null }> {
     const nextIndex = (game.currentChallengeIndex ?? 0) + 1;
 
     if (nextIndex >= (game.challengeOrder?.length || 0)) {
@@ -337,21 +292,113 @@ async function advanceFromResults(transaction: Transaction, gameRef: any, game: 
       
         const gameResult = { winner, message };
         
-        transaction.update(gameRef, {
+        const updates = {
             gameState: 'final_results',
             gameResult,
             'challengeState.timerEndsAt': deleteField()
-        });
+        };
         
-        return { ...game, gameState: 'final_results', gameResult, teamScores: game.teamScores };
+        return { updates, finalGame: { ...game, gameState: 'final_results', gameResult, teamScores: game.teamScores } };
     } else {
-        transaction.update(gameRef, {
+        const updates = {
             currentChallengeIndex: nextIndex,
             gameState: 'challenge_intro',
             'challengeState.playerProgress': {},
             'challengeState.results': [],
             'challengeState.puzzle': {},
+        };
+        return { updates, finalGame: null };
+    }
+}
+
+
+export async function nextKingOfGenius(gameId: string, hostId: string) {
+    let gameDataForLeagueUpdate: Game | null = null;
+    await runTransaction(db, async (transaction) => {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) return;
+        const game = gameDoc.data() as Game;
+        if (game.hostId !== hostId) return;
+        if (game.gameState !== 'challenge_results') return; // Ensure we are in the correct state
+
+        const { updates, finalGame } = await advanceFromResults(game);
+        transaction.update(gameRef, updates);
+        gameDataForLeagueUpdate = finalGame;
+    });
+
+    if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
+    
+    // Check if the next state requires preparing a challenge and do it.
+    const updatedGameDoc = await getDoc(doc(db, 'games', gameId));
+    if (updatedGameDoc.exists() && updatedGameDoc.data().gameState === 'challenge_intro') {
+        await prepareNextChallenge(gameId, hostId);
+    }
+}
+
+export async function handleTimeout(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId.toUpperCase());
+    
+    try {
+        let gameDataForLeagueUpdate: Game | null = null;
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) return;
+            const game = gameDoc.data() as Game;
+            
+            if (game.hostId !== hostId) return;
+
+            // Timer check
+            if (!game.challengeState?.challengeEndsAt || Date.now() < game.challengeState.challengeEndsAt.toMillis()) {
+                return;
+            }
+
+            if (game.gameState === 'challenge_intro') {
+                const challengeIndex = game.currentChallengeIndex ?? 0;
+                const puzzleString = game.puzzles?.[challengeIndex];
+                if (!puzzleString) {
+                    await prepareNextChallenge(gameId, hostId);
+                }
+                await beginChallenge(gameId, hostId);
+
+            } else if (game.gameState === 'challenge_active') {
+                const activePlayers = game.players.filter(p => p.status === 'alive');
+                const submittedPlayers = game.challengeState?.results?.map(r => r.playerId) || [];
+                const missingSubmissions = activePlayers.filter(p => !submittedPlayers.includes(p.id));
+
+                if (missingSubmissions.length > 0) {
+                    const resultsToAdd = missingSubmissions.map(p => ({
+                        playerId: p.id,
+                        team: p.team!,
+                        isCorrect: false,
+                        time: (game.challengeState?.duration || 90) + 1,
+                        score: 0
+                    }));
+                    transaction.update(gameRef, {'challengeState.results': arrayUnion(...resultsToAdd) });
+                }
+                
+                const gameAfterUpdates = { ...game, challengeState: { ...game.challengeState, results: [...(game.challengeState.results || []), ...missingSubmissions.map(p => ({playerId: p.id, team: p.team!, isCorrect: false, time: 99, score: 0}))] } };
+                const { updates } = await advanceFromActive(gameAfterUpdates);
+                transaction.update(gameRef, updates);
+
+            } else if (game.gameState === 'challenge_results') {
+                const { updates, finalGame } = await advanceFromResults(game);
+                transaction.update(gameRef, updates);
+                gameDataForLeagueUpdate = finalGame;
+            }
         });
-        return null;
+
+        if (gameDataForLeagueUpdate) {
+            await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+        }
+
+        const updatedGameDoc = await getDoc(doc(db, 'games', gameId));
+        if (updatedGameDoc.exists() && updatedGameDoc.data().gameState === 'challenge_intro') {
+            await prepareNextChallenge(gameId, hostId);
+        }
+    } catch(error) {
+        console.error("Error in handleTimeout:", error);
     }
 }
