@@ -60,15 +60,17 @@ import {
   addEducatedMerchantCategory,
   editEducatedMerchantCategory,
   deleteEducatedMerchantCategory,
-  deleteQuestions,
-  countQuestions,
-  uploadWordWarWordsFromJson,
-  uploadPrisonQuestionsFromJson,
-  uploadEducatedMerchantQuestionsFromJson,
-  deleteDuplicateWords,
-  deleteSimilarQuestions as deleteSimilarTrapAnswerQuestions,
-  deleteSimilarPrisonQuestions
-} from "@/lib/actions/admin";
+} from "@/lib/actions/admin/settings";
+import {
+    deleteQuestions,
+    countQuestions,
+    uploadWordWarWordsFromJson,
+    uploadPrisonQuestionsFromJson,
+    uploadEducatedMerchantQuestionsFromJson,
+    deleteDuplicateWords,
+    deleteSimilarQuestions as deleteSimilarTrapAnswerQuestions
+} from "@/lib/actions/admin/content";
+import { deleteSimilarPrisonQuestions } from '@/lib/actions/admin/maintenance';
 
 import type { Game } from "@/types";
 import { Info, Upload, Trash2, Sparkles, Edit, Save, Loader2, FileUp, FileX2, X, RefreshCw, Filter, Download, Check } from "lucide-react";
