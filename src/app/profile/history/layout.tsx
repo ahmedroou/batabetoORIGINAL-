@@ -1,51 +1,5 @@
 "use client";
 
-import type { Metadata, Viewport } from "next";
-
-// =============================
-// Metadata (SEO + Social Cards)
-// =============================
-export const metadata: Metadata = {
-  title: {
-    default: "سجل المباريات",
-    template: "%s • سجل المباريات",
-  },
-  description: "اطلع على تاريخ مبارياتك ونتائجها.",
-  applicationName: "PlayVerse",
-  keywords: ["سجل", "مباريات", "ألعاب", "نتائج", "تاريخ"],
-  authors: [{ name: "PlayVerse" }],
-  icons: { icon: "/favicon.ico" },
-  alternates: { canonical: "/history" },
-  openGraph: {
-    type: "website",
-    locale: "ar_SA",
-    title: "سجل المباريات",
-    description: "اطلع على تاريخ مبارياتك ونتائجها.",
-    url: "/history",
-    siteName: "PlayVerse",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "سجل المباريات",
-    description: "اطلع على تاريخ مبارياتك ونتائجها.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#6D28D9" }, // violet-700
-    { media: "(prefers-color-scheme: dark)", color: "#A78BFA" }, // violet-300
-  ],
-};
-
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#6D28D9" },
-    { media: "(prefers-color-scheme: dark)", color: "#A78BFA" },
-  ],
-};
-
 // =============================
 // Layout (RTL-friendly, Minimal)
 // - متناسق مع صفحة سجل المباريات المحسّنة (بنفسجي/أبيض)
