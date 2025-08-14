@@ -9,6 +9,7 @@ import { PlayerAvatar } from '../PlayerAvatar';
 import { HandCoins, Crown, AlertTriangle, Home, Building } from 'lucide-react';
 import type { Player } from '@/types';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface PlayerHUDProps {
   players: Player[];
@@ -98,7 +99,7 @@ function useAnimatedMoney(players: Player[], opts?: { duration?: number; clearAf
 
 export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDProps) {
   const currentPlayerId = turnOrder[currentTurnIndex];
-
+  const isMobile = useIsMobile();
   const { display, deltas, nonceMap } = useAnimatedMoney(players, { duration: 650, clearAfterMs: 1400 });
 
   // leader calculation
@@ -128,7 +129,7 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
         </CardHeader>
 
         <CardContent className="py-2">
-          <ScrollArea className="h-[30vh] pr-2">
+          <ScrollArea className={cn(isMobile ? "h-[15vh]" : "h-[30vh]", "pr-2")}>
             <div className="space-y-2">
               {players.map((player) => {
                 const isCurrent = player.id === currentPlayerId;
@@ -136,8 +137,6 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
                 const isWinner = player.status === 'winner';
                 const isLeader = player.id === leaderId;
                 const rank = ranking[player.id];
-
-                // displayed money from hook (smooth)
                 const moneyDisplay = display[player.id] ?? player.money ?? 0;
                 const delta = deltas[player.id];
                 const nonce = nonceMap[player.id];
@@ -160,8 +159,6 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="relative w-10 h-10 flex-shrink-0">
                         <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10" />
-
-                        {/* floating delta badge above avatar */}
                         <AnimatePresence>
                           {typeof delta === 'number' && (
                             <motion.div
@@ -170,46 +167,35 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
                               animate={{ y: -12, opacity: 1 }}
                               exit={{ y: -22, opacity: 0 }}
                               transition={{ duration: 0.6 }}
-                              className={cn(
-                                'absolute left-1/2 -translate-x-1/2 -top-3 px-2 py-0.5 rounded-full text-[11px] font-semibold shadow',
-                                delta > 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
-                              )}
-                            >
+                              className={cn( 'absolute left-1/2 -translate-x-1/2 -top-3 px-2 py-0.5 rounded-full text-[11px] font-semibold shadow', delta > 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white' )}>
                               {delta > 0 ? `+${nf.format(delta)}` : `-${nf.format(Math.abs(delta))}`}
                             </motion.div>
                           )}
                         </AnimatePresence>
-
                         {isLeader && (
                           <span className="absolute -right-2 -top-2 bg-yellow-400 text-black rounded-full p-0.5 shadow">
                             <Crown className="w-3 h-3" />
                           </span>
                         )}
                       </div>
-
                       <div className="leading-tight min-w-0">
                         <div className="flex items-center gap-2">
                           <div className="text-sm font-bold truncate">{player.name}</div>
                           {isCurrent && <div className="text-[11px] px-2 py-0.5 rounded bg-primary text-black">دور</div>}
                           {isBankrupt && <div className="text-[11px] px-2 py-0.5 rounded bg-red-600 text-white">مفلس</div>}
                         </div>
-
                         <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-3">
                           <span className="flex items-center gap-1"><Home className="w-3 h-3" /> <span className="font-mono">{player.position ?? 0}</span></span>
                           <span className="flex items-center gap-1"><Building className="w-3 h-3" /> <span className="font-mono">{player.propertiesCount ?? 0}</span></span>
                         </div>
                         <div className="mt-1 flex items-center gap-2">
                           <HandCoins className="w-4 h-4 text-yellow-400" />
-                          <div
-                            className="tabular-nums font-mono font-bold text-sm"
-                            title={`${player.name} - رصيد`}
-                          >
+                          <div className="tabular-nums font-mono font-bold text-sm" title={`${player.name} - رصيد`}>
                             {nf.format(moneyDisplay)}
                           </div>
                         </div>
                       </div>
                     </div>
-
                     <div className="flex flex-col items-end min-w-[48px]">
                       <div className="text-lg font-bold">
                         {rank ? `#${rank}` : '—'}

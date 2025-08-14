@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,6 +8,9 @@ import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import type { Timestamp } from 'firebase/firestore';
 import { useEffect, useRef } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { cn } from '@/lib/utils';
+
 
 interface ActivityLogProps {
   log: { message: string; timestamp: Date | Timestamp }[];
@@ -14,6 +18,7 @@ interface ActivityLogProps {
 
 export function ActivityLog({ log }: ActivityLogProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   const toValidDate = (timestamp: Date | Timestamp): Date => {
     if (timestamp instanceof Date) {
@@ -32,7 +37,6 @@ export function ActivityLog({ log }: ActivityLogProps) {
     }
   }, [log]);
 
-  // Animation variants for staggered children
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -55,7 +59,7 @@ export function ActivityLog({ log }: ActivityLogProps) {
         <CardTitle>سجل الأحداث</CardTitle>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="h-[45vh]" ref={scrollRef}>
+        <ScrollArea className={cn(isMobile ? "h-[15vh]" : "h-[45vh]")} ref={scrollRef}>
           {log.length === 0 ? (
             <div className="text-center text-muted-foreground mt-4">لا توجد أحداث حالياً</div>
           ) : (
