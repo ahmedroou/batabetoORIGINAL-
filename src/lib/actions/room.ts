@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -26,8 +27,10 @@ import type {
   Game as GameTypeAlias, // helpful aliasing for string literal types, if needed later
 } from '@/types';
 import { generateGameId } from '@/lib/actions/helpers';
-import { getTrapAnswerCategories, getEducatedMerchantCategories } from './admin';
+import { getTrapAnswerCategories, getEducatedMerchantCategories } from './admin/settings';
 import { getPlayerFromUserId } from './user/queries';
+import { getGamePopularityStats } from './stats';
+
 
 // ============================================================
 // Types & Constants
@@ -465,3 +468,5 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
     }
   });
 }
+
+    
