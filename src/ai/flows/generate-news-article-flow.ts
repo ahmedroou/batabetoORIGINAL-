@@ -78,7 +78,7 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), h
 
 const countWords = (s: string) => safeStr(s).split(/\s+/).filter(Boolean).length;
 
-const pick<T>(arr: T[], n: number) => arr.slice(0, Math.max(0, n));
+const pick = <T>(arr: T[], n: number): T[] => arr.slice(0, Math.max(0, n));
 
 function uniqBy<T>(arr: T[], key: (t: T) => string | number) {
   const seen = new Set<string | number>();

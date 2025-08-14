@@ -45,8 +45,8 @@ import {
   removePlayerFromAudienceGroup,
   runAiJournalist,
   deleteOldArticles,
-  adminSearchUsers,
-} from "@/lib/actions/admin";
+} from "@/lib/actions/news";
+import { adminSearchUsers } from "@/lib/actions/admin";
 import { Timestamp } from "firebase/firestore";
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -922,3 +922,5 @@ export default function NewsTab() {
     </Tabs>
   );
 }
+
+    
