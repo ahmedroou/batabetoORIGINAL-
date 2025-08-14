@@ -476,18 +476,27 @@ export async function handleTimeout(gameId: string, hostId: string, opts?: { exp
     ensureHost(game, hostId);
 
     const timer = game.wordWarState?.timer;
-    if (!timer?.startedAt || typeof timer.durationSec !== 'number') return;
+    if (!timer?.startedAt || typeof timer.durationSec !== 'number') {
+        // No active server-authoritative timer, so no timeout action to take.
+        return; 
+    }
 
     const started = timer.startedAt.toMillis();
     const expiresAt = started + millis(timer.durationSec);
-    if (nowMs() < expiresAt) return; // not yet expired
-
+    
+    // Check if the timer has actually expired on the server.
+    // A small buffer might be good here in a real-world scenario.
+    if (nowMs() < expiresAt) {
+      return; // Not yet expired.
+    }
+    
+    // The timer has expired, proceed with the state transition.
     if (game.gameState === 'preparation') {
       t.update(gameRef, { gameState: 'guide_turn' });
       setTimer(t, gameRef, 'guide', getTurnTime(game));
       return;
     }
-
+    
     if (game.gameState === 'guide_turn' || game.gameState === 'guesser_turn') {
       const currentTeam = game.wordWarState.turn;
       const next = nextTeam(currentTeam);
@@ -566,4 +575,3 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
     await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
   }
 }
-    
