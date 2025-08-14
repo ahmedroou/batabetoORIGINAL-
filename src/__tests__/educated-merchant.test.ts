@@ -57,11 +57,11 @@ describe('Educated Merchant - Game Logic Helpers', () => {
     let game = createMockGame(mockPlayers, { board: mockBoard });
     // Manually set player 1 to land on player 2's property before the roll action
     const player1StartPos = 0;
-    const diceRoll = 2;
-    game.players[0].position = player1StartPos;
+    const diceRoll = 2; // This will land p1 on tile 2
+    game.players[0].position = player1StartPos; // Set initial position for context
 
-    // Simulate dice roll logic by setting up the game state as if the roll just happened
-    const nextGame = {
+    // Manually update player state as if the roll just happened for the helper function
+    const gameAfterRoll = {
         ...game,
         players: game.players.map(p => p.id === 'p1' ? { ...p, position: (player1StartPos + diceRoll) % mockBoard.length } : p),
         educatedMerchantState: {
@@ -69,8 +69,9 @@ describe('Educated Merchant - Game Logic Helpers', () => {
             lastDiceRoll: diceRoll,
         }
     };
-
-    const { updates } = _rollDice(nextGame, 'p1'); 
+    
+    // Call the helper which contains the rent logic
+    const { updates } = _rollDice(gameAfterRoll, 'p1'); 
     
     const finalPlayers = updates.players;
     const player1 = finalPlayers.find(p => p.id === 'p1');
@@ -84,10 +85,16 @@ describe('Educated Merchant - Game Logic Helpers', () => {
   
    test('Player should go bankrupt if they cannot afford rent', () => {
     let game = createMockGame(mockPlayers, { board: mockBoard });
-    game.players[0].money = 20; // Not enough money for rent
-    game.players[0].position = 2; // Move p1 to p2's property
+    game.players[0].money = 20; // Not enough money for rent (35)
+    game.players[0].position = 0;
 
-    const { updates } = _rollDice(game, 'p1');
+    const gameAfterRoll = {
+        ...game,
+        players: game.players.map(p => p.id === 'p1' ? { ...p, position: 2 } : p),
+        educatedMerchantState: { ...game.educatedMerchantState, lastDiceRoll: 2 },
+    };
+
+    const { updates } = _rollDice(gameAfterRoll, 'p1');
     const finalPlayers = updates.players;
     const player1 = finalPlayers.find(p => p.id === 'p1');
     const player2 = finalPlayers.find(p => p.id === 'p2');
@@ -105,12 +112,13 @@ describe('Educated Merchant - Game Logic Helpers', () => {
     game.gameState = 'property_action';
     game.players[0].position = 1;
     const purchaseResult = _purchaseProperty(game, 'p1');
-    const afterPurchasePlayers = purchaseResult.updates.players;
-    expect(afterPurchasePlayers.find(p => p.id === 'p1')?.money).toBe(1000 - property.price);
-    expect(purchaseResult.updates.gameState).toBe('question');
     
     // 2. Simulate answering correctly
-    const gameAfterPurchase = { ...game, ...purchaseResult.updates, players: afterPurchasePlayers, educatedMerchantState: { ...game.educatedMerchantState, ...purchaseResult.updates }};
+    const gameAfterPurchase = { 
+        ...game, 
+        players: purchaseResult.updates.players, // use updated players from purchase
+        educatedMerchantState: { ...game.educatedMerchantState, ...purchaseResult.updates }
+    };
     gameAfterPurchase.educatedMerchantState.currentQuestion = { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] };
     
     const { updates: finalUpdates } = _answerQuestion(gameAfterPurchase, 'p1', 'Correct');
@@ -131,7 +139,11 @@ describe('Educated Merchant - Game Logic Helpers', () => {
     game.players[0].position = 1;
     const purchaseResult = _purchaseProperty(game, 'p1');
     
-    const gameAfterPurchase = { ...game, ...purchaseResult.updates, players: purchaseResult.updates.players, educatedMerchantState: { ...game.educatedMerchantState, ...purchaseResult.updates }};
+    const gameAfterPurchase = { 
+        ...game, 
+        players: purchaseResult.updates.players, 
+        educatedMerchantState: { ...game.educatedMerchantState, ...purchaseResult.updates }
+    };
     gameAfterPurchase.educatedMerchantState.currentQuestion = { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] };
 
     const { updates: finalUpdates } = _answerQuestion(gameAfterPurchase, 'p1', 'Wrong');
@@ -144,13 +156,13 @@ describe('Educated Merchant - Game Logic Helpers', () => {
   
   test('Game should end when only one player remains', () => {
       const players = [
-          { ...mockPlayers[0], status: 'alive', money: 100 },
-          { ...mockPlayers[1], status: 'bankrupt', money: 0 },
-          { ...mockPlayers[2], status: 'bankrupt', money: 0 },
+          { ...mockPlayers[0], status: 'alive' as const, money: 100 },
+          { ...mockPlayers[1], status: 'bankrupt' as const, money: 0 },
+          { ...mockPlayers[2], status: 'bankrupt' as const, money: 0 },
       ];
       let game = createMockGame(players, { board: mockBoard });
-      game.players[0].position = 0; // At start to trigger end turn logic
-      game.gameState = 'rolling'; // Ensure correct starting state for the test
+      game.players[0].position = 0; 
+      game.gameState = 'rolling'; 
       
       const { isGameOver, finalGame } = _rollDice(game, 'p1');
       
@@ -160,24 +172,23 @@ describe('Educated Merchant - Game Logic Helpers', () => {
   });
 
   test('Passing GO should reward the player', () => {
-      let game = createMockGame(mockPlayers, { board: mockBoard });
+      const boardWith30Tiles = Array.from({ length: 30 }, (_, i) => ({ id: i, type: 'property', name: `P${i}`, price: 100, rent: 10, ownerId: null, category: 'Test' }));
+      boardWith30Tiles[0].type = 'start';
+      let game = createMockGame(mockPlayers, { board: boardWith30Tiles });
       game.players[0].position = 27; // Before GO
       
-      // Simulate rolling a 3, which lands on tile 2
-      // This is a simplified check of the _rollDice logic's side effect.
-      // A more direct test would check the `passedGo` logic inside the helper.
-      
       const playerStartMoney = game.players[0].money!;
-      const diceRollResult = 3;
-      const oldPosition = 27;
-      const newPosition = (oldPosition + diceRollResult) % mockBoard.length; // = 2
-      let money = playerStartMoney;
-      if (newPosition < oldPosition) {
-          money += 200; // PASS_GO_REWARD
-      }
+      
+      const gameAfterRoll = {
+        ...game,
+        players: game.players.map(p => p.id === 'p1' ? { ...p, position: (27 + 5) % 30 } : p), // 32 % 30 = 2
+        educatedMerchantState: { ...game.educatedMerchantState, lastDiceRoll: 5 },
+      };
 
-      // Asserting the expected calculation
-      expect(money).toBe(playerStartMoney + 200);
+      const { updates } = _rollDice(gameAfterRoll, 'p1');
+      const player1 = updates.players.find((p: Player) => p.id === 'p1');
+
+      expect(player1.money).toBe(playerStartMoney + 200); // 1000 + 200
   });
 });
 

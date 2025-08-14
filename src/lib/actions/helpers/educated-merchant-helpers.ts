@@ -6,7 +6,6 @@ import { Timestamp } from 'firebase/firestore';
 import { PROPERTY_NAMES } from '@/data/properties';
 import { deleteField } from 'firebase/firestore';
 import { arrayUnion } from 'firebase/firestore';
-import { randomInt } from 'crypto';
 import { getEducatedMerchantCategories } from '../../actions/admin';
 
 // -----------------------------
@@ -61,7 +60,8 @@ export function _generateBoard(categories: string[]): Property[] {
   board[0] = { id: 0, type: 'start', name: 'نقطة البداية', category: '', price: 0, rent: 0, ownerId: null };
   const finePositions = new Set<number>();
   while (finePositions.size < MAX_FINES) {
-    finePositions.add(Math.floor(Math.random() * (BOARD_SIZE - 1)) + 1);
+    const pos = Math.floor(Math.random() * (BOARD_SIZE - 2)) + 1; // Avoid pos 0 and ensure it is not the last
+    if (!finePositions.has(pos)) finePositions.add(pos);
   }
   let fineAmount = DEFAULT_FINE;
   finePositions.forEach(pos => {
@@ -382,6 +382,7 @@ export function _answerQuestion(game: Game, playerId: string, answer: string) {
 }
 
 export function _endTurn(game: Game, playerId: string) {
+    if (game.gameState !== 'property_action') throw new Error('Not in property action state.');
     const turnOrder = ensure(game.educatedMerchantState?.turnOrder);
     if (turnOrder[ensure(game.educatedMerchantState.currentTurnIndex)] !== playerId) throw new Error('Not your turn.');
     
