@@ -6,7 +6,7 @@ import { Timestamp } from 'firebase/firestore';
 import { PROPERTY_NAMES } from '@/data/properties';
 import { deleteField } from 'firebase/firestore';
 import { arrayUnion } from 'firebase/firestore';
-import { getEducatedMerchantCategories } from '../../actions/admin';
+import { getEducatedMerchantCategories } from '../../actions/admin/settings';
 
 // -----------------------------
 // Constants
@@ -136,10 +136,10 @@ export function _endTurnInternal(game: Game, playerId: string, extraMessage: str
   const activePlayers = players.filter(p => p.status === 'alive');
   let isGameOver = activePlayers.length <= 1;
 
+  const turnOrder = ensure(game.educatedMerchantState?.turnOrder);
   const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex);
   let nextTurnIndex = findNextAliveIndex(turnOrder, players, currentTurnIndex);
   
-  const turnOrder = ensure(game.educatedMerchantState?.turnOrder);
   const movesThisRound = game.educatedMerchantState?.movesThisRound ?? 0;
   const activeAtRoundStart = game.educatedMerchantState?.activeCountAtRoundStart ?? activePlayers.length;
   let newMoves = movesThisRound + 1;
@@ -315,9 +315,11 @@ export function _purchaseProperty(game: Game, playerId: string) {
     const updates = {
         players,
         gameState: 'question' as const,
-        'educatedMerchantState.timerEndsAt': addActionTimer(QUESTION_TIME_SECONDS),
-        'educatedMerchantState.pendingPurchase': { playerId, propertyId: property.id, price: property.price, questionId: null, propertyName: property.name },
-        'educatedMerchantState.questionToken': token,
+        educatedMerchantState: {
+          timerEndsAt: addActionTimer(QUESTION_TIME_SECONDS),
+          pendingPurchase: { playerId, propertyId: property.id, price: property.price, questionId: null, propertyName: property.name },
+          questionToken: token,
+        }
     };
     return { updates, needsQuestion: { category: property.category, token } };
 }

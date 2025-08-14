@@ -67,6 +67,8 @@ describe('Educated Merchant - Game Logic Helpers', () => {
         educatedMerchantState: {
             ...game.educatedMerchantState,
             lastDiceRoll: diceRoll,
+            turnOrder: game.players.map(p => p.id), // Ensure turnOrder is present
+            currentTurnIndex: 0,
         }
     };
     
@@ -117,7 +119,7 @@ describe('Educated Merchant - Game Logic Helpers', () => {
     const gameAfterPurchase = { 
         ...game, 
         players: purchaseResult.updates.players, // use updated players from purchase
-        educatedMerchantState: { ...game.educatedMerchantState, ...purchaseResult.updates }
+        educatedMerchantState: { ...game.educatedMerchantState, ...purchaseResult.updates.educatedMerchantState }
     };
     gameAfterPurchase.educatedMerchantState.currentQuestion = { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] };
     
@@ -142,7 +144,7 @@ describe('Educated Merchant - Game Logic Helpers', () => {
     const gameAfterPurchase = { 
         ...game, 
         players: purchaseResult.updates.players, 
-        educatedMerchantState: { ...game.educatedMerchantState, ...purchaseResult.updates }
+        educatedMerchantState: { ...game.educatedMerchantState, ...purchaseResult.updates.educatedMerchantState }
     };
     gameAfterPurchase.educatedMerchantState.currentQuestion = { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] };
 
@@ -172,7 +174,7 @@ describe('Educated Merchant - Game Logic Helpers', () => {
   });
 
   test('Passing GO should reward the player', () => {
-      const boardWith30Tiles = Array.from({ length: 30 }, (_, i) => ({ id: i, type: 'property', name: `P${i}`, price: 100, rent: 10, ownerId: null, category: 'Test' }));
+      const boardWith30Tiles = Array.from({ length: 30 }, (_, i) => ({ id: i, type: 'property', name: `P${i}`, price: 100, rent: 10, ownerId: null, category: 'Test' } as Property));
       boardWith30Tiles[0].type = 'start';
       let game = createMockGame(mockPlayers, { board: boardWith30Tiles });
       game.players[0].position = 27; // Before GO
