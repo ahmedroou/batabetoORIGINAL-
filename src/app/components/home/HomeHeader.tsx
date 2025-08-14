@@ -32,6 +32,7 @@ import {
   Bug,
   CheckCircle2,
   Coins,
+  Crown,
   Inbox,
   Loader2,
   LogOut,
@@ -215,7 +216,7 @@ export const ComplaintDialog = ({ userProfile, trigger }: { userProfile: UserPro
                 disabled={isSubmitting}
                 className="w-full rounded-xl bg-gradient-to-r from-primary to-secondary text-primary-foreground"
               >
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'إرسال تقرير المشكلة'}
+                {isSubmitting ? <Loader2 className="animate-spin" /> : 'إرسال تقرير المشكلة'}
               </Button>
             </div>
           </TabsContent>
@@ -492,7 +493,7 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
 
         {/* وسط: عبارة ترحيب واضحة */}
         <div className="hidden md:block rounded-full bg-background/50 border border-border/50 px-4 py-1 shadow-sm">
-            <span className="font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary text-lg tracking-tight">
+            <span className="font-bold text-lg tracking-tight text-amber-200">
                 أهلاً بك يا {userProfile.name}!
             </span>
         </div>
@@ -516,6 +517,21 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
             </TooltipProvider>
           )}
 
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link href="/kings" aria-label="قاعة الملوك">
+                  <Button variant="ghost" size="icon" className="rounded-xl">
+                    <Crown className="h-6 w-6 text-yellow-400" />
+                  </Button>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>قاعة الملوك</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
