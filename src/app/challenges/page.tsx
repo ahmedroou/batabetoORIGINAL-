@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEffect } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Swords, CheckCircle, Trophy } from "lucide-react";
-import type { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import { motion } from 'framer-motion';
 
 
