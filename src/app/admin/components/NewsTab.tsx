@@ -4,7 +4,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Timestamp } from "firebase/firestore";
 
 // UI
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -33,7 +32,6 @@ import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown, Bo
 import type { Article, AudienceGroup, UserProfile } from "@/types";
 import { format, formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
-import { adminSearchUsers } from "@/lib/actions/admin";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import {
   createArticle,
@@ -47,7 +45,8 @@ import {
   removePlayerFromAudienceGroup,
   runAiJournalist,
   deleteOldArticles,
-} from "@/lib/actions/news";
+  adminSearchUsers,
+} from "@/lib/actions/admin";
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Utilities
@@ -104,7 +103,7 @@ function ArticleRow({
   onEdit: (a: Article) => void;
   onDelete: (a: Article) => void;
 }) {
-  const createdAtDate = article.createdAt instanceof Timestamp ? article.createdAt.toDate() : new Date(article.createdAt);
+  const createdAtDate = new Date(article.createdAt);
 
   return (
     <div className="group relative overflow-hidden rounded-xl border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60 hover:shadow-md transition-shadow">
@@ -922,5 +921,3 @@ export default function NewsTab() {
     </Tabs>
   );
 }
-
-    

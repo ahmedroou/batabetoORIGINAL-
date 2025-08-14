@@ -1,3 +1,4 @@
+
 "use client";
 
 /**
@@ -51,7 +52,6 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
-  uploadTrapAnswerQuestionsFromJson,
   addTrapAnswerCategory,
   deleteTrapAnswerCategory,
   editTrapAnswerCategory,
@@ -63,11 +63,11 @@ import {
   deleteQuestions,
   countQuestions,
   uploadWordWarWordsFromJson,
-  deleteDuplicateWords,
   uploadPrisonQuestionsFromJson,
-  deleteSimilarQuestions,
-  deleteSimilarPrisonQuestions,
   uploadEducatedMerchantQuestionsFromJson,
+  deleteDuplicateWords,
+  deleteSimilarQuestions as deleteSimilarTrapAnswerQuestions,
+  deleteSimilarPrisonQuestions
 } from "@/lib/actions/admin";
 
 import type { Game } from "@/types";
@@ -669,8 +669,10 @@ const QuestionManagementTab: React.FC = () => {
     let result: { success?: boolean; count?: number; error?: string; message?: string } | undefined;
     try {
       if (deletionParams.duplicates) {
-        if (deletionParams.game === "trap-answer" || deletionParams.game === "educated-merchant") {
-          result = await deleteSimilarQuestions(deletionParams.game, deletionParams.category);
+        if (deletionParams.game === "trap-answer") {
+          result = await deleteSimilarTrapAnswerQuestions(deletionParams.game, 0.95, deletionParams.category);
+        } else if (deletionParams.game === "word_war") {
+          result = await deleteDuplicateWords();
         } else if (deletionParams.game === "prison") {
           result = await deleteSimilarPrisonQuestions();
         }

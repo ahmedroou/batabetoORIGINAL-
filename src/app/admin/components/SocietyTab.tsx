@@ -1,3 +1,4 @@
+
 "use client";
 
 /**
@@ -49,8 +50,8 @@ import {
   setAnnouncement,
   getAnnouncement,
   backfillPunishmentStatus,
-  adminGiveReward,
-  adminApplyPunishment,
+  giveReward as adminGiveReward,
+  applyPunishment as adminApplyPunishment,
   adminSearchUsers,
   backfillUserPermissions,
 } from "@/lib/actions/admin";
