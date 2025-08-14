@@ -40,7 +40,7 @@ const DICE_MIN = 1;
 const DICE_MAX = 6; // تم التصحيح إلى نرد قياسي 1..6
 
 // -----------------------------
-// Helpers
+// Helpers (داخلية)
 // -----------------------------
 function nowTimestamp(): Timestamp {
   return Timestamp.now();
@@ -105,17 +105,14 @@ async function fetchRandomQuestion(category: string): Promise<EducatedMerchantQu
 
   const questionDoc = qs.docs[0];
   const questionData = { id: questionDoc.id, ...questionDoc.data() } as EducatedMerchantQuestion;
-  // خلط الخيارات على الخادم (ممتاز — يبقى عشوائياً)
+  // خلط الخيارات على الخادم
   const options = shuffle([...(questionData.dummyAnswers || []), questionData.answer]);
   questionData.options = options;
   return questionData;
 }
 
 // -----------------------------
-// Safety-net: process an expired timer inside the same transaction
-// This allows ANY transaction (player action or admin call) to advance a stuck turn
-// without needing an external scheduler. The function is idempotent and returns
-// meta-information for post-transaction handling (e.g., fetching a question).
+// Safety-net: معالجة انتهاء المؤقت داخل نفس المعاملة
 // -----------------------------
 async function applyTimeoutIfNeeded(tx: any, gameRef: any, game: Game): Promise<{
   applied: boolean;
@@ -127,7 +124,7 @@ async function applyTimeoutIfNeeded(tx: any, gameRef: any, game: Game): Promise<
   if (!timerEndsAt) return { applied: false };
   if (Date.now() < timerEndsAt.toMillis()) return { applied: false };
 
-  // timer expired -> we must advance the current player's turn automatically
+  // timer expired -> advance turn automatically
   const turnOrder = ensure(game.educatedMerchantState?.turnOrder, 'ترتيب الأدوار مفقود.');
   const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex, 'فهرس الدور الحالي مفقود.');
   const currentPlayerId = turnOrder[currentTurnIndex];
@@ -149,7 +146,6 @@ async function applyTimeoutIfNeeded(tx: any, gameRef: any, game: Game): Promise<
   const state = game.gameState;
 
   if (state === 'rolling') {
-    // do an automatic roll
     const diceMax = game.educatedMerchantState?.settings?.diceMax ?? DICE_MAX;
     const diceRollResult = randomDiceRoll(diceMax);
 
@@ -167,7 +163,6 @@ async function applyTimeoutIfNeeded(tx: any, gameRef: any, game: Game): Promise<
 
     updates['players'] = players;
     updates['educatedMerchantState.lastDiceRoll'] = diceRollResult;
-    // include animation nonce so clients can correlate the roll even if it's automatic
     updates['educatedMerchantState.displayingRollResult'] = { number: diceRollResult, nonce: Date.now() };
     updates['educatedMerchantState.rollAnimationNonce'] = Date.now();
 
@@ -193,7 +188,6 @@ async function applyTimeoutIfNeeded(tx: any, gameRef: any, game: Game): Promise<
         nonce: Date.now(),
       };
 
-      // end turn after rent logic
       const { updates: endUpdates, isGameOver } = endTurnInternal(
         { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board } } as Game,
         currentPlayerId,
@@ -212,7 +206,6 @@ async function applyTimeoutIfNeeded(tx: any, gameRef: any, game: Game): Promise<
       Object.assign(updates, endUpdates);
       gameEnded = isGameOver;
     } else if (landingProperty.type === 'property') {
-      // property_action: give a short timer for purchase
       updates = {
         ...updates,
         players,
@@ -231,7 +224,6 @@ async function applyTimeoutIfNeeded(tx: any, gameRef: any, game: Game): Promise<
       needFineQuestion = { category: 'قسم الغرامات', token: (updates['educatedMerchantState.questionToken'] as string) };
     }
   } else if (state === 'property_action') {
-    // player didn't act on purchase -> skip and end turn
     const { updates: endUpdates, isGameOver } = endTurnInternal(
       { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board } } as Game,
       currentPlayerId,
@@ -241,7 +233,6 @@ async function applyTimeoutIfNeeded(tx: any, gameRef: any, game: Game): Promise<
     Object.assign(updates, endUpdates);
     gameEnded = isGameOver;
   } else if (state === 'question') {
-    // player didn't answer -> apply default (refund or fine)
     const pendingPurchase = game.educatedMerchantState?.pendingPurchase;
     const pendingFine = game.educatedMerchantState?.pendingFine;
 
@@ -276,7 +267,6 @@ async function applyTimeoutIfNeeded(tx: any, gameRef: any, game: Game): Promise<
     updates['educatedMerchantState.questionToken'] = deleteField();
     gameEnded = isGameOver;
   } else {
-    // unknown state: safe fallback - advance to next turn
     const { updates: endUpdates, isGameOver } = endTurnInternal(
       { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board } } as Game,
       currentPlayerId,
@@ -289,22 +279,21 @@ async function applyTimeoutIfNeeded(tx: any, gameRef: any, game: Game): Promise<
 
   if (logEvents.length) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
 
-  // apply updates inside the same transaction
   if (Object.keys(updates).length > 0) {
     tx.update(gameRef, updates);
   }
 
-  // if game ended, produce a sanitized Game object for league update (post-transaction)
   if (gameEnded) {
-    finalGameDataForLeagueUpdate = {
+    const finalGameDataForLeagueUpdate = {
       ...game,
       players,
       educatedMerchantState: { ...game.educatedMerchantState, board },
       gameState: 'final_results',
     } as Game;
+    return { applied: true, needFineQuestion, finalGameDataForLeagueUpdate, gameEnded };
   }
 
-  return { applied: true, needFineQuestion, finalGameDataForLeagueUpdate, gameEnded };
+  return { applied: true, needFineQuestion, finalGameDataForLeagueUpdate: null, gameEnded };
 }
 
 // -----------------------------
@@ -362,9 +351,6 @@ export async function generateBoard(categories: string[]): Promise<Property[]> {
 
 // -----------------------------
 // Public API (transactional wrappers)
-// Each public transaction now first attempts to advance any expired timer
-// to ensure the game never remains stuck. This creates a safety-net so that
-// any client action will implicitly 'wake' the game and finish an expired turn.
 // -----------------------------
 export async function startGame(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
@@ -428,11 +414,10 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
     let game = snap.data() as Game;
 
-    // safety-net: advance expired turn if present
+    // safety-net
     const timeoutResult = await applyTimeoutIfNeeded(tx, gameRef, game);
     if (timeoutResult.applied) {
       if (timeoutResult.needFineQuestion) needFineQuestion = timeoutResult.needFineQuestion;
-      // reload state after applying timeout
       snap = await tx.get(gameRef);
       if (!snap.exists()) throw new Error('اللعبة غير موجودة بعد تطبيق المؤقت.');
       game = snap.data() as Game;
@@ -462,13 +447,11 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     const logEvents: Array<{ message: string; timestamp: Timestamp }> = [];
     logEvents.push({ message: `${player.name} رمى ${diceRollResult} وتحرك إلى "${landingProperty.name}".`, timestamp: nowTimestamp() });
 
-    // المرور من البداية
     if (newPosition < oldPosition) {
       player.money = (player.money || 0) + PASS_GO_REWARD;
       logEvents.push({ message: `${player.name} مر بنقطة البداية، وحصل على ${PASS_GO_REWARD} دينار.`, timestamp: nowTimestamp() });
     }
 
-    // إيجار إن كان العقار مملوكًا لغيره
     const updates: any = {
       players,
       'educatedMerchantState.lastDiceRoll': diceRollResult,
@@ -498,7 +481,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
         nonce: Date.now(),
       };
 
-      // أنهِ الدور بعد دفع الإيجار
       const { updates: endUpdates } = endTurnInternal(
         { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board } } as Game,
         playerId,
@@ -507,7 +489,6 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
       );
       Object.assign(updates, endUpdates);
     } else if (landingProperty.type === 'start') {
-      // إنهاء فوري
       const { updates: endUpdates } = endTurnInternal(
         { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board } } as Game,
         playerId,
@@ -516,17 +497,13 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
       );
       Object.assign(updates, endUpdates);
     } else if (landingProperty.type === 'property') {
-      // قرار شراء
       updates.gameState = 'property_action';
       updates['educatedMerchantState.timerEndsAt'] = addActionTimer();
-      // لا إنهاء للدور هنا
     } else if (landingProperty.type === 'fine') {
-      // سؤال غرامة — لا نجلِب السؤال داخل المعاملة
       updates.gameState = 'question';
       updates['educatedMerchantState.pendingFine'] = { playerId, fineAmount: landingProperty.fineAmount ?? DEFAULT_FINE };
       updates['educatedMerchantState.timerEndsAt'] = addActionTimer(QUESTION_TIME_SECONDS);
       updates['educatedMerchantState.questionToken'] = qToken;
-      // لا تمسح displayingRollResult هنا — اترك الواجهة تُتمّ الأنيميشن
       needFineQuestion = { category: 'قسم الغرامات', token: qToken };
     }
 
@@ -535,14 +512,12 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     tx.update(gameRef, updates);
   });
 
-  // لو احتجنا سؤال غرامة: اجلبه ثم ثبّتَه بمعاملة تحقق من token
   if (needFineQuestion) {
     const question = await fetchRandomQuestion(needFineQuestion.category);
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(doc(db, 'games', gameId));
       if (!snap.exists()) return;
       const game = snap.data() as Game;
-      // تحقّق من أن الـ token ما زال مطابقًا وأننا ما زلنا في حالة السؤال
       if (
         game.gameState === 'question' &&
         game.educatedMerchantState?.questionToken === needFineQuestion!.token &&
@@ -566,13 +541,8 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
     if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
     let game = snap.data() as Game;
 
-    // safety-net
     const timeoutResult = await applyTimeoutIfNeeded(tx, gameRef, game);
     if (timeoutResult.applied) {
-      if (timeoutResult.finalGameDataForLeagueUpdate) {
-        // we won't try to update league inside the transaction; it will be handled post-transaction
-      }
-      // reload
       snap = await tx.get(gameRef);
       if (!snap.exists()) throw new Error('اللعبة غير موجودة بعد تطبيق المؤقت.');
       game = snap.data() as Game;
@@ -594,7 +564,6 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
     if (property.type !== 'property' || property.ownerId) throw new Error('هذا العقار غير متاح للشراء.');
     if ((player.money || 0) < property.price) throw new Error('رصيدك لا يكفي لشراء هذا العقار.');
 
-    // خصم المبلغ مؤقتًا — القرار النهائي بعد السؤال
     player.money = (player.money || 0) - property.price;
 
     const updates: any = {
@@ -610,10 +579,8 @@ export async function purchaseProperty(gameId: string, playerId: string): Promis
       },
       'educatedMerchantState.questionToken': qToken,
       'educatedMerchantState.currentQuestion': deleteField(),
-      // لا نحذف displayingRollResult هنا
     };
 
-    // سنحتاج سؤالًا من نفس تصنيف العقار
     pending = { category: property.category, token: qToken };
     tx.update(gameRef, updates);
   });
@@ -645,11 +612,9 @@ export async function answerQuestion(gameId: string, playerId: string, answer: s
     if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
     let game = snap.data() as Game;
 
-    // safety-net
     const timeoutResult = await applyTimeoutIfNeeded(tx, gameRef, game);
     if (timeoutResult.applied) {
       if (timeoutResult.finalGameDataForLeagueUpdate) finalGameDataForLeagueUpdate = timeoutResult.finalGameDataForLeagueUpdate;
-      // reload state after applying timeout
       snap = await tx.get(gameRef);
       if (!snap.exists()) throw new Error('اللعبة غير موجودة بعد تطبيق المؤقت.');
       game = snap.data() as Game;
@@ -751,8 +716,6 @@ export async function handleTimeout(gameId: string, hostId: string): Promise<voi
     if (!snap.exists()) return;
     const game = snap.data() as Game;
 
-    // only host may call the explicit handler as an admin call; however the safety-net
-    // (applyTimeoutIfNeeded) can be invoked by any transaction. Here we allow host to trigger it.
     if (game.hostId !== hostId) return;
 
     const res = await applyTimeoutIfNeeded(tx, gameRef, game);
@@ -797,7 +760,7 @@ function endTurnInternal(
   const logEvents: Array<{ message: string; timestamp: Timestamp }> = [];
   if (extraMessage) logEvents.push({ message: extraMessage, timestamp: nowTimestamp() });
 
-  // تحرير العقارات المملوكة لمفلسين
+  // تحرير العقارات للمفلسين
   for (let i = 0; i < board.length; i++) {
     const prop = board[i];
     if (!prop) continue;
@@ -808,7 +771,6 @@ function endTurnInternal(
     }
   }
 
-  // فرض أن المفلس لا يحتفظ بأموال موجبة
   for (let i = 0; i < players.length; i++) {
     const p = players[i];
     if (p.status === 'bankrupt' && (p.money || 0) > 0) players[i] = { ...p, money: 0 } as Player;
@@ -816,7 +778,6 @@ function endTurnInternal(
 
   const activePlayers = players.filter((p) => p.status === 'alive');
 
-  // نهاية اللعبة إذا بقي لاعب واحد
   if (activePlayers.length <= 1) {
     const winner = activePlayers[0];
     const ranking = [...players]
@@ -852,9 +813,8 @@ function endTurnInternal(
   const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex, 'Current turn index missing.');
 
   let nextTurnIndex = findNextAliveIndex(turnOrder, players, currentTurnIndex);
-  if (nextTurnIndex === -1) nextTurnIndex = currentTurnIndex; // احتياط
+  if (nextTurnIndex === -1) nextTurnIndex = currentTurnIndex;
 
-  // إدارة الجولات بثبات عدد الأحياء عند بداية الجولة
   const movesThisRound = game.educatedMerchantState?.movesThisRound ?? 0;
   const activeAtRoundStart = game.educatedMerchantState?.activeCountAtRoundStart ?? activePlayers.length;
 
@@ -881,7 +841,7 @@ function endTurnInternal(
       gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.`, ranking },
       players,
       'educatedMerchantState.board': board,
-      'educatedMerchantState.timerEndsAt': deleteField(), // تمت الإضافة لضمان إطفاء المؤقّت
+      'educatedMerchantState.timerEndsAt': deleteField(),
       'educatedMerchantState.displayingRollResult': deleteField(),
       'educatedMerchantState.lastRentPayment': deleteField(),
       'educatedMerchantState.currentQuestion': deleteField(),
@@ -922,10 +882,8 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
     if (!snap.exists()) throw new Error('اللعبة غير موجودة.');
     let game = snap.data() as Game;
 
-    // safety-net
     const timeoutResult = await applyTimeoutIfNeeded(tx, gameRef, game);
     if (timeoutResult.applied) {
-      // reload
       snap = await tx.get(gameRef);
       if (!snap.exists()) throw new Error('اللعبة غير موجودة بعد تطبيق المؤقت.');
       game = snap.data() as Game;
@@ -942,3 +900,13 @@ export async function endTurn(gameId: string, playerId: string): Promise<void> {
     tx.update(gameRef, updates);
   });
 }
+
+// --------------------------------------
+// Aliases للتوافق العكسي (لا تغيير منطق)
+// توفر أسماء بديلة محتملة كانت مستخدمة في الواجهة سابقًا بدون الحاجة لتعديل أي ملف آخر.
+// --------------------------------------
+export { startGame as startKingOfGeniusGame };
+export { rollDice as prepareNextChallenge };
+export { answerQuestion as submitChallengeResult };
+export { endTurn as endKingOfGeniusTurn };
+export { handleTimeout as handleKingOfGeniusTimeout };

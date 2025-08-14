@@ -127,7 +127,7 @@ const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challen
                                                     <p className="font-semibold flex items-center gap-1.5">
                                                         {participant.name}
                                                         {isKingOfGames && <Crown className="w-4 h-4 text-yellow-300 fill-yellow-400" title="ملك الملوك"/>}
-                                                        {gameKingTitle && !isKingOfGames && <Crown className="w-4 h-4 text-amber-400" title={`ملك لعبة ${GAME_TYPE_NAMES[gameKingTitle.gameType]}`}/>}
+                                                        {gameKingTitle && !isKingOfGames && <Crown className="w-4 h-4 text-amber-400" title={`ملك لعبة ${GAME_TYPE_NAMES[gameKingTitle.gameType as Game['gameType']]}`}/>}
                                                     </p>
                                                      {rank && RankIcon && (
                                                         <Badge variant="secondary" className="w-fit text-xs">
@@ -169,13 +169,15 @@ const EntryFeeDisplay = ({ entryFee }: { entryFee?: EntryFee }) => {
 };
 
 const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; index: number; isEnded: boolean; }) => {
-    const { user, userProfile } = useAuth();
+    const { user, userProfile, refreshUserProfile } = useAuth();
     const { toast } = useToast();
     const [isJoining, setIsJoining] = useState(false);
     const [isConfirmingJoin, setIsConfirmingJoin] = useState(false);
     const [progress, setProgress] = useState(0);
     const topThree = challenge.topParticipants || [];
 
+    const isParticipant = userProfile && challenge.participantIds?.includes(userProfile.uid);
+    
     useEffect(() => {
         if (isEnded) {
             setProgress(100);
@@ -208,6 +210,7 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
         const result = await joinChallenge(challenge.id, user.uid);
         if (result.success) {
             toast({ title: "لقد انضممت إلى البطولة بنجاح!" });
+            if (refreshUserProfile) refreshUserProfile();
         } else {
             toast({ title: "خطأ في الانضمام", description: result.error, variant: 'destructive' });
         }
@@ -224,7 +227,9 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
         }
     };
     
-    const isParticipant = userProfile && challenge.participantIds?.includes(userProfile.uid);
+    const myScore = isParticipant ? challenge.scores?.[userProfile.uid] || 0 : 0;
+    const progressToTarget = challenge.targetPoints > 0 ? (myScore / challenge.targetPoints) * 100 : 0;
+
 
     return (
         <motion.div variants={cardVariants} initial="hidden" animate="visible" className="h-full">
@@ -253,6 +258,17 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
                             <PrizeDisplay prizes={challenge.thirdPlacePrize} rank="3rd" />
                         </div>
                      </div>
+                     
+                    {isParticipant && !isEnded && (
+                        <div className="pt-2">
+                            <h4 className="font-semibold text-gray-300 mb-2 text-sm">تقدمك:</h4>
+                            <div className="flex justify-between items-center text-xs mb-1">
+                                <span className="font-bold text-yellow-300">{myScore} / {challenge.targetPoints} نقطة</span>
+                                <span>{Math.round(progressToTarget)}%</span>
+                            </div>
+                            <Progress value={progressToTarget} className="h-2 [&>*]:bg-yellow-400" />
+                        </div>
+                    )}
                      
                     {topThree.length > 0 && (
                          <div>
