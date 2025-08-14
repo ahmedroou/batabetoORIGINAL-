@@ -163,7 +163,7 @@ export default function AdminPage() {
                     </DialogHeader>
                     <div className="flex items-center justify-center p-4 min-h-[60vh] bg-slate-100 rounded-md">
                        {testGame?.gameType === 'king-of-genius' && testingChallenge && (
-                            <ChallengeHost game={testGame} player={testGame.players[0]} self={testGame.players[0]} challenge={challenge} />
+                            <ChallengeHost game={testGame} player={testGame.players[0]} self={testGame.players[0]} challenge={testingChallenge} />
                         )}
                     </div>
                 </DialogContent>
