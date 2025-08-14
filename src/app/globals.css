@@ -271,3 +271,29 @@
 .shadow-inner-dark {
     box-shadow: inset 0 2px 6px 0 rgba(0, 0, 0, 0.4);
 }
+
+/* Scoped styles for the newspaper layout */
+.news-scope { --news-serif: var(--font-merriweather), var(--font-noto-naskh), Georgia, 'Times New Roman', serif; }
+.news-scope { --news-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji'; }
+.news-scope { --ink: #1f2937; --ink-muted: #4b5563; --paper: #faf8f1; --paper-ink: rgba(0,0,0,0.04); --rule: #e5dfcf; }
+
+.news-scope.newspaper-bg {
+    background:
+      radial-gradient(1200px 800px at 50% -200px, #ffffff, transparent 70%),
+      radial-gradient(800px 600px at 10% 0%, rgba(0,0,0,0.03), transparent 60%),
+      radial-gradient(800px 600px at 90% 0%, rgba(0,0,0,0.03), transparent 60%),
+      repeating-linear-gradient(0deg, var(--paper-ink), var(--paper-ink) 1px, transparent 1px, transparent 7px),
+      linear-gradient(180deg, #fffaf0, var(--paper));
+    color: var(--ink);
+}
+
+.news-scope .font-serif { font-family: var(--news-serif) !important; }
+.news-scope .font-sans { font-family: var(--news-sans) !important; }
+.news-scope h1, .news-scope h2, .news-scope h3 { letter-spacing: 0.3px; }
+.news-scope h1 { font-feature-settings: 'liga' 1, 'kern' 1; }
+.news-scope p { text-wrap: pretty; }
+.news-scope a { text-underline-offset: 2px; }
+.news-scope a:hover { text-decoration-thickness: 2px; }
+.news-scope ::selection { background: #111827; color: #fef3c7; }
+.news-scope .paper-card { box-shadow: 0 6px 18px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.05); }
+.news-scope .paper-card:hover { box-shadow: 0 10px 28px rgba(0,0,0,0.1); }

@@ -1,8 +1,9 @@
+
 "use client";
 
 import * as React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Challenge, ChallengePrize, UserProfile, EntryFee, GameKing, SocialRank } from '@/types';
+import type { Challenge, ChallengePrize, UserProfile, EntryFee, GameKing, SocialRank, Game } from '@/types';
 import { getChallenges, joinChallenge, getChallengeDetails, getAllChallengesForAdmin } from '@/lib/actions/challenges';
 import { getGameKings, getKingOfGames } from '@/lib/actions/user';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,7 +16,7 @@ import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { GAME_TYPE_NAMES } from '@/types';
+import { GAME_TYPE_NAMES } from '@/data/icons';
 import { useAuth } from '@/hooks/useAuth';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
@@ -367,9 +368,10 @@ export default function SocietyChallenges({ filter = 'active', query = '', sort 
             const matchesFilter = filter === 'active' ? !isEnded : isEnded;
 
             // Filter by search query
+            const gameTypeName = c.specificGameType && GAME_TYPE_NAMES[c.specificGameType as Game['gameType']];
             const matchesQuery = lowercaseQuery === '' ||
                 c.title.toLowerCase().includes(lowercaseQuery) ||
-                (c.specificGameType && GAME_TYPE_NAMES[c.specificGameType as Game['gameType']].toLowerCase().includes(lowercaseQuery)) ||
+                (gameTypeName && gameTypeName.toLowerCase().includes(lowercaseQuery)) ||
                 c.firstPlacePrize.some(p => p.type.toLowerCase().includes(lowercaseQuery));
 
             return matchesFilter && matchesQuery;
