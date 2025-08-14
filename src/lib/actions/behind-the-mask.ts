@@ -27,7 +27,189 @@ import {
 import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile, League, PrivateEvent, PlayerTeam } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
-import { processDayInternal, checkForWinner, processNightInternal } from './helpers/behind-the-mask-helpers';
+
+
+// --- START of inlined helpers from behind-the-mask-helpers.ts ---
+
+/**
+ * Pure function to check for a winner based on player statuses.
+ * @param players - The current list of players.
+ * @returns A GameResult object if there is a winner, otherwise null.
+ */
+function checkForWinner(players: Player[]): GameResult | null {
+    const alivePlayers = players.filter(p => p.status === 'alive');
+    const goodTeamCount = alivePlayers.filter(p => p.team === 'good').length;
+    const mafiaTeamCount = alivePlayers.filter(p => p.team === 'mafia').length;
+
+    if (mafiaTeamCount === 0) {
+        return { winner: 'good', message: 'لقد قضى فريق الخير على كل الأشرار!' };
+    }
+    if (mafiaTeamCount >= goodTeamCount) {
+        return { winner: 'mafia', message: 'لقد سيطر فريق الشر على المدينة!' };
+    }
+    return null;
+}
+
+/**
+ * Pure function to process the results of the night phase.
+ * @param game - The current game state.
+ * @returns An object with updated players, new events, and other state changes.
+ */
+async function processNightInternal(game: Game) {
+    const players = game.players.map(p => ({ ...p })); // Deep copy
+    const nightActions = game.mafiaState?.nightActions || {};
+    const newEvents: DayEvent[] = [];
+    const newPrivateEvents: Record<string, PrivateEvent[]> = {};
+    const newPrivateChats: Record<string, any> = game.mafiaState?.privateChats || {};
+    let newLastHealedPlayerId: string | null = null;
+    let killTarget: { targetId: string, bomberId?: string } | null = null;
+
+    // --- Action Processing Logic ---
+
+    // 1. Protection actions (Doctor)
+    const healAction = Object.values(nightActions).find(a => a.action === 'heal');
+    if (healAction) {
+        const doctor = players.find(p => p.id === healAction.actorId);
+        if (doctor && doctor.status === 'alive') {
+            const target = players.find(p => p.id === healAction.targetId);
+            if (target && target.status === 'alive') {
+                target.isProtected = true;
+                newLastHealedPlayerId = target.id;
+            }
+        }
+    }
+
+    // 2. Killing actions (Killer)
+    const killAction = Object.values(nightActions).find(a => a.action === 'kill');
+    if (killAction && killAction.targetId !== 'skip') {
+        killTarget = { targetId: killAction.targetId };
+    }
+    
+    // 3. Bomber action - if the bomber was killed, their target is also marked for death
+    const bomberAction = Object.values(nightActions).find(a => a.action === 'bomb');
+    if(bomberAction && bomberAction.targetId) {
+        const bomberPlayer = players.find(p => p.id === bomberAction.actorId);
+        if(bomberPlayer && bomberPlayer.status === 'killed' && killAction?.targetId === bomberPlayer.id) {
+             killTarget = { targetId: bomberAction.targetId, bomberId: bomberAction.actorId };
+        }
+    }
+
+    // 4. Resolve kills
+    if (killTarget) {
+        const targetPlayerIndex = players.findIndex(p => p.id === killTarget!.targetId);
+        if (targetPlayerIndex !== -1) {
+            const targetPlayer = players[targetPlayerIndex];
+            if (targetPlayer.isProtected) {
+                newEvents.push({ type: 'protection', message: 'لقد حاول القاتل الهجوم، لكن الطبيب أنقذ الهدف في الوقت المناسب!' });
+                if (healAction) {
+                    if (!newPrivateEvents[healAction.actorId]) newPrivateEvents[healAction.actorId] = [];
+                    newPrivateEvents[healAction.actorId].push({ type: 'doctor_success', message: 'لقد نجحت في إنقاذ هدفك!' });
+                }
+            } else {
+                players[targetPlayerIndex].status = 'killed';
+                newEvents.push({ type: 'death', message: `استيقظ أهل المدينة ليجدوا ${targetPlayer.name} قد قُتل!`, killedPlayer: { name: targetPlayer.name, avatarId: targetPlayer.avatarId }});
+            }
+        }
+    }
+
+
+    // 5. Information gathering actions (Detective, Spy)
+    Object.values(nightActions).forEach(action => {
+        if (!newPrivateEvents[action.actorId]) newPrivateEvents[action.actorId] = [];
+
+        const actor = players.find(p => p.id === action.actorId);
+        if (!actor || actor.status !== 'alive') return;
+        
+        const target = players.find(p => p.id === action.targetId);
+        if (!target) return;
+
+        if (action.action === 'investigate') {
+            const targetRole = ROLES[target.role!];
+            newPrivateEvents[action.actorId].push({
+                type: 'investigation_result',
+                message: `تقرير التحقيق: ${target.name} ينتمي إلى ${targetRole.team === 'mafia' ? 'فريق الشر' : 'فريق الخير'}.`,
+                targetPlayer: { id: target.id, name: target.name, avatarId: target.avatarId }
+            });
+        } else if (action.action === 'spy') {
+             const targetRole = ROLES[target.apparentRole || target.role!];
+             
+             // Check if target is soldier
+            if(target.role === 'soldier') {
+                newPrivateEvents[action.actorId].push({
+                    type: 'spy_result_soldier_block',
+                    message: `لقد حاولت التجسس على ${target.name}، لكنه جندي متأهب وكشفك!`,
+                    targetPlayer: { id: target.id, name: target.name, avatarId: target.avatarId, role: target.role }
+                });
+            } else {
+                newPrivateEvents[action.actorId].push({
+                    type: 'spy_result',
+                    message: `تقرير التجسس: دور ${target.name} هو ${targetRole.name}.`,
+                    targetPlayer: { id: target.id, name: target.name, avatarId: target.avatarId, role: target.apparentRole || target.role! }
+                });
+                
+                // If spy finds a mafia member, open a private chat
+                if (targetRole.team === 'mafia') {
+                    const chatId = [actor.id, target.id].sort().join('-');
+                    if (!newPrivateChats[chatId]) {
+                        newPrivateChats[chatId] = { participants: [actor.id, target.id], messages: [] };
+                    }
+                }
+            }
+        }
+    });
+
+    // Clean up temporary states
+    players.forEach(p => {
+        delete p.isProtected;
+        delete p.apparentRole;
+    });
+
+    return { updatedPlayers, newEvents, newPrivateEvents, newPrivateChats, newLastHealedPlayerId };
+}
+
+
+async function processDayInternal(game: Game) {
+    const players = [...game.players];
+    const votes = game.mafiaState?.votes || {};
+    const voteCounts: Record<string, number> = {};
+    const events: DayEvent[] = [];
+    let executedPlayer: Player | null = null;
+    
+    Object.values(votes).forEach(targetId => {
+        if (targetId) {
+            voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+        }
+    });
+
+    const maxVotes = Math.max(0, ...Object.values(voteCounts));
+    const mostVotedIds = Object.keys(voteCounts).filter(id => voteCounts[id] === maxVotes);
+    
+    if (mostVotedIds.length === 1 && maxVotes > 0) {
+        const executedPlayerId = mostVotedIds[0];
+        const playerIndex = players.findIndex(p => p.id === executedPlayerId);
+        if (playerIndex !== -1) {
+            players[playerIndex].status = 'voted_out';
+            executedPlayer = players[playerIndex];
+            events.push({
+                type: 'execution',
+                message: `بعد نقاش حاد، قرر أهل المدينة إعدام ${executedPlayer!.name}!`,
+                executedPlayer: { name: executedPlayer!.name, avatarId: executedPlayer!.avatarId, temporaryTitle: executedPlayer!.temporaryTitle }
+            });
+        }
+    } else {
+        events.push({ type: 'no_execution', message: 'لم يتمكن أهل المدينة من الاتفاق على إعدام أحد.' });
+    }
+    
+    const winner = checkForWinner(players);
+    const lastExecutedPlayer = executedPlayer ? { name: executedPlayer.name, avatarId: executedPlayer.avatarId, temporaryTitle: executedPlayer.temporaryTitle } : null;
+
+    return { 
+        updatedGame: { players, events, lastExecutedPlayer },
+        winner
+    };
+}
+// --- END of inlined helpers ---
+
 
 const ROLE_REVEAL_DURATION_SECONDS = 15;
 
