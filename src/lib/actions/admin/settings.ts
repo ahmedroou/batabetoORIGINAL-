@@ -150,21 +150,6 @@ export async function setSocialRanks(ranks: SocialRank[]) {
     }
 }
 
-export async function getSocialRanks() {
-    try {
-        const ref = doc(db, 'game_settings', 'social_ranks');
-        const snap = await getDoc(ref);
-        if (snap.exists() && snap.data().list?.length > 0) {
-            return { success: true, ranks: snap.data().list as SocialRank[] };
-        }
-        await setDoc(ref, { list: DEFAULT_SOCIAL_RANKS });
-        return { success: true, ranks: DEFAULT_SOCIAL_RANKS };
-    } catch (e) {
-        console.error("Error getting social ranks:", e);
-        return { success: false, error: 'فشل جلب الألقاب الاجتماعية.' };
-    }
-}
-
 // -- Trap Answer Categories --
 export async function getTrapAnswerCategories() {
     try {
@@ -338,5 +323,62 @@ export async function deleteEducatedMerchantCategory(categoryToDelete: string) {
     } catch (error) {
         console.error("Error deleting category:", error);
         return { success: false, error: 'فشل حذف قسم التاجر المتعلم والأسئلة المرتبطة به.' };
+    }
+}
+
+export async function addPermissionToRank(rankName: string, permissionId: string): Promise<{ success: boolean, error?: string }> {
+    if (!stringNonEmpty(rankName) || !stringNonEmpty(permissionId)) {
+        return { success: false, error: 'اسم الرتبة والصلاحية مطلوبان.' };
+    }
+    
+    const ref = doc(db, 'game_settings', 'social_ranks');
+    try {
+        const snap = await getDoc(ref);
+        if (!snap.exists()) throw new Error('مستند الألقاب غير موجود.');
+
+        const ranks: SocialRank[] = snap.data().list || [];
+        const rankIndex = ranks.findIndex(r => r.name === rankName);
+        if (rankIndex === -1) throw new Error('لم يتم العثور على الرتبة المحددة.');
+
+        const rank = ranks[rankIndex];
+        if (!rank.permissions) rank.permissions = [];
+        if (rank.permissions.includes(permissionId as any)) return { success: true }; // Already exists
+
+        rank.permissions.push(permissionId as any);
+        ranks[rankIndex] = rank;
+        
+        await updateDoc(ref, { list: ranks });
+        return { success: true };
+    } catch (e: any) {
+        console.error('Error adding permission to rank:', e);
+        return { success: false, error: e.message };
+    }
+}
+
+export async function removePermissionFromRank(rankName: string, permissionId: string): Promise<{ success: boolean, error?: string }> {
+    if (!stringNonEmpty(rankName) || !stringNonEmpty(permissionId)) {
+        return { success: false, error: 'اسم الرتبة والصلاحية مطلوبان.' };
+    }
+
+    const ref = doc(db, 'game_settings', 'social_ranks');
+    try {
+        const snap = await getDoc(ref);
+        if (!snap.exists()) throw new Error('مستند الألقاب غير موجود.');
+
+        const ranks: SocialRank[] = snap.data().list || [];
+        const rankIndex = ranks.findIndex(r => r.name === rankName);
+        if (rankIndex === -1) throw new Error('لم يتم العثور على الرتبة المحددة.');
+
+        const rank = ranks[rankIndex];
+        if (!rank.permissions) return { success: true }; // Nothing to remove
+
+        rank.permissions = rank.permissions.filter(p => p !== permissionId);
+        ranks[rankIndex] = rank;
+
+        await updateDoc(ref, { list: ranks });
+        return { success: true };
+    } catch (e: any) {
+        console.error('Error removing permission from rank:', e);
+        return { success: false, error: e.message };
     }
 }

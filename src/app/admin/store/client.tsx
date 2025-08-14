@@ -50,9 +50,8 @@ import {
   getAvatarPrices,
   getPunishmentAvatarPrices,
   getDefaultAvatar,
-  getTopUsers,
 } from "@/lib/actions/admin";
-import { getRanks } from "@/lib/actions/user";
+import { getRanks, getTopUsers } from "@/lib/actions/user";
 import { cn } from "@/lib/utils";
 import { ALL_PERMISSIONS } from "@/data/permissions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -513,7 +512,7 @@ export default function AdminStoreClient() {
   const handlePermissionToggle = async (permissionId: string) => {
     if (!selectedRankForPermissions) return;
     setIsUpdatingPermission(true);
-    const has = selectedRankForPermissions.permissions?.includes(permissionId);
+    const has = selectedRankForPermissions.permissions?.includes(permissionId as any);
     const action = has ? removePermissionFromRank : addPermissionToRank;
     const res = await action(selectedRankForPermissions.name, permissionId);
     if (res.success) {
@@ -826,7 +825,7 @@ export default function AdminStoreClient() {
                       <div className="space-y-3">
                         {selectedRankForPermissions ? (
                           ALL_PERMISSIONS.map((perm) => {
-                            const has = selectedRankForPermissions.permissions?.includes(perm.id);
+                            const has = selectedRankForPermissions.permissions?.includes(perm.id as any);
                             return (
                               <div key={perm.id} className="flex items-center justify-between rounded-lg bg-black/30 p-2">
                                 <div>
