@@ -1,7 +1,7 @@
 
 "use client";
 
-import SocietyChallenges from "../society/components/SocietyChallenges";
+import SocietyChallenges from "@/app/society/components/SocietyChallenges";
 import { useAuth } from '@/hooks/useAuth';
 import { useEffect } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';

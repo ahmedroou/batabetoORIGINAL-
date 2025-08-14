@@ -328,7 +328,7 @@ export default function SocietyChallenges({ filter = 'active' }: { filter?: 'act
     useEffect(() => {
         const fetchChallenges = async () => {
             setIsLoading(true);
-            const fetchedChallenges = await getAllChallengesForAdmin();
+            const fetchedChallenges = await getChallenges();
             setChallenges(fetchedChallenges);
             setIsLoading(false);
         };

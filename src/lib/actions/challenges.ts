@@ -59,21 +59,21 @@ export async function createChallenge(challengeData: CreateChallengeInput): Prom
 
 
 /**
- * Retrieves all active challenges, including top 3 participants for each.
- * @returns {Promise<Challenge[]>} An array of active challenges with top participant data.
+ * Retrieves all challenges.
+ * @returns {Promise<Challenge[]>} An array of challenges.
  */
 export async function getChallenges(): Promise<Challenge[]> {
     try {
         const challengesCol = collection(db, 'challenges');
         const q = query(
             challengesCol, 
-            where('endsAt', '>', Timestamp.now()),
-            orderBy('endsAt', 'asc')
+            orderBy('endsAt', 'desc')
         );
         const snapshot = await getDocs(q);
         
         const challenges = snapshot.docs.map(doc => {
             const data = doc.data();
+            // Ensure createdAt and endsAt are JavaScript Date objects
             const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date();
             const endsAt = data.endsAt instanceof Timestamp ? data.endsAt.toDate() : new Date(Date.now() + 24 * 60 * 60 * 1000); // Fallback
             return {
@@ -91,11 +91,16 @@ export async function getChallenges(): Promise<Challenge[]> {
                 const top3Ids = sortedParticipantIds.slice(0, 3);
                 
                 if (top3Ids.length > 0) {
-                    const usersQuery = query(collection(db, 'users'), where('__name__', 'in', top3Ids));
-                    const usersSnapshot = await getDocs(usersQuery);
-                    const topUsersData = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
-                    
-                    challenge.topParticipants = topUsersData.sort((a,b) => (challenge.scores[b.uid] || 0) - (challenge.scores[a.uid] || 0));
+                     try {
+                        const usersQuery = query(collection(db, 'users'), where('__name__', 'in', top3Ids));
+                        const usersSnapshot = await getDocs(usersQuery);
+                        const topUsersData = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
+                        
+                        challenge.topParticipants = topUsersData.sort((a,b) => (challenge.scores[b.uid] || 0) - (challenge.scores[a.uid] || 0));
+                     } catch(e) {
+                         console.error(`Failed to fetch top participants for challenge ${challenge.id}`, e);
+                         challenge.topParticipants = [];
+                     }
                 } else {
                      challenge.topParticipants = [];
                 }

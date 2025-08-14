@@ -89,7 +89,7 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
     });
     
     // Fetch leaderboard points for each king
-    const kingIds = Object.values(kings).map(k => k.kingId);
+    const kingIds = Object.values(kings).map(k => k.kingId).filter(Boolean);
     if (kingIds.length > 0) {
         const usersQuery = query(collection(db, 'users'), where('__name__', 'in', kingIds));
         const usersSnapshot = await getDocs(usersQuery);

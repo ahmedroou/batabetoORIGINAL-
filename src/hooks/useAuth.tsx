@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo, useCallback } from 'react';
@@ -262,13 +263,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   
    useEffect(() => {
     if (!user) return; // Don't fetch challenges if there's no user
-    const challengesQuery = query(collection(db, 'challenges'), orderBy('createdAt', 'desc'), limit(1));
+    const challengesQuery = query(collection(db, 'challenges'), where('endsAt', '>', Timestamp.now()), orderBy('endsAt', 'asc'), limit(5));
     
     const unsubscribeChallenges = onSnapshot(challengesQuery, (snapshot) => {
-        if (!snapshot.empty) {
-            const latestChallenge = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Challenge;
-            setActiveChallenges([latestChallenge]); // We only care about the latest one for notifications
-            
+        const fetchedChallenges = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Challenge));
+        setActiveChallenges(fetchedChallenges);
+        
+        if (fetchedChallenges.length > 0) {
+            const latestChallenge = fetchedChallenges[0];
             const lastSeenTimestamp = localStorage.getItem('lastChallengeView');
             const latestChallengeTimestamp = (latestChallenge.createdAt as Timestamp)?.toMillis();
             
@@ -279,6 +281,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     setNewChallengeAvailable(false);
                 }
             }
+        } else {
+            setNewChallengeAvailable(false);
         }
     });
 
