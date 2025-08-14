@@ -46,7 +46,8 @@ import {
     getTopUsers as queryTopUsers,
     getRanks as queryRanks,
     getUsersByRank as queryUsersByRank,
-    getTopPunisher as queryTopPunisher
+    getTopPunisher as queryTopPunisher,
+    getKingsPageData
 } from './user';
 
 
@@ -1150,3 +1151,5 @@ export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: n
 export async function generateGeniusChallenge(input: GenerateGeniusChallengeInput): Promise<GenerateGeniusChallengeOutput> {
     return generateGeniusChallengeFlow(input);
 }
+
+    

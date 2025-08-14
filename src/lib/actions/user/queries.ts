@@ -77,8 +77,33 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
     }
     const kings: Record<string, GameKing> = {};
     snapshot.forEach(doc => {
-      kings[doc.id] = doc.data() as GameKing;
+      const data = doc.data();
+      kings[doc.id] = {
+          name: data.name,
+          avatarId: data.avatarId,
+          winCount: data.winCount,
+          kingId: data.kingId,
+          // Fetch leaderboardPoints for the king from their user profile
+          leaderboardPoints: 0, // Placeholder, will be fetched next
+      } as GameKing;
     });
+    
+    // Fetch leaderboard points for each king
+    const kingIds = Object.values(kings).map(k => k.kingId);
+    if (kingIds.length > 0) {
+        const usersQuery = query(collection(db, 'users'), where('__name__', 'in', kingIds));
+        const usersSnapshot = await getDocs(usersQuery);
+        const usersData = new Map(usersSnapshot.docs.map(d => [d.id, d.data() as UserProfile]));
+
+        for(const gameType in kings) {
+            const king = kings[gameType];
+            const kingUser = usersData.get(king.kingId);
+            if (kingUser) {
+                king.leaderboardPoints = kingUser.leaderboardPoints || 0;
+            }
+        }
+    }
+    
     return kings;
   } catch (error) {
     console.error("Error fetching game kings:", error);
@@ -253,5 +278,7 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
         return [];
     }
 }
+
+    
 
     
