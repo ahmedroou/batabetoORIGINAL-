@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -125,9 +124,9 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
         description: error.message,
         variant: 'destructive',
       });
-    } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false); // Reset on error
     }
+    // On success, the component will unmount, so no need to reset state.
   };
 
   const handleRandomizeTeams = async () => {
@@ -259,4 +258,3 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
     </Card>
   );
 }
-```

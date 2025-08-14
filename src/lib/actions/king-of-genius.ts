@@ -135,8 +135,6 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
       teamScores: { A: 0, B: 0 },
       challengeState: {}, // Clear old state
     });
-
-    // We don't return anything to be called after, so we don't need the `postTransaction` logic
   });
   
   // After setting the state to intro, immediately call the logic to prepare the first round
@@ -357,4 +355,3 @@ async function advanceFromResults(transaction: Transaction, gameRef: any, game: 
         return null;
     }
 }
-```

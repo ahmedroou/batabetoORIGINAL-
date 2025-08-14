@@ -331,4 +331,3 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
       </AnimatePresence>
   );
 }
-```
