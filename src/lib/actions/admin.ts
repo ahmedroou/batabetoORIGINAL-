@@ -60,24 +60,19 @@ export async function adminSearchUsers(searchTerm: string): Promise<UserProfile[
   const term = searchTerm.toLowerCase();
   const usersRef = collection(db, 'users');
 
-  const nameQuery = query(usersRef, where('name', '>=', term), where('name', '<=', term + '\uf8ff'));
-  const emailQuery = query(usersRef, where('email', '>=', term), where('email', '<=', term + '\uf8ff'));
-
-  const [nameSnapshot, emailSnapshot] = await Promise.all([getDocs(nameQuery), getDocs(emailQuery)]);
-    
-  const usersMap = new Map<string, UserProfile>();
-  const processSnapshot = (snapshot: any) => {
-    snapshot.docs.forEach((doc: any) => {
-      if (!usersMap.has(doc.id)) {
-        usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
-      }
-    });
-  }
-
-  processSnapshot(nameSnapshot);
-  processSnapshot(emailSnapshot);
-
-  return Array.from(usersMap.values());
+  // Since Firestore queries are case-sensitive, we can't directly query for a lowercase version
+  // without having a dedicated lowercase field. The best approach without schema changes is to fetch
+  // and filter, which is what the original implementation did. We will add the lowercase conversion here.
+  const querySnapshot = await getDocs(usersRef);
+  const users = querySnapshot.docs
+    .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
+    .filter(
+      (user) =>
+        user.name?.toLowerCase().includes(term) ||
+        user.email?.toLowerCase().includes(term)
+    );
+  
+  return users;
 }
 
 
@@ -1151,5 +1146,3 @@ export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: n
 export async function generateGeniusChallenge(input: GenerateGeniusChallengeInput): Promise<GenerateGeniusChallengeOutput> {
     return generateGeniusChallengeFlow(input);
 }
-
-    
