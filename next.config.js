@@ -22,6 +22,12 @@ const nextConfig = {
         fs: false
       };
     }
+    
+    // The following lines are the fix
+    if (isServer) {
+        config.externals.push('@opentelemetry/instrumentation');
+    }
+
     return config;
   },
 };
