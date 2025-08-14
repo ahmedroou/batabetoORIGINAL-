@@ -21,26 +21,26 @@ describe('End of Game Awards Logic', () => {
              gameResult: { winner: 'p1', message: 'Game Over' }
         };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game, []);
 
         // --- Verify Player 1 (1st Place) ---
         expect(updates['p1']).toBeDefined();
         expect(updates['p1'].leaderboardPoints).toBe(3);
         expect(updates['p1'].coins).toBe(2);
-        expect(updates['p1'].gamesPlayed).toBe(1);
+        expect(updates['p1'].gamesPlayed).toEqual({ 'trap-answer': 1 });
 
         // --- Verify Player 2 (2nd Place) ---
         expect(updates['p2']).toBeDefined();
         expect(updates['p2'].leaderboardPoints).toBe(2);
         expect(updates['p2'].coins).toBe(1);
-        expect(updates['p2'].gamesPlayed).toBe(1);
+        expect(updates['p2'].gamesPlayed).toEqual({ 'trap-answer': 1 });
 
 
         // --- Verify Player 3 (3rd Place) ---
         expect(updates['p3']).toBeDefined();
         expect(updates['p3'].leaderboardPoints).toBe(1);
         expect(updates['p3'].coins).toBe(0);
-        expect(updates['p3'].gamesPlayed).toBe(1);
+        expect(updates['p3'].gamesPlayed).toEqual({ 'trap-answer': 1 });
         
         // --- Verify Win Count ---
         expect(winUpdate).toBeDefined();
@@ -60,7 +60,7 @@ describe('End of Game Awards Logic', () => {
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game, []);
 
         // P1 is 1st
         expect(updates['p1'].leaderboardPoints).toBe(3);
@@ -90,7 +90,7 @@ describe('End of Game Awards Logic', () => {
             gameResult: { winner: 'red', message: 'Red team wins!' }
         };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game, []);
         
         // Red team members (winners) get awards
         expect(updates['p1'].leaderboardPoints).toBe(3);

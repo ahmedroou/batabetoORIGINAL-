@@ -27,20 +27,20 @@ describe('End of Game Awards Logic', () => {
         expect(updates['p1']).toBeDefined();
         expect(updates['p1'].leaderboardPoints).toBe(3);
         expect(updates['p1'].coins).toBe(2);
-        expect(updates['p1'].gamesPlayed).toBeDefined();
+        expect(updates['p1'].gamesPlayed).toEqual({ 'trap-answer': 1 });
 
         // --- Verify Player 2 (2nd Place) ---
         expect(updates['p2']).toBeDefined();
         expect(updates['p2'].leaderboardPoints).toBe(2);
         expect(updates['p2'].coins).toBe(1);
-        expect(updates['p2'].gamesPlayed).toBeDefined();
+        expect(updates['p2'].gamesPlayed).toEqual({ 'trap-answer': 1 });
 
 
         // --- Verify Player 3 (3rd Place) ---
         expect(updates['p3']).toBeDefined();
         expect(updates['p3'].leaderboardPoints).toBe(1);
         expect(updates['p3'].coins).toBe(0);
-        expect(updates['p3'].gamesPlayed).toBeDefined();
+        expect(updates['p3'].gamesPlayed).toEqual({ 'trap-answer': 1 });
         
         // --- Verify Win Count ---
         expect(winUpdate).toBeDefined();
