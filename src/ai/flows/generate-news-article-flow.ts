@@ -39,7 +39,7 @@ Today's Date: {{{date}}}
 **Active Challenges & Tournaments:**
 {{#if active_challenges}}
 {{#each active_challenges}}
-- Challenge '{{title}}' is ongoing. Ends on: {{endsAt}}. Prizes are significant. This is important.
+- Challenge '{{title}}' is ongoing. Ends on: {{endsAt}}. Participants: {{participantCount}}. This is important.
 {{/each}}
 {{else}}
 - No active challenges today. A day of peace.
@@ -78,7 +78,7 @@ Today's Date: {{{date}}}
 **Recent Game Results (Last 10 Games):**
 {{#if recent_games}}
 {{#each recent_games}}
-- Game '{{gameType}}' finished. Winner: {{gameResult.winner}}.
+- Game '{{gameType}}' finished. Winner: {{gameResult.winner}}. Players involved: {{#each players}}{{name}} (Score: {{lookup ../playerScores id}}), {{/each}}.
 {{/each}}
 {{/if}}
 ---
@@ -89,7 +89,7 @@ Today's Date: {{{date}}}
 {{/each}}
 {{/if}}
 ---
-Based on ALL of this information, provide a summary. Select only the key events that would make for a juicy news story. Connect new events to older stories if possible. Ignore minor events unless they contribute to a larger narrative (e.g., a top player losing a duel).
+Based on ALL of this information, provide a summary. Select only the key events that would make for a juicy news story. Connect new events to older stories if possible. Look for patterns: Is a top player on a losing streak? Is a new player dominating a specific game? Who got the highest score today? Ignore minor events unless they contribute to a larger narrative (e.g., a top player losing a duel).
 `
 });
 
@@ -120,6 +120,7 @@ Your task is to write a news article in Arabic.
 - Use a satirical, humorous, and slightly mocking tone.
 - Do not just list the events. Create a story around them.
 - The article should be engaging and make the players feel like their actions have consequences and are being watched.
+- Keep the article between 100 and 200 words.
 `
 });
 
@@ -147,7 +148,7 @@ const newsGeneratorFlow = ai.defineFlow(
       headline: draftArticle.headline,
       body: draftArticle.body,
       category: 'أخبار اللعبة',
-      imageUrl: "", // Removed image generation
+      imageUrl: "",
     };
   }
 );

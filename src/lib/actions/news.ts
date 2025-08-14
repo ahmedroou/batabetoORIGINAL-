@@ -337,7 +337,7 @@ export async function runAiJournalist(directive?: string): Promise<{success: boo
             title: generatedArticle.headline,
             content: generatedArticle.body,
             category: generatedArticle.category,
-            imageUrl: generatedArticle.imageUrl || "",
+            imageUrl: "", // No image generation
             authorName: "المراسل الذكي",
             authorId: "ai_journalist",
             isPublished: true,
