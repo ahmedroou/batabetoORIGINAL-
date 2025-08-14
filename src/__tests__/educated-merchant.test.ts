@@ -119,25 +119,28 @@ describe('Educated Merchant - Game Logic Helpers', () => {
   test('Player can purchase an unowned property by answering correctly', () => {
     const property = mockBoard[1];
     let game = createMockGame(mockPlayers, { board: mockBoard, turnOrder: mockPlayers.map(p => p.id) });
+    game.players[0].money = 1000;
+    game.players[0].position = 1;
+    game.gameState = 'property_action';
     
-    // Setup state as if purchase has been initiated
-    const gameAfterPurchaseInit: Game = {
+    const gameAfterPurchaseInit = _purchaseProperty(game, 'p1');
+    const gameWithQuestion = {
         ...game,
-        gameState: 'question',
-        players: game.players.map(p => p.id === 'p1' ? { ...p, money: 1000 - property.price, position: 1 } : p),
+        ...gameAfterPurchaseInit.updates,
         educatedMerchantState: {
           ...game.educatedMerchantState,
+          ...gameAfterPurchaseInit.updates.educatedMerchantState,
           currentQuestion: { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] },
-          pendingPurchase: { playerId: 'p1', propertyId: 1, price: property.price, questionId: 'q1', propertyName: property.name },
         },
     };
 
-    const { updates: finalUpdates } = _answerQuestion(gameAfterPurchaseInit, 'p1', 'Correct');
+    const { updates: finalUpdates } = _answerQuestion(gameWithQuestion, 'p1', 'Correct');
     const finalBoard = finalUpdates['educatedMerchantState.board'];
     const finalPlayers = finalUpdates.players;
 
     expect(finalBoard[1].ownerId).toBe('p1');
     expect(finalPlayers.find((p: Player) => p.id === 'p1')?.propertiesCount).toBe(1);
+    expect(finalPlayers.find((p: Player) => p.id === 'p1')?.money).toBe(900);
     expect(finalUpdates.gameState).toBe('rolling');
   });
   
@@ -145,20 +148,22 @@ describe('Educated Merchant - Game Logic Helpers', () => {
     const property = mockBoard[1];
     const refund = Math.round(property.price / 4);
     let game = createMockGame(mockPlayers, { board: mockBoard, turnOrder: mockPlayers.map(p => p.id) });
+    game.players[0].money = 1000;
+    game.players[0].position = 1;
+    game.gameState = 'property_action';
 
-    // Setup state as if purchase has been initiated
-    const gameAfterPurchaseInit: Game = {
+    const gameAfterPurchaseInit = _purchaseProperty(game, 'p1');
+    const gameWithQuestion: Game = {
         ...game,
-        gameState: 'question',
-        players: game.players.map(p => p.id === 'p1' ? { ...p, money: 1000 - property.price, position: 1 } : p),
+        ...gameAfterPurchaseInit.updates,
         educatedMerchantState: {
           ...game.educatedMerchantState,
+          ...gameAfterPurchaseInit.updates.educatedMerchantState,
           currentQuestion: { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] },
-          pendingPurchase: { playerId: 'p1', propertyId: 1, price: property.price, questionId: 'q1', propertyName: property.name },
         },
     };
 
-    const { updates: finalUpdates } = _answerQuestion(gameAfterPurchaseInit, 'p1', 'Wrong');
+    const { updates: finalUpdates } = _answerQuestion(gameWithQuestion, 'p1', 'Wrong');
     const finalBoard = finalUpdates['educatedMerchantState.board'];
     const finalPlayers = finalUpdates.players;
 
@@ -183,7 +188,7 @@ describe('Educated Merchant - Game Logic Helpers', () => {
       
       const gameAfterRoll = {
         ...game,
-        players: game.players.map(p => p.id === 'p1' ? { ...p, position: 2 } : p),
+        players: game.players.map(p => p.id === 'p1' ? { ...p, position: (p.position + 2) % mockBoard.length } : p),
         educatedMerchantState: { ...game.educatedMerchantState, lastDiceRoll: 2 },
       };
 
