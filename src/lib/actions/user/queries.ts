@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase';
 import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch, increment } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge, Game } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
+import { getTopUsers as adminGetTopUsers } from '../admin/users';
 
 
 // This function is purely for fetching ranks from the database.
@@ -243,15 +244,7 @@ export async function updateUserWinCount(gameType: Game['gameType'], userId: str
 }
 
 export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
-    try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, orderBy(field, 'desc'), limit(count));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-    } catch (error) {
-        console.error(`Error getting top users by ${field}:`, error);
-        return [];
-    }
+    return adminGetTopUsers(field, count);
 }
 
 export async function getTopPunisher(): Promise<UserProfile | null> {
@@ -296,8 +289,3 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
         return [];
     }
 }
-
-    
-
-    
-

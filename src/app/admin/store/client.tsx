@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -49,8 +50,9 @@ import {
   getAvatarPrices,
   getPunishmentAvatarPrices,
   getDefaultAvatar,
+  getTopUsers,
 } from "@/lib/actions/admin";
-import { getRanks, getTopUsers } from "@/lib/actions/user";
+import { getRanks } from "@/lib/actions/user";
 import { cn } from "@/lib/utils";
 import { ALL_PERMISSIONS } from "@/data/permissions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
