@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -91,7 +92,8 @@ const getTimerExpiryMs = (game: Game): number | null => {
   if (ww.timer) {
     const t = ww.timer;
     // endsAtApprox is a client-side convenience, but startedAt + duration is authoritative
-    if (t.endsAtApprox) return t.endsAtApprox.toMillis ? t.endsAtApprox.toMillis() : new Date(t.endsAtApprox).getTime();
+    if (t.endsAtApprox?.toMillis) return t.endsAtApprox.toMillis();
+    if (typeof t.endsAtApprox === 'string') return new Date(t.endsAtApprox).getTime();
     if (t.startedAt?.toMillis && typeof t.durationSec === "number") {
       return t.startedAt.toMillis() + t.durationSec * 1000;
     }

@@ -672,23 +672,21 @@ export interface Game {
 
   // "حرب الكلمات" (Word War) specific state
   wordWarState?: {
-    settings: {
-        turnTime: number;
-    };
-    cards: WordWarCard[];
+    settings: { turnTime: number };
+    cards?: WordWarCard[]; // Legacy
+    cardsMap?: Record<string, WordWarCard>;
+    cardsOrder?: string[];
     turn: 'red' | 'blue';
-    guides: {
-        red: string;
-        blue: string;
+    turnId?: number;
+    timer?: {
+        phase: 'prep' | 'guide' | 'guess';
+        startedAt: Timestamp;
+        durationSec: number;
+        endsAtApprox: Timestamp; // Client-side convenience
     };
-    previousGuides?: {
-        red?: string;
-        blue?: string;
-    };
-    currentHint?: {
-        word: string;
-        count: number;
-    };
+    guides: { red: string; blue: string; };
+    previousGuides?: { red?: string; blue?: string; };
+    currentHint?: { word: string; count: number; };
     guessesLeft?: number;
     turnResult?: 'hit' | 'miss' | 'neutral' | 'assassin';
     timerEndsAt?: Timestamp | null;

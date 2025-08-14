@@ -80,7 +80,7 @@ function setTimer(
       phase,
       startedAt: serverTimestamp(),
       durationSec,
-      endsAtApprox: nowMs() + millis(durationSec),
+      endsAtApprox: Timestamp.fromMillis(nowMs() + millis(durationSec)),
     },
   });
 }
@@ -439,16 +439,26 @@ export async function revealCard(
   });
 }
 
-export async function endTurn(gameId: string, playerId: string) {
+export async function endTurn(gameId: string, playerId: string, opts?: { expectedTurnId?: number; clientSentAtMs?: number }) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (t) => {
     const gameDoc = await t.get(gameRef);
     if (!gameDoc.exists()) throw new Error('Game not found.');
     const game = gameDoc.data() as Game;
+    const ww = game.wordWarState;
 
+    if (!ww) return;
     if (game.gameState !== 'guesser_turn') return; // ignore stale
 
-    const currentTeam = game.wordWarState.turn;
+    const player = ensurePlayerInGame(game, playerId);
+    if (player.team !== ww.turn) throw new Error('It is not your team\'s turn to act.');
+
+    if (opts?.expectedTurnId != null && ww.turnId != null && opts.expectedTurnId !== ww.turnId) {
+      metricInc(t, gameRef, 'metrics.rejected.staleTurn');
+      return;
+    }
+
+    const currentTeam = ww.turn;
     const next = nextTeam(currentTeam);
 
     t.update(gameRef, {
@@ -460,12 +470,12 @@ export async function endTurn(gameId: string, playerId: string) {
       'metrics.lastEndTurnAt': serverTimestamp(),
     });
 
-    bumpTurnId(t, gameRef, game.wordWarState.turnId);
+    bumpTurnId(t, gameRef, ww.turnId);
     setTimer(t, gameRef, 'guide', getTurnTime(game));
   });
 }
 
-export async function handleTimeout(gameId: string, hostId: string) {
+export async function handleTimeout(gameId: string, hostId: string, opts?: { expectedTurnId?: number; clientSentAtMs?: number }) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (t) => {
     const gameDoc = await t.get(gameRef);
@@ -505,19 +515,25 @@ export async function handleTimeout(gameId: string, hostId: string) {
   });
 }
 
-export async function toggleSuspicion(gameId: string, playerId: string, cardText: string) {
+export async function toggleSuspicion(gameId: string, playerId: string, cardText: string, opts?: { expectedTurnId?: number; clientSentAtMs?: number }) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (t) => {
     const gameDoc = await t.get(gameRef);
     if (!gameDoc.exists()) throw new Error('Game not found.');
     const game = gameDoc.data() as Game;
+    const ww = game.wordWarState;
 
+    if (!ww) return;
     if (game.gameState !== 'guesser_turn') return; // ignore when not guessing
 
+    if (opts?.expectedTurnId != null && ww.turnId != null && opts.expectedTurnId !== ww.turnId) {
+      return; // stale
+    }
+    
     const player = ensurePlayerInGame(game, playerId);
     if (!player.team) throw new Error('Player not assigned to a team.');
 
-    const suspicions = game.wordWarState.suspicions || ({} as Record<string, string[]>);
+    const suspicions = ww.suspicions || ({} as Record<string, string[]>);
     const cardSus = suspicions[cardText] || [];
     const isMine = cardSus.includes(playerId);
 
@@ -559,127 +575,3 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
     await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
   }
 }
-
-// =====================
-// --- Extra files (copy as needed) ---
-// 1) Cloud Functions (functions/src/wordWarTimers.ts)
-// 2) Security Rules snippet (firestore.rules)
-// =====================
-
-/*
-// functions/src/wordWarTimers.ts
-import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { onCall } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
-
-admin.initializeApp();
-const adb = admin.firestore();
-
-// Utility: compute expiry
-const ms = (s:number)=>s*1000;
-
-export const wordWar_enforceTimers = onSchedule('every 1 minutes', async () => {
-  const now = Date.now();
-  const snap = await adb.collection('games')
-    .where('wordWarState.timer.startedAt', '<=', admin.firestore.Timestamp.fromMillis(now - ms(10))) // coarse prefilter
-    .get();
-
-  const batch = adb.batch();
-  for (const doc of snap.docs) {
-    const g = doc.data() as any;
-    const timer = g?.wordWarState?.timer;
-    if (!timer?.startedAt || typeof timer.durationSec !== 'number') continue;
-    const started = timer.startedAt.toMillis();
-    const expiresAt = started + ms(timer.durationSec);
-    if (now < expiresAt) continue;
-
-    // mirror logic of handleTimeout (server-authoritative)
-    if (g.gameState === 'preparation') {
-      batch.update(doc.ref, { gameState: 'guide_turn', 'wordWarState.timer': {
-        phase: 'guide', startedAt: admin.firestore.FieldValue.serverTimestamp(), durationSec: g.wordWarState?.settings?.turnTime || 60,
-        endsAtApprox: Date.now() + ms(g.wordWarState?.settings?.turnTime || 60),
-      }});
-      continue;
-    }
-    if (g.gameState === 'guide_turn' || g.gameState === 'guesser_turn') {
-      const next = g.wordWarState.turn === 'red' ? 'blue' : 'red';
-      batch.update(doc.ref, {
-        gameState: 'guide_turn',
-        'wordWarState.turn': next,
-        'wordWarState.currentHint': null,
-        'wordWarState.guessesLeft': 0,
-        'wordWarState.suspicions': {},
-        'wordWarState.turnId': (g.wordWarState.turnId || 0) + 1,
-        'metrics.timeouts': admin.firestore.FieldValue.increment(1),
-        'wordWarState.timer': {
-          phase: 'guide', startedAt: admin.firestore.FieldValue.serverTimestamp(), durationSec: g.wordWarState?.settings?.turnTime || 60,
-          endsAtApprox: Date.now() + ms(g.wordWarState?.settings?.turnTime || 60),
-        }
-      });
-    }
-  }
-  await batch.commit();
-});
-
-export const wordWar_handleTimeoutIfExpired = onCall(async (req) => {
-  const { gameId } = req.data || {};
-  if (!gameId) throw new Error('Missing gameId');
-  const ref = adb.collection('games').doc(gameId);
-  await adb.runTransaction(async (t) => {
-    const snap = await t.get(ref);
-    if (!snap.exists) return;
-    const g:any = snap.data();
-    const timer = g?.wordWarState?.timer;
-    if (!timer?.startedAt || typeof timer.durationSec !== 'number') return;
-    const started = timer.startedAt.toMillis();
-    const expiresAt = started + ms(timer.durationSec);
-    if (Date.now() < expiresAt) return;
-
-    if (g.gameState === 'preparation') {
-      t.update(ref, { gameState: 'guide_turn', 'wordWarState.timer': {
-        phase: 'guide', startedAt: admin.firestore.FieldValue.serverTimestamp(), durationSec: g.wordWarState?.settings?.turnTime || 60,
-        endsAtApprox: Date.now() + ms(g.wordWarState?.settings?.turnTime || 60),
-      }});
-      return;
-    }
-    if (g.gameState === 'guide_turn' || g.gameState === 'guesser_turn') {
-      const next = g.wordWarState.turn === 'red' ? 'blue' : 'red';
-      t.update(ref, {
-        gameState: 'guide_turn',
-        'wordWarState.turn': next,
-        'wordWarState.currentHint': null,
-        'wordWarState.guessesLeft': 0,
-        'wordWarState.suspicions': {},
-        'wordWarState.turnId': (g.wordWarState.turnId || 0) + 1,
-        'metrics.timeouts': admin.firestore.FieldValue.increment(1),
-        'wordWarState.timer': {
-          phase: 'guide', startedAt: admin.firestore.FieldValue.serverTimestamp(), durationSec: g.wordWarState?.settings?.turnTime || 60,
-          endsAtApprox: Date.now() + ms(g.wordWarState?.settings?.turnTime || 60),
-        }
-      });
-    }
-  });
-  return { ok: true };
-});
-*/
-
-/*
-// firestore.rules (snippet; optional — soft guard against stale writes)
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /games/{gameId} {
-      allow read: if true;
-      // Example: allow updates if timer either absent or not expired.
-      allow update: if
-        request.auth != null && (
-          !('wordWarState' in resource.data) ||
-          !('timer' in resource.data.wordWarState) ||
-          (resource.data.wordWarState.timer.durationSec is int &&
-            resource.data.wordWarState.timer.startedAt is timestamp &&
-            request.time.toMillis() < resource.data.wordWarState.timer.startedAt.toMillis() + (resource.data.wordWarState.timer.durationSec * 1000))
-        );
-    }
-  }
-}
-*/
