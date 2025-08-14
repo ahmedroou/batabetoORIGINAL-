@@ -1,7 +1,6 @@
+"use client";
 
-'use client';
-
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,92 +9,109 @@ import { Card, CardDescription, CardFooter, CardHeader, CardTitle, CardContent }
 import { Button } from '@/components/ui/button';
 import { GAME_ICONS } from '@/data/icons';
 import type { Game } from '@/types';
-import { Star, Loader2, Heart, TrendingUp, Trophy, Coins } from 'lucide-react';
+import { Star, Loader2, Heart, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+// -----------------------------
+// Fancy inline SVG icons (Black/Gold theme)
+// These are self-contained, scalable and give a premium look.
+// -----------------------------
+function GoldTrophy({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <defs>
+        <linearGradient id="g1" x1="0" x2="1">
+          <stop offset="0" stopColor="#FFD166" />
+          <stop offset="1" stopColor="#FFB703" />
+        </linearGradient>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+          <feMerge>
+            <feMergeNode in="coloredBlur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      <g filter="url(#glow)">
+        <path d="M8 3h8v2a3 3 0 0 1-3 3h-2A3 3 0 0 1 8 5V3z" fill="url(#g1)" />
+        <path d="M7 7a5 5 0 0 0-5 5v1a3 3 0 0 0 3 3h1v2h8v-2h1a3 3 0 0 0 3-3v-1a5 5 0 0 0-5-5H7z" fill="#B8860B" opacity="0.95" />
+        <rect x="9" y="17" width="6" height="1.6" rx="0.4" fill="#F4E27A" />
+      </g>
+    </svg>
+  );
+}
+
+function GoldCoin({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <defs>
+        <radialGradient id="c1" cx="0.3" cy="0.2" r="1">
+          <stop offset="0" stopColor="#FFF7CC" />
+          <stop offset="1" stopColor="#FFC857" />
+        </radialGradient>
+      </defs>
+      <circle cx="12" cy="12" r="9" fill="url(#c1)" stroke="#B57E00" strokeWidth="0.8" />
+      <text x="12" y="15" fontSize="9" fontWeight="700" textAnchor="middle" fill="#7A4900">¢</text>
+    </svg>
+  );
+}
+
+function GoldStar({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <defs>
+        <linearGradient id="s1" x1="0" x2="1">
+          <stop offset="0" stopColor="#FFEAA7" />
+          <stop offset="1" stopColor="#FFD166" />
+        </linearGradient>
+      </defs>
+      <path d="M12 2l2.6 6.7L21 10l-5 3.7L17.2 21 12 17.8 6.8 21 8 13.7 3 10l6.4-1.3L12 2z" fill="url(#s1)" stroke="#A36A00" strokeWidth="0.4" />
+    </svg>
+  );
+}
+
+// -----------------------------
+// Prize row component — elegant, compact and responsive
+// -----------------------------
+function PrizeRow({ rank, points, coins }: { rank: string; points: number; coins: number }) {
+  return (
+    <div className="flex items-center gap-3 text-xs md:text-sm justify-center md:justify-start text-white/90">
+      <div className="flex items-center gap-2">
+        <GoldTrophy className="w-5 h-5" />
+        <span className="font-semibold">{rank}</span>
+      </div>
+
+      <div className="flex items-center gap-2 text-yellow-50/95">
+        <GoldStar className="w-4 h-4" />
+        <span className="opacity-95">{points}</span>
+      </div>
+
+      {coins > 0 && (
+        <div className="flex items-center gap-2">
+          <GoldCoin className="w-4 h-4" />
+          <span className="opacity-95">{coins}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// -----------------------------
+// Main improved GameGrid component
+// - Premium black/gold/white theme
+// - Accessible interactive cards (keyboard + focus)
+// - Fancy SVG prizes + hover animations
+// - Stable rendering & clear loading states per-card
+// -----------------------------
 
 type LoadingState =
-  | 'create-king-of-genius'
-  | 'create-trap-answer'
-  | 'create-behind-the-mask'
-  | 'create-word_war'
-  | 'create-prison'
-  | 'create-educated-merchant'
+  | `create-${Game['gameType']}`
   | null;
 
-const gameCardsData: Array<{
-  type: Game['gameType'];
-  title: string;
-  description: string;
-  defaultTag?: 'جديد';
-  accent: { from: string; via?: string; to:string };
-  prizes: { rank: string; points: number; coins: number }[];
-}> = [
-  { 
-    type: 'king-of-genius', 
-    title: 'ساحة العباقرة', 
-    description: 'تحديات ذكاء وسرعة بديهة بين فريقين.', 
-    accent: { from: 'from-fuchsia-500/25', to: 'to-violet-500/25' },
-    prizes: [
-        { rank: 'الفريق الفائز', points: 3, coins: 2 }
-    ]
-  },
-  { 
-    type: 'word_war', 
-    title: 'حرب الكلمات', 
-    description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.', 
-    accent: { from: 'from-emerald-500/25', to: 'to-teal-500/25' },
-    prizes: [
-        { rank: 'الفريق الفائز', points: 3, coins: 2 }
-    ]
-  },
-  { 
-    type: 'trap-answer', 
-    title: 'الجواب المفخخ', 
-    description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.', 
-    accent: { from: 'from-amber-500/25', to: 'to-orange-500/25' },
-    prizes: [
-        { rank: 'المركز الأول', points: 3, coins: 2 },
-        { rank: 'المركز الثاني', points: 2, coins: 1 },
-        { rank: 'المركز الثالث', points: 1, coins: 0 },
-    ]
-  },
-  { 
-    type: 'behind-the-mask', 
-    title: 'خلف القناع', 
-    description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.', 
-    defaultTag: 'جديد', 
-    accent: { from: 'from-rose-500/25', to: 'to-red-500/25' },
-    prizes: [
-        { rank: 'الفريق الفائز', points: 3, coins: 2 }
-    ]
-  },
-  { 
-    type: 'prison', 
-    title: 'السجن', 
-    description: 'اجمع أكبر عدد من الإجابات الصحيحة لتفوز بالمزاد أو تخاطر بالعقوبة.', 
-    accent: { from: 'from-cyan-500/25', to: 'to-sky-500/25' },
-    prizes: [
-        { rank: 'المركز الأول', points: 3, coins: 2 },
-        { rank: 'المركز الثاني', points: 2, coins: 1 },
-        { rank: 'المركز الثالث', points: 1, coins: 0 },
-    ]
-  },
-  { 
-    type: 'educated-merchant', 
-    title: 'التاجر المتعلم', 
-    description: 'اشترِ العقارات، أجب على الأسئلة، وأفلس خصومك.', 
-    accent: { from: 'from-purple-500/25', to: 'to-indigo-500/25' },
-    prizes: [
-        { rank: 'المركز الأول', points: 4, coins: 3 },
-        { rank: 'المركز الثاني', points: 2, coins: 1 },
-        { rank: 'المركز الثالث', points: 1, coins: 1 },
-    ]
-  },
-];
-
 interface GameGridProps {
-    favoriteGame: string | null;
-    popularGame: string | null;
+  favoriteGame: string | null;
+  popularGame: string | null;
 }
 
 export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
@@ -104,127 +120,149 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
   const router = useRouter();
   const { user, userProfile } = useAuth();
 
-  const handleCreate = async (gameType: Game['gameType']) => {
-    if (!user || !userProfile?.avatarId) {
-      toast({ title: 'الرجاء اختيار شخصية من ملفك الشخصي أولاً', variant: 'destructive', duration: 3000 });
-      return;
-    }
+  const handleCreate = useCallback(
+    async (gameType: Game['gameType'], title?: string) => {
+      if (!user || !userProfile?.avatarId) {
+        toast({ title: 'الرجاء اختيار شخصية من ملفك الشخصي أولاً', variant: 'destructive', duration: 3000 });
+        return;
+      }
 
-    setIsLoading(`create-${gameType}` as LoadingState);
+      const loadingKey = `create-${gameType}` as LoadingState;
+      setIsLoading(loadingKey);
 
-    const result = await createGameRoom(user.uid, gameType, userProfile.avatarId);
-    if (result.error) {
-      toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
-      setIsLoading(null);
-    } else if (result.gameId && result.player) {
-      sessionStorage.setItem(`player-id-${result.gameId}`, result.player.id);
-      router.push(`/game/${result.gameId}`);
-    }
-  };
+      try {
+        const result = await createGameRoom(user.uid, gameType, userProfile.avatarId);
+        if (result.error) {
+          toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+          setIsLoading(null);
+          return;
+        }
 
+        if (result.gameId && result.player) {
+          sessionStorage.setItem(`player-id-${result.gameId}`, result.player.id);
+          router.push(`/game/${result.gameId}`);
+        }
+      } catch (err: any) {
+        toast({ title: 'حدث خطأ غير متوقع', description: err?.message ?? String(err), variant: 'destructive' });
+        setIsLoading(null);
+      }
+    },
+    [user, userProfile, router, toast]
+  );
+
+  // UI: heading + grid
   return (
-    <div className="space-y-8 pt-8" dir="rtl">
-      <div className="text-center">
-        <h2 className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary text-3xl md:text-4xl font-extrabold tracking-tight">
-          اختر لعبتك
-        </h2>
-        <p className="mt-1 text-muted-foreground">اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</p>
-      </div>
+    <TooltipProvider>
+      <div className="space-y-8 pt-8" dir="rtl">
+        <div className="text-center">
+          <h2 className="bg-clip-text text-transparent bg-gradient-to-r from-white/90 to-amber-300 text-3xl md:text-4xl font-extrabold tracking-tight">
+            اختر لعبتك
+          </h2>
+          <p className="mt-1 text-white/70">إنشئ غرفة راقية، دعُ أصدقاءك، وابدأ التحدّي الآن.</p>
+        </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
-        {gameCardsData.map((game, i) => {
-          const Icon = (GAME_ICONS as any)[game.type] || Star;
-          const loadingThis = isLoading === (`create-${game.type}` as LoadingState);
-          
-          const isFavorite = game.type === favoriteGame;
-          const isPopular = game.type === popularGame;
-          let tag = game.defaultTag;
-          let TagIcon = Star;
-          if (isFavorite) {
-            tag = 'مفضلة';
-            TagIcon = Heart;
-          }
-          if (isPopular) {
-            tag = 'مشهورة';
-            TagIcon = TrendingUp;
-          }
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+          {gameCardsData.map((game, i) => {
+            const Icon = (GAME_ICONS as any)[game.type] || Star;
+            const loadingThis = isLoading === (`create-${game.type}`);
+            const isFavorite = game.type === favoriteGame;
+            const isPopular = game.type === popularGame;
 
-          return (
-            <motion.article
-              key={game.type}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: i * 0.05 }}
-              className="group relative overflow-hidden rounded-2xl border bg-card/70 shadow-sm backdrop-blur transition-all hover:shadow-xl"
-            >
-              <div aria-hidden className={`pointer-events-none absolute -inset-1 opacity-70 blur-2xl bg-gradient-to-br ${game.accent.from} ${game.accent.via ?? ''} ${game.accent.to}`} />
-              <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10" />
+            const tag = isFavorite ? { text: 'مفضلة', Icon: Heart } : isPopular ? { text: 'مشهورة', Icon: TrendingUp } : game.defaultTag ? { text: game.defaultTag, Icon: Star } : null;
 
-              <Card className="relative h-full border-none bg-transparent shadow-none flex flex-col">
-                <CardHeader className="relative text-center">
-                  {tag && (
-                    <span className="absolute start-3 top-3 select-none rounded-full border border-white/10 bg-background/70 px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur inline-flex items-center gap-1">
-                      <TagIcon className="w-3 h-3" /> {tag}
-                    </span>
-                  )}
-                  <div className="mx-auto mb-2 grid h-16 w-16 place-items-center rounded-2xl border border-white/15 bg-gradient-to-b from-background/70 to-background/40 shadow-inner">
-                    <Icon className="h-10 w-10 text-primary transition-transform duration-300 group-hover:scale-105" />
-                  </div>
-                  <CardTitle className="text-xl font-bold tracking-tight">{game.title}</CardTitle>
-                  <CardDescription className="mx-auto max-w-[28ch] leading-relaxed">
-                    {game.description}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-grow">
-                    <div className="border-t border-white/10 my-2"></div>
-                    <div className="space-y-1 text-center">
-                         <h4 className="text-sm font-bold text-muted-foreground flex items-center justify-center gap-1"><Trophy className="w-4 h-4 text-amber-400"/> الجوائز</h4>
-                         {game.prizes.map((prize, pIdx) => (
-                             <div key={pIdx} className="text-xs flex justify-center items-center gap-2">
-                                 <span className="font-semibold">{prize.rank}:</span>
-                                 <div className="flex items-center gap-2">
-                                     <span className="flex items-center gap-1"><Star className="w-3 h-3 text-primary"/> {prize.points}</span>
-                                     {prize.coins > 0 && <span className="flex items-center gap-1"><Coins className="w-3 h-3 text-yellow-400"/> {prize.coins}</span>}
-                                 </div>
-                             </div>
-                         ))}
-                    </div>
-                </CardContent>
-                <CardFooter className="relative mt-auto pt-4">
-                  <Button
-                    className="w-full rounded-xl bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg transition-transform hover:opacity-90 focus-visible:translate-y-[1px]"
-                    onClick={() => handleCreate(game.type)}
-                    disabled={!!isLoading}
-                    aria-busy={loadingThis}
-                    aria-label={`إنشاء غرفة ${game.title}`}
-                  >
-                    {loadingThis ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        جاري الإنشاء…
+            return (
+              <motion.article
+                key={game.type}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.36, delay: i * 0.04 }}
+                className="group relative overflow-hidden rounded-2xl border border-transparent bg-gradient-to-b from-[#070707]/80 to-[#0f0f0f]/88 shadow-lg"
+                aria-labelledby={`game-${game.type}-title`}
+              >
+                {/* Decorative glow */}
+                <div aria-hidden className={`pointer-events-none absolute -inset-1 opacity-30 blur-2xl ${game.accent.from} ${game.accent.via ?? ''} ${game.accent.to}`} />
+                <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/6" />
+
+                <Card className="relative h-full border-none bg-transparent shadow-none flex flex-col z-10">
+                  <CardHeader className="relative text-center pt-6">
+                    {tag && (
+                      <span className="absolute start-3 top-3 select-none inline-flex items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-amber-200 border border-amber-700/20 shadow-sm backdrop-blur">
+                        <tag.Icon className="w-3 h-3 text-amber-300" />
+                        {tag.text}
                       </span>
-                    ) : (
-                      'أنشئ غرفة'
                     )}
-                  </Button>
-                </CardFooter>
-                <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-24 translate-y-10 bg-gradient-to-t from-black/10 to-transparent opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100" />
-              </Card>
-              <button
-                className="absolute inset-0 -z-10 cursor-pointer"
-                tabIndex={-1} // Changed from 0 to -1 to avoid being focusable but still clickable
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    if (!isLoading) handleCreate(game.type);
-                  }
-                }}
-                aria-label={`فتح ${game.title}`}
-              />
-            </motion.article>
-          );
-        })}
+
+                    <div className="mx-auto mb-2 grid h-20 w-20 place-items-center rounded-3xl border border-white/10 bg-gradient-to-b from-[#0b0b0b] to-[#1a1a1a] shadow-inner transform transition-transform group-hover:scale-105">
+                      <Icon className="h-10 w-10 text-amber-300" />
+                    </div>
+
+                    <CardTitle id={`game-${game.type}-title`} className="text-xl font-bold tracking-tight text-white">
+                      {game.title}
+                    </CardTitle>
+                    <CardDescription className="mx-auto max-w-[32ch] leading-relaxed text-white/70">{game.description}</CardDescription>
+                  </CardHeader>
+
+                  <CardContent className="flex-grow">
+                    <div className="border-t border-white/6 my-3" />
+                    <div className="space-y-2 text-center md:text-start">
+                      <h4 className="text-sm font-bold text-amber-200 flex items-center justify-center md:justify-start gap-2"><GoldTrophy className="w-4 h-4"/> الجوائز</h4>
+
+                      <div className="grid gap-2 mt-2">
+                        {game.prizes.map((p, idx) => (
+                          <div key={idx} className="flex items-center justify-center md:justify-start">
+                            <PrizeRow rank={p.rank} points={p.points} coins={p.coins} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+
+                  <CardFooter className="relative mt-auto pt-4">
+                    <Button
+                      className="w-full rounded-xl bg-gradient-to-r from-amber-400/90 to-yellow-300/90 text-black shadow-[0_10px_30px_rgba(255,185,0,0.08)] hover:scale-[0.997] focus:outline-none"
+                      onClick={() => handleCreate(game.type, game.title)}
+                      disabled={!!isLoading}
+                      aria-busy={loadingThis}
+                      aria-label={`إنشاء غرفة ${game.title}`}
+                    >
+                      {loadingThis ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-black" />
+                          جاري الإنشاء…
+                        </span>
+                      ) : (
+                        'أنشئ غرفة'
+                      )}
+                    </Button>
+                  </CardFooter>
+
+                  {/* Focusable overlay to allow keyboard activation on whole card */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`اختيار ${game.title}`}
+                    onClick={() => !isLoading && handleCreate(game.type, game.title)}
+                    onKeyDown={(e) => {
+                      if ((e.key === 'Enter' || e.key === ' ') && !isLoading) {
+                        e.preventDefault();
+                        handleCreate(game.type, game.title);
+                      }
+                    }}
+                    className="absolute inset-0 z-0 bg-transparent"
+                  />
+                </Card>
+
+                <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-24 translate-y-10 bg-gradient-to-t from-black/40 to-transparent opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100" />
+              </motion.article>
+            );
+          })}
+        </div>
       </div>
-    </div>
+
+      {/* Local keyframes */}
+      <style jsx>{`
+        @keyframes floaty { 0% { transform: translateY(0) } 50% { transform: translateY(-4px) } 100% { transform: translateY(0) } }
+      `}</style>
+    </TooltipProvider>
   );
 }

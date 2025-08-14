@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
@@ -32,15 +31,13 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { cn } from "@/lib/utils";
 
 import { updateUserAvatar, updateUserName, updateUserGender, payPunishmentTax } from "@/lib/actions/user";
-import type { SocialRank, Game } from "@/types";
-import { GAME_TYPE_NAMES } from "@/data/icons";
+import type { SocialRank } from "@/types";
 
 import {
   ArrowLeft,
   Check,
   CircleDollarSign,
   Diamond,
-  Edit,
   Gavel,
   Gamepad2,
   Handshake,
@@ -49,34 +46,32 @@ import {
   Save,
   Shield,
   ShoppingCart,
-  Trophy,
-  User as UserIcon,
-  VenetianMask,
   ShieldCheck,
   Star,
   Users as UsersIcon,
+  VenetianMask,
 } from "lucide-react";
 
-/**
- * GPT‑5 Enhanced Profile Page
- * - Elegant header with gradient + subtle animation
- * - Cleaner avatar picker with keyboard support
- * - Inline name editor with validation
- * - Rank progress & quick stats grid
- * - Punishment card with time remaining + confirm to pay tax
- * - Gender selector (optional) with instant update
- */
+function toDate(input?: unknown): Date | null {
+  if (!input) return null;
+  if (input instanceof Date) return input;
+  if (typeof input === "number") return new Date(input);
+  if (typeof input === "string") return new Date(input);
+  const anyVal = input as any;
+  if (anyVal && typeof anyVal.toDate === "function") {
+    try { return anyVal.toDate(); } catch { return null; }
+  }
+  return null;
+}
 
 export default function ProfilePage() {
   const { user, userProfile, loading, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
-  // Local state
   const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
 
-  const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
 
@@ -88,26 +83,39 @@ export default function ProfilePage() {
     return getSocialRankForUser(userProfile.leaderboardPoints);
   }, [userProfile, getSocialRankForUser]);
 
-  // Active decree overrides rank name visually
-  const activeDecree = userProfile?.decrees?.find((d) => d.until && new Date(d.until) > new Date());
+  const activeDecree = useMemo(() => {
+    const now = new Date();
+    return userProfile?.decrees?.find((d) => {
+      const u = toDate(d.until);
+      return u ? u > now : false;
+    });
+  }, [userProfile?.decrees]);
 
   const currentPunishment = useMemo(() => {
     if (!userProfile) return null;
-    if (userProfile.originalAvatarToRevert?.until && new Date(userProfile.originalAvatarToRevert.until) > new Date()) {
+    const avUntil = toDate(userProfile.originalAvatarToRevert?.until);
+    if (avUntil && avUntil > new Date()) {
       return { type: "avatar" as const, details: userProfile.originalAvatarToRevert };
     }
-    if (userProfile.humiliation?.until && new Date(userProfile.humiliation.until) > new Date()) {
+    const humUntil = toDate(userProfile.humiliation?.until);
+    if (humUntil && humUntil > new Date()) {
       return { type: "humiliation" as const, details: userProfile.humiliation };
     }
     return null;
   }, [userProfile]);
 
-  // Next rank progress (nice UX hint)
   const rankProgress = useMemo(() => {
     const points = userProfile?.leaderboardPoints ?? 0;
     if (!socialRanks || socialRanks.length === 0) return null;
     const sorted = [...socialRanks].sort((a, b) => a.threshold - b.threshold);
-    const currentIndex = sorted.findIndex((r) => points >= r.threshold && (sorted[sorted.indexOf(r) + 1] ? points < sorted[sorted.indexOf(r) + 1].threshold : true));
+    let currentIndex = -1;
+    for (let i = 0; i < sorted.length; i++) {
+      const next = sorted[i + 1];
+      if (points >= sorted[i].threshold && (!next || points < next.threshold)) {
+        currentIndex = i;
+        break;
+      }
+    }
     const next = sorted[currentIndex + 1];
     if (!next) return { label: currentRank?.name ?? "", pct: 100, toNext: 0, nextName: null as string | null };
     const rangeStart = sorted[currentIndex]?.threshold ?? 0;
@@ -117,13 +125,11 @@ export default function ProfilePage() {
     return { label: currentRank?.name ?? "", pct, toNext, nextName: next.name };
   }, [userProfile?.leaderboardPoints, socialRanks, currentRank?.name]);
 
-  // Prefill new name & avatar selection
   useEffect(() => {
     if (userProfile?.avatarId) setSelectedAvatarId(userProfile.avatarId);
     if (userProfile?.name) setNewName(userProfile.name);
   }, [userProfile?.avatarId, userProfile?.name]);
 
-  // Guard unauthenticated
   useEffect(() => {
     if (!loading && !userProfile) {
       toast({ title: "غير مصرح لك", description: "يجب عليك تسجيل الدخول لعرض هذه الصفحة.", variant: "destructive" });
@@ -134,7 +140,6 @@ export default function ProfilePage() {
   const validateName = (name: string) => {
     const trimmed = name.trim();
     if (trimmed.length < 2 || trimmed.length > 22) return "يجب أن يتراوح الاسم بين 2 و 22 حرفًا";
-    // Arabic, English letters, numbers, spaces, underscores
     const re = /^[A-Za-z\u0600-\u06FF0-9 _]+$/u;
     if (!re.test(trimmed)) return "اسم غير صالح: استخدم حروفًا وأرقامًا ومسافات فقط";
     return null;
@@ -142,27 +147,24 @@ export default function ProfilePage() {
 
   const onSaveName = async () => {
     if (!user || !newName) return;
+    if (userProfile?.hasChangedName) return;
     const err = validateName(newName);
     if (err) {
       toast({ title: "تنبيه", description: err, variant: "destructive" });
       return;
     }
-    if (newName.trim() === userProfile?.name) {
-      setIsEditingName(false);
-      return;
-    }
+    if (newName.trim() === (userProfile?.name ?? "")) return;
     try {
       setIsSavingName(true);
       const res = await updateUserName(user.uid, newName.trim());
       if (res.success) {
         toast({ title: "تم التحديث", description: "تم تحديث اسمك بنجاح" });
         await refreshUserProfile?.();
-        setIsEditingName(false);
       } else {
         throw new Error(res.error);
       }
     } catch (e: any) {
-      toast({ title: "خطأ", description: e?.message ?? "تعذر تحديث الاسم" , variant: "destructive"});
+      toast({ title: "خطأ", description: e?.message ?? "تعذر تحديث الاسم", variant: "destructive" });
     } finally {
       setIsSavingName(false);
     }
@@ -235,15 +237,15 @@ export default function ProfilePage() {
   };
 
   const rankHue = useMemo(() => {
-    // pick an accent hue based on rank threshold to color rings/gradients (purely aesthetic)
     const base = currentRank?.threshold ?? 0;
-    const hue = (base * 7) % 360; // playful mapping
+    const hue = (base * 7) % 360;
     return `hsl(${hue} 70% 50%)`;
   }, [currentRank?.threshold]);
 
-  const timeRemaining = (until?: string) => {
-    if (!until) return "";
-    try { return formatDistanceToNow(new Date(until), { addSuffix: true, locale: ar }); } catch { return ""; }
+  const timeRemaining = (until?: any) => {
+    const dt = toDate(until);
+    if (!dt) return "";
+    try { return formatDistanceToNow(dt, { addSuffix: true, locale: ar }); } catch { return ""; }
   };
 
   if (loading || !userProfile) {
@@ -264,12 +266,9 @@ export default function ProfilePage() {
     );
   }
 
-  const allPlayedGames = Object.keys(userProfile.gamesPlayed || {}) as (keyof typeof GAME_TYPE_NAMES)[];
-
   return (
     <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-gray-900 to-black py-8 px-4">
       <div className="mx-auto w-full max-w-5xl space-y-6">
-        {/* Header / Banner */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <Card className="overflow-hidden border-purple-500/20 bg-gradient-to-br from-purple-900/30 via-gray-900 to-black">
             <div className="relative h-32 w-full bg-[radial-gradient(circle_at_30%_20%,_rgba(168,85,247,0.35),_transparent_40%),_radial-gradient(circle_at_70%_0%,_rgba(99,102,241,0.25),_transparent_40%)]" />
@@ -288,7 +287,7 @@ export default function ProfilePage() {
                   )}
                 </div>
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h1 className="text-2xl font-bold tracking-wide">{userProfile.name}</h1>
                     <Badge variant="secondary" className="gap-1">
                       {currentRank?.icon ? <currentRank.icon className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
@@ -316,20 +315,20 @@ export default function ProfilePage() {
                       <ShoppingCart className="ml-2 h-4 w-4" /> المتجر
                     </Link>
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => router.push("/")}> <ArrowLeft /> </Button>
+                  <Button variant="ghost" size="icon" aria-label="العودة" onClick={() => router.push("/")}> <ArrowLeft /> </Button>
                 </div>
               </div>
             </CardHeader>
           </Card>
         </motion.div>
 
-        {/* Quick stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <StatPill icon={<CircleDollarSign className="h-4 w-4" />} label="كوينز" value={userProfile.coins ?? 0} />
           <StatPill icon={<Diamond className="h-4 w-4" />} label="ألماس" value={userProfile.diamonds ?? 0} />
-          <StatPill icon={<Trophy className="h-4 w-4" />} label="نقاط" value={userProfile.leaderboardPoints ?? 0} />
           <StatPill icon={<ShieldCheck className="h-4 w-4" />} label="الشرف" value={userProfile.honorPoints ?? 0} />
           <StatPill icon={<Handshake className="h-4 w-4" />} label="الولاء" value={userProfile.loyaltyPoints ?? 0} />
+          <StatPill icon={<Star className="h-4 w-4" />} label="التمرد" value={userProfile.rebellionPoints ?? 0} />
+          <StatPill icon={<Gamepad2 className="h-4 w-4" />} label="مباريات" value={userProfile.gamesPlayed ?? 0} />
         </div>
 
         <Card className="border-purple-500/20 bg-black/30 backdrop-blur-sm">
@@ -339,14 +338,12 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="customize" className="w-full">
-              <TabsList className="grid w-full grid-cols-4 bg-gray-900/50">
+              <TabsList className="grid w-full grid-cols-3 bg-gray-900/50">
                 <TabsTrigger value="customize">التخصيص</TabsTrigger>
-                <TabsTrigger value="stats">الإحصائيات</TabsTrigger>
+                <TabsTrigger value="security">الحساب</TabsTrigger>
                 <TabsTrigger value="status">الحالة</TabsTrigger>
-                <TabsTrigger value="account">الحساب</TabsTrigger>
               </TabsList>
 
-              {/* Customize */}
               <TabsContent value="customize" className="mt-6 space-y-6">
                 <section>
                   <h3 className="mb-2 text-lg font-semibold">اختر شخصيتك</h3>
@@ -382,39 +379,19 @@ export default function ProfilePage() {
                     <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> جارٍ حفظ الشخصية…</div>
                   )}
                 </section>
-              </TabsContent>
-              
-              {/* Stats */}
-              <TabsContent value="stats" className="mt-6 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {allPlayedGames.map(gameType => (
-                          <div key={gameType} className="p-3 bg-muted/50 rounded-lg border">
-                              <h4 className="font-bold">{GAME_TYPE_NAMES[gameType]}</h4>
-                              <div className="flex justify-between items-center text-sm mt-1">
-                                  <span>مباريات: {userProfile.gamesPlayed?.[gameType] || 0}</span>
-                                  <span>انتصارات: {userProfile.winCounts?.[gameType] || 0}</span>
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-              </TabsContent>
 
-
-              {/* Account / security */}
-              <TabsContent value="account" className="mt-6 space-y-4">
-                 <section className="space-y-2">
+                <section className="space-y-2">
                   <h3 className="text-lg font-semibold">اسمك</h3>
                   <div className="flex items-center gap-2">
                     <Input
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
-                      disabled={isSavingName || (!!userProfile.hasChangedName && !isEditingName)}
-                      onFocus={() => setIsEditingName(true)}
+                      disabled={isSavingName || !!userProfile.hasChangedName}
                       maxLength={22}
                       aria-label="تعديل الاسم"
                       placeholder="اكتب اسمك هنا"
                     />
-                    <Button onClick={onSaveName} disabled={isSavingName || (!!userProfile.hasChangedName && !isEditingName)}>
+                    <Button onClick={onSaveName} disabled={isSavingName || !!userProfile.hasChangedName}>
                       {isSavingName ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="ml-2 h-4 w-4" /> حفظ</>}
                     </Button>
                   </div>
@@ -432,7 +409,7 @@ export default function ProfilePage() {
                       onClick={() => onChangeGender("male")}
                       className="gap-2"
                     >
-                      <UserIcon className="h-4 w-4" /> ذكر
+                      <VenetianMask className="h-4 w-4" /> ذكر
                     </Button>
                     <Button
                       type="button"
@@ -440,13 +417,26 @@ export default function ProfilePage() {
                       onClick={() => onChangeGender("female")}
                       className="gap-2"
                     >
-                      <UserIcon className="h-4 w-4" /> أنثى
+                      <VenetianMask className="h-4 w-4" /> أنثى
                     </Button>
                   </div>
                 </section>
               </TabsContent>
 
-              {/* Status */}
+              <TabsContent value="security" className="mt-6 space-y-4">
+                <div className="flex items-center gap-3 text-lg">
+                  <Mail className="h-5 w-5 text-primary" />
+                  <span className="text-muted-foreground">{userProfile.email ?? "—"}</span>
+                </div>
+                {userProfile.clan && (
+                  <div className="flex items-center gap-3 text-lg">
+                    <UsersIcon className="h-5 w-5 text-primary" />
+                    <span className="font-semibold">{userProfile.clan.name}</span>
+                    <Button size="sm" variant="link" asChild><Link href="/society">الانتقال إلى المجتمع</Link></Button>
+                  </div>
+                )}
+              </TabsContent>
+
               <TabsContent value="status" className="mt-6 space-y-4">
                 {currentPunishment ? (
                   <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4">
@@ -460,7 +450,7 @@ export default function ProfilePage() {
                         : `تم إذلالك بواسطة ${currentPunishment.details.byName ?? "—"}.`}
                     </p>
                     {currentPunishment.details?.until && (
-                      <p className="mt-1 text-xs text-muted-foreground">تنتهي {timeRemaining(currentPunishment.details.until as any)}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">تنتهي {timeRemaining(currentPunishment.details.until)}</p>
                     )}
                     {!!currentPunishment.details?.taxToLift && (
                       <div className="mt-3">
@@ -496,12 +486,11 @@ export default function ProfilePage() {
           </CardContent>
           <CardFooter className="justify-between text-xs text-muted-foreground">
             <span>معرف المستخدم: <strong className="font-mono tracking-wider">{userProfile.uid.slice(0, 6)}…</strong></span>
-            <span>آخر تحديث للملف: {new Date(userProfile.updatedAt ?? Date.now()).toLocaleDateString("ar-SA")}</span>
+            <span>آخر تحديث للملف: {(toDate(userProfile.updatedAt) ?? new Date()).toLocaleDateString("ar-SA")}</span>
           </CardFooter>
         </Card>
       </div>
 
-      {/* Confirm tax payment */}
       <AlertDialog open={openTaxConfirm} onOpenChange={setOpenTaxConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
