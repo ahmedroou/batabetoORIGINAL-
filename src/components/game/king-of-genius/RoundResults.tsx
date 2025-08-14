@@ -44,6 +44,19 @@ export function RoundResults({
           return () => clearTimeout(timer);
       }
   }, [isHost, game.id, self.id]);
+  
+   const handleNextRound = async () => {
+        if (!isHost) return;
+        setIsSubmitting(true);
+        try {
+            await nextKingOfGenius(game.id, self.id);
+        } catch (error: any) {
+            toast({ title: "خطأ", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
 
   const results = game.challengeState?.results || [];
 
@@ -153,9 +166,15 @@ export function RoundResults({
           </div>
         </CardContent>
          <CardFooter>
-            <p className="w-full text-center text-muted-foreground animate-pulse">
-              في انتظار بدء الجولة التالية...
-            </p>
+            {isHost ? (
+                <Button onClick={handleNextRound} disabled={isSubmitting} className="w-full">
+                    {isSubmitting ? '...' : 'المتابعة'}
+                </Button>
+            ) : (
+                <p className="w-full text-center text-muted-foreground animate-pulse">
+                في انتظار المضيف لبدء الجولة التالية...
+                </p>
+            )}
         </CardFooter>
       </Card>
     </div>

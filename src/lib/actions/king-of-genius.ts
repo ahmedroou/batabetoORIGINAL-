@@ -159,6 +159,8 @@ async function prepareNextChallenge(gameId: string, hostId: string) {
              throw new Error("No more challenges left.");
         }
         
+        // This is an external call and must be done outside a transaction.
+        // So we get the puzzle first, then run a new transaction to update.
         const { puzzle } = await generateGeniusChallenge({ challengeId });
         
         const puzzles = game.puzzles ? [...game.puzzles] : [];
@@ -178,9 +180,8 @@ async function prepareNextChallenge(gameId: string, hostId: string) {
 }
 
 
-export async function beginChallenge(gameId: string, hostId: string) {
-  const gameRef = doc(db, 'games', gameId.toUpperCase());
-  await runTransaction(db, async (transaction) => {
+async function beginChallenge(gameId: string, hostId: string, transaction: Transaction) {
+    const gameRef = doc(db, 'games', gameId.toUpperCase());
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
     const game = gameDoc.data() as Game;
@@ -190,13 +191,15 @@ export async function beginChallenge(gameId: string, hostId: string) {
     
     const challengeIndex = game.currentChallengeIndex ?? 0;
     const puzzleString = game.puzzles?.[challengeIndex];
-    if (!puzzleString) throw new Error(`فشل تحميل لغز للتحدي.`);
+    if (!puzzleString) {
+        throw new Error(`فشل تحميل لغز للتحدي.`);
+    }
 
     const puzzle = JSON.parse(puzzleString);
     const initialProgress: Record<string, PlayerProgress> = {};
     game.players.forEach(p => {
         if (p.status === 'alive') {
-            initialProgress[p.id] = { currentStep: 0, wrongAttempts: 0 }; 
+            initialProgress[p.id] = { currentProblemIndex: 0, wrongAttempts: 0 }; 
         }
     });
     
@@ -206,7 +209,6 @@ export async function beginChallenge(gameId: string, hostId: string) {
         'challengeState.results': [],
         'challengeState.playerProgress': initialProgress,
     });
-  });
 }
 
 export async function submitChallengeResult(
@@ -343,6 +345,8 @@ export async function handleTimeout(gameId: string, hostId: string) {
     
     try {
         let gameDataForLeagueUpdate: Game | null = null;
+        let requiresNextChallengePrep = false;
+
         await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
             if (!gameDoc.exists()) return;
@@ -350,18 +354,17 @@ export async function handleTimeout(gameId: string, hostId: string) {
             
             if (game.hostId !== hostId) return;
 
-            // Timer check
             if (!game.challengeState?.challengeEndsAt || Date.now() < game.challengeState.challengeEndsAt.toMillis()) {
                 return;
             }
-
+            
             if (game.gameState === 'challenge_intro') {
                 const challengeIndex = game.currentChallengeIndex ?? 0;
                 const puzzleString = game.puzzles?.[challengeIndex];
                 if (!puzzleString) {
-                    await prepareNextChallenge(gameId, hostId);
+                    throw new Error("اللغز غير جاهز. خطأ في `prepareNextChallenge`.");
                 }
-                await beginChallenge(gameId, hostId);
+                await beginChallenge(gameId, hostId, transaction);
 
             } else if (game.gameState === 'challenge_active') {
                 const activePlayers = game.players.filter(p => p.status === 'alive');
@@ -387,6 +390,9 @@ export async function handleTimeout(gameId: string, hostId: string) {
                 const { updates, finalGame } = await advanceFromResults(game);
                 transaction.update(gameRef, updates);
                 gameDataForLeagueUpdate = finalGame;
+                if(updates.gameState === 'challenge_intro') {
+                     requiresNextChallengePrep = true;
+                }
             }
         });
 
@@ -394,10 +400,10 @@ export async function handleTimeout(gameId: string, hostId: string) {
             await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
         }
 
-        const updatedGameDoc = await getDoc(doc(db, 'games', gameId));
-        if (updatedGameDoc.exists() && updatedGameDoc.data().gameState === 'challenge_intro') {
-            await prepareNextChallenge(gameId, hostId);
+        if (requiresNextChallengePrep) {
+             await prepareNextChallenge(gameId, hostId);
         }
+
     } catch(error) {
         console.error("Error in handleTimeout:", error);
     }

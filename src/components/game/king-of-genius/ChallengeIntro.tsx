@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -39,11 +40,15 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
 
   // Effect for the host to automatically trigger the next state when the timer ends.
   useEffect(() => {
+    let timerId: NodeJS.Timeout;
     if(countdown <= 0 && isHost && user) {
-        // Use handleTimeout to ensure consistent state transition logic
-        const timer = setTimeout(() => handleTimeout(game.id, user.uid), 500); // Add small buffer
-        return () => clearTimeout(timer);
+        timerId = setTimeout(() => {
+            handleTimeout(game.id, user.uid);
+        }, 500); // Add small buffer
     }
+    return () => {
+        if(timerId) clearTimeout(timerId);
+    };
   }, [countdown, isHost, game.id, user]);
 
   return (
