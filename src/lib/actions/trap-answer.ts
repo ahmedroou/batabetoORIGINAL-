@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -36,7 +37,7 @@ import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { calculateTrapAnswerScores } from './helpers/trap-answer-helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { calculateEndOfGameAwards } from './user/awards';
-import { getTrapAnswerCategories } from './admin';
+import { getTrapAnswerCategories } from './admin/settings';
 
 /* -------------------------------------------------------------
  * Constants
