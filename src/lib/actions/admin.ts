@@ -33,18 +33,19 @@ import {
     count,
 } from 'firebase/firestore';
 import { isFirebaseError,  getSimilaritySignature } from './helpers';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, Decree } from '@/types';
+import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, Decree, SocialEvent } from '@/types';
 import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { generateGeniusChallenge as generateGeniusChallengeFlow } from '@/ai/flows/generate-genius-challenge';
 import type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput } from '@/ai/flows/generate-genius-challenge';
 import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
+import { getChallenges } from './challenges';
 
 
 // Import from the central user actions index
 import { 
-    giveReward, 
-    applyPunishment, 
+    giveReward as givePlayerReward, 
+    applyPunishment as applyPlayerPunishment, 
     getTopUsers as queryTopUsers,
     getRanks as queryRanks,
     getUsersByRank as queryUsersByRank,
@@ -584,10 +585,13 @@ export async function getAnnouncement() {
 export async function adminUpdateUser(userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> {
     if(!userId) return {success: false, error: "User ID is required."};
     
+    // Security enhancement: Prevent changing admin status via this function.
+    const sanitizedData = { ...data };
+    delete (sanitizedData as any).isAdmin;
+    delete (sanitizedData as any).isEditor;
+    
     const userRef = doc(db, 'users', userId);
     try {
-        const sanitizedData = Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== undefined));
-        
         await updateDoc(userRef, sanitizedData);
         return {success: true}
     } catch(error) {
@@ -1134,11 +1138,11 @@ export async function backfillUserPermissions(): Promise<{ success: boolean; cou
 
 
 export async function adminGiveReward(actorId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
-    return giveReward(actorId, targetId, reward, reason);
+    return givePlayerReward(actorId, targetId, reward, reason);
 }
 
 export async function adminApplyPunishment(actorId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
-    return applyPunishment(actorId, targetId, penalty, reason);
+    return applyPlayerPunishment(actorId, targetId, penalty, reason);
 }
 
 export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
@@ -1183,10 +1187,20 @@ async function getJournalistSourceMaterial(directive?: string) {
 }
 
 async function getRecentFinishedGames(count: number): Promise<Game[]> {
-    const gamesCol = collection(db, 'games');
-    const q = query(gamesCol, where('gameState', '==', 'final_results'), orderBy('createdAt', 'desc'), limit(count));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data() as Game);
+    try {
+        const gamesCol = collection(db, 'games');
+        const q = query(
+            gamesCol,
+            where('gameState', '==', 'final_results'),
+            orderBy('createdAt', 'desc'),
+            limit(count)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => doc.data() as Game);
+    } catch (error) {
+        console.error("Error fetching recent games:", error);
+        return [];
+    }
 }
 
 export async function runAiJournalist(directive?: string): Promise<{success: boolean, article?: { headline: string }, error?: string}> {
