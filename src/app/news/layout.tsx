@@ -1,10 +1,9 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Merriweather, Noto_Naskh_Arabic, Amiri } from 'next/font/google';
 
 export const metadata: Metadata = {
   title: 'صحيفة اللعبة | بطابيطو',
   description: 'آخر الأخبار والتحديثات من عالم بطابيطو.',
-  themeColor: '#FAF8F1',
   openGraph: {
     title: 'صحيفة اللعبة | بطابيطو',
     description: 'آخر الأخبار والتحديثات من عالم بطابيطو.',
@@ -20,6 +19,10 @@ export const metadata: Metadata = {
   alternates: {
     canonical: '/news',
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#FAF8F1'
 };
 
 const inter = Inter({

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Merriweather, Cairo } from 'next/font/google';
 import React from 'react';
 
@@ -60,11 +60,15 @@ export const metadata: Metadata = {
     icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',
   },
+};
+
+export const viewport: Viewport = {
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#ffffff' },
     { media: '(prefers-color-scheme: dark)', color: '#0b0b12' },
   ],
 };
+
 
 // --- Layout Wrapper ---
 export default function SocietyLayout({
