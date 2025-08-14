@@ -107,6 +107,7 @@ export async function randomizeTeams(gameId: string, hostId: string) {
 export async function startKingOfGeniusGame(gameId: string, userId: string) {
   const gameRef = doc(db, 'games', gameId.toUpperCase());
 
+  // First transaction: Set up the game to start the intro
   await runTransaction(db, async (transaction) => {
     const gameDoc = await transaction.get(gameRef);
     if (!gameDoc.exists()) throw new Error('اللعبة غير موجودة.');
@@ -128,6 +129,9 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
 
     const shuffledChallenges = [...GENIUS_CHALLENGES].sort(() => 0.5 - Math.random());
     const challengeOrder = shuffledChallenges.map((c) => c.id);
+    
+    // Set timer for the intro phase. The handleTimeout will then call prepareNextChallenge.
+    const introEndsAt = Timestamp.fromMillis(Date.now() + INTRO_COUNTDOWN_SECONDS * 1000);
 
     transaction.update(gameRef, {
       gameState: 'challenge_intro',
@@ -135,42 +139,39 @@ export async function startKingOfGeniusGame(gameId: string, userId: string) {
       puzzles: [], // Puzzles will be generated on-demand
       currentChallengeIndex: 0,
       teamScores: { A: 0, B: 0 },
-      challengeState: {}, // Clear old state
+      challengeState: { timerEndsAt: introEndsAt },
     });
   });
-  
-  // After setting the state to intro, immediately call the logic to prepare the first round
-  await prepareNextChallenge(gameId, userId);
 }
 
-
+// Generates puzzle for the current index and prepares the game state for the intro countdown.
 async function prepareNextChallenge(gameId: string, hostId: string) {
     const gameRef = doc(db, 'games', gameId.toUpperCase());
+
+    const challengeIndex = (await getDoc(gameRef)).data()?.currentChallengeIndex ?? 0;
+    const challengeId = (await getDoc(gameRef)).data()?.challengeOrder?.[challengeIndex];
+    if (!challengeId) {
+        // This case should ideally be handled by advancing to final_results, but as a safeguard:
+        throw new Error("No more challenges left or challenge order is missing.");
+    }
+
+    const { puzzle } = await generateGeniusChallenge({ challengeId });
+    const puzzleString = JSON.stringify(puzzle);
+
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found.");
+        if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
-        
-        if (game.hostId !== hostId) return;
+        if(game.hostId !== hostId) return;
 
-        const challengeIndex = game.currentChallengeIndex ?? 0;
-        const challengeId = game.challengeOrder?.[challengeIndex];
-        if (!challengeId) {
-             throw new Error("No more challenges left.");
-        }
-        
-        // This is an external call and must be done outside a transaction.
-        // So we get the puzzle first, then run a new transaction to update.
-        const { puzzle } = await generateGeniusChallenge({ challengeId });
-        
-        const puzzles = game.puzzles ? [...game.puzzles] : [];
-        puzzles[challengeIndex] = JSON.stringify(puzzle);
+        const puzzles = game.puzzles || [];
+        puzzles[challengeIndex] = puzzleString;
 
         const challengeDetails = GENIUS_CHALLENGE_MAP.get(challengeId);
         const duration = challengeDetails?.timeLimit || 90;
-        
+
         const challengeEndsAt = Timestamp.fromMillis(Date.now() + (duration + INTRO_COUNTDOWN_SECONDS) * 1000);
-        
+
         transaction.update(gameRef, {
             puzzles,
             'challengeState.duration': duration,
@@ -180,6 +181,7 @@ async function prepareNextChallenge(gameId: string, hostId: string) {
 }
 
 
+// Transitions the game state from 'intro' to 'active'
 async function beginChallenge(gameId: string, hostId: string, transaction: Transaction) {
     const gameRef = doc(db, 'games', gameId.toUpperCase());
     const gameDoc = await transaction.get(gameRef);
@@ -246,8 +248,7 @@ export async function submitChallengeResult(
   });
 }
 
-
-async function advanceFromActive(game: Game) {
+async function advanceFromActive(game: Game, transaction: Transaction) {
     const results = game.challengeState?.results || [];
     
     const sortedCorrectResults = results
@@ -267,75 +268,75 @@ async function advanceFromActive(game: Game) {
         }
     });
 
-    const updates = {
+    transaction.update(doc(db, 'games', game.id), {
         teamScores: newScores,
         gameState: 'challenge_results',
         'challengeState.timerEndsAt': Timestamp.fromMillis(Date.now() + 15 * 1000)
-    };
-    return {updates, finalGame: null};
+    });
 }
 
-async function advanceFromResults(game: Game): Promise<{ updates: any, finalGame: Game | null }> {
-    const nextIndex = (game.currentChallengeIndex ?? 0) + 1;
+async function advanceToFinalResults(game: Game, transaction: Transaction): Promise<Game> {
+    let winner: Game['gameResult']['winner'] = 'draw';
+    let message = 'انتهت المواجهة بالتعادل!';
+    const teamAScore = game.teamScores?.A || 0;
+    const teamBScore = game.teamScores?.B || 0;
 
-    if (nextIndex >= (game.challengeOrder?.length || 0)) {
-        let winner: Game['gameResult']['winner'] = 'draw';
-        let message = 'انتهت المواجهة بالتعادل!';
-        const teamAScore = game.teamScores?.A || 0;
-        const teamBScore = game.teamScores?.B || 0;
-
-        if (teamAScore > teamBScore) {
-            winner = 'A';
-            message = 'الفريق الأزرق يسحق الفريق الأحمر!';
-        } else if (teamBScore > teamAScore) {
-            winner = 'B';
-            message = 'الفريق الأحمر يتغلب على الفريق الأزرق!';
-        }
-      
-        const gameResult = { winner, message };
-        
-        const updates = {
-            gameState: 'final_results',
-            gameResult,
-            'challengeState.timerEndsAt': deleteField()
-        };
-        
-        return { updates, finalGame: { ...game, gameState: 'final_results', gameResult, teamScores: game.teamScores } };
-    } else {
-        const updates = {
-            currentChallengeIndex: nextIndex,
-            gameState: 'challenge_intro',
-            'challengeState.playerProgress': {},
-            'challengeState.results': [],
-            'challengeState.puzzle': {},
-        };
-        return { updates, finalGame: null };
+    if (teamAScore > teamBScore) {
+        winner = 'A';
+        message = 'الفريق الأزرق يسحق الفريق الأحمر!';
+    } else if (teamBScore > teamAScore) {
+        winner = 'B';
+        message = 'الفريق الأحمر يتغلب على الفريق الأزرق!';
     }
+  
+    const gameResult = { winner, message };
+    
+    transaction.update(doc(db, 'games', game.id), {
+        gameState: 'final_results',
+        gameResult,
+        'challengeState.timerEndsAt': deleteField()
+    });
+    
+    return { ...game, gameState: 'final_results', gameResult };
 }
 
+async function advanceToNextChallengeIntro(game: Game, transaction: Transaction) {
+    const nextIndex = (game.currentChallengeIndex ?? 0) + 1;
+    transaction.update(doc(db, 'games', game.id), {
+        currentChallengeIndex: nextIndex,
+        gameState: 'challenge_intro',
+        'challengeState.playerProgress': {},
+        'challengeState.results': [],
+        'challengeState.puzzle': {},
+        'challengeState.timerEndsAt': Timestamp.fromMillis(Date.now() + INTRO_COUNTDOWN_SECONDS * 1000)
+    });
+}
 
-export async function nextKingOfGenius(gameId: string, hostId: string) {
+export async function nextRound(gameId: string, hostId: string) {
     let gameDataForLeagueUpdate: Game | null = null;
+    let requiresNextChallengePrep = false;
+
     await runTransaction(db, async (transaction) => {
         const gameRef = doc(db, 'games', gameId);
         const gameDoc = await transaction.get(gameRef);
         if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
-        if (game.hostId !== hostId) return;
-        if (game.gameState !== 'challenge_results') return; // Ensure we are in the correct state
+        if (game.hostId !== hostId || game.gameState !== 'challenge_results') return;
 
-        const { updates, finalGame } = await advanceFromResults(game);
-        transaction.update(gameRef, updates);
-        gameDataForLeagueUpdate = finalGame;
+        const nextIndex = (game.currentChallengeIndex ?? 0) + 1;
+        if (nextIndex >= (game.challengeOrder?.length || 0)) {
+            gameDataForLeagueUpdate = await advanceToFinalResults(game, transaction);
+        } else {
+            await advanceToNextChallengeIntro(game, transaction);
+            requiresNextChallengePrep = true;
+        }
     });
 
     if (gameDataForLeagueUpdate) {
         await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
     }
     
-    // Check if the next state requires preparing a challenge and do it.
-    const updatedGameDoc = await getDoc(doc(db, 'games', gameId));
-    if (updatedGameDoc.exists() && updatedGameDoc.data().gameState === 'challenge_intro') {
+    if (requiresNextChallengePrep) {
         await prepareNextChallenge(gameId, hostId);
     }
 }
@@ -354,18 +355,20 @@ export async function handleTimeout(gameId: string, hostId: string) {
             
             if (game.hostId !== hostId) return;
 
-            if (!game.challengeState?.challengeEndsAt || Date.now() < game.challengeState.challengeEndsAt.toMillis()) {
+            if (!game.challengeState?.timerEndsAt || Date.now() < game.challengeState.timerEndsAt.toMillis()) {
                 return;
             }
             
             if (game.gameState === 'challenge_intro') {
-                const challengeIndex = game.currentChallengeIndex ?? 0;
-                const puzzleString = game.puzzles?.[challengeIndex];
-                if (!puzzleString) {
-                    throw new Error("اللغز غير جاهز. خطأ في `prepareNextChallenge`.");
+                // If the puzzle isn't ready yet, it means prepareNextChallenge hasn't run. Let's run it.
+                // This state can happen if the host starts the game, and the intro timer finishes before
+                // the server could generate and write the first puzzle.
+                const puzzleIsMissing = !game.puzzles || !game.puzzles[game.currentChallengeIndex ?? 0];
+                if (puzzleIsMissing) {
+                    await prepareNextChallenge(gameId, hostId);
                 }
+                // Now that the puzzle is guaranteed to be there, we can transition to active.
                 await beginChallenge(gameId, hostId, transaction);
-
             } else if (game.gameState === 'challenge_active') {
                 const activePlayers = game.players.filter(p => p.status === 'alive');
                 const submittedPlayers = game.challengeState?.results?.map(r => r.playerId) || [];
@@ -382,16 +385,18 @@ export async function handleTimeout(gameId: string, hostId: string) {
                     transaction.update(gameRef, {'challengeState.results': arrayUnion(...resultsToAdd) });
                 }
                 
-                const gameAfterUpdates = { ...game, challengeState: { ...game.challengeState, results: [...(game.challengeState.results || []), ...missingSubmissions.map(p => ({playerId: p.id, team: p.team!, isCorrect: false, time: 99, score: 0}))] } };
-                const { updates } = await advanceFromActive(gameAfterUpdates);
-                transaction.update(gameRef, updates);
+                // Read the updated game state within the transaction to pass to advanceFromActive
+                const updatedGameDoc = await transaction.get(gameRef);
+                const updatedGame = updatedGameDoc.data() as Game;
+                await advanceFromActive(updatedGame, transaction);
 
             } else if (game.gameState === 'challenge_results') {
-                const { updates, finalGame } = await advanceFromResults(game);
-                transaction.update(gameRef, updates);
-                gameDataForLeagueUpdate = finalGame;
-                if(updates.gameState === 'challenge_intro') {
-                     requiresNextChallengePrep = true;
+                const nextIndex = (game.currentChallengeIndex ?? 0) + 1;
+                if (nextIndex >= (game.challengeOrder?.length || 0)) {
+                    gameDataForLeagueUpdate = await advanceToFinalResults(game, transaction);
+                } else {
+                    await advanceToNextChallengeIntro(game, transaction);
+                    requiresNextChallengePrep = true;
                 }
             }
         });

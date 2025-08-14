@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Game, GeniusChallenge, Player } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { motion } from 'framer-motion';
@@ -22,9 +22,10 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
   const { user } = useAuth();
   
   useEffect(() => {
-    if (!game.challengeState?.challengeEndsAt) return;
+    if (!game.challengeState?.timerEndsAt || !game.challengeState.duration) return;
 
-    const challengeActiveTime = game.challengeState?.duration || 90;
+    const challengeActiveTime = game.challengeState.duration;
+    // Calculate the intro end time by subtracting the challenge duration from the total end time.
     const introEndTime = game.challengeState.challengeEndsAt.toMillis() - (challengeActiveTime * 1000);
 
     const updateCountdown = () => {
@@ -40,11 +41,12 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
 
   // Effect for the host to automatically trigger the next state when the timer ends.
   useEffect(() => {
-    let timerId: NodeJS.Timeout;
+    let timerId: NodeJS.Timeout | null = null;
     if(countdown <= 0 && isHost && user) {
+        // Use a very short timeout to ensure this runs after the state has settled
         timerId = setTimeout(() => {
             handleTimeout(game.id, user.uid);
-        }, 500); // Add small buffer
+        }, 100); 
     }
     return () => {
         if(timerId) clearTimeout(timerId);
