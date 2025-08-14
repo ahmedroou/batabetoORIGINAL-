@@ -1,4 +1,5 @@
 
+
 import type { Game, SocialRank } from '@/types';
 import { getRanks } from './queries';
 
@@ -22,6 +23,12 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         { leaderboardPoints: 2, coins: 1 }, // 2nd place
         { leaderboardPoints: 1, coins: 0 }, // 3rd place
     ];
+    
+    const educatedMerchantAwardTiers = [
+        { leaderboardPoints: 4, coins: 3 }, // 1st place
+        { leaderboardPoints: 2, coins: 1 }, // 2nd place
+        { leaderboardPoints: 1, coins: 1 }, // 3rd place
+    ];
 
     const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: number, challengePoints?: number, permissions?: string[] }> = {};
     let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
@@ -29,6 +36,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     
     const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
     const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (game.trapAnswerState?.settings?.rounds || 10) <= 7;
+    const isEducatedMerchantGame = game.gameType === 'educated-merchant';
 
     
     if (isTeamGame) {
@@ -63,7 +71,10 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         playerRanks.forEach(({ id, rank }) => {
             let playerAwards = { leaderboardPoints: 0, coins: 0, challengePoints: 0 };
             
-            if (!isShortTrapAnswerGame) {
+            if (isEducatedMerchantGame) {
+                const tier = (rank - 1) < educatedMerchantAwardTiers.length ? educatedMerchantAwardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
+                playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
+            } else if (!isShortTrapAnswerGame) {
                  const tier = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
                  playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
             }
@@ -141,5 +152,3 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
 
     return { updates, winUpdate, specialAwards };
 }
-
-    

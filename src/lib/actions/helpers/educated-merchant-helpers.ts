@@ -134,11 +134,37 @@ function _endTurnInternal(game: Game, playerId: string, extraMessage: string | n
   players.forEach(p => { if (p.status === 'bankrupt' && (p.money || 0) > 0) p.money = 0; });
 
   const activePlayers = players.filter(p => p.status === 'alive');
-  const isGameOver = activePlayers.length <= 1;
+  let isGameOver = activePlayers.length <= 1;
+
+  const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex);
+  let nextTurnIndex = findNextAliveIndex(turnOrder, players, currentTurnIndex);
+  
+  const turnOrder = ensure(game.educatedMerchantState?.turnOrder);
+  const movesThisRound = game.educatedMerchantState?.movesThisRound ?? 0;
+  const activeAtRoundStart = game.educatedMerchantState?.activeCountAtRoundStart ?? activePlayers.length;
+  let newMoves = movesThisRound + 1;
+  let currentRound = game.round || 1;
+  let newActiveAtRoundStart = activeAtRoundStart;
+
+  if (newMoves >= newActiveAtRoundStart) {
+    currentRound += 1;
+    newMoves = 0;
+    newActiveAtRoundStart = players.filter(p => p.status === 'alive').length;
+  }
+  
+  const maxRounds = game.educatedMerchantState?.settings?.maxRounds || DEFAULT_MAX_ROUNDS;
+  
+  if (currentRound > maxRounds) {
+      isGameOver = true;
+  }
 
   if (isGameOver) {
-    const winner = activePlayers[0];
-    const finalGameData = { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board }, gameState: 'final_results' as const, gameResult: { winner: winner?.id || 'none', message: `اللاعب ${winner?.name || ''} هو الناجي الأخير!` } };
+    const winner = activePlayers.reduce((a, b) => ((a.money || 0) > (b.money || 0) ? a : b), activePlayers[0] || null);
+    const message = activePlayers.length <= 1 
+        ? `اللاعب ${winner?.name || ''} هو الناجي الأخير!`
+        : `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.`;
+        
+    const finalGameData = { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board }, gameState: 'final_results' as const, gameResult: { winner: winner?.id || 'none', message } };
     const updates: any = {
         gameState: 'final_results',
         gameResult: finalGameData.gameResult,
@@ -152,42 +178,8 @@ function _endTurnInternal(game: Game, playerId: string, extraMessage: string | n
     return { isGameOver: true, updates, finalGame: finalGameData as Game };
   }
 
-  const turnOrder = ensure(game.educatedMerchantState?.turnOrder);
-  const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex);
-  let nextTurnIndex = findNextAliveIndex(turnOrder, players, currentTurnIndex);
-  
   if(nextTurnIndex === -1) { // Should not happen if game over check is correct
     return { isGameOver: true, updates: {}, finalGame: null };
-  }
-
-  const movesThisRound = game.educatedMerchantState?.movesThisRound ?? 0;
-  const activeAtRoundStart = game.educatedMerchantState?.activeCountAtRoundStart ?? activePlayers.length;
-  let newMoves = movesThisRound + 1;
-  let newRound = game.round || 1;
-  let newActiveAtRoundStart = activeAtRoundStart;
-
-  if (newMoves >= newActiveAtRoundStart) {
-    newRound += 1;
-    newMoves = 0;
-    newActiveAtRoundStart = players.filter(p => p.status === 'alive').length;
-  }
-
-  const maxRounds = game.educatedMerchantState?.settings?.maxRounds || DEFAULT_MAX_ROUNDS;
-
-  if (newRound > maxRounds) {
-    const winner = activePlayers.reduce((a, b) => ((a.money || 0) > (b.money || 0) ? a : b));
-    const finalGameData = { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board }, gameState: 'final_results' as const, gameResult: { winner: winner?.id || 'none', message: `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.` } };
-    const updates: any = {
-        gameState: 'final_results',
-        gameResult: finalGameData.gameResult,
-        players,
-        'educatedMerchantState.board': board,
-        'educatedMerchantState.timerEndsAt': deleteField(),
-    };
-     if (logEvents.length > 0) {
-        updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
-    }
-    return { isGameOver: true, updates, finalGame: finalGameData as Game };
   }
 
   const finalUpdates: any = {
@@ -195,7 +187,7 @@ function _endTurnInternal(game: Game, playerId: string, extraMessage: string | n
     'educatedMerchantState.board': board,
     'educatedMerchantState.currentTurnIndex': nextTurnIndex,
     'educatedMerchantState.timerEndsAt': addActionTimer(ACTION_TIME_SECONDS),
-    round: newRound,
+    round: currentRound,
     players,
     'educatedMerchantState.movesThisRound': newMoves,
     'educatedMerchantState.activeCountAtRoundStart': newActiveAtRoundStart,
