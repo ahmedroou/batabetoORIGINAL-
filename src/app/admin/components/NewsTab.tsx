@@ -47,6 +47,7 @@ import {
   deleteOldArticles,
   adminSearchUsers,
 } from "@/lib/actions/admin";
+import { Timestamp } from "firebase/firestore";
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Utilities
@@ -103,7 +104,7 @@ function ArticleRow({
   onEdit: (a: Article) => void;
   onDelete: (a: Article) => void;
 }) {
-  const createdAtDate = new Date(article.createdAt);
+  const createdAtDate = article.createdAt instanceof Timestamp ? article.createdAt.toDate() : new Date(article.createdAt);
 
   return (
     <div className="group relative overflow-hidden rounded-xl border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60 hover:shadow-md transition-shadow">

@@ -45,16 +45,21 @@ import { Separator } from "@/components/ui/separator";
 // Server Actions
 import {
   adminUpdateUser,
-  recalculateGameKings,
-  adminSendMail,
-  setAnnouncement,
-  getAnnouncement,
-  backfillPunishmentStatus,
   giveReward as adminGiveReward,
   applyPunishment as adminApplyPunishment,
   adminSearchUsers,
+  adminSendMail,
+} from "@/lib/actions/admin/users";
+import {
+  setAnnouncement,
+  getAnnouncement,
+} from "@/lib/actions/admin/settings";
+import {
+  recalculateGameKings,
+  backfillPunishmentStatus,
   backfillUserPermissions,
-} from "@/lib/actions/admin";
+} from "@/lib/actions/admin/maintenance";
+
 import { GAME_TYPE_NAMES } from "@/types";
 import { cn } from "@/lib/utils";
 
