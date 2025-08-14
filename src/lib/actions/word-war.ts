@@ -32,7 +32,7 @@ import {
   type DocumentReference,
 } from 'firebase/firestore';
 import type { Game, Player, WordWarCard } from '@/types';
-import { shuffle } from './helpers';
+import { shuffle } from '@/lib/actions/helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { WORD_WAR_WORDS } from '@/data/word-war-words';
 
