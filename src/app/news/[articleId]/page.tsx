@@ -178,7 +178,7 @@ export default async function ArticlePage({ params }: Props) {
                 )}
 
                 {/* Remaining paragraphs in a light newspaper multi-column on xl */}
-                <div className="[&_p]:mb-5 xl:columns-2 xl:gap-12">
+                <div className="printable-article-content [&_p]:mb-5">
                   {paragraphs.slice(1).map((para, idx) => (
                     <p key={idx} className="font-sans text-[17px] leading-8 text-neutral-800">
                       {para}
@@ -244,15 +244,6 @@ export default async function ArticlePage({ params }: Props) {
           </div>
         </div>
       </div>
-
-      {/* Print styles */}
-      <style jsx global>{`
-        @media print {
-          body { background: white !important; }
-          .bg-[url('data:image/svg+xml;utf8,<svg xmlns\\=\\'http://www.w3.org/2000/svg\\' width\\=\\'100\\' height\\=\\'100\\'><rect width\\=\\'100%\\' height\\=\\'100%\\' fill\\=\\'%23f8fafc\\'/><path d\\=\\'M0 0 H100\\' stroke\\=\\'%23eef2f7\\' stroke-width\\=\\'1\\'/></svg>')] { background: white !important; }
-          .xl\\:columns-2 { columns: 2 !important; column-gap: 2.5rem !important; }
-        }
-      `}</style>
     </div>
   );
 }
