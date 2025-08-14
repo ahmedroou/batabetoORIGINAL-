@@ -116,7 +116,7 @@ export default async function ArticlePage({ params }: Props) {
   const isAiGeneratedImage = article.imageUrl?.startsWith('data:image');
 
   return (
-    <div className="min-h-screen bg-[url('data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'100\\' height=\\'100\\'><rect width=\\'100%\\' height=\\'100%\\' fill=\\'%23f8fafc\\'/><path d=\\'M0 0 H100\\' stroke=\\'%23eef2f7\\' stroke-width=\\'1\\'/></svg>')] bg-repeat text-neutral-900">
+    <div className="min-h-screen newspaper-bg text-neutral-900">
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
         {/* Back link */}
         <div className="mb-6">
@@ -134,7 +134,7 @@ export default async function ArticlePage({ params }: Props) {
 
               <header className="px-5 sm:px-8 pt-8 pb-6 border-b border-neutral-200">
                 {article.category && (
-                  <p className="text-[13px] font-semibold tracking-wider text-primary/90 mb-3">
+                  <p className="text-[13px] font-semibold tracking-wider text-primary/90 mb-3 font-sans">
                     {article.category}
                   </p>
                 )}
@@ -143,7 +143,7 @@ export default async function ArticlePage({ params }: Props) {
                   {article.title}
                 </h1>
 
-                <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-[15px] text-neutral-600">
+                <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-[15px] text-neutral-600 font-sans">
                   <span className="flex items-center gap-2"><User className="w-5 h-5" />{article.authorName}</span>
                   <span className="flex items-center gap-2"><Calendar className="w-5 h-5" />{format(article.createdAt, 'EEEE, d MMMM yyyy', { locale: ar })}</span>
                   <span className="text-neutral-500">{minutes} دقيقة قراءة</span>
@@ -163,7 +163,7 @@ export default async function ArticlePage({ params }: Props) {
                       data-ai-hint="newspaper illustration"
                     />
                   </div>
-                  <figcaption className="mt-3 text-sm text-neutral-500 border-t border-dashed border-neutral-200 pt-2">
+                  <figcaption className="mt-3 text-sm text-neutral-500 border-t border-dashed border-neutral-200 pt-2 font-sans">
                     {article.title} {isAiGeneratedImage && '(صورة مُولّدة بالذكاء الاصطناعي)'}
                   </figcaption>
                 </figure>
@@ -172,7 +172,7 @@ export default async function ArticlePage({ params }: Props) {
               <div className="px-5 sm:px-8 py-8">
                 {/* Dek/lede (اختياري) */}
                 {paragraphs[0] && (
-                  <p className="mb-6 font-serif text-xl leading-9 text-neutral-800 first-letter:float-right first-letter:ml-3 first-letter:text-6xl first-letter:leading-[0.75] first-letter:font-black first-letter:text-neutral-900">
+                  <p className="mb-6 font-sans text-xl leading-9 text-neutral-800 first-letter:float-right first-letter:ml-3 first-letter:text-6xl first-letter:leading-[0.75] first-letter:font-serif first-letter:font-black first-letter:text-neutral-900">
                     {paragraphs[0]}
                   </p>
                 )}
@@ -188,7 +188,7 @@ export default async function ArticlePage({ params }: Props) {
 
                 {/* Tags */}
                 {article.tags && article.tags.length > 0 && (
-                  <footer className="mt-10 pt-6 border-t border-neutral-200">
+                  <footer className="mt-10 pt-6 border-t border-neutral-200 font-sans">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Tag className="w-5 h-5 text-neutral-500" />
                       <h3 className="font-semibold text-neutral-700">الوسوم:</h3>
@@ -210,13 +210,13 @@ export default async function ArticlePage({ params }: Props) {
             <nav className="mt-8 flex flex-col sm:flex-row gap-4">
               {prevArticle && (
                 <Link href={`/news/${prevArticle.id}`} className="flex-1 rounded-lg border border-neutral-200 bg-white/90 hover:bg-white transition shadow-sm p-4">
-                  <span className="block text-sm text-neutral-500 mb-1">المقال السابق</span>
+                  <span className="block text-sm text-neutral-500 mb-1 font-sans">المقال السابق</span>
                   <span className="font-serif font-bold text-neutral-900 leading-snug line-clamp-2">{prevArticle.title}</span>
                 </Link>
               )}
               {nextArticle && (
                 <Link href={`/news/${nextArticle.id}`} className="flex-1 rounded-lg border border-neutral-200 bg-white/90 hover:bg-white transition shadow-sm p-4 text-right">
-                  <span className="block text-sm text-neutral-500 mb-1">المقال التالي</span>
+                  <span className="block text-sm text-neutral-500 mb-1 font-sans">المقال التالي</span>
                   <span className="font-serif font-bold text-neutral-900 leading-snug line-clamp-2">{nextArticle.title}</span>
                 </Link>
               )}
@@ -228,7 +228,7 @@ export default async function ArticlePage({ params }: Props) {
                 <h2 className="font-serif text-2xl font-extrabold mb-4">مقالات ذات صلة</h2>
                 <div className="grid sm:grid-cols-2 gap-4">
                   {related.map(r => (
-                    <Link key={r.id} href={`/news/${r.id}`} className="rounded-lg border border-neutral-200 bg-white/90 hover:bg-white transition shadow-sm p-4">
+                    <Link key={r.id} href={`/news/${r.id}`} className="rounded-lg border border-neutral-200 bg-white/90 hover:bg-white transition shadow-sm p-4 font-sans">
                       <h3 className="font-semibold text-neutral-900 leading-snug line-clamp-2">{r.title}</h3>
                       <p className="text-xs text-neutral-500 mt-1">{format(r.createdAt, 'd MMMM yyyy', { locale: ar })}</p>
                     </Link>

@@ -40,13 +40,13 @@ const NewspaperHeader = ({ headlines }: { headlines: string[] }) => {
             <h1 className="font-serif text-5xl md:text-7xl font-extrabold tracking-wide text-zinc-900">
               صحيفة اللعبة
             </h1>
-            <p className="mt-2 text-base md:text-lg text-zinc-600 tracking-widest">آخر الأخبار والتحديثات من عالم بطابيطو</p>
-            <p className="mt-1 text-sm text-zinc-500">العدد اليومي — {today}</p>
+            <p className="mt-2 text-base md:text-lg text-zinc-600 tracking-widest font-sans">آخر الأخبار والتحديثات من عالم بطابيطو</p>
+            <p className="mt-1 text-sm text-zinc-500 font-sans">العدد اليومي — {today}</p>
           </div>
 
           {/* Breaking news ticker */}
           {headlines.length > 0 && (
-            <div className="relative bg-zinc-900 text-zinc-100 overflow-hidden">
+            <div className="relative bg-zinc-900 text-zinc-100 overflow-hidden font-sans">
               <div className="flex items-center gap-3 px-4 py-2 border-b border-zinc-700">
                 <Megaphone className="w-4 h-4" />
                 <span className="text-xs font-medium tracking-widest">عاجل الآن</span>
@@ -97,7 +97,7 @@ const ArticleCard = ({ article, isFeatured }: { article: Article; isFeatured?: b
         )}
         <div className={`${isFeatured ? 'md:w-1/2' : ''} p-6 flex flex-col gap-3`}>
           <h2 className={`font-serif text-zinc-900 leading-tight ${isFeatured ? 'text-3xl' : 'text-xl'} group-hover:underline`}>{article.title}</h2>
-          <div className="flex flex-wrap items-center gap-4 text-[11px] md:text-xs text-zinc-500">
+          <div className="flex flex-wrap items-center gap-4 text-[11px] md:text-xs text-zinc-500 font-sans">
             <span className="flex items-center gap-1"><User className="w-4 h-4" />{article.authorName}</span>
             <span className="flex items-center gap-1"><Calendar className="w-4 h-4" />{formatDate(article.createdAt as any)}</span>
           </div>
@@ -105,7 +105,7 @@ const ArticleCard = ({ article, isFeatured }: { article: Article; isFeatured?: b
             {excerpt}
           </p>
           <div className="mt-auto pt-2">
-            <span className="inline-flex items-center gap-1 font-medium text-primary group-hover:gap-2 transition-all">
+            <span className="inline-flex items-center gap-1 font-medium text-primary group-hover:gap-2 transition-all font-sans">
               اقرأ المزيد <ArrowRight className="w-4 h-4" />
             </span>
           </div>

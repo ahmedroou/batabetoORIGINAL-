@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter, Merriweather, Noto_Naskh_Arabic } from 'next/font/google';
+import { Inter, Merriweather, Noto_Naskh_Arabic, Amiri } from 'next/font/google';
 
 export const metadata: Metadata = {
   title: 'صحيفة اللعبة | بطابيطو',
@@ -28,14 +28,16 @@ const inter = Inter({
   display: 'swap',
 });
 
-const merriweather = Merriweather({
-  subsets: ['latin'],
-  weight: ['400', '700', '900'],
-  variable: '--font-merriweather',
+// A classic Arabic font for headlines, giving a distinct "newspaper" feel.
+const amiri = Amiri({
+  subsets: ['arabic', 'latin'],
+  weight: ['400', '700'],
+  variable: '--font-amiri',
   display: 'swap',
 });
 
-// Arabic serif for headlines & long-form (pairs beautifully with Merriweather)
+
+// Arabic sans-serif for body text, excellent for readability.
 const notoNaskh = Noto_Naskh_Arabic({
   subsets: ['arabic'],
   weight: ['400', '500', '600', '700'],
@@ -46,7 +48,7 @@ const notoNaskh = Noto_Naskh_Arabic({
 export default function NewsLayout({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className={`news-scope ${inter.variable} ${merriweather.variable} ${notoNaskh.variable} font-sans newspaper-bg min-h-screen`}
+      className={`news-scope ${inter.variable} ${amiri.variable} ${notoNaskh.variable} font-sans newspaper-bg min-h-screen`}
       dir="rtl"
       lang="ar"
     >
