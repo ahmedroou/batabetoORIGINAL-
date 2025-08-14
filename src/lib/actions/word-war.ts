@@ -285,6 +285,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
         if (!gameDoc.exists()) return;
         const game = gameDoc.data() as Game;
 
+        if (game.hostId !== hostId) throw new Error("Only the host can handle timeouts.");
         if (!game.wordWarState?.timerEndsAt || Date.now() < game.wordWarState.timerEndsAt.toMillis()) {
             return; // Timer hasn't expired server-side.
         }

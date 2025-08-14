@@ -23,6 +23,12 @@ async function recordSocialEvent(event: Omit<SocialEvent, 'id' | 'timestamp'>, t
 
 export async function giveReward(actorId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
     return runTransaction(db, async (transaction) => {
+        const actorRef = doc(db, "users", actorId);
+        const actorDoc = await transaction.get(actorRef);
+        if(!actorDoc.exists() || !actorDoc.data()?.isAdmin) {
+            throw new Error("ليس لديك صلاحية لتنفيذ هذا الأمر.");
+        }
+        
         const targetRef = doc(db, "users", targetId);
         const targetDoc = await transaction.get(targetRef);
         
@@ -54,6 +60,12 @@ export async function giveReward(actorId: string, targetId: string, reward: { po
 
 export async function applyPunishment(actorId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
      return runTransaction(db, async (transaction) => {
+        const actorRef = doc(db, "users", actorId);
+        const actorDoc = await transaction.get(actorRef);
+        if(!actorDoc.exists() || !actorDoc.data()?.isAdmin) {
+            throw new Error("ليس لديك صلاحية لتنفيذ هذا الأمر.");
+        }
+
         const targetRef = doc(db, "users", targetId);
         const targetDoc = await transaction.get(targetRef);
 

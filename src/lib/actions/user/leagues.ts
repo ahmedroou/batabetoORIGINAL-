@@ -26,7 +26,7 @@ export async function getLeagueData(leagueId: string): Promise<{ league: League 
         let members: UserProfile[] = [];
         if (league.members && league.members.length > 0) {
             const usersRef = collection(db, 'users');
-            const memberChunks = [];
+            const memberChunks: string[][] = [];
             for (let i = 0; i < league.members.length; i += 30) {
                 memberChunks.push(league.members.slice(i, i + 30));
             }
@@ -59,23 +59,30 @@ export async function updateUserStats(adminId: string, leagueId: string, userId:
     if (!userId || !leagueId) {
         return { success: false, error: "معرف المستخدم والدوري مطلوب." };
     }
-    try {
+    
+    return runTransaction(db, async (transaction) => {
+        const adminRef = doc(db, "users", adminId);
         const leagueRef = doc(db, 'leagues', leagueId);
         
-        const leagueDoc = await getDoc(leagueRef);
-        if (!leagueDoc.exists()) {
-             return { success: false, error: "الدوري غير موجود." };
-        }
+        const [adminDoc, leagueDoc] = await Promise.all([transaction.get(adminRef), transaction.get(leagueRef)]);
+        
+        if(!leagueDoc.exists()) throw new Error("الدوري غير موجود.");
+        
+        const league = leagueDoc.data() as League;
+        const isAdmin = adminDoc.exists() && adminDoc.data()?.isAdmin;
+        const isLeagueAdmin = league.adminId === adminId;
 
-        await updateDoc(leagueRef, {
+        if(!isAdmin && !isLeagueAdmin) throw new Error("ليس لديك صلاحية لتعديل بيانات هذا الدوري.");
+
+        transaction.update(leagueRef, {
             [`scores.${userId}`]: stats.points,
             [`gamesPlayed.${userId}`]: stats.gamesPlayed
         });
+
         return { success: true };
-    } catch (error) {
-        console.error("Error updating user stats in league:", error);
-        return { success: false, error: "حدث خطأ غير متوقع." };
-    }
+    }).catch( (error: any) => {
+         return { success: false, error: error.message || "حدث خطأ غير متوقع." };
+    });
 };
 
 export async function createLeague(userId: string, leagueName: string, password?: string) {
@@ -262,6 +269,12 @@ export async function leaveLeague(leagueId: string, userId: string): Promise<{ s
 }
 
 export async function resetAllLeagueStats(adminId: string): Promise<{ success: boolean, count?: number, error?: string }> {
+    const adminRef = doc(db, 'users', adminId);
+    const adminDoc = await getDoc(adminRef);
+    if (!adminDoc.exists() || !adminDoc.data()?.isAdmin) {
+        return { success: false, error: 'ليس لديك صلاحية لتنفيذ هذا الأمر.' };
+    }
+    
     const leaguesRef = collection(db, 'leagues');
 
     try {
@@ -406,3 +419,4 @@ export async function updateLeagueScoresForGameEnd(game: Game) {
         console.error("Error updating league scores after game end:", error);
     }
 }
+
