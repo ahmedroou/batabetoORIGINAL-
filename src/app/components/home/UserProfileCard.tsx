@@ -88,7 +88,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
           ].join(" ")}
           aria-label="بطاقة الملف الشخصي"
         >
-          <CardContent className="p-5 md:p-6 flex flex-col items-center gap-4">
+          <CardContent className="p-4 flex flex-col items-center gap-3">
 
             {/* الصورة الرمزية + تعديل */}
             <div className="relative">
@@ -99,7 +99,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
               >
                 <PlayerAvatar
                   avatarId={userProfile.avatarId}
-                  className="w-28 h-28 rounded-full ring-4 ring-violet-200/70 dark:ring-violet-700/30 shadow-md"
+                  className="w-24 h-24 rounded-full ring-2 ring-violet-200/70 dark:ring-violet-700/30 shadow-md"
                   temporaryTitle={userProfile.temporaryTitle}
                   priority
                 />
@@ -108,7 +108,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
               <Button
                 variant="outline"
                 size="icon"
-                className="absolute -bottom-2 -left-1 rounded-full h-9 w-9 border-violet-300/60 bg-white/70 hover:bg-white/90 dark:bg-white/10 dark:hover:bg-white/15"
+                className="absolute -bottom-1 -left-1 rounded-full h-8 w-8 border-violet-300/60 bg-white/70 hover:bg-white/90 dark:bg-white/10 dark:hover:bg-white/15"
                 asChild
                 aria-label="تعديل الملف الشخصي"
               >
@@ -120,8 +120,8 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
 
             {/* معلومات المستخدم */}
             <div className="text-center">
-               <p className="text-sm text-violet-800/70 dark:text-violet-200/70">مرحباً بك يا</p>
-                <CardTitle className="text-4xl font-extrabold tracking-tight font-serif text-slate-800 dark:text-slate-200">
+               <p className="text-xs text-violet-800/70 dark:text-violet-200/70">مرحباً بك يا</p>
+                <CardTitle className="text-2xl font-extrabold tracking-tight font-serif text-slate-800 dark:text-slate-200">
                   {userProfile.name}
                 </CardTitle>
 
@@ -130,7 +130,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                     initial={{ y: -4, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ duration: 0.22, delay: 0.05 }}
-                    className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-xs dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100"
+                    className="mt-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-xs dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100"
                   >
                     {RankIcon ? (
                       <RankIcon className="w-4 h-4 text-violet-700 dark:text-violet-200" />
@@ -153,30 +153,30 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex flex-col items-center gap-1 rounded-xl px-3 py-1.5 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
-                    <CircleDollarSign className="w-5 h-5 text-violet-700 dark:text-violet-200" />
-                    <span className="font-semibold">{nf.format(userProfile.coins || 0)}</span>
-                    <span className="text-xs">كوينز</span>
+                  <div className="flex flex-col items-center gap-1 rounded-xl px-2 py-1 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
+                    <CircleDollarSign className="w-4 h-4 text-violet-700 dark:text-violet-200" />
+                    <span className="font-semibold text-sm">{nf.format(userProfile.coins || 0)}</span>
+                    <span className="text-[10px]">كوينز</span>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>رصيد الكوينز الخاص بك</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex flex-col items-center gap-1 rounded-xl px-3 py-1.5 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
-                    <Trophy className="w-5 h-5 text-violet-700 dark:text-violet-200" />
-                    <span className="font-semibold">{nf.format(userProfile.leaderboardPoints || 0)}</span>
-                    <span className="text-xs">نقاط</span>
+                  <div className="flex flex-col items-center gap-1 rounded-xl px-2 py-1 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
+                    <Trophy className="w-4 h-4 text-violet-700 dark:text-violet-200" />
+                    <span className="font-semibold text-sm">{nf.format(userProfile.leaderboardPoints || 0)}</span>
+                    <span className="text-[10px]">نقاط</span>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>إجمالي نقاط الصدارة</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex flex-col items-center gap-1 rounded-xl px-3 py-1.5 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
-                    <Diamond className="w-5 h-5 text-violet-700 dark:text-violet-200" />
-                    <span className="font-semibold">{nf.format(userProfile.diamonds || 0)}</span>
-                    <span className="text-xs">ألماس</span>
+                  <div className="flex flex-col items-center gap-1 rounded-xl px-2 py-1 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
+                    <Diamond className="w-4 h-4 text-violet-700 dark:text-violet-200" />
+                    <span className="font-semibold text-sm">{nf.format(userProfile.diamonds || 0)}</span>
+                    <span className="text-[10px]">ألماس</span>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>أحجارك الكريمة</TooltipContent>
