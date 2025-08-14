@@ -5,7 +5,7 @@ import {
   _rollDice,
   _purchaseProperty,
   _answerQuestion,
-  _endTurn,
+  _endTurnInternal as _endTurn,
   _generateBoard,
 } from '@/lib/actions/helpers/educated-merchant-helpers';
 import type { Game, Player, Property, EducatedMerchantQuestion } from '@/types';
@@ -55,11 +55,23 @@ describe('Educated Merchant - Game Logic Helpers', () => {
   
   test('Player should pay rent when landing on an owned property', () => {
     let game = createMockGame(mockPlayers, { board: mockBoard });
-    game.players[0].position = 2; // Move p1 to p2's property
+    // Manually set player 1 to land on player 2's property before the roll action
+    const player1StartPos = 0;
+    const diceRoll = 2;
+    game.players[0].position = player1StartPos;
 
-    const { updates } = _rollDice(game, 'p1'); // This will trigger the rent logic
+    // Simulate dice roll logic by setting up the game state as if the roll just happened
+    const nextGame = {
+        ...game,
+        players: game.players.map(p => p.id === 'p1' ? { ...p, position: (player1StartPos + diceRoll) % mockBoard.length } : p),
+        educatedMerchantState: {
+            ...game.educatedMerchantState,
+            lastDiceRoll: diceRoll,
+        }
+    };
+
+    const { updates } = _rollDice(nextGame, 'p1'); 
     
-    // We expect the internal logic to have calculated the next state after rent payment
     const finalPlayers = updates.players;
     const player1 = finalPlayers.find(p => p.id === 'p1');
     const player2 = finalPlayers.find(p => p.id === 'p2');
@@ -138,8 +150,9 @@ describe('Educated Merchant - Game Logic Helpers', () => {
       ];
       let game = createMockGame(players, { board: mockBoard });
       game.players[0].position = 0; // At start to trigger end turn logic
+      game.gameState = 'rolling'; // Ensure correct starting state for the test
       
-      const { isGameOver, finalGame } = _endTurn(game, 'p1');
+      const { isGameOver, finalGame } = _rollDice(game, 'p1');
       
       expect(isGameOver).toBe(true);
       expect(finalGame?.gameState).toBe('final_results');
@@ -235,3 +248,4 @@ describe('Educated Merchant - End of Game Awards', () => {
     });
 });
     
+

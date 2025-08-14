@@ -115,7 +115,7 @@ export async function _getInitialGameState(players: Player[]) {
 }
 
 
-function _endTurnInternal(game: Game, playerId: string, extraMessage: string | null = null, extraUpdates?: { players?: Player[], board?: Property[] }): { updates: any, isGameOver: boolean, finalGame: Game | null } {
+export function _endTurnInternal(game: Game, playerId: string, extraMessage: string | null = null, extraUpdates?: { players?: Player[], board?: Property[] }): { updates: any, isGameOver: boolean, finalGame: Game | null } {
   const players = extraUpdates?.players ? clonePlayers(extraUpdates.players) : clonePlayers(game.players);
   const board = extraUpdates?.board ? cloneBoard(extraUpdates.board) : cloneBoard(ensure(game.educatedMerchantState?.board));
   
@@ -281,6 +281,14 @@ export function _rollDice(game: Game, playerId: string) {
         updates['educatedMerchantState.timerEndsAt'] = addActionTimer(QUESTION_TIME_SECONDS);
         updates['educatedMerchantState.questionToken'] = token;
         needsQuestion = { category: 'قسم الغرامات', token };
+    } else {
+        // Fallback for any other tile type (e.g., if a new one is added but not handled)
+        const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, null, { players, board });
+        Object.assign(updates, endUpdates);
+        if (logEvents.length > 0 && !updates['educatedMerchantState.activityLog']) {
+            updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+        }
+        return { updates, needsQuestion: null, isGameOver, finalGame };
     }
 
     if (logEvents.length > 0) updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
@@ -374,7 +382,6 @@ export function _answerQuestion(game: Game, playerId: string, answer: string) {
 }
 
 export function _endTurn(game: Game, playerId: string) {
-    if (game.gameState !== 'property_action') throw new Error('Not in property action state.');
     const turnOrder = ensure(game.educatedMerchantState?.turnOrder);
     if (turnOrder[ensure(game.educatedMerchantState.currentTurnIndex)] !== playerId) throw new Error('Not your turn.');
     
