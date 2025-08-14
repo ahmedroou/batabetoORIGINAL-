@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -237,7 +238,7 @@ function AuroraShine() {
 
 function SectionHeader({ title, subtitle, icon }: { title: string; subtitle?: string; icon?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
       <div className="flex items-center gap-2 text-xl font-bold">
         <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-card shadow-sm">
           {icon}

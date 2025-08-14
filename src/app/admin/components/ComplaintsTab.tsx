@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -500,7 +501,7 @@ export default function ComplaintsTab() {
       {/* Header */}
       <div className="space-y-2 text-center">
         <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">إدارة الشكاوى</h1>
-        <p className="text-muted-foreground">لوحة تحكّم سريعة لمعالجة التعويضات وتقارير الأخطاء — تصميم مُحسّن بواسطة GPT‑5.</p>
+        <p className="text-muted-foreground">لوحة تحكّم سريعة لمعالجة التعويضات وتقارير الأخطاء.</p>
       </div>
 
       {/* Toolbar */}

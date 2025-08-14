@@ -252,7 +252,7 @@ export default function AdminPage() {
         {/* Header */}
         <Card className="backdrop-blur supports-[backdrop-filter]:bg-background/70">
           <CardHeader>
-             <div className="flex flex-wrap items-start justify-between gap-4">
+             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <CardTitle className="text-2xl md:text-3xl">لوحة تحكم الأدمن</CardTitle>
                   <CardDescription>إدارة محتوى اللعبة وإعداداتها.</CardDescription>
@@ -283,7 +283,7 @@ export default function AdminPage() {
         {/* Tabs */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
           <Tabs value={activeTab} onValueChange={(v) => setTab(v as any)} className="w-full">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
               {tabMap.map(({ value, label, icon: Icon }, idx) => (
                 <TabsTrigger key={value} value={value} className="group">
                   <Icon className="mr-2 h-4 w-4 group-data-[state=active]:scale-110 transition-transform" />

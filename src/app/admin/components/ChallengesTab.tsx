@@ -263,7 +263,7 @@ const ChallengeForm = ({
 
       {/* Prizes */}
       <div className="space-y-4 pt-4 border-t">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <h4 className="font-bold text-lg">جوائز المراكز</h4>
           <div className="text-xs text-muted-foreground flex items-center gap-3">
             <span className="flex items-center gap-1">{currencyIcon("coins")} <b>{totals.coins}</b></span>
@@ -505,8 +505,8 @@ export default function ChallengesTab() {
     const statusColor = isFinalized ? "bg-emerald-600/20 text-emerald-300 border-emerald-700/30" : isEnded ? "bg-amber-600/20 text-amber-300 border-amber-700/30" : "bg-blue-600/20 text-blue-300 border-blue-700/30";
 
     return (
-      <div className={cn("rounded-lg p-3 border flex items-center justify-between gap-3", isFinalized ? "bg-background" : isEnded ? "bg-muted/50" : "bg-muted")}>        
-        <div className="space-y-1">
+      <div className={cn("rounded-lg p-3 border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3", isFinalized ? "bg-background" : isEnded ? "bg-muted/50" : "bg-muted")}>        
+        <div className="space-y-1 flex-grow">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={cn("text-[11px] px-2 py-0.5 rounded-full border", statusColor)}>
               {isFinalized ? "موزّعة الجوائز" : isEnded ? "انتهت" : "نشِطة"}
@@ -521,7 +521,7 @@ export default function ChallengesTab() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 self-end sm:self-center">
           {!isFinalized && (
             <Button size="icon" variant="ghost" onClick={() => setEditingChallenge(c)} aria-label="تعديل">
               <Edit className="w-4 h-4" />
