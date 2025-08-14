@@ -1,4 +1,4 @@
-'use server';
+
 
 /**
  * @fileoverview This file contains helper functions specific to the "Trap Answer" game logic.
