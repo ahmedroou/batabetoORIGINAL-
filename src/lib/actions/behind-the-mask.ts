@@ -67,7 +67,7 @@ const getSettings = (game: Game) => ({
 
 const safeGetPlayer = (game: Game, id: string | null | undefined) => game.players.find((p) => p.id === id);
 
-const checkForWinner = (players: Player[]): GameResult | null => {
+export const checkForWinner = (players: Player[]): GameResult | null => {
   const alive = players.filter((p) => p.status === 'alive');
   const good = alive.filter((p) => p.team === 'good').length;
   const mafia = alive.filter((p) => p.team === 'mafia').length;
@@ -80,7 +80,7 @@ const checkForWinner = (players: Player[]): GameResult | null => {
 // Night & Day internal processors (pure-ish helpers)
 // ---------------------------------------------------------------------------
 
-async function processNightInternal(game: Game) {
+export async function processNightInternal(game: Game) {
   const players = game.players.map((p) => ({ ...p }));
   const nightActions = game.mafiaState?.nightActions || {};
   const newEvents: DayEvent[] = [];
@@ -185,7 +185,7 @@ async function processNightInternal(game: Game) {
   return { updatedPlayers: players, newEvents, newPrivateEvents, newPrivateChats, newLastHealedPlayerId };
 }
 
-async function processDayInternal(game: Game) {
+export async function processDayInternal(game: Game) {
   const players = [...game.players];
   const votes = game.mafiaState?.votes || {};
   const counts: Record<string, number> = {};
@@ -499,7 +499,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
  */
 export async function sendPublicMessage(gameId: string, message: Omit<PublicChatMessage, 'timestamp'>): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
-  const fullMessage: PublicChatMessage = { ...message, text: clamp(message.text, DEFAULTS.PUBLIC_MSG_MAX), timestamp: Timestamp.now() } as PublicChatMessage;
+  const fullMessage: PublicChatMessage = { ...message, message: clamp(message.message, DEFAULTS.PUBLIC_MSG_MAX), timestamp: Timestamp.now() } as PublicChatMessage;
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -523,7 +523,7 @@ export async function sendPrivateMessage(
   message: Omit<PrivateChatMessage, 'timestamp'>,
 ): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
-  const fullMessage: PrivateChatMessage = { ...message, text: clamp(message.text, DEFAULTS.PRIVATE_MSG_MAX), timestamp: Timestamp.now() } as PrivateChatMessage;
+  const fullMessage: PrivateChatMessage = { ...message, message: clamp(message.message, DEFAULTS.PRIVATE_MSG_MAX), timestamp: Timestamp.now() } as PrivateChatMessage;
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);

@@ -1,7 +1,7 @@
 import type { Game, Player, NightAction, PlayerTeam, DayEvent, PrivateEvent, PrivateChat, GameResult } from '@/types';
 import { calculateEndOfGameAwards } from '@/lib/actions/user/awards';
 import { ROLES } from '@/data/mafia-roles';
-import { processNightInternal, checkForWinnerInternal, processDayInternal } from '@/lib/actions/helpers/behind-the-mask-helpers';
+import { processNightInternal, checkForWinner, processDayInternal } from '@/lib/actions/behind-the-mask';
 
 // --- Jest Tests ---
 
@@ -181,8 +181,8 @@ describe('Behind The Mask - Day Phase & Voting Logic', () => {
         const game = createMockGame(players);
         if (game.mafiaState) game.mafiaState.votes = votes;
 
-        const { executedPlayer } = await processDayInternal(game);
-        expect(executedPlayer?.id).toBe('p2');
+        const { updatedGame } = await processDayInternal(game);
+        expect(updatedGame.players.find(p => p.id === 'p2')?.status).toBe('voted_out');
     });
 
     test('No one is executed if there is a tie', async () => {
@@ -196,8 +196,8 @@ describe('Behind The Mask - Day Phase & Voting Logic', () => {
         const game = createMockGame(players);
         if (game.mafiaState) game.mafiaState.votes = votes;
         
-        const { executedPlayer } = await processDayInternal(game);
-        expect(executedPlayer).toBeNull();
+        const { updatedGame } = await processDayInternal(game);
+        expect(updatedGame.players.every(p => p.status === 'alive')).toBe(true);
     });
 });
 
@@ -211,7 +211,7 @@ describe('Behind The Mask - Win Conditions & Awards', () => {
             createMockPlayer('p3', 'killer', 'mafia'),
         ];
         players[2].status = 'voted_out'; // Killer is eliminated
-        const result = checkForWinnerInternal(players);
+        const result = checkForWinner(players);
         expect(result).not.toBeNull();
         expect(result?.winner).toBe('good');
     });
@@ -222,10 +222,10 @@ describe('Behind The Mask - Win Conditions & Awards', () => {
             createMockPlayer('p2', 'civilian', 'good'),
         ];
         // Mafia (1) is not greater than good (1), so no win yet. Game continues.
-        expect(checkForWinnerInternal(players)).toBeNull(); 
+        expect(checkForWinner(players)).toBeNull(); 
 
         players.push(createMockPlayer('p3', 'spy', 'mafia')); // Mafia is now 2 vs 1
-         const result = checkForWinnerInternal(players);
+         const result = checkForWinner(players);
         expect(result).not.toBeNull();
         expect(result?.winner).toBe('mafia');
     });
@@ -235,7 +235,7 @@ describe('Behind The Mask - Win Conditions & Awards', () => {
             createMockPlayer('p1', 'killer', 'mafia'),
             createMockPlayer('p2', 'civilian', 'good'),
         ];
-        const result = checkForWinnerInternal(players);
+        const result = checkForWinner(players);
         expect(result).toBeNull(); // 1v1 is not an automatic win, day phase decides it
     });
 
