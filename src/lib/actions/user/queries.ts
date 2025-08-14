@@ -216,8 +216,7 @@ export async function updateUserWinCount(gameType: Game['gameType'], userId: str
     
     const userRef = doc(db, 'users', userId);
     // Note: This function now accepts a WriteBatch object instead of a full transaction,
-    // so we cannot `get` docs. We must perform updates blindly. This is acceptable
-    // as we are only using increments.
+    // so we cannot `get` docs. This is acceptable as we are only using increments.
     
     batch.update(userRef, {
       [`winCounts.${gameType}`]: increment(1)
@@ -282,3 +281,4 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
     
 
     
+

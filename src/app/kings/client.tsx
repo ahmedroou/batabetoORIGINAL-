@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -6,22 +7,12 @@ import type { GameKing, Game, UserProfile, SocialRank } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
-import { GAME_ICONS } from "@/data/icons";
+import { GAME_TYPE_NAMES } from "@/data/icons";
 import { Crown, Star, Trophy, Shield } from "lucide-react";
 import { motion } from "framer-motion";
-import { getKingsPageData } from "@/lib/actions/user";
+import { getKingsPageData } from "@/lib/actions/user/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
-
-
-const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
-  'king-of-genius': 'ساحة العباقرة',
-  'trap-answer': 'الجواب المفخخ',
-  'behind-the-mask': 'خلف القناع',
-  'word_war': 'حرب الكلمات',
-  'prison': 'السجن',
-  'educated-merchant': 'التاجر المتعلم',
-};
 
 export default function KingsClient() {
   const [kings, setKings] = useState<Record<string, GameKing>>({});
@@ -30,10 +21,8 @@ export default function KingsClient() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { socialRanks, getSocialRankForUser } = useAuth();
 
-  // ميمو للأنواع لضمان ثبات الترتيب ومنع ريريندر غير لازم
   const gameEntries = useMemo(() => Object.entries(GAME_TYPE_NAMES), []);
 
-  // جلب البيانات مع حماية من setState بعد إلغاء التركيب
   useEffect(() => {
     let alive = true;
     const fetchKingsData = async () => {
@@ -62,7 +51,6 @@ export default function KingsClient() {
     return getSocialRankForUser(kingOfGames.leaderboardPoints || 0);
   }, [kingOfGames, socialRanks, getSocialRankForUser]);
 
-  // عناصر الحركة الجمالية
   const floatTransition = { type: "spring", stiffness: 120, damping: 14 };
   const cardWhileHover = { y: -6, scale: 1.02 };
   const cardWhileTap = { scale: 0.98 };
@@ -95,7 +83,6 @@ export default function KingsClient() {
 
   return (
     <div className="min-h-screen w-full bg-gray-950 text-white">
-      {/* خلفية فنية (أورورا) + النجوم الموجودة */}
       <div className="fixed inset-0 z-0 overflow-hidden">
         <div className="absolute inset-0 stars"></div>
         <div className="absolute inset-0 twinkling"></div>
@@ -143,7 +130,6 @@ export default function KingsClient() {
           </motion.p>
         </header>
 
-        {/* حالة خطأ أنيقة مع زر إعادة المحاولة (بدون إضافة Button جديد) */}
         {!isLoading && errorMsg && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -170,7 +156,6 @@ export default function KingsClient() {
           renderLoadingState()
         ) : (
           <div className="w-full">
-            {/* ملك الألعاب العام */}
             {kingOfGames && (
               <motion.div
                 initial={{ opacity: 0, y: 40 }}
@@ -178,7 +163,6 @@ export default function KingsClient() {
                 transition={{ duration: 0.55 }}
               >
                 <Card className="mb-12 relative overflow-hidden bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 border-2 border-yellow-300/80 text-black">
-                  {/* وهج جمالي داخلي */}
                   <div className="pointer-events-none absolute inset-0 opacity-40 mix-blend-soft-light" />
                   <CardContent className="relative p-4 md:p-6 flex flex-col md:flex-row items-center gap-6">
                     <motion.div
@@ -217,7 +201,6 @@ export default function KingsClient() {
                         )}
                       </div>
                     </div>
-                    {/* شريط وهج علوي */}
                     <div
                       aria-hidden
                       className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-200/60 via-white/80 to-amber-200/60"
@@ -227,11 +210,10 @@ export default function KingsClient() {
               </motion.div>
             )}
 
-            {/* بطاقات ملوك الألعاب */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {gameEntries.map(([gameType, name], index) => {
-                const king = kings[gameType];
-                const Icon = (GAME_ICONS as any)[gameType] || Star;
+                const king = kings[gameType as keyof typeof kings];
+                const Icon = GAME_TYPE_NAMES[gameType as keyof typeof GAME_TYPE_NAMES] ? (GAME_ICONS as any)[gameType] || Star : Star;
                 const kingRank = king ? getSocialRankForUser(king.leaderboardPoints || 0) : null;
                 const RankIcon = (kingRank && kingRank.icon) ? kingRank.icon : Shield;
 
@@ -248,7 +230,6 @@ export default function KingsClient() {
                         "bg-black/35 backdrop-blur-lg border-purple-800/50 text-white",
                         "shadow-lg shadow-purple-900/40 hover:shadow-purple-500/50 transition-all duration-300"
                       )}>
-                        {/* لمسة وهج على الحواف */}
                         <div aria-hidden className="pointer-events-none absolute inset-0 opacity-10 bg-gradient-to-br from-purple-400 via-fuchsia-400 to-amber-300" />
                         <div className="relative">
                           <Icon className="w-16 h-16 text-purple-300 mx-auto mb-2 drop-shadow-[0_0_10px_rgba(192,132,252,0.45)]" />
@@ -306,3 +287,4 @@ export default function KingsClient() {
     </div>
   );
 }
+
