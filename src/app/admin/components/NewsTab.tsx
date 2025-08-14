@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -24,7 +25,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogHeader as AlertDialogHeaderAlt, AlertDialogTitle as AlertDialogTitleAlt, AlertDialogDescription as AlertDialogDescriptionAlt, AlertDialogContent as AlertDialogContentAlt, AlertDialogFooter as AlertDialogFooterAlt } from '@/components/ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogContent, AlertDialogFooter } from '@/components/ui/alert-dialog';
 import { createArticle, getArticlesForAdmin, updateArticle, deleteArticle, getAudienceGroups, createAudienceGroup, addPlayerToAudienceGroup, deleteAudienceGroup, removePlayerFromAudienceGroup, runAiJournalist, deleteOldArticles } from '@/lib/actions/news';
 
 export default function NewsTab() {
@@ -456,21 +457,21 @@ export default function NewsTab() {
             
             {/* Delete Old Articles Confirmation */}
             <AlertDialog open={showDeleteOldArticlesDialog} onOpenChange={setShowDeleteOldArticlesDialog}>
-              <AlertDialogContentAlt>
-                <AlertDialogHeaderAlt>
-                  <AlertDialogTitleAlt>تأكيد حذف المقالات القديمة</AlertDialogTitleAlt>
-                  <AlertDialogDescriptionAlt>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>تأكيد حذف المقالات القديمة</AlertDialogTitle>
+                  <AlertDialogDescription>
                     هل أنت متأكد من رغبتك في حذف جميع المقالات التي يزيد عمرها عن 7 أيام؟ لا يمكن التراجع عن هذا الإجراء.
-                  </AlertDialogDescriptionAlt>
-                </AlertDialogHeaderAlt>
-                <AlertDialogFooterAlt>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
                   <AlertDialogCancel>إلغاء</AlertDialogCancel>
                   <AlertDialogAction onClick={handleDeleteOldArticlesConfirm} disabled={isDeletingOld} className="bg-destructive hover:bg-destructive/90">
                     {isDeletingOld ? <Loader2 className="animate-spin"/> : "نعم، قم بالحذف"}
                   </AlertDialogAction>
-                </AlertDialogFooterAlt>
-              </AlertDialogContentAlt>
+                </AlertDialogFooter>
+              </AlertDialogContent>
             </AlertDialog>
         </Tabs>
     );
-
+}
