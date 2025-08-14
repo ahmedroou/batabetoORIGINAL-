@@ -451,13 +451,10 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
   return (
     <header
       dir="rtl"
-      className={cn(
-        'sticky top-0 z-40 w-full border-b border-white/10',
-        'bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60'
-      )}
+      className="w-full"
     >
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3">
-        {/* يسار: حساب/بريد/خروج */}
+        {/* Left: User actions */}
         <div className="flex items-center gap-1 md:gap-2">
           <TooltipProvider>
             <Tooltip>
@@ -490,14 +487,14 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
           </TooltipProvider>
         </div>
 
-        {/* وسط: شعار بطابيطو */}
+        {/* Center: App Name (visible on medium screens and up) */}
         <div className="hidden md:block">
             <span className="text-2xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-fuchsia-500">
                 بطابيطو
             </span>
         </div>
 
-        {/* يمين: متجر/أدمن */}
+        {/* Right: Main navigation */}
         <div className="flex items-center gap-1 md:gap-2">
           {userProfile.isAdmin && (
             <TooltipProvider>

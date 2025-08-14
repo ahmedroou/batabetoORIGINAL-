@@ -5,6 +5,7 @@ import { Inter, Merriweather, Cairo } from 'next/font/google';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/hooks/useAuth';
 import './globals.css';
+import GlobalNavBar from '@/components/layout/GlobalNavBar';
 
 // =============================================================
 // Society Layout (Enhanced) – gpt5
@@ -104,6 +105,7 @@ export default function RootLayout({
     >
       <body>
          <AuthProvider>
+            <GlobalNavBar />
             {children}
             <Toaster />
          </AuthProvider>
