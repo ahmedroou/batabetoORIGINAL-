@@ -34,8 +34,8 @@ export default function ActiveLobbiesList({ onJoin, onLobbiesUpdate }: ActiveLob
     const q = query(
       collection(db, 'games'),
       where('gameState', '==', 'lobby'),
-      where('expiresAt', '>', Timestamp.now()),
-      orderBy('expiresAt', 'asc')
+      orderBy('expiresAt', 'asc'),
+      where('expiresAt', '>', Timestamp.now())
     );
 
     const unsubscribe = onSnapshot(
