@@ -1,5 +1,4 @@
-
-'use client';
+"use client";
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -63,7 +62,7 @@ export default function GlobalNavBar() {
                   )}
                 >
                   <Icon className="h-4 w-4 md:h-5 md:w-5" />
-                  <span className="hidden md:inline">{label}</span>
+                  <span className="md:inline">{label}</span>
                 </a>
               </Link>
             );
