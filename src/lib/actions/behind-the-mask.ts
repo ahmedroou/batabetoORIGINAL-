@@ -384,6 +384,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
       update['mafiaState.phase'] = 'final_results';
       update.gameResult = winner;
       update['mafiaState.timerEndsAt'] = deleteField();
+      await updateLeagueScoresForGameEnd({ ...game, players: cleaned, gameResult: winner });
     } else {
       const { day } = getSettings(game);
       update['mafiaState.phase'] = 'day';

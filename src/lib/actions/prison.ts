@@ -352,7 +352,7 @@ export async function proceedToResultsInternal(
     const rejudgerId = game.prisonState?.rejudgeRequestsUsedBy?.slice(-1)[0];
     if (rejudgerId && roundScores[rejudgerId]) {
       roundScores[rejudgerId].points -= 1;
-      roundScores[rejudgerId].breakdown.push({ reason: 'اعتراض خاطئ', points: -1 } as any);
+      (roundScores[rejudgerId].breakdown as any[]).push({ reason: 'اعتراض خاطئ', points: -1 } as any);
     }
   }
 
@@ -537,6 +537,21 @@ export async function nextRound(gameId: string, hostId: string) {
       nextState = 'open_auction';
       timerSec = ps.settings.answeringTime || DEFAULTS.answeringTime;
     }
+    
+    const isGameOver = alivePlayers.length < 2 || (game.round || 0) >= (game.prisonState?.settings.rounds || DEFAULTS.maxRounds);
+    if(isGameOver) {
+        const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) => ((game.playerScores![a] || 0) > (game.playerScores![b] || 0) ? a : b), Object.keys(game.playerScores || {})[0] || '');
+        const finalUpdate = {
+             gameState: 'final_results' as const,
+             gameResult: { winner: winnerId, message: 'انتهت اللعبة' },
+             'prisonState.timerEndsAt': deleteField(),
+             stateVersion: increment(1),
+        };
+        tx.update(gameRef, finalUpdate);
+        gameDataForLeagueUpdate = {...game, ...finalUpdate};
+        return;
+    }
+
 
     tx.update(gameRef, {
       players: updatedPlayers,
