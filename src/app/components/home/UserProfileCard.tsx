@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo } from "react";
@@ -27,6 +28,12 @@ interface UserProfileCardProps {
 export default function UserProfileCard({ userProfile, currentRank, socialRanks }: UserProfileCardProps) {
   // Sorted ranks (stable copy)
   const sortedRanks = useMemo(() => [...socialRanks].sort((a, b) => a.threshold - b.threshold), [socialRanks]);
+
+  // Active decree overrides rank name visually
+  const activeDecree = useMemo(() => 
+      userProfile?.decrees?.find((d) => d.until && new Date(d.until) > new Date()),
+    [userProfile?.decrees]
+  );
 
   // Figure out next rank + progress
   const { nextRank, pointsForCurrentRank, pointsForNextRank } = useMemo(() => {
@@ -203,3 +210,4 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
     </div>
   );
 }
+
