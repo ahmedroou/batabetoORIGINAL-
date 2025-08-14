@@ -350,14 +350,14 @@ export default function NewsTab() {
                         <CardContent className="space-y-4">
                              <div>
                                 <h4 className="font-bold">توليد مقال اليوم</h4>
-                                <p className="text-xs text-muted-foreground mb-2">سيقوم الذكاء الاصطناعي بتحليل الأحداث الأخيرة لكتابة مقال جديد مع صورة حصرية.</p>
+                                <p className="text-xs text-muted-foreground mb-2">سيقوم الذكاء الاصطناعي بتحليل الأحداث الأخيرة وكتابة مقال جديد عنها.</p>
                                 <div className="space-y-2">
                                     <Label htmlFor="ai-directive">توجيه (اختياري)</Label>
                                     <Input id="ai-directive" value={aiDirective} onChange={e => setAiDirective(e.target.value)} placeholder="مثال: ركز على الصراع بين اللاعب س واللاعب ص" />
                                 </div>
                                 <Button className="w-full mt-2" onClick={handleRunAiJournalist} disabled={isGeneratingArticle}>
-                                    {isGeneratingArticle ? <Loader2 className="animate-spin" /> : <><ImageIcon className='ml-2'/> <BrainCircuit className='ml-2'/></>}
-                                    توليد مقال وصورة
+                                    {isGeneratingArticle ? <Loader2 className="animate-spin" /> : <BrainCircuit className='ml-2'/>}
+                                    توليد مقال
                                 </Button>
                              </div>
                              <div className="pt-4 border-t">
@@ -473,3 +473,4 @@ export default function NewsTab() {
             </AlertDialog>
         </Tabs>
     );
+

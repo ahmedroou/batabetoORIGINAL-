@@ -1,7 +1,7 @@
 'use server';
 
 /**
- * @fileOverview AI flow to generate a daily news article summarizing game events, including a unique cover image.
+ * @fileOverview AI flow to generate a daily news article summarizing game events.
  *
  * - generateNewsArticle - The main function that orchestrates the generation.
  */
@@ -143,33 +143,11 @@ const newsGeneratorFlow = ai.defineFlow(
       throw new Error('AI Writer failed to produce an article.');
     }
 
-    // Step 3: Generate an image based on the headline
-    let imageUrl = "";
-    try {
-        const imagePrompt = `Generate a symbolic, high-contrast, digital art style image representing the following news headline: "${draftArticle.headline}". The style should be like a dramatic newspaper illustration, using dark tones with highlights of purple and red.`;
-        const { media } = await ai.generate({
-            model: 'googleai/gemini-2.0-flash-preview-image-generation',
-            prompt: imagePrompt,
-            config: {
-                responseModalities: ['TEXT', 'IMAGE'],
-            },
-        });
-        
-        if (media?.url) {
-            imageUrl = media.url;
-        } else {
-             console.warn("Image generation succeeded but returned no media URL.");
-        }
-    } catch (error) {
-        // Log the error but don't fail the entire flow if image generation fails
-        console.error("AI Image Generation failed:", error);
-    }
-
     return {
       headline: draftArticle.headline,
       body: draftArticle.body,
       category: 'أخبار اللعبة',
-      imageUrl: imageUrl, 
+      imageUrl: "", // Removed image generation
     };
   }
 );
