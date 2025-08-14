@@ -1,5 +1,3 @@
-
-
 /**
  * @fileoverview This file contains helper functions specific to the "Trap Answer" game logic.
  * These are pure functions, designed to be easily testable and separate from server-side effects.
@@ -37,11 +35,12 @@ export function calculateTrapAnswerScores(
     const answerGroups: { text: string; authors: string[] }[] = [];
     Object.entries(playerAnswers).forEach(([authorId, answerText]) => {
         if (answerText === null || answerText.trim() === '') return;
-        const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, answerText) > SIMILARITY_THRESHOLD);
+        const trimmedAnswer = answerText.trim();
+        const similarGroup = answerGroups.find(g => safeCompareStrings(g.text, trimmedAnswer) > SIMILARITY_THRESHOLD);
         if (similarGroup) {
             similarGroup.authors.push(authorId);
         } else {
-            answerGroups.push({ text: answerText, authors: [authorId] });
+            answerGroups.push({ text: trimmedAnswer, authors: [authorId] });
         }
     });
 

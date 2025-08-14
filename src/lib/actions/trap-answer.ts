@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -106,13 +107,22 @@ function buildShuffledAnswers(question: TrapQuestion, playerAnswers: Record<stri
   );
 
   const all = new Set<string>([question.answer]);
-  traps.forEach((t) => all.add(t));
+  traps.forEach((t) => {
+      // Don't add a trap if it's too similar to the correct answer
+      if (safeCompareStrings(t, question.answer) < 0.95) {
+          all.add(t);
+      }
+  });
 
+  // Add dummy answers only if we have less than 4 unique options
   if (all.size < 4 && Array.isArray(question.dummyAnswers) && question.dummyAnswers.length > 0) {
     const shuffledDummies = shuffle([...question.dummyAnswers]);
     for (const d of shuffledDummies) {
       if (all.size >= 4) break;
-      all.add(d);
+       // Also check similarity for dummies to avoid confusion
+      if (safeCompareStrings(d, question.answer) < 0.95) {
+         all.add(d);
+      }
     }
   }
 
@@ -166,7 +176,6 @@ export async function updateGameSettings(
 export async function startTrapAnswerGame(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
 
-  // مصدر الأقسام الموثوق (كما هو سلوك الملف الأصلي)
   const categoriesResult = await getTrapAnswerCategories();
   ensure(categoriesResult.success && Array.isArray(categoriesResult.categories) && categoriesResult.categories.length > 0,
     'لا يمكن بدء اللعبة، لم يتم العثور على أقسام أسئلة صالحة.'
@@ -215,7 +224,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
     ensure(snap.exists(), 'اللعبة غير موجودة.');
 
     const game = snap.data() as Game;
-    if (game.gameState !== 'category-selection') return; // التزام بالسلوك الأصلي
+    if (game.gameState !== 'category-selection') return;
 
     const turnOrder = game.trapAnswerState?.turnOrder || [];
     const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
@@ -223,7 +232,6 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
 
     ensure(currentTurnPlayerId === playerId, 'ليس دورك لاختيار القسم.');
 
-    // نفس نهج الاستعلام العشوائي المستخدم أصلاً
     const randomQuestion = await fetchRandomQuestionByCategory(category);
 
     const answerTime = game.trapAnswerState?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
@@ -252,8 +260,8 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
 
     const game = snap.data() as Game;
 
-    if (game.gameState !== 'answer-submission') return; // الالتزام بالسلوك
-    if (hasOwn(game.trapAnswerState?.playerAnswers || {}, playerId)) return; // منع التكرار
+    if (game.gameState !== 'answer-submission') return;
+    if (hasOwn(game.trapAnswerState?.playerAnswers || {}, playerId)) return;
 
     const finalAnswer = answer.trim() === '' ? null : answer.trim();
     const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
@@ -296,7 +304,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
     const game = snap.data() as Game;
 
-    if (game.gameState !== 'guessing') return; // الالتزام بالسلوك
+    if (game.gameState !== 'guessing') return;
     if (hasOwn(game.trapAnswerState?.playerGuesses || {}, playerId)) return;
 
     const finalGuess = guess === null ? TIMEOUT_TOKEN : guess;
@@ -331,13 +339,14 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
 
       const game = snap.data() as Game;
       requireHost(game, hostId);
-      if (game.gameState !== 'round-results') return; // التزام
+      if (game.gameState !== 'round-results') return;
 
       const currentRound = game.round || 0;
       const totalRounds = game.trapAnswerState?.settings.rounds || 10;
 
       if (currentRound >= totalRounds) {
-        const finalAwardsResult = calculateEndOfGameAwards(game);
+        const allRanks = await getRanks();
+        const finalAwardsResult = calculateEndOfGameAwards(game, allRanks);
         const winnerId = finalAwardsResult.winUpdate?.userId || '';
 
         const finalGameData: Game = {
