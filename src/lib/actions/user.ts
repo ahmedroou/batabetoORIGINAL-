@@ -1,5 +1,3 @@
-
-
 'use server';
 
 /**
@@ -26,7 +24,7 @@ import {
 import { calculateEndOfGameAwards } from './user/awards';
 import { giveReward, applyPunishment, humiliatePlayer, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax, liftPunishment } from './user/social';
 import { requestAllegiance, respondToAllegianceRequest } from './user/allegiance';
-import { joinChallenge } from './challenges';
+import { joinChallenge } from '../challenges';
 
 
 export {
@@ -90,4 +88,5 @@ export {
     
 
     
+
 

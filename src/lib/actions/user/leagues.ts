@@ -1,5 +1,3 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -419,4 +417,3 @@ export async function updateLeagueScoresForGameEnd(game: Game) {
         console.error("Error updating league scores after game end:", error);
     }
 }
-

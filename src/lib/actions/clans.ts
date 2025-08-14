@@ -1,4 +1,3 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -14,7 +13,10 @@ import {
     increment,
     arrayUnion,
     getDoc,
-    arrayRemove
+    arrayRemove,
+    where,
+    setDoc,
+    deleteDoc
 } from 'firebase/firestore';
 import type { Clan, Player, UserProfile, ClanMember, ClanWarInvitation, Game } from '@/types';
 import { getPlayerFromUserId } from './user';

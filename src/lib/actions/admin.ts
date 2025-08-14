@@ -1372,7 +1372,7 @@ export async function deleteOldArticles() {
     for (const group of chunkArray(refs)) {
       const b = writeBatch(db);
       group.forEach((r) => b.delete(r));
-      await b.commit();
+      await batch.commit();
       deleted += group.length;
     }
 

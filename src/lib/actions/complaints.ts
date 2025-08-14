@@ -1,5 +1,3 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -40,7 +38,7 @@ export async function getComplaints(): Promise<{ success: boolean; complaints?: 
     try {
         const complaintsCol = collection(db, 'complaints');
         // This query requires a composite index on (status, createdAt)
-        const q = query(complaintsCol, where('status', '==', 'pending'), orderBy('createdAt', 'asc'));
+        const q = query(complaintsCol, orderBy('createdAt', 'desc'));
         const snapshot = await getDocs(q);
 
         const complaints = snapshot.docs.map(doc => {
