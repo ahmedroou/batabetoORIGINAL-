@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player, WordWarCard } from "@/types";
@@ -37,6 +38,7 @@ import {
   TimerReset,
   Wand2,
   ShieldQuestion,
+  Timer,
 } from "lucide-react";
 import { PlayerAvatar } from "../PlayerAvatar";
 import * as roomActions from "@/lib/actions/room";
@@ -58,7 +60,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { CountdownTimer } from "@/components/game/CountdownTimer";
 
 /**
  * Word War — React UI v2
@@ -89,7 +90,8 @@ const getTimerExpiryMs = (game: Game): number | null => {
   // v2 timer structure
   if (ww.timer) {
     const t = ww.timer;
-    if (t.endsAtApprox?.toMillis) return t.endsAtApprox.toMillis();
+    // endsAtApprox is a client-side convenience, but startedAt + duration is authoritative
+    if (t.endsAtApprox) return t.endsAtApprox.toMillis ? t.endsAtApprox.toMillis() : new Date(t.endsAtApprox).getTime();
     if (t.startedAt?.toMillis && typeof t.durationSec === "number") {
       return t.startedAt.toMillis() + t.durationSec * 1000;
     }
@@ -153,6 +155,28 @@ const ScoreCounter = ({
     <span className="text-[10px] font-semibold tracking-wide">{label}</span>
   </div>
 );
+
+// New CountdownTimer specific for this UI
+function CountdownTimer({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) {
+  const [timeLeft, setTimeLeft] = useState(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000));
+
+  useEffect(() => {
+    const update = () => {
+      const remaining = Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000);
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        onExpire();
+        clearInterval(id);
+      }
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [expiryTimestamp, onExpire]);
+
+  return <span>{timeLeft}</span>;
+}
+
 
 export default function WordWarGame({ game, self }: WordWarGameProps) {
   const { toast } = useToast();
@@ -682,7 +706,7 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
         {timerExpiryMs && game.gameState !== "final_results" && game.gameState !== "board_reveal" && (
           <div className="sticky top-2 self-end z-20 mr-2">
             <div className="flex items-center gap-2 bg-white/80 backdrop-blur px-2 py-1 rounded-full border shadow-sm">
-              <TimerReset className="w-4 h-4 text-indigo-600" />
+              <Timer className="w-4 h-4 text-indigo-600" />
               <CountdownTimer expiryTimestamp={timerExpiryMs} onExpire={onTimeout} />
             </div>
           </div>
