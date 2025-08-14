@@ -97,7 +97,7 @@ const isSamePrice = (
 ) => !a || !b ? a === b : a.price === b.price && a.currency === b.currency;
 
 // -----------------------------
-// Avatar Card (reusable)
+// Avatar Card (reusable & memoized)
 // -----------------------------
 interface AvatarTileProps {
   avatarId: string;
@@ -105,12 +105,12 @@ interface AvatarTileProps {
   basePrice: Omit<AvatarPrice, "avatarId"> | undefined;
   isDefault: boolean;
   disabled?: boolean;
-  onPriceChange: (price: number) => void;
-  onCurrencyChange: (currency: "coins" | "diamonds") => void;
-  onSetDefault?: () => void;
+  onPriceChange: (id: string, price: number) => void;
+  onCurrencyChange: (id: string, currency: "coins" | "diamonds") => void;
+  onSetDefault?: (id: string) => void;
 }
 
-function AvatarTile({
+const AvatarTile = React.memo(function AvatarTile({
   avatarId,
   price,
   basePrice,
@@ -149,7 +149,7 @@ function AvatarTile({
           <button
             type="button"
             title="تعيين كشخصية افتراضية"
-            onClick={onSetDefault}
+            onClick={() => onSetDefault(avatarId)}
             className={cn(
               "absolute top-2 left-2 grid h-8 w-8 place-items-center rounded-full bg-black/40 backdrop-blur hover:bg-black/60 transition",
               isDefault && "text-yellow-400"
@@ -166,13 +166,13 @@ function AvatarTile({
           inputMode="numeric"
           className="text-center"
           value={price?.price ?? ""}
-          onChange={(e) => onPriceChange(Number(e.target.value))}
+          onChange={(e) => onPriceChange(avatarId, Number(e.target.value))}
           placeholder="السعر"
           disabled={disabled || isDefault}
         />
         <Select
           value={(price?.currency as "coins" | "diamonds") || "coins"}
-          onValueChange={(v: "coins" | "diamonds") => onCurrencyChange(v)}
+          onValueChange={(v: "coins" | "diamonds") => onCurrencyChange(avatarId, v)}
           disabled={disabled || isDefault}
         >
           <SelectTrigger className="w-24">
@@ -200,7 +200,64 @@ function AvatarTile({
       )}
     </div>
   );
+});
+
+// -----------------------------
+// Rank Row (with own state)
+// -----------------------------
+interface RankRowProps {
+  rank: SocialRank;
+  onUpdate: (field: keyof SocialRank, value: any) => void;
+  onRemove: () => void;
+  disabled?: boolean;
 }
+
+const RankRow = React.memo(function RankRow({ rank, onUpdate, onRemove, disabled }: RankRowProps) {
+  const IconComp = rankIconMap[rank.icon] || Star;
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-black/20 p-2">
+      <Input
+        type="number"
+        className="w-28"
+        value={rank.threshold}
+        onChange={(e) => onUpdate("threshold", parseInt(e.target.value || "0", 10))}
+        placeholder="النقاط"
+        disabled={disabled}
+      />
+      <Input
+        className="flex-1"
+        value={rank.name}
+        onChange={(e) => onUpdate("name", e.target.value)}
+        placeholder="اسم اللقب"
+        disabled={disabled}
+      />
+      <Select value={rank.icon} onValueChange={(v) => onUpdate("icon", v)} disabled={disabled}>
+        <SelectTrigger className="w-36">
+          <SelectValue>
+            <div className="flex items-center gap-2">
+              <IconComp className="h-4 w-4" />
+              <span>{rank.icon}</span>
+            </div>
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {Object.keys(rankIconMap).map((name) => {
+            const I = rankIconMap[name];
+            return (
+              <SelectItem key={name} value={name}>
+                <div className="flex items-center gap-2"><I className="h-4 w-4"/><span>{name}</span></div>
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+      <Button size="icon" variant="destructive" onClick={onRemove} disabled={disabled}>
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+});
+
 
 // -----------------------------
 // Main Admin Store
@@ -236,6 +293,7 @@ export default function AdminStoreClient() {
   const [query, setQuery] = useState("");
   const [showOnlyChanged, setShowOnlyChanged] = useState(false);
   const [density, setDensity] = useState<"cozy" | "compact">("cozy");
+  const [pendingRemoveIndex, setPendingRemoveIndex] = useState<number | null>(null);
 
   const debouncedQuery = useDebounced(query, 250);
 
@@ -303,12 +361,12 @@ export default function AdminStoreClient() {
     if (userProfile?.isAdmin) fetchPageData();
   }, [userProfile?.isAdmin, fetchPageData]);
 
-  // Warn on unsaved changes
   const dirtyRegular = useMemo(() =>
-    Object.keys(prices).some((id) => !isSamePrice(prices[id], basePrices[id])),
+    AVATAR_IDS.some((id) => !isSamePrice(prices[id], basePrices[id])),
   [prices, basePrices]);
+
   const dirtyPunish = useMemo(() =>
-    Object.keys(punishmentPrices).some((id) => !isSamePrice(punishmentPrices[id], basePunishmentPrices[id])),
+    PUNISHMENT_AVATAR_IDS.some((id) => !isSamePrice(punishmentPrices[id], basePunishmentPrices[id])),
   [punishmentPrices, basePunishmentPrices]);
 
   const hasDirty = dirtyRegular || dirtyPunish;
@@ -323,6 +381,29 @@ export default function AdminStoreClient() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasDirty]);
 
+  const handleSavePrices = async (tab: "regular" | "punishment") => {
+    setIsSaving(true);
+    const current = tab === "regular" ? prices : punishmentPrices;
+    const allIds = tab === "regular" ? AVATAR_IDS : PUNISHMENT_AVATAR_IDS;
+
+    const payload: AvatarPrice[] = allIds.map(id => ({
+      avatarId: id,
+      price: current[id]?.price ?? -1, // -1 or another sentinel for "not for sale"
+      currency: current[id]?.currency ?? 'coins'
+    }));
+
+    const action = tab === "regular" ? setAvatarPrices : setPunishmentAvatarPrices;
+    const res = await action(payload);
+    if (res.success) {
+      toast({ title: "تم الحفظ", description: `تم حفظ أسعار ${tab === 'regular' ? 'المتجر العادي' : 'متجر العقوبات'}.` });
+      if (tab === "regular") setBasePrices({ ...prices });
+      else setBasePunishmentPrices({ ...punishmentPrices });
+    } else {
+      toast({ title: "فشل الحفظ", description: res.error, variant: "destructive" });
+    }
+    setIsSaving(false);
+  };
+  
   // Keyboard: Ctrl/Cmd+S to save current store tab
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -338,6 +419,7 @@ export default function AdminStoreClient() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, storeTab, prices, punishmentPrices, ranks]);
 
   // -----------------------------
@@ -352,20 +434,21 @@ export default function AdminStoreClient() {
     return filtered.filter((id) => !isSamePrice(map[id], base[id]));
   }, [storeTab, prices, punishmentPrices, basePrices, basePunishmentPrices, debouncedQuery, showOnlyChanged]);
 
-  const setPrice = (id: string, v: number) => {
-    if (storeTab === "regular") setPrices((p) => ({ ...p, [id]: { ...(p[id] || { price: 0, currency: "coins" }), price: Number(v) } }));
-    else setPunishmentPrices((p) => ({ ...p, [id]: { ...(p[id] || { price: 0, currency: "coins" }), price: Number(v) } }));
-  };
-  const setCurrency = (id: string, v: "coins" | "diamonds") => {
-    if (storeTab === "regular") setPrices((p) => ({ ...p, [id]: { ...(p[id] || { price: 0, currency: "coins" }), currency: v } }));
-    else setPunishmentPrices((p) => ({ ...p, [id]: { ...(p[id] || { price: 0, currency: "coins" }), currency: v } }));
-  };
+  const handlePriceChange = useCallback((id: string, value: number) => {
+    const setter = storeTab === 'regular' ? setPrices : setPunishmentPrices;
+    setter(p => ({ ...p, [id]: { ...(p[id] || { price: 0, currency: 'coins'}), price: value }}));
+  }, [storeTab]);
+
+  const handleCurrencyChange = useCallback((id: string, value: 'coins' | 'diamonds') => {
+      const setter = storeTab === 'regular' ? setPrices : setPunishmentPrices;
+      setter(p => ({ ...p, [id]: { ...(p[id] || { price: 0, currency: 'coins'}), currency: value }}));
+  }, [storeTab]);
+  
 
   const handleSetDefault = async (id: string) => {
     const res = await setDefaultAvatar(id);
     if (res.success) {
       setDefaultAvatarId(id);
-      // Ensure default avatar is always free coins=0
       setPrices((p) => ({ ...p, [id]: { price: 0, currency: "coins" } }));
       toast({ title: "تم التعيين", description: `${id} أصبحت الشخصية الافتراضية (مجانية).` });
     } else {
@@ -373,27 +456,6 @@ export default function AdminStoreClient() {
     }
   };
 
-  const handleSavePrices = async (tab: "regular" | "punishment") => {
-    setIsSaving(true);
-    const current = tab === "regular" ? prices : punishmentPrices;
-    const base = tab === "regular" ? basePrices : basePunishmentPrices;
-
-    // Save only changed items
-    const changed: AvatarPrice[] = Object.entries(current)
-      .filter(([id, p]) => !isSamePrice(p, base[id]))
-      .map(([avatarId, p]) => ({ avatarId, price: p.price ?? 0, currency: (p.currency as any) || "coins" }));
-
-    const action = tab === "regular" ? setAvatarPrices : setPunishmentAvatarPrices;
-    const res = await action(changed);
-    if (res.success) {
-      toast({ title: "تم الحفظ", description: `تم حفظ ${changed.length} عنصرًا بنجاح.` });
-      if (tab === "regular") setBasePrices({ ...prices });
-      else setBasePunishmentPrices({ ...punishmentPrices });
-    } else {
-      toast({ title: "فشل الحفظ", description: res.error, variant: "destructive" });
-    }
-    setIsSaving(false);
-  };
 
   const bulkApply = (payload: { price?: number; currency?: "coins" | "diamonds" }) => {
     const ids = visibleAvatarIds; // apply on currently visible (after search/filter)
@@ -463,17 +525,21 @@ export default function AdminStoreClient() {
   // -----------------------------
   // Ranks
   // -----------------------------
-  const handleRankChange = (index: number, field: keyof SocialRank, value: string | number) => {
+  const handleRankChange = useCallback((index: number, field: keyof SocialRank, value: string | number) => {
     setRanks((prev) => {
       const copy = [...prev];
-      (copy[index] as any)[field] = value;
+      if (copy[index]) {
+        (copy[index] as any)[field] = value;
+      }
       return copy;
     });
-  };
+  }, []);
 
-  const [pendingRemoveIndex, setPendingRemoveIndex] = useState<number | null>(null);
-  const confirmRemoveRank = (index: number) => setPendingRemoveIndex(index);
-  const actuallyRemoveRank = () => {
+  const handleRemoveRank = useCallback((index: number) => {
+    setPendingRemoveIndex(index);
+  }, []);
+  
+  const confirmRemoveRank = () => {
     if (pendingRemoveIndex == null) return;
     setRanks((prev) => prev.filter((_, i) => i !== pendingRemoveIndex));
     setPendingRemoveIndex(null);
@@ -489,15 +555,18 @@ export default function AdminStoreClient() {
 
   const handleSaveRanks = async () => {
     setIsSavingRanks(true);
-    // validate
     const sorted = [...ranks].sort((a, b) => a.threshold - b.threshold);
     const dup = new Set<number>();
+    let hasDup = false;
     sorted.forEach((r) => {
-      if (dup.has(r.threshold)) {
-        toast({ title: "تحذير", description: "هناك عتبات مكررة للألقاب. تأكد من تفرّدها.", variant: "destructive" });
-      }
+      if (dup.has(r.threshold)) hasDup = true;
       dup.add(r.threshold);
     });
+    if(hasDup) {
+      toast({ title: "تحذير", description: "هناك عتبات مكررة للألقاب. تأكد من تفرّدها.", variant: "destructive" });
+      setIsSavingRanks(false);
+      return;
+    }
 
     const res = await setSocialRanks(sorted);
     if (res.success) {
@@ -685,9 +754,9 @@ export default function AdminStoreClient() {
                           basePrice={currentBase[id]}
                           isDefault={storeTab === "regular" && id === defaultAvatarId}
                           disabled={isLoadingData}
-                          onPriceChange={(v) => setPrice(id, v)}
-                          onCurrencyChange={(v) => setCurrency(id, v)}
-                          onSetDefault={storeTab === "regular" ? () => handleSetDefault(id) : undefined}
+                          onPriceChange={handlePriceChange}
+                          onCurrencyChange={handleCurrencyChange}
+                          onSetDefault={storeTab === "regular" ? handleSetDefault : undefined}
                         />
                       ))}
                     </div>
@@ -745,49 +814,15 @@ export default function AdminStoreClient() {
                         ))}
                       </div>
                     ) : (
-                      ranks.map((rank, index) => {
-                        const IconComp = rankIconMap[rank.icon] || Star;
-                        return (
-                          <div key={`${rank.name}-${index}`} className="flex items-center gap-2 rounded-md bg-black/20 p-2">
-                            <Input
-                              type="number"
-                              className="w-28"
-                              value={rank.threshold}
-                              onChange={(e) => handleRankChange(index, "threshold", parseInt(e.target.value || "0", 10))}
-                              placeholder="النقاط"
-                            />
-                            <Input
-                              className="flex-1"
-                              value={rank.name}
-                              onChange={(e) => handleRankChange(index, "name", e.target.value)}
-                              placeholder="اسم اللقب"
-                            />
-                            <Select value={rank.icon} onValueChange={(v) => handleRankChange(index, "icon", v)}>
-                              <SelectTrigger className="w-36">
-                                <SelectValue>
-                                  <div className="flex items-center gap-2">
-                                    <IconComp className="h-4 w-4" />
-                                    <span>{rank.icon}</span>
-                                  </div>
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {Object.keys(rankIconMap).map((name) => {
-                                  const I = rankIconMap[name];
-                                  return (
-                                    <SelectItem key={name} value={name}>
-                                      <div className="flex items-center gap-2"><I className="h-4 w-4"/><span>{name}</span></div>
-                                    </SelectItem>
-                                  );
-                                })}
-                              </SelectContent>
-                            </Select>
-                            <Button size="icon" variant="destructive" onClick={() => confirmRemoveRank(index)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        );
-                      })
+                      ranks.map((rank, index) => (
+                        <RankRow
+                          key={`${rank.name}-${index}`}
+                          rank={rank}
+                          onUpdate={(field, value) => handleRankChange(index, field, value)}
+                          onRemove={() => handleRemoveRank(index)}
+                          disabled={isSavingRanks}
+                        />
+                      ))
                     )}
                     <Button variant="outline" className="w-full" onClick={handleAddRank}>
                       <PlusCircle className="me-2 h-4 w-4" /> إضافة لقب جديد
@@ -880,7 +915,7 @@ export default function AdminStoreClient() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction onClick={actuallyRemoveRank} className="bg-destructive hover:bg-destructive/90">
+            <AlertDialogAction onClick={confirmRemoveRank} className="bg-destructive hover:bg-destructive/90">
               حذف
             </AlertDialogAction>
           </AlertDialogFooter>
