@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -132,23 +133,65 @@ const indexHintMsg =
 
 export async function adminSearchUsers(searchTerm: string): Promise<UserProfile[]> {
   if (!stringNonEmpty(searchTerm)) return [];
-  const term = normalize(searchTerm).toLowerCase();
-
-  // ملاحظة: بدون حقل lowerName مسبقًا سنضطر لجلب ثم تصفية.
-  // تحسين مستقبلي: إضافة حقول searchable (lowerName, lowerEmail) و فهارس.
+  const term = normalize(searchTerm);
   const usersRef = collection(db, 'users');
-  const snapshot = await getDocs(usersRef);
 
-  const users = snapshot.docs
-    .map((d) => ({ uid: d.id, ...d.data() } as UserProfile))
-    .filter((u) => {
-      const name = (u.name || '').toLowerCase();
-      const email = (u.email || '').toLowerCase();
-      return name.includes(term) || email.includes(term);
+  // Create two separate queries for each field
+  const nameQuery = query(
+    usersRef,
+    where('name', '>=', term),
+    where('name', '<=', term + '\uf8ff')
+  );
+  const emailQuery = query(
+    usersRef,
+    where('email', '>=', term.toLowerCase()),
+    where('email', '<=', term.toLowerCase() + '\uf8ff')
+  );
+
+  try {
+    const [nameSnapshot, emailSnapshot] = await Promise.all([
+      getDocs(nameQuery),
+      getDocs(emailQuery)
+    ]);
+    
+    const usersMap = new Map<string, UserProfile>();
+
+    nameSnapshot.forEach(doc => {
+      if (!usersMap.has(doc.id)) {
+        usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
+      }
     });
 
-  // حد أقصى منطقي للنتائج
-  return users.slice(0, 50);
+    emailSnapshot.forEach(doc => {
+      if (!usersMap.has(doc.id)) {
+        usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
+      }
+    });
+    
+    const users = Array.from(usersMap.values());
+
+    return users.slice(0, 50); // Limit results for performance
+  } catch (error) {
+    console.error('Error searching users by specific fields:', error);
+    // As a fallback for potential "need index" errors, we can revert to the old method,
+    // though this is less efficient. It ensures the feature doesn't completely break.
+    console.warn('Falling back to client-side filtering for user search.');
+    try {
+        const fullSnapshot = await getDocs(usersRef);
+        const lowerCaseSearchTerm = term.toLowerCase();
+        const filteredUsers = fullSnapshot.docs
+            .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
+            .filter(
+                (user) =>
+                    user.name?.toLowerCase().includes(lowerCaseSearchTerm) ||
+                    user.email?.toLowerCase().includes(lowerCaseSearchTerm)
+            );
+        return filteredUsers.slice(0, 50);
+    } catch(fallbackError) {
+        console.error('Fallback user search also failed:', fallbackError);
+        return [];
+    }
+  }
 }
 
 /* ====================== البريد الإداري ====================== */
