@@ -77,7 +77,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
         <div className="absolute -inset-20 opacity-20 blur-2xl bg-[conic-gradient(var(--tw-gradient-stops))] animate-[spin_12s_linear_infinite]" />
       </div>
 
-      <Card className="rounded-[22px] overflow-hidden backdrop-blur-xl bg-background/70 border-transparent">
+      <Card className="rounded-[22px] overflow-hidden backdrop-blur-xl bg-black/60 border-transparent">
         <div className="absolute -top-24 -left-20 h-64 w-64 rounded-full opacity-20 blur-3xl bg-gradient-to-br from-primary/40 to-purple-500/40" />
         <div className="absolute -bottom-24 -right-20 h-64 w-64 rounded-full opacity-20 blur-3xl bg-gradient-to-br from-amber-400/30 to-fuchsia-500/30" />
 
@@ -89,7 +89,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                 <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-primary/50 to-fuchsia-500/40 blur-md" />
                 <PlayerAvatar
                   avatarId={userProfile.avatarId}
-                  className="w-24 h-24 rounded-full border-4 border-background/80 shadow-xl relative z-10"
+                  className="w-24 h-24 rounded-full border-4 border-black/80 shadow-xl relative z-10"
                   temporaryTitle={userProfile.temporaryTitle}
                   priority
                 />
@@ -103,8 +103,8 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
           {/* Main info */}
           <div className="flex-grow text-center md:text-right w-full">
             <div className="flex items-center justify-center md:justify-start gap-3 flex-wrap">
-              <p className="text-xl">أهلاً بك يا</p>
-              <CardTitle className="text-3xl font-serif font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-300 to-slate-100">
+              <p className="text-xl text-slate-300">أهلاً بك يا</p>
+              <CardTitle className="text-3xl font-serif font-extrabold tracking-tight text-amber-200">
                 {userProfile.name}!
               </CardTitle>
               {currentRank && (
