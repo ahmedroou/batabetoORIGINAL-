@@ -38,6 +38,8 @@ import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES, D
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
 import { generateGeniusChallenge as generateGeniusChallengeFlow } from '@/ai/flows/generate-genius-challenge';
 import type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput } from '@/ai/flows/generate-genius-challenge';
+import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
+
 
 // Import from the central user actions index
 import { 
@@ -1146,3 +1148,100 @@ export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: n
 export async function generateGeniusChallenge(input: GenerateGeniusChallengeInput): Promise<GenerateGeniusChallengeOutput> {
     return generateGeniusChallengeFlow(input);
 }
+
+async function getJournalistSourceMaterial(directive?: string) {
+    const oneDayAgo = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
+    const eventsQuery = query(collection(db, 'social_events'), where('timestamp', '>=', oneDayAgo), orderBy('timestamp', 'desc'));
+
+    const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const articlesQuery = query(collection(db, 'articles'), where('createdAt', '>=', sevenDaysAgo), orderBy('createdAt', 'desc'));
+
+    const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges, recent_games] = await Promise.all([
+        getDocs(eventsQuery),
+        getDocs(articlesQuery),
+        getTopUsers('leaderboardPoints', 5),
+        getAllUsers('punished'),
+        getTopPunisher(),
+        getChallenges(),
+        getRecentFinishedGames(10), // This function needs to be defined
+    ]);
+
+    const events = eventsSnapshot.docs.map(doc => ({ ...doc.data(), timestamp: doc.data().timestamp.toDate() } as SocialEvent));
+    const previous_articles = articlesSnapshot.docs.map(doc => ({ ...doc.data(), createdAt: doc.data().createdAt.toDate() } as Article));
+
+    return { 
+        events, 
+        previous_articles, 
+        leaderboard, 
+        punished_players, 
+        top_punisher, 
+        active_challenges, 
+        recent_games,
+        directive,
+        date: new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    };
+}
+
+async function getRecentFinishedGames(count: number): Promise<Game[]> {
+    const gamesCol = collection(db, 'games');
+    const q = query(gamesCol, where('gameState', '==', 'final_results'), orderBy('createdAt', 'desc'), limit(count));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data() as Game);
+}
+
+export async function runAiJournalist(directive?: string): Promise<{success: boolean, article?: { headline: string }, error?: string}> {
+    try {
+        const sourceMaterial = await getJournalistSourceMaterial(directive);
+        
+        const generatedArticle = await generateNewsArticle(sourceMaterial);
+
+        if (!generatedArticle.headline || !generatedArticle.body) {
+            throw new Error("فشل الذكاء الاصطناعي في توليد مقال متكامل.");
+        }
+        
+        await addDoc(collection(db, 'articles'), {
+            title: generatedArticle.headline,
+            content: generatedArticle.body,
+            category: generatedArticle.category,
+            imageUrl: "",
+            authorName: "المراسل الذكي",
+            authorId: "ai_journalist",
+            isPublished: true,
+            audience: ['public'],
+            createdAt: serverTimestamp(),
+            views: 0,
+        });
+        
+        return { success: true, article: { headline: generatedArticle.headline } };
+    } catch (error: any) {
+        console.error("Error running AI journalist:", error);
+        return { success: false, error: error.message || "حدث خطأ غير متوقع." };
+    }
+}
+
+
+export async function deleteOldArticles(): Promise<{success: boolean, deletedCount?: number, error?: string}> {
+    try {
+        const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const q = query(collection(db, 'articles'), where('createdAt', '<', sevenDaysAgo));
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+            return { success: true, deletedCount: 0 };
+        }
+        
+        const batch = writeBatch(db);
+        snapshot.docs.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        
+        await batch.commit();
+
+        return { success: true, deletedCount: snapshot.size };
+    } catch (error: any) {
+        console.error("Error deleting old articles:", error);
+        return { success: false, error: "فشل حذف المقالات القديمة." };
+    }
+}
+
+    
