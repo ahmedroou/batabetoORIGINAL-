@@ -27,7 +27,7 @@ import {
 import type { Game, Player, PlayerRole, NightAction, DayEvent, PrivateChatMessage, PublicChatMessage, GameResult, UserProfile, League, PrivateEvent, PlayerTeam } from '@/types';
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
-import { processDayInternal, checkForWinner, processNightInternal } from '@/lib/actions/helpers/behind-the-mask-helpers';
+import { processDayInternal, checkForWinner, processNightInternal } from './helpers/behind-the-mask-helpers';
 
 const ROLE_REVEAL_DURATION_SECONDS = 15;
 
