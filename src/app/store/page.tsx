@@ -11,9 +11,6 @@ import type { Metadata, Viewport } from 'next';
  * - Polished loading fallback that matches site visuals (stars/twinkling)
  */
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 export const metadata: Metadata = {
   title: 'متجر الشخصيات | بطابيطو',
   description:
