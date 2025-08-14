@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -59,54 +60,58 @@ export async function createChallenge(challengeData: CreateChallengeInput): Prom
 
 
 /**
- * Retrieves all challenges.
- * @returns {Promise<Challenge[]>} An array of challenges.
+ * Retrieves all challenges, optimized to reduce database reads.
+ * It fetches the latest 15 challenges and performs a single bulk fetch for top participants.
+ * @returns {Promise<Challenge[]>} An array of challenges with top participant data.
  */
 export async function getChallenges(): Promise<Challenge[]> {
     try {
         const challengesCol = collection(db, 'challenges');
-        const q = query(
-            challengesCol, 
-            orderBy('endsAt', 'desc')
-        );
+        // Optimization: Fetch only the latest 15 challenges to limit the main query size.
+        const q = query(challengesCol, orderBy('endsAt', 'desc'), limit(15));
         const snapshot = await getDocs(q);
         
-        const challenges = snapshot.docs.map(doc => {
+        let challenges = snapshot.docs.map(doc => {
             const data = doc.data();
-            // Ensure createdAt and endsAt are JavaScript Date objects
             const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date();
-            const endsAt = data.endsAt instanceof Timestamp ? data.endsAt.toDate() : new Date(Date.now() + 24 * 60 * 60 * 1000); // Fallback
+            const endsAt = data.endsAt instanceof Timestamp ? data.endsAt.toDate() : new Date(Date.now() + 24 * 60 * 60 * 1000);
             return {
                 id: doc.id,
                 ...data,
                 createdAt,
                 endsAt,
+                topParticipants: [], // Initialize with an empty array
             } as Challenge;
         });
 
-        // Fetch top 3 participants for each challenge
-        for (const challenge of challenges) {
+        // Optimization: Collect all top participant IDs from all challenges into a single set.
+        const allTopParticipantIds = new Set<string>();
+        challenges.forEach(challenge => {
             if (challenge.scores && Object.keys(challenge.scores).length > 0) {
                 const sortedParticipantIds = Object.keys(challenge.scores).sort((a, b) => (challenge.scores[b] || 0) - (challenge.scores[a] || 0));
-                const top3Ids = sortedParticipantIds.slice(0, 3);
-                
-                if (top3Ids.length > 0) {
-                     try {
-                        const usersQuery = query(collection(db, 'users'), where('__name__', 'in', top3Ids));
-                        const usersSnapshot = await getDocs(usersQuery);
-                        const topUsersData = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
-                        
-                        challenge.topParticipants = topUsersData.sort((a,b) => (challenge.scores[b.uid] || 0) - (challenge.scores[a.uid] || 0));
-                     } catch(e) {
-                         console.error(`Failed to fetch top participants for challenge ${challenge.id}`, e);
-                         challenge.topParticipants = [];
-                     }
-                } else {
-                     challenge.topParticipants = [];
-                }
-            } else {
-                 challenge.topParticipants = [];
+                sortedParticipantIds.slice(0, 3).forEach(id => allTopParticipantIds.add(id));
             }
+        });
+
+        // Optimization: Fetch all unique top participants in a single batch query.
+        if (allTopParticipantIds.size > 0) {
+            const idsArray = Array.from(allTopParticipantIds);
+            const usersQuery = query(collection(db, 'users'), where('__name__', 'in', idsArray));
+            const usersSnapshot = await getDocs(usersQuery);
+            const usersDataMap = new Map<string, UserProfile>();
+            usersSnapshot.docs.forEach(d => usersDataMap.set(d.id, { uid: d.id, ...d.data() } as UserProfile));
+            
+            // Map the fetched user data back to each challenge.
+            challenges.forEach(challenge => {
+                 if (challenge.scores && Object.keys(challenge.scores).length > 0) {
+                    const sortedParticipantIds = Object.keys(challenge.scores).sort((a, b) => (challenge.scores[b] || 0) - (challenge.scores[a] || 0));
+                    const top3Ids = sortedParticipantIds.slice(0, 3);
+                    challenge.topParticipants = top3Ids
+                        .map(id => usersDataMap.get(id))
+                        .filter((user): user is UserProfile => !!user)
+                        .sort((a,b) => (challenge.scores[b.uid] || 0) - (challenge.scores[a.uid] || 0));
+                 }
+            });
         }
         
         return challenges;
@@ -116,6 +121,7 @@ export async function getChallenges(): Promise<Challenge[]> {
         return [];
     }
 }
+
 
 /**
  * Gets full details for a single challenge, including the top 10 participants.
