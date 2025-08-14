@@ -15,23 +15,22 @@ import { GAME_ICONS, GAME_TYPE_NAMES } from '@/data/icons';
 
 interface ActiveLobbiesListProps {
   onJoin: (id: string) => Promise<void>;
+  onLobbiesUpdate: (lobbies: Game[]) => void;
 }
 
-export default function ActiveLobbiesList({ onJoin }: ActiveLobbiesListProps) {
+export default function ActiveLobbiesList({ onJoin, onLobbiesUpdate }: ActiveLobbiesListProps) {
   const { toast } = useToast();
   const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
   const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
   const [joiningLobbyId, setJoiningLobbyId] = useState<string | null>(null);
   const [now, setNow] = useState<number>(Date.now());
 
-  // تحديث الوقت كل ثانية لعرض العدّ التنازلي بدقة
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
-    // ترتيب تصاعدي حسب وقت الانتهاء لإبراز الغرف القريبة من الانقضاء أولاً
     const q = query(
       collection(db, 'games'),
       where('gameState', '==', 'lobby'),
@@ -44,6 +43,7 @@ export default function ActiveLobbiesList({ onJoin }: ActiveLobbiesListProps) {
       (snapshot) => {
         const lobbies = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Game[];
         setActiveLobbies(lobbies);
+        onLobbiesUpdate(lobbies); //
         setIsLoadingLobbies(false);
       },
       (error: any) => {
@@ -59,13 +59,12 @@ export default function ActiveLobbiesList({ onJoin }: ActiveLobbiesListProps) {
     );
 
     return () => unsubscribe();
-  }, [toast]);
+  }, [toast, onLobbiesUpdate]);
 
   const handleJoinClick = async (lobbyId: string) => {
     setJoiningLobbyId(lobbyId);
     try {
       await onJoin(lobbyId);
-      // في حالة فشل التنقل (لم يتم إلغاء التركيب) نعيد الزر للوضع الطبيعي بعد مهلة بسيطة
       setTimeout(() => setJoiningLobbyId((id) => (id === lobbyId ? null : id)), 3000);
     } catch (e: any) {
       setJoiningLobbyId(null);
@@ -120,7 +119,6 @@ export default function ActiveLobbiesList({ onJoin }: ActiveLobbiesListProps) {
       </CardHeader>
       <CardContent>
         <div className="relative">
-          {/* تأثير تدرّج خفيف أعلى/أسفل أثناء التمرير */}
           <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-background to-transparent" />
           <ScrollArea className="h-[360px] pr-4" aria-live="polite">
             <div className="space-y-3">{content}</div>
@@ -131,8 +129,6 @@ export default function ActiveLobbiesList({ onJoin }: ActiveLobbiesListProps) {
     </Card>
   );
 }
-
-// =============== عناصر فرعية ===============
 
 function LobbyRow({
   lobby,
@@ -165,7 +161,6 @@ function LobbyRow({
       transition={{ duration: 0.25 }}
       className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card/60 p-3 backdrop-blur supports-[backdrop-filter]:bg-card/40 hover:shadow-lg hover:shadow-primary/10"
     >
-      {/* هالة زخرفية خفيفة */}
       <div aria-hidden className="absolute -inset-px rounded-2xl opacity-40">
         <div className="absolute inset-0 rounded-2xl bg-[conic-gradient(from_0deg_at_50%_50%,hsl(var(--primary)/.08),transparent,transparent,hsl(var(--secondary)/.08),transparent)] blur-sm transition-opacity duration-300 group-hover:opacity-70" />
       </div>
@@ -195,7 +190,6 @@ function LobbyRow({
               <span className="truncate">المضيف: {hostName}</span>
             </div>
 
-            {/* شريط التقدم لاكتمال الغرفة */}
             <div className="mt-2 h-1.5 w-full rounded-full bg-muted/70">
               <motion.div
                 className={`h-full rounded-full ${isFull ? 'bg-destructive' : 'bg-primary'}`}
@@ -208,7 +202,6 @@ function LobbyRow({
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
-          {/* شريط تقدّم زمني رفيع حول الزر */}
           {expiresAt && (
             <div className="relative hidden sm:block h-9 w-9">
               <svg viewBox="0 0 36 36" className="absolute inset-0 -rotate-90">
@@ -256,12 +249,12 @@ function LobbyRow({
 
 function EmptyState() {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-dashed border-border/70 bg-card/60 p-8 text-center">
+    <div className="relative overflow-hidden rounded-2xl border border-dashed border-border/70 bg-card/60 p-7 text-center">
       <div aria-hidden className="pointer-events-none absolute -inset-px rounded-2xl opacity-60">
         <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(60%_60%_at_50%_0%,hsl(var(--primary)/.12),transparent_70%)]" />
       </div>
-      <div className="relative mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-gradient-to-br from-primary/10 to-secondary/10">
-        <Sparkles className="h-6 w-6 text-primary" />
+      <div className="relative mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-gradient-to-br from-primary/10 to-secondary/10">
+        <Sparkles className="h-5 w-5 text-primary" />
       </div>
       <p className="font-semibold">لا توجد غرف نشطة حاليًا</p>
       <p className="mt-1 text-sm text-muted-foreground">كن أول من ينشئ غرفة جديدة واستدعِ أصدقاءك! ✨</p>
@@ -269,12 +262,10 @@ function EmptyState() {
   );
 }
 
-// =============== أدوات مساعدة ===============
-
 function formatTimeLeft(expiresAt: Date | null, nowMs: number): { label: string; isUrgent: boolean; progressToExpire: number } {
   if (!expiresAt) return { label: '—', isUrgent: false, progressToExpire: 0 };
   const total = Math.max(0, expiresAt.getTime() - nowMs);
-  const isUrgent = total <= 60_000; // دقيقة أو أقل
+  const isUrgent = total <= 60_000;
 
   const mins = Math.floor(total / 60_000);
   const secs = Math.floor((total % 60_000) / 1000);
@@ -289,9 +280,6 @@ function formatTimeLeft(expiresAt: Date | null, nowMs: number): { label: string;
   } else {
     label = `${secs}ث`;
   }
-
-  // تقدير تقدّم الوقت نحو الانتهاء لعنصر SVG (0 → 1)
-  // إذا كان لديك مدة أصلية لم تُحفظ، سنفترض نافذة 15 دقيقة افتراضيًا لتأثير بصري معقول
   const ASSUMED_WINDOW_MS = 15 * 60_000;
   const timeToExpire = total;
   const progressToExpire = 1 - Math.min(1, timeToExpire / ASSUMED_WINDOW_MS);

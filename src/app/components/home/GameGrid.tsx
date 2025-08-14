@@ -9,11 +9,10 @@ import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/comp
 import { Button } from '@/components/ui/button';
 import { GAME_ICONS } from '@/data/icons';
 import type { Game } from '@/types';
-import { Star, Loader2 } from 'lucide-react';
+import { Star, Loader2, Heart, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-// نوع حالة التحميل
- type LoadingState =
+type LoadingState =
   | 'create-king-of-genius'
   | 'create-trap-answer'
   | 'create-behind-the-mask'
@@ -22,23 +21,27 @@ import { motion } from 'framer-motion';
   | 'create-educated-merchant'
   | null;
 
-// خريطة ألوان ولمسات لكل لعبة (تدرّجات + وسوم)
-const gameCards: Array<{
+const gameCardsData: Array<{
   type: Game['gameType'];
   title: string;
   description: string;
-  tag?: 'جديد' | 'مفضل' | 'مشهور';
+  defaultTag?: 'جديد';
   accent: { from: string; via?: string; to: string };
 }> = [
-  { type: 'king-of-genius', title: 'ساحة العباقرة', description: 'تحديات ذكاء وسرعة بديهة بين فريقين.', tag: 'مشهور', accent: { from: 'from-fuchsia-500/25', to: 'to-violet-500/25' } },
-  { type: 'word_war', title: 'حرب الكلمات', description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.', tag: 'مفضل', accent: { from: 'from-emerald-500/25', to: 'to-teal-500/25' } },
+  { type: 'king-of-genius', title: 'ساحة العباقرة', description: 'تحديات ذكاء وسرعة بديهة بين فريقين.', accent: { from: 'from-fuchsia-500/25', to: 'to-violet-500/25' } },
+  { type: 'word_war', title: 'حرب الكلمات', description: 'لمّح لفريقك لكشف كلماتكم قبل الخصم.', accent: { from: 'from-emerald-500/25', to: 'to-teal-500/25' } },
   { type: 'trap-answer', title: 'الجواب المفخخ', description: 'اكتب جوابًا خاطئًا ومقنعًا لخداع الآخرين.', accent: { from: 'from-amber-500/25', to: 'to-orange-500/25' } },
-  { type: 'behind-the-mask', title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.', tag: 'جديد', accent: { from: 'from-rose-500/25', to: 'to-red-500/25' } },
+  { type: 'behind-the-mask', title: 'خلف القناع', description: 'اكشف هوية القاتل قبل أن يقضي عليكم جميعًا.', defaultTag: 'جديد', accent: { from: 'from-rose-500/25', to: 'to-red-500/25' } },
   { type: 'prison', title: 'السجن', description: 'اجمع أكبر عدد من الإجابات الصحيحة لتفوز بالمزاد أو تخاطر بالعقوبة.', accent: { from: 'from-cyan-500/25', to: 'to-sky-500/25' } },
   { type: 'educated-merchant', title: 'التاجر المتعلم', description: 'اشترِ العقارات، أجب على الأسئلة، وأفلس خصومك.', accent: { from: 'from-purple-500/25', to: 'to-indigo-500/25' } },
 ];
 
-export default function GameGrid() {
+interface GameGridProps {
+    favoriteGame: string | null;
+    popularGame: string | null;
+}
+
+export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
   const [isLoading, setIsLoading] = useState<LoadingState>(null);
   const { toast } = useToast();
   const router = useRouter();
@@ -64,7 +67,6 @@ export default function GameGrid() {
 
   return (
     <div className="space-y-8 pt-8" dir="rtl">
-      {/* عنوان جذّاب */}
       <div className="text-center">
         <h2 className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary text-3xl md:text-4xl font-extrabold tracking-tight">
           اختر لعبتك
@@ -72,11 +74,23 @@ export default function GameGrid() {
         <p className="mt-1 text-muted-foreground">اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</p>
       </div>
 
-      {/* شبكة الألعاب */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
-        {gameCards.map((game, i) => {
+        {gameCardsData.map((game, i) => {
           const Icon = (GAME_ICONS as any)[game.type] || Star;
           const loadingThis = isLoading === (`create-${game.type}` as LoadingState);
+          
+          const isFavorite = game.type === favoriteGame;
+          const isPopular = game.type === popularGame;
+          let tag = game.defaultTag;
+          let TagIcon = Star;
+          if (isFavorite) {
+            tag = 'مفضلة';
+            TagIcon = Heart;
+          }
+          if (isPopular) {
+            tag = 'مشهورة';
+            TagIcon = TrendingUp;
+          }
 
           return (
             <motion.article
@@ -86,32 +100,24 @@ export default function GameGrid() {
               transition={{ duration: 0.35, delay: i * 0.05 }}
               className="group relative overflow-hidden rounded-2xl border bg-card/70 shadow-sm backdrop-blur transition-all hover:shadow-xl"
             >
-              {/* هالة خلفية متدرّجة */}
               <div aria-hidden className={`pointer-events-none absolute -inset-1 opacity-70 blur-2xl bg-gradient-to-br ${game.accent.from} ${game.accent.via ?? ''} ${game.accent.to}`} />
-
-              {/* حواف زخرفية */}
               <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10" />
 
               <Card className="relative h-full border-none bg-transparent shadow-none">
                 <CardHeader className="relative text-center">
-                  {/* شارة */}
-                  {game.tag && (
-                    <span className="absolute start-3 top-3 select-none rounded-full border border-white/10 bg-background/70 px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur">
-                      {game.tag}
+                  {tag && (
+                    <span className="absolute start-3 top-3 select-none rounded-full border border-white/10 bg-background/70 px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur inline-flex items-center gap-1">
+                      <TagIcon className="w-3 h-3" /> {tag}
                     </span>
                   )}
-
-                  {/* أيقونة داخل كبسولة */}
                   <div className="mx-auto mb-2 grid h-16 w-16 place-items-center rounded-2xl border border-white/15 bg-gradient-to-b from-background/70 to-background/40 shadow-inner">
                     <Icon className="h-10 w-10 text-primary transition-transform duration-300 group-hover:scale-105" />
                   </div>
-
                   <CardTitle className="text-xl font-bold tracking-tight">{game.title}</CardTitle>
                   <CardDescription className="mx-auto max-w-[28ch] leading-relaxed">
                     {game.description}
                   </CardDescription>
                 </CardHeader>
-
                 <CardFooter className="relative mt-auto">
                   <Button
                     className="w-full rounded-xl bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg transition-transform hover:opacity-90 focus-visible:translate-y-[1px]"
@@ -130,12 +136,8 @@ export default function GameGrid() {
                     )}
                   </Button>
                 </CardFooter>
-
-                {/* تأثير خدش ضوئي عند التحويم */}
                 <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-24 translate-y-10 bg-gradient-to-t from-black/10 to-transparent opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100" />
               </Card>
-
-              {/* تفعيل عبر لوحة المفاتيح */}
               <button
                 className="absolute inset-0 -z-10 cursor-pointer"
                 tabIndex={0}

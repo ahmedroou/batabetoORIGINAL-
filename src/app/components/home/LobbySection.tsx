@@ -11,8 +11,13 @@ import { Button } from "@/components/ui/button";
 import { LogIn, Users } from "lucide-react";
 import { joinGameRoom } from "@/lib/actions/room";
 import ActiveLobbiesList from "./ActiveLobbiesList";
+import type { Game } from '@/types';
 
-export default function LobbySection() {
+interface LobbySectionProps {
+    onLobbiesUpdate: (lobbies: Game[]) => void;
+}
+
+export default function LobbySection({ onLobbiesUpdate }: LobbySectionProps) {
     const [gameId, setGameId] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const { user, userProfile } = useAuth();
@@ -61,7 +66,7 @@ export default function LobbySection() {
                     </div>
                 </CardContent>
             </Card>
-            <ActiveLobbiesList onJoin={handleJoin} />
+            <ActiveLobbiesList onJoin={handleJoin} onLobbiesUpdate={onLobbiesUpdate} />
         </div>
     );
 }

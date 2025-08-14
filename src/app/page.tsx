@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Megaphone, Swords, X, Trophy, Gamepad2, Rocket, Sparkles } from 'lucide-react';
@@ -20,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { CompactChallengeList } from './components/home/CompactChallengeList';
 import ComplaintBubble from './components/home/ComplaintBubble';
+import type { Game } from '@/types';
 
 export default function Home() {
   const router = useRouter();
@@ -36,13 +37,48 @@ export default function Home() {
 
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const [showAnnouncement, setShowAnnouncement] = useState<boolean>(true);
+  const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
+
+  const handleLobbiesUpdate = useCallback((lobbies: Game[]) => {
+    setActiveLobbies(lobbies);
+  }, []);
+
+  const { favoriteGame, popularGame } = useMemo(() => {
+    // Determine favorite game based on user's win counts
+    const winCounts = userProfile?.winCounts || {};
+    let favGame: string | null = null;
+    let maxWins = 0;
+    Object.entries(winCounts).forEach(([gameType, wins]) => {
+      if (wins > maxWins) {
+        maxWins = wins;
+        favGame = gameType;
+      }
+    });
+
+    // Determine popular game based on active lobbies
+    const lobbyCounts: Record<string, number> = {};
+    activeLobbies.forEach(lobby => {
+        lobbyCounts[lobby.gameType] = (lobbyCounts[lobby.gameType] || 0) + 1;
+    });
+
+    let popGame: string | null = null;
+    let maxLobbies = 0;
+    Object.entries(lobbyCounts).forEach(([gameType, count]) => {
+        if (count > maxLobbies) {
+            maxLobbies = count;
+            popGame = gameType;
+        }
+    });
+
+    return { favoriteGame: favGame, popularGame: popGame };
+  }, [userProfile?.winCounts, activeLobbies]);
+
 
   useEffect(() => {
     const unsubAnnouncement = onSnapshot(doc(db, 'game_settings', 'announcement'), (docSnap) => {
       if (docSnap.exists()) {
         const text = (docSnap.data() as { text?: string }).text ?? null;
         setAnnouncement(text);
-        // كل إعلان جديد يظهر مجددًا حتى لو تم إغلاقه سابقًا
         if (text) setShowAnnouncement(true);
       }
     });
@@ -59,7 +95,6 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background" dir="rtl" lang="ar">
-      {/* خلفية محيطة إبداعية */}
       <AmbientBackground />
 
       <HomeHeader userProfile={userProfile} />
@@ -71,7 +106,6 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          {/* شريط الإعلانات */}
           <AnimatePresence>
             {announcement && showAnnouncement && (
               <motion.div
@@ -99,9 +133,7 @@ export default function Home() {
             )}
           </AnimatePresence>
 
-          {/* شبكة الصفحة الأساسية */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* العمود الأيمن: الملف الشخصي + إجراءات سريعة */}
             <div className="space-y-6">
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
                 <UserProfileCard userProfile={userProfile} currentRank={currentRank} socialRanks={socialRanks} />
@@ -132,7 +164,6 @@ export default function Home() {
               </motion.div>
             </div>
 
-            {/* العمود الأوسط + الأيسر: التحديات + الألعاب + اللوبي */}
             <div className="lg:col-span-2 space-y-6">
               <AnimatePresence>
                 {activeChallenges.length > 0 && (
@@ -160,14 +191,14 @@ export default function Home() {
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
                 <SectionHeader title="اكتشف الألعاب" icon={<Rocket className="h-5 w-5" />} subtitle="مجموعة مختارة بعناية لتناسب كل الأذواق" />
                 <div className="mt-3 rounded-2xl border border-border/60 bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/40">
-                  <GameGrid />
+                  <GameGrid favoriteGame={favoriteGame} popularGame={popularGame} />
                 </div>
               </motion.div>
 
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
                 <SectionHeader title="اللوبي" icon={<Gamepad2 className="h-5 w-5" />} subtitle="تواصل بسرعة مع اللاعبين والغرف المفتوحة" />
                 <div className="mt-3 rounded-2xl border border-border/60 bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/40">
-                  <LobbySection />
+                   <LobbySection onLobbiesUpdate={handleLobbiesUpdate} />
                 </div>
               </motion.div>
             </div>
@@ -175,7 +206,6 @@ export default function Home() {
         </motion.div>
       </main>
 
-      {/* الحوارات + الفقاعة */}
       <HomeDialogs
         user={user}
         userProfile={userProfile}
@@ -188,23 +218,15 @@ export default function Home() {
   );
 }
 
-/**
- * عناصر زخرفية وخلفيات مبتكرة
- * مصممة لتكون خفيفة وبدون تبعيات إضافية
- */
 function AmbientBackground() {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-      {/* هالات متوهجة */}
       <div className="absolute -top-40 -start-40 h-[38rem] w-[38rem] rounded-full bg-primary/25 blur-3xl opacity-40" />
       <div className="absolute -bottom-40 -end-40 h-[32rem] w-[32rem] rounded-full bg-fuchsia-500/20 blur-3xl" />
       <div className="absolute top-1/2 -translate-y-1/2 start-1/2 -translate-x-1/2 h-[28rem] w-[28rem] rounded-full bg-emerald-500/10 blur-3xl" />
-
-      {/* شبكة ناعمة */}
       <div className="absolute inset-0 opacity-40 [mask-image:radial-gradient(60%_60%_at_50%_30%,black,transparent)]">
         <div className="h-full w-full bg-[linear-gradient(to_right,hsl(var(--muted-foreground)/.08)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--muted-foreground)/.08)_1px,transparent_1px)] bg-[size:36px_36px]" />
       </div>
-      {/* توهج علوي */}
       <div className="absolute inset-x-0 -top-24 h-40 bg-gradient-to-b from-primary/30 to-transparent" />
     </div>
   );
@@ -249,7 +271,3 @@ function SectionHeader({ title, subtitle, icon }: { title: string; subtitle?: st
     </div>
   );
 }
-
-// ————————————————————————————————————————
-// تم بواسطة GPT-5 Thinking: تحسين بصري/حركي مع الحفاظ على البنية الحالية والمكونات الأصلية
-// ————————————————————————————————————————
