@@ -1,11 +1,10 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import type { Game, GeniusChallenge, Player } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { motion } from 'framer-motion';
-import { beginChallenge, handleTimeout } from '@/lib/actions/king-of-genius';
+import { handleTimeout } from '@/lib/actions/king-of-genius';
 import { useAuth } from '@/hooks/useAuth';
 
 interface ChallengeIntroProps {
@@ -83,4 +82,3 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
     </div>
   );
 }
-```
