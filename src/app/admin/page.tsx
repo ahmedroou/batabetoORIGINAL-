@@ -1,7 +1,8 @@
 
+
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -110,7 +111,7 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-export default function AdminPage() {
+function AdminPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { userProfile, loading } = useAuth();
@@ -364,4 +365,17 @@ export default function AdminPage() {
       </Dialog>
     </main>
   );
+}
+
+
+export default function AdminPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex min-h-screen w-full items-center justify-center">
+                <Loader2 className="h-10 w-10 animate-spin" />
+            </div>
+        }>
+            <AdminPageContent />
+        </Suspense>
+    )
 }
