@@ -71,10 +71,6 @@ const NewspaperHeader = ({ headlines }: { headlines: string[] }) => {
           )}
         </div>
       </div>
-      <style jsx>{`
-        .paper-bg { background: radial-gradient(1600px 600px at 50% -20%, rgba(0,0,0,0.06), transparent), #fafaf9; }
-        .ticker-mask { mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
-      `}</style>
     </header>
   );
 };
@@ -115,9 +111,6 @@ const ArticleCard = ({ article, isFeatured }: { article: Article; isFeatured?: b
           </div>
         </div>
       </article>
-      <style jsx>{`
-        .paper-card { background: #fff; border: 1px solid rgba(24,24,27,.12); border-radius: 14px; box-shadow: 0 1px 0 rgba(24,24,27,.03), 0 10px 20px -10px rgba(24,24,27,.15); }
-      `}</style>
     </Link>
   );
 };
