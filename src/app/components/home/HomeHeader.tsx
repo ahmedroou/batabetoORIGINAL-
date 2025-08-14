@@ -453,8 +453,7 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
       dir="rtl"
       className={cn(
         'sticky top-0 z-40 w-full border-b border-white/10',
-        'bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background/60 to-background/80',
-        'backdrop-blur supports-[backdrop-filter]:bg-background/60'
+        'bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60'
       )}
     >
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3">

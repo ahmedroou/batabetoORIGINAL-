@@ -7,7 +7,7 @@ import type { UserProfile, SocialRank } from "@/types";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { Button } from "@/components/ui/button";
-import { CircleDollarSign, Diamond, Edit, Star, Trophy, ShoppingBag, History } from "lucide-react";
+import { CircleDollarSign, Diamond, Edit, Star, Trophy, History } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
@@ -82,8 +82,8 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
           className={[
             "rounded-2xl",
             "border border-violet-300/50 dark:border-violet-400/20",
-            "bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60",
-            "dark:bg-gradient-to-b dark:from-violet-950/50 dark:to-slate-950/30",
+            "bg-white/70 backdrop-blur-xl supports-[backdrop-filter]:bg-white/50",
+            "dark:bg-gradient-to-b dark:from-violet-950/40 dark:to-slate-950/20",
             "shadow-sm",
           ].join(" ")}
           aria-label="بطاقة الملف الشخصي"
@@ -108,7 +108,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                 <Button
                   variant="outline"
                   size="icon"
-                  className="absolute -bottom-2 -left-2 rounded-full h-9 w-9 border-violet-300/60 bg-white/70 hover:bg-white/90 dark:bg-white/10 dark:hover:bg-white/15"
+                  className="absolute -bottom-2 -left-1/2 translate-x-1/2 rounded-full h-9 w-9 border-violet-300/60 bg-white/70 hover:bg-white/90 dark:bg-white/10 dark:hover:bg-white/15"
                   asChild
                   aria-label="تعديل الملف الشخصي"
                 >
@@ -116,25 +116,12 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                     <Edit className="w-4 h-4 text-violet-700 dark:text-violet-200" />
                   </Link>
                 </Button>
-                
-                 <Button
-                  variant="outline"
-                  size="icon"
-                  className="absolute -bottom-2 -right-2 rounded-full h-9 w-9 border-violet-300/60 bg-white/70 hover:bg-white/90 dark:bg-white/10 dark:hover:bg-white/15"
-                  asChild
-                  aria-label="سجل المباريات"
-                >
-                  <Link href="/profile/history" aria-label="فتح سجل المباريات">
-                    <History className="w-4 h-4 text-violet-700 dark:text-violet-200" />
-                  </Link>
-                </Button>
               </div>
 
               {/* معلومات المستخدم */}
               <div className="text-center md:text-right">
-                <div className="flex items-center justify-center md:justify-start gap-3 flex-wrap">
-                  <p className="text-sm text-violet-800/70 dark:text-violet-200/70">مرحباً بك يا</p>
-                  <CardTitle className="text-3xl font-extrabold tracking-tight font-serif bg-clip-text text-transparent bg-gradient-to-br from-slate-800 to-slate-600 dark:from-white dark:to-slate-300">
+                 <p className="text-sm text-violet-800/70 dark:text-violet-200/70 mb-1">مرحباً بك يا</p>
+                  <CardTitle className="text-4xl font-extrabold tracking-tight font-serif text-slate-800 dark:text-slate-200">
                     {userProfile.name}
                   </CardTitle>
 
@@ -143,7 +130,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                       initial={{ y: -4, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ duration: 0.22, delay: 0.05 }}
-                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-xs dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100"
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-xs dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100"
                     >
                       {RankIcon ? (
                         <RankIcon className="w-4 h-4 text-violet-700 dark:text-violet-200" />
@@ -153,7 +140,6 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                       <span>{activeDecree?.title ?? effectiveCurrentRank?.name}</span>
                     </motion.span>
                   )}
-                </div>
 
                 {/* الإحصاءات */}
                 <div
@@ -241,8 +227,8 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                   <Link href="/clan-wars">حروب الفرق</Link>
                 </Button>
                 <Button variant="ghost" asChild className="rounded-xl text-violet-900 hover:bg-violet-50 dark:text-violet-100 dark:hover:bg-white/10">
-                  <Link href="/store" className="inline-flex items-center gap-2">
-                    <ShoppingBag className="h-4 w-4" /> المتجر
+                   <Link href="/profile/history" className="inline-flex items-center gap-2">
+                    <History className="h-4 w-4" /> سجل المباريات
                   </Link>
                 </Button>
               </div>
