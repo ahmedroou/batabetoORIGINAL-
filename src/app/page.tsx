@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { CompactChallengeList } from './components/home/CompactChallengeList';
 import ComplaintBubble from './components/home/ComplaintBubble';
 import type { Game } from '@/types';
-import { getGamePopularityStats } from '@/lib/actions/user';
+import { getGamePopularityStats } from '@/lib/actions/user/queries';
 
 export default function Home() {
   const router = useRouter();
