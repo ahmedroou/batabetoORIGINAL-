@@ -17,7 +17,7 @@ import {
     serverTimestamp,
 } from 'firebase/firestore';
 import type { TrapQuestion } from '@/types';
-import { isFirebaseError, getSimilaritySignature } from '../helpers';
+import { isFirebaseError, getSimilaritySignature } from '@/lib/actions/helpers';
 
 const BATCH_LIMIT_SAFE = 450;
 
@@ -279,5 +279,3 @@ export async function deleteQuestions(criteria: DeleteCriteria) {
         return { error: 'فشل حذف العناصر.' };
     }
 }
-
-    
