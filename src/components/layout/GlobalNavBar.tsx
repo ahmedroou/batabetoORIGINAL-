@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, useScroll, useMotionValueEvent } from 'framer-motion';
-import { Home, Users, Crown, Swords, Newspaper } from 'lucide-react';
+import { Home, Users, Crown, Swords, Newspaper, Store } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -14,6 +14,7 @@ const navItems = [
   { href: '/kings', label: 'الملوك', icon: Crown },
   { href: '/challenges', label: 'البطولات', icon: Swords },
   { href: '/news', label: 'الجريدة', icon: Newspaper },
+  { href: '/store', label: 'المتجر', icon: Store },
 ];
 
 export default function GlobalNavBar() {
