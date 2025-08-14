@@ -31,14 +31,15 @@ import {
   MessageSquarePlus,
   Rocket,
   Keyboard,
+  ShoppingCart,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
 // Data
 import { GENIUS_CHALLENGES, type GeniusChallenge } from "@/data/genius-challenges";
 
-// Server Actions - Import from new central point
-import { generateGeniusChallenge } from "@/lib/actions/admin";
+// Server Actions
+import { generateGeniusChallenge } from "@/ai/flows/generate-genius-challenge";
 
 /**
  * Lazy-loaded admin tabs (improves first paint and reduces bundle size)
@@ -259,6 +260,9 @@ function AdminPageContent() {
                   <CardDescription>إدارة محتوى اللعبة وإعداداتها.</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button variant="secondary" asChild>
+                      <Link href="/store"><ShoppingCart className="ml-2 h-4 w-4" /> عرض متجر اللاعبين</Link>
+                  </Button>
                   <Button variant="outline" asChild aria-label="إدارة المتجر والألقاب">
                     <Link href="/admin/store">
                       <Store className="mr-2" /> إدارة المتجر والألقاب
