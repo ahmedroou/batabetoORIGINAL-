@@ -54,7 +54,13 @@ const mockBoard: Property[] = [
 describe('Educated Merchant - Game Logic Helpers', () => {
   
   test('Player should pay rent when landing on an owned property', () => {
-    let game = createMockGame(mockPlayers, { board: mockBoard, turnOrder: mockPlayers.map(p => p.id), currentTurnIndex: 0 });
+    let game = createMockGame(mockPlayers, { 
+        board: mockBoard, 
+        turnOrder: mockPlayers.map(p => p.id), 
+        currentTurnIndex: 0,
+        movesThisRound: 0,
+        activeCountAtRoundStart: mockPlayers.length
+    });
     // Manually set player 1 to land on player 2's property before the roll action
     const player1StartPos = 0;
     const diceRoll = 2; // This will land p1 on tile 2
@@ -84,7 +90,13 @@ describe('Educated Merchant - Game Logic Helpers', () => {
   });
   
    test('Player should go bankrupt if they cannot afford rent', () => {
-    let game = createMockGame(mockPlayers, { board: mockBoard, turnOrder: mockPlayers.map(p => p.id), currentTurnIndex: 0 });
+    let game = createMockGame(mockPlayers, { 
+        board: mockBoard, 
+        turnOrder: mockPlayers.map(p => p.id), 
+        currentTurnIndex: 0,
+        movesThisRound: 0,
+        activeCountAtRoundStart: mockPlayers.length
+    });
     game.players[0].money = 20; // Not enough money for rent (35)
     game.players[0].position = 0;
 
@@ -160,7 +172,12 @@ describe('Educated Merchant - Game Logic Helpers', () => {
           { ...mockPlayers[1], status: 'bankrupt' as const, money: 0 },
           { ...mockPlayers[2], status: 'bankrupt' as const, money: 0 },
       ];
-      let game = createMockGame(players, { board: mockBoard, turnOrder: players.map(p => p.id) });
+      let game = createMockGame(players, { 
+        board: mockBoard, 
+        turnOrder: players.map(p => p.id),
+        movesThisRound: 0,
+        activeCountAtRoundStart: players.length,
+      });
       game.players[0].position = 0; 
       game.gameState = 'rolling'; 
       
@@ -180,7 +197,12 @@ describe('Educated Merchant - Game Logic Helpers', () => {
   test('Passing GO should reward the player', () => {
       const boardWith30Tiles = Array.from({ length: 30 }, (_, i) => ({ id: i, type: 'property', name: `P${i}`, price: 100, rent: 10, ownerId: null, category: 'Test' } as Property));
       boardWith30Tiles[0].type = 'start';
-      let game = createMockGame(mockPlayers, { board: boardWith30Tiles, turnOrder: mockPlayers.map(p => p.id) });
+      let game = createMockGame(mockPlayers, { 
+          board: boardWith30Tiles, 
+          turnOrder: mockPlayers.map(p => p.id),
+          movesThisRound: 0,
+          activeCountAtRoundStart: mockPlayers.length
+      });
       game.players[0].position = 27; // Before GO
       
       const playerStartMoney = game.players[0].money!;
@@ -265,3 +287,4 @@ describe('Educated Merchant - End of Game Awards', () => {
     });
 });
     
+
