@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { GAME_TYPE_NAMES, GAME_ICONS } from "@/data/icons";
-import { Crown, Star, Trophy, Shield } from "lucide-react";
+import { Crown, Star, Trophy, Shield, Handshake, Angry } from "lucide-react";
 import { motion } from "framer-motion";
 import { getKingsPageData } from "@/lib/actions/user/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -188,10 +188,10 @@ export default function KingsClient() {
                       >
                         {kingOfGames.name}
                       </h3>
-                      <div className="flex flex-col md:flex-row items-center justify-center md:justify-start gap-x-4 gap-y-1 mt-2 text-xl font-semibold text-yellow-100/90">
+                       <div className="flex flex-col md:flex-row items-center justify-center md:justify-start gap-x-4 gap-y-1 mt-2 text-xl font-semibold text-yellow-100/90">
                         <div className="flex items-center gap-2">
                           <Trophy className="w-5 h-5" />
-                          {kingOfGames.leaderboardPoints} نقطة صدارة
+                          {kingOfGames.leaderboardPoints || 0} نقطة صدارة
                         </div>
                         {kingOfGamesRank && kingOfGamesRank.icon && (
                           <div className="flex items-center gap-2">
@@ -199,6 +199,11 @@ export default function KingsClient() {
                             <span>{kingOfGamesRank.name}</span>
                           </div>
                         )}
+                      </div>
+                       <div className="flex justify-center md:justify-start gap-x-3 gap-y-1 mt-2 text-sm font-semibold text-yellow-800/90">
+                        <span className="flex items-center gap-1.5"><Shield className="w-4 h-4"/>{kingOfGames.honorPoints || 0} شرف</span>
+                        <span className="flex items-center gap-1.5"><Handshake className="w-4 h-4"/>{kingOfGames.loyaltyPoints || 0} ولاء</span>
+                        <span className="flex items-center gap-1.5"><Angry className="w-4 h-4"/>{kingOfGames.rebellionPoints || 0} تمرد</span>
                       </div>
                     </div>
                     <div
@@ -214,7 +219,7 @@ export default function KingsClient() {
               {gameEntries.map(([gameType, name], index) => {
                 const king = kings[gameType as keyof typeof kings];
                 const Icon = GAME_TYPE_NAMES[gameType as keyof typeof GAME_TYPE_NAMES] ? (GAME_ICONS as any)[gameType] || Star : Star;
-                const kingRank = king ? getSocialRankForUser(king.leaderboardPoints || 0) : null;
+                const kingRank = king ? getSocialRankForUser(king.totalLeaderboardPoints || 0) : null;
                 const RankIcon = (kingRank && kingRank.icon) ? kingRank.icon : Shield;
 
                 return (
@@ -265,7 +270,7 @@ export default function KingsClient() {
                                 <Star className="w-4 h-4" /> {king.winCount} انتصارات
                               </span>
                                 <span className="flex items-center gap-1.5">
-                                    <Trophy className="w-4 h-4" /> {king.totalLeaderboardPoints || 0} إجمالي النقاط
+                                    <Trophy className="w-4 h-4" /> {king.totalLeaderboardPoints || 0} نقطة
                                 </span>
                             </div>
                           </div>

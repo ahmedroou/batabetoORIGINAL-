@@ -87,19 +87,25 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
       } as GameKing;
     });
     
-    // Fetch leaderboard points for each king
-    const kingIds = Object.values(kings).map(k => k.kingId).filter(Boolean);
-    if (kingIds.length > 0) {
-        const usersQuery = query(collection(db, 'users'), where('__name__', 'in', kingIds));
-        const usersSnapshot = await getDocs(usersQuery);
-        const usersData = new Map(usersSnapshot.docs.map(d => [d.id, d.data() as UserProfile]));
+    const allKingIds = Object.values(kings).map(k => k.kingId).filter(Boolean);
+    const kingIdChunks: string[][] = [];
+    for (let i = 0; i < allKingIds.length; i += 30) {
+        kingIdChunks.push(allKingIds.slice(i, i + 30));
+    }
+    
+    const usersData = new Map<string, UserProfile>();
 
-        for(const gameType in kings) {
-            const king = kings[gameType];
-            const kingUser = usersData.get(king.kingId);
-            if (kingUser) {
-                king.totalLeaderboardPoints = kingUser.leaderboardPoints || 0;
-            }
+    for (const chunk of kingIdChunks) {
+        const usersQuery = query(collection(db, 'users'), where('__name__', 'in', chunk));
+        const usersSnapshot = await getDocs(usersQuery);
+        usersSnapshot.docs.forEach(d => usersData.set(d.id, d.data() as UserProfile));
+    }
+
+    for(const gameType in kings) {
+        const king = kings[gameType];
+        const kingUser = usersData.get(king.kingId);
+        if (kingUser) {
+            king.totalLeaderboardPoints = kingUser.leaderboardPoints || 0;
         }
     }
     
@@ -280,3 +286,4 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
     
 
     
+

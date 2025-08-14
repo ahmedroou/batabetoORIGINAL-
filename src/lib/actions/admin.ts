@@ -1,1261 +1,1384 @@
-
-
 'use server';
 
 /**
- * @fileoverview Admin-only actions for managing game content.
+ * admin-actions.gpt5-refactor.ts
+ * ---------------------------------------------------------
+ * ملف موحّد ومحسّن لإدارة المحتوى عبر Firestore.
+ * يتضمن تحسينات في الأداء، الأمان، القابلية للتوسع، ووضوح الشفرة.
+ * - الحفاظ على نفس أسماء الدوال العامة لتوافق الواجهات الحالية.
+ * - تحسين التعامل مع الدُفعات (batch) وحدّ 500 عملية في Firestore.
+ * - حمايات إضافية، وفحص مُدخلات أساسي، ورسائل أخطاء أوضح.
+ * - تجهيزات لمزايا مستقبلية (التقسيم بالصفحات/الفلاتر/التدقيق).
+ * ---------------------------------------------------------
  */
 
 import { db } from '@/lib/firebase';
 import {
-    collection,
-    doc,
-    getDoc,
-    setDoc,
-    updateDoc,
-    getDocs,
-    writeBatch,
-    query,
-    where,
-    deleteField,
-    arrayUnion,
-    arrayRemove,
-    orderBy,
-    limit,
-    runTransaction,
-    Timestamp,
-    addDoc,
-    serverTimestamp,
-    getCountFromServer,
-    collectionGroup,
-    aggregate,
-    sum,
-    count,
+  addDoc,
+  aggregate,
+  arrayRemove,
+  arrayUnion,
+  collection,
+  collectionGroup,
+  count,
+  deleteField,
+  doc,
+  getCountFromServer,
+  getDoc,
+  getDocs,
+  getFirestore,
+  limit,
+  orderBy,
+  query,
+  runTransaction,
+  serverTimestamp,
+  setDoc,
+  Timestamp,
+  updateDoc,
+  where,
+  writeBatch,
 } from 'firebase/firestore';
-import { isFirebaseError,  getSimilaritySignature } from './helpers';
-import type { UserProfile, AvatarPrice, SocialRank, PrisonQuestion, Game, TrapQuestion, Mail, PermissionId, GameKing, Decree, SocialEvent } from '@/types';
-import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES, DEFAULT_SOCIAL_RANKS, GAME_TYPE_NAMES } from '@/types';
+
+import type {
+  Article,
+  AudienceGroup, // (موجود في المشروع، غير مستخدم هنا)
+  AvatarPrice,
+  Decree,
+  Game,
+  GameKing,
+  Mail,
+  PermissionId,
+  PrisonQuestion,
+  SocialEvent,
+  SocialRank,
+  TrapQuestion,
+  UserProfile,
+} from '@/types';
+
+import {
+  DEFAULT_TRAP_ANSWER_CATEGORIES,
+  DEFAULT_EDUCATED_MERCHANT_CATEGORIES,
+  DEFAULT_SOCIAL_RANKS,
+  GAME_TYPE_NAMES,
+} from '@/types';
+
 import { PUNISHMENT_AVATAR_IDS } from '@/data/punishment-avatars';
+
+import { isFirebaseError, getSimilaritySignature } from './helpers';
+
 import { generateGeniusChallenge as generateGeniusChallengeFlow } from '@/ai/flows/generate-genius-challenge';
-import type { GenerateGeniusChallengeInput, GenerateGeniusChallengeOutput } from '@/ai/flows/generate-genius-challenge';
+import type {
+  GenerateGeniusChallengeInput,
+  GenerateGeniusChallengeOutput,
+} from '@/ai/flows/generate-genius-challenge';
+
 import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
 import { getChallenges } from './challenges';
 
-
-// Import from the central user actions index
-import { 
-    giveReward as givePlayerReward, 
-    applyPunishment as applyPlayerPunishment, 
-    getTopUsers as queryTopUsers,
-    getRanks as queryRanks,
-    getUsersByRank as queryUsersByRank,
-    getTopPunisher as queryTopPunisher,
-    getKingsPageData
+import {
+  giveReward as givePlayerReward,
+  applyPunishment as applyPlayerPunishment,
+  getTopUsers as queryTopUsers,
+  getRanks as queryRanks,
+  getUsersByRank as queryUsersByRank, // (غير مستخدم هنا لكن الإبقاء عليه لا يضر)
+  getTopPunisher as queryTopPunisher,
+  getKingsPageData, // (غير مستخدم هنا)
 } from './user';
 
+/* ====================== أدوات/مساعدات عامة ====================== */
 
-// Server-side user search for admin actions
-export async function adminSearchUsers(searchTerm: string): Promise<UserProfile[]> {
-  if (!searchTerm.trim()) {
-    return [];
+const BATCH_LIMIT_SAFE = 450; // أقل من 500 احتياطًا للتحديثات المركبة
+const NOW = () => new Date();
+
+const toJSDate = (value: any): Date | null => {
+  try {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (value?.toDate) return value.toDate();
+    if (typeof value === 'number') return new Date(value);
+    return null;
+  } catch {
+    return null;
   }
-  
-  const term = searchTerm.toLowerCase();
-  const usersRef = collection(db, 'users');
+};
 
-  // Since Firestore queries are case-sensitive, we can't directly query for a lowercase version
-  // without having a dedicated lowercase field. The best approach without schema changes is to fetch
-  // and filter, which is what the original implementation did. We will add the lowercase conversion here.
-  const querySnapshot = await getDocs(usersRef);
-  const users = querySnapshot.docs
-    .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
-    .filter(
-      (user) =>
-        user.name?.toLowerCase().includes(term) ||
-        user.email?.toLowerCase().includes(term)
-    );
-  
-  return users;
+const normalize = (s: any) =>
+  (typeof s === 'string' ? s : String(s ?? ''))
+    .trim()
+    .replace(/\s+/g, ' ');
+
+const stringNonEmpty = (s: any) => typeof s === 'string' && normalize(s).length > 0;
+
+function chunkArray<T>(arr: T[], size = BATCH_LIMIT_SAFE): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
 }
 
+async function commitChunks(ops: ((b: ReturnType<typeof writeBatch>) => void)[]) {
+  if (ops.length === 0) return;
+  const batches = chunkArray(ops, BATCH_LIMIT_SAFE).map((opsChunk) => {
+    const b = writeBatch(db);
+    opsChunk.forEach((op) => op(b));
+    return b.commit();
+  });
+  await Promise.all(batches);
+}
 
-export async function adminSendMail(recipientIds: string[], subject: string, body: string, coins: number): Promise<{ success: boolean; error?: string }> {
-  if (!recipientIds || recipientIds.length === 0 || !subject.trim() || !body.trim()) {
-    return { success: false, error: "المعلومات غير كافية لإرسال الرسالة." };
+const indexHintMsg =
+  'قد تحتاج إلى إنشاء فهرس مركّب في Firestore لهذه الاستعلامات. راجع سجلات Firebase Console لمعرفة تفاصيل الفهرس المقترح.';
+
+/* ====================== بحث المستخدمين (أدمن) ====================== */
+
+export async function adminSearchUsers(searchTerm: string): Promise<UserProfile[]> {
+  if (!stringNonEmpty(searchTerm)) return [];
+  const term = normalize(searchTerm).toLowerCase();
+
+  // ملاحظة: بدون حقل lowerName مسبقًا سنضطر لجلب ثم تصفية.
+  // تحسين مستقبلي: إضافة حقول searchable (lowerName, lowerEmail) و فهارس.
+  const usersRef = collection(db, 'users');
+  const snapshot = await getDocs(usersRef);
+
+  const users = snapshot.docs
+    .map((d) => ({ uid: d.id, ...d.data() } as UserProfile))
+    .filter((u) => {
+      const name = (u.name || '').toLowerCase();
+      const email = (u.email || '').toLowerCase();
+      return name.includes(term) || email.includes(term);
+    });
+
+  // حد أقصى منطقي للنتائج
+  return users.slice(0, 50);
+}
+
+/* ====================== البريد الإداري ====================== */
+
+export async function adminSendMail(
+  recipientIds: string[],
+  subject: string,
+  body: string,
+  coins: number,
+): Promise<{ success: boolean; error?: string }> {
+  if (!recipientIds?.length || !stringNonEmpty(subject) || !stringNonEmpty(body)) {
+    return { success: false, error: 'المعلومات غير كافية لإرسال الرسالة.' };
   }
 
   try {
     const senderName = 'Admin';
-    const batch = writeBatch(db);
-    
-    recipientIds.forEach(recipientId => {
-        const mailRef = doc(collection(db, `users/${recipientId}/mail`));
-        const mailData: Omit<Mail, 'id'> = {
-            senderName,
-            subject,
-            body,
-            isRead: false,
-            createdAt: serverTimestamp() as any, // Placeholder for server
-            expiresAt: Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000).toDate(),
-            coins: coins > 0 ? coins : undefined,
-            coinsClaimed: coins > 0 ? false : undefined,
-        };
-        batch.set(mailRef, mailData);
-    });
-    
-    await batch.commit();
+    const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
 
+    for (const recipientId of recipientIds) {
+      const mailRef = doc(collection(db, `users/${recipientId}/mail`));
+      const mailData: Omit<Mail, 'id'> = {
+        senderName,
+        subject: normalize(subject),
+        body: normalize(body),
+        isRead: false,
+        createdAt: serverTimestamp() as any,
+        expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+        coins: coins > 0 ? coins : undefined,
+        coinsClaimed: coins > 0 ? false : undefined,
+      };
+      ops.push((b) => b.set(mailRef, mailData));
+    }
+
+    await commitChunks(ops);
     return { success: true };
   } catch (error: any) {
-    console.error("Error sending mail:", error);
-    return { success: false, error: error.message || "فشل إرسال الرسالة." };
+    console.error('Error sending mail:', error);
+    return { success: false, error: error?.message || 'فشل إرسال الرسالة.' };
   }
-};
+}
 
-export async function uploadEducatedMerchantQuestionsFromJson(questions: { question: string, answer: string, dummyAnswers?: string[] }[], category: string) {
-    if (!questions || !Array.isArray(questions) || questions.length === 0) {
-        return { error: 'ملف JSON غير صالح أو فارغ.' };
+/* ====================== رفع أسئلة ومحتوى (دفعات) ====================== */
+
+type QAJson = { question: string; answer: string; dummyAnswers?: string[] };
+type PrisonJson = { text: string };
+
+function dedupeLocal<T>(arr: T[], keyer: (t: T) => string) {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of arr) {
+    const k = keyer(item);
+    if (k && !seen.has(k)) {
+      seen.add(k);
+      out.push(item);
     }
-    if (!category || typeof category !== 'string' || category.trim() === '') {
-        return { error: 'يجب تحديد قسم صالح.' };
-    }
+  }
+  return out;
+}
 
-    try {
-        const batch = writeBatch(db);
-        const questionsCol = collection(db, 'educated_merchant_questions');
-        let validQuestionsCount = 0;
+export async function uploadEducatedMerchantQuestionsFromJson(
+  questions: QAJson[],
+  category: string,
+) {
+  if (!Array.isArray(questions) || questions.length === 0)
+    return { error: 'ملف JSON غير صالح أو فارغ.' };
+  if (!stringNonEmpty(category)) return { error: 'يجب تحديد قسم صالح.' };
 
-        questions.forEach(q => {
-            if (q && typeof q.question === 'string' && q.question.trim() !== '' && 
-                typeof q.answer === 'string' && q.answer.trim() !== '') {
-                
-                const hasDummyAnswers = Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '');
+  try {
+    const questionsCol = collection(db, 'educated_merchant_questions');
+    let valid = 0;
 
-                const docRef = doc(questionsCol);
-                const questionData: Partial<TrapQuestion> & {similaritySignature: string} = {
-                    question: q.question.trim(),
-                    answer: q.answer.trim(),
-                    category: category.trim(),
-                    randomKey: Math.random(),
-                    similaritySignature: getSimilaritySignature(q.question),
-                    ...(hasDummyAnswers && { dummyAnswers: q.dummyAnswers!.map(da => da.trim()) }),
-                };
-                
-                batch.set(docRef, questionData);
-                validQuestionsCount++;
-            }
-        });
+    // إزالة التكرار داخل الملف نفسه
+    const cleaned = dedupeLocal(
+      questions.filter(
+        (q) => stringNonEmpty(q.question) && stringNonEmpty(q.answer),
+      ),
+      (q) => getSimilaritySignature(normalize(q.question)),
+    );
 
-        if (validQuestionsCount === 0) {
-            return { error: 'لم يتم العثور على أسئلة صالحة في الملف. تأكد من أن كل سؤال يحتوي على `question` و `answer`.' };
-        }
+    const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
 
-        await batch.commit();
-        return { success: true, count: validQuestionsCount };
-    } catch (error) {
-        console.error("Error uploading educated merchant questions:", error);
-        return { error: 'حدث خطأ أثناء رفع أسئلة التاجر المتعلم.' };
-    }
-};
-
-export async function uploadTrapAnswerQuestionsFromJson(questions: { question: string, answer: string, dummyAnswers?: string[] }[], category: string) {
-    if (!questions || !Array.isArray(questions) || questions.length === 0) {
-        return { error: 'ملف JSON غير صالح أو فارغ.' };
-    }
-    if (!category || typeof category !== 'string' || category.trim() === '') {
-        return { error: 'يجب تحديد قسم صالح.' };
-    }
-
-    try {
-        const batch = writeBatch(db);
-        const questionsCol = collection(db, 'trap_answer_questions');
-        let validQuestionsCount = 0;
-
-        questions.forEach(q => {
-            if (q && typeof q.question === 'string' && q.question.trim() !== '' && 
-                typeof q.answer === 'string' && q.answer.trim() !== '') {
-                
-                const hasDummyAnswers = Array.isArray(q.dummyAnswers) && q.dummyAnswers.every(da => typeof da === 'string' && da.trim() !== '');
-
-                const docRef = doc(questionsCol);
-                const questionData: Partial<TrapQuestion> & {similaritySignature: string} = {
-                    question: q.question.trim(),
-                    answer: q.answer.trim(),
-                    category: category.trim(),
-                    randomKey: Math.random(),
-                    similaritySignature: getSimilaritySignature(q.question),
-                    ...(hasDummyAnswers && { dummyAnswers: q.dummyAnswers!.map(da => da.trim()) }),
-                };
-                
-                batch.set(docRef, questionData);
-                validQuestionsCount++;
-            }
-        });
-
-        if (validQuestionsCount === 0) {
-            return { error: 'لم يتم العثور على أسئلة صالحة في الملف. تأكد من أن كل سؤال يحتوي على `question` و `answer`.' };
-        }
-
-        await batch.commit();
-        return { success: true, count: validQuestionsCount };
-    } catch (error) {
-        console.error("Error uploading trap answer questions:", error);
-        return { error: 'حدث خطأ أثناء رفع أسئلة الجواب المفخخ.' };
-    }
-};
-
-
-export async function uploadPrisonQuestionsFromJson(questions: { text: string }[]) {
-    if (!questions || !Array.isArray(questions) || questions.length === 0) {
-        return { error: 'ملف JSON غير صالح أو فارغ.' };
+    for (const q of cleaned) {
+      const docRef = doc(questionsCol);
+      const hasDummy =
+        Array.isArray(q.dummyAnswers) &&
+        q.dummyAnswers.every((d) => stringNonEmpty(d));
+      const data: Partial<TrapQuestion> & { similaritySignature: string } = {
+        question: normalize(q.question),
+        answer: normalize(q.answer),
+        category: normalize(category),
+        randomKey: Math.random(),
+        similaritySignature: getSimilaritySignature(normalize(q.question)),
+        ...(hasDummy && { dummyAnswers: q.dummyAnswers!.map((d) => normalize(d)) }),
+      };
+      ops.push((b) => b.set(docRef, data));
+      valid++;
     }
 
-    try {
-        const batch = writeBatch(db);
-        const questionsCol = collection(db, 'prison_questions');
-        let validQuestionsCount = 0;
+    await commitChunks(ops);
+    if (valid === 0) return { error: 'لم يتم العثور على أسئلة صالحة.' };
+    return { success: true, count: valid };
+  } catch (e) {
+    console.error('Error uploading educated merchant questions:', e);
+    return { error: 'حدث خطأ أثناء رفع أسئلة التاجر المتعلم.' };
+  }
+}
 
-        questions.forEach(q => {
-            if (q && typeof q.text === 'string' && q.text.trim() !== '') {
-                const docRef = doc(questionsCol);
-                batch.set(docRef, { 
-                    text: q.text.trim(),
-                    similaritySignature: getSimilaritySignature(q.text),
-                });
-                validQuestionsCount++;
-            }
-        });
+export async function uploadTrapAnswerQuestionsFromJson(
+  questions: QAJson[],
+  category: string,
+) {
+  if (!Array.isArray(questions) || questions.length === 0)
+    return { error: 'ملف JSON غير صالح أو فارغ.' };
+  if (!stringNonEmpty(category)) return { error: 'يجب تحديد قسم صالح.' };
 
-        if (validQuestionsCount === 0) {
-            return { error: 'لم يتم العثور على أسئلة صالحة في الملف.' };
-        }
+  try {
+    const questionsCol = collection(db, 'trap_answer_questions');
+    let valid = 0;
 
-        await batch.commit();
-        return { success: true, count: validQuestionsCount };
-    } catch (error) {
-        console.error("Error uploading prison questions:", error);
-        return { error: 'حدث خطأ أثناء رفع أسئلة السجن.' };
+    const cleaned = dedupeLocal(
+      questions.filter(
+        (q) => stringNonEmpty(q.question) && stringNonEmpty(q.answer),
+      ),
+      (q) => getSimilaritySignature(normalize(q.question)),
+    );
+
+    const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+
+    for (const q of cleaned) {
+      const docRef = doc(questionsCol);
+      const hasDummy =
+        Array.isArray(q.dummyAnswers) &&
+        q.dummyAnswers.every((d) => stringNonEmpty(d));
+      const data: Partial<TrapQuestion> & { similaritySignature: string } = {
+        question: normalize(q.question),
+        answer: normalize(q.answer),
+        category: normalize(category),
+        randomKey: Math.random(),
+        similaritySignature: getSimilaritySignature(normalize(q.question)),
+        ...(hasDummy && { dummyAnswers: q.dummyAnswers!.map((d) => normalize(d)) }),
+      };
+      ops.push((b) => b.set(docRef, data));
+      valid++;
     }
-};
+
+    await commitChunks(ops);
+    if (valid === 0) return { error: 'لم يتم العثور على أسئلة صالحة.' };
+    return { success: true, count: valid };
+  } catch (e) {
+    console.error('Error uploading trap answer questions:', e);
+    return { error: 'حدث خطأ أثناء رفع أسئلة الجواب المفخخ.' };
+  }
+}
+
+export async function uploadPrisonQuestionsFromJson(questions: PrisonJson[]) {
+  if (!Array.isArray(questions) || questions.length === 0)
+    return { error: 'ملف JSON غير صالح أو فارغ.' };
+
+  try {
+    const questionsCol = collection(db, 'prison_questions');
+    let valid = 0;
+
+    const cleaned = dedupeLocal(
+      questions.filter((q) => stringNonEmpty(q.text)),
+      (q) => getSimilaritySignature(normalize(q.text)),
+    );
+
+    const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+
+    for (const q of cleaned) {
+      const docRef = doc(questionsCol);
+      ops.push((b) =>
+        b.set(docRef, {
+          text: normalize(q.text),
+          similaritySignature: getSimilaritySignature(normalize(q.text)),
+          createdAt: serverTimestamp(),
+        }),
+      );
+      valid++;
+    }
+
+    await commitChunks(ops);
+    if (valid === 0) return { error: 'لم يتم العثور على أسئلة صالحة في الملف.' };
+    return { success: true, count: valid };
+  } catch (e) {
+    console.error('Error uploading prison questions:', e);
+    return { error: 'حدث خطأ أثناء رفع أسئلة السجن.' };
+  }
+}
 
 export async function uploadWordWarWordsFromJson(words: string[]) {
-    if (!words || !Array.isArray(words) || words.length === 0) {
-        return { error: 'ملف JSON غير صالح أو فارغ.' };
+  if (!Array.isArray(words) || words.length === 0)
+    return { error: 'ملف JSON غير صالح أو فارغ.' };
+
+  try {
+    const wordsCol = collection(db, 'word_war_words');
+    const unique = Array.from(
+      new Set(words.map((w) => normalize(w)).filter(Boolean)),
+    );
+
+    if (unique.length === 0) return { error: 'لا توجد كلمات صالحة.' };
+
+    const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+    for (const word of unique) {
+      const ref = doc(wordsCol);
+      ops.push((b) => b.set(ref, { text: word }));
     }
-
-    try {
-        const batch = writeBatch(db);
-        const wordsCol = collection(db, 'word_war_words');
-        let validWordsCount = 0;
-
-        const uniqueWords = Array.from(new Set(words.map(w => w.trim()).filter(Boolean)));
-
-        uniqueWords.forEach(word => {
-            const docRef = doc(wordsCol);
-            batch.set(docRef, { 
-                text: word,
-            });
-            validWordsCount++;
-        });
-
-        if (validWordsCount === 0) {
-            return { error: 'لم يتم العثور على كلمات صالحة في الملف.' };
-        }
-
-        await batch.commit();
-        return { success: true, count: validWordsCount };
-    } catch (error) {
-        console.error("Error uploading word war words:", error);
-        return { error: 'حدث خطأ أثناء رفع كلمات حرب الكلمات.' };
-    }
-};
-
-export async function countQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'educated-merchant' , category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean, duplicates?: { threshold: number } | 'word_war_duplicates' }) {
-    if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all && !criteria.duplicates) {
-        return { success: false, error: 'يجب تحديد معيار للعد.' };
-    }
-
-    let collectionName: string;
-    let textFieldName = 'text';
-
-    switch(criteria.game) {
-        case 'trap-answer': 
-            collectionName = 'trap_answer_questions'; 
-            textFieldName = 'question';
-            break;
-        case 'educated-merchant': 
-            collectionName = 'educated_merchant_questions'; 
-            textFieldName = 'question';
-            break;
-        case 'prison': 
-            collectionName = 'prison_questions'; 
-            textFieldName = 'text';
-            break;
-        case 'word_war': 
-            collectionName = 'word_war_words'; 
-            textFieldName = 'text';
-            break;
-        default: return { success: false, error: "نوع لعبة غير مدعوم." };
-    }
-
-    try {
-        const itemsCol = collection(db, collectionName);
-        let q;
-        
-        if (criteria.all) {
-            const snapshot = await getCountFromServer(itemsCol);
-            return { success: true, count: snapshot.data().count };
-        }
-        
-        if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
-            q = query(itemsCol, where('category', '==', criteria.category.trim()));
-            const snapshot = await getCountFromServer(q);
-            return { success: true, count: snapshot.data().count };
-        } 
-        
-        if (criteria.searchTerm) {
-            const searchTerm = criteria.searchTerm.trim();
-            const snapshot = await getDocs(query(itemsCol, where(textFieldName, '>=', searchTerm), where(textFieldName, '<=', searchTerm + '\uf8ff')));
-            return { success: true, count: snapshot.size };
-        }
-        
-        if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
-            const searchTerm = criteria.answerSearchTerm.trim();
-             const snapshot = await getDocs(query(itemsCol, where('answer', '>=', searchTerm), where('answer', '<=', searchTerm + '\uf8ff')));
-            return { success: true, count: snapshot.size };
-        }
-        
-        return { success: false, error: "معايير العد غير صالحة." };
-
-    } catch (error) {
-        console.error("Error counting items:", error);
-        return { success: false, error: 'حدث خطأ أثناء عد العناصر. قد تحتاج إلى إنشاء فهرس في قاعدة البيانات.' };
-    }
-};
-
-export async function deleteQuestions(criteria: { game: 'trap-answer' | 'prison' | 'word_war' | 'educated-merchant', category?: string; searchTerm?: string; answerSearchTerm?: string; all?: boolean }) {
-    if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
-        return { error: 'يجب تحديد معيار للحذف.' };
-    }
-
-     let collectionName: string;
-    switch(criteria.game) {
-        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
-        case 'educated-merchant': collectionName = 'educated_merchant_questions'; break;
-        case 'prison': collectionName = 'prison_questions'; break;
-        case 'word_war': collectionName = 'word_war_words'; break;
-        default: return { error: "نوع لعبة غير مدعوم." };
-    }
-
-    try {
-        const batch = writeBatch(db);
-        const itemsCol = collection(db, collectionName);
-        let q;
-        const textFieldName = (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant') ? 'question' : 'text';
-
-
-        if (criteria.all) {
-            q = query(itemsCol);
-        } else if (criteria.category && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
-            q = query(itemsCol, where('category', '==', criteria.category.trim()));
-        } else if (criteria.searchTerm) {
-            const searchTerm = criteria.searchTerm.trim();
-            q = query(itemsCol, where(textFieldName, '>=', searchTerm), where(textFieldName, '<=', searchTerm + '\uf8ff'));
-        } else if (criteria.answerSearchTerm && (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')) {
-            const searchTerm = criteria.answerSearchTerm.trim();
-             q = query(itemsCol, where('answer', '>=', searchTerm), where('answer', '<=', searchTerm + '\uf8ff'));
-        } else {
-            return { error: "معايير الحذف غير صالحة." };
-        }
-
-        const querySnapshot = await getDocs(q);
-        if (querySnapshot.empty) return { success: true, count: 0, message: 'لم يتم العثور على عناصر تطابق المعايير المحددة.' };
-
-        querySnapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-        
-        await batch.commit();
-        return { success: true, count: querySnapshot.size };
-
-    } catch (error) {
-        console.error("Error deleting items:", error);
-        return { error: 'حدث خطأ أثناء حذف العناصر. قد تحتاج إلى إنشاء فهرس في قاعدة البيانات.' };
-    }
-};
-
-async function findDuplicateQuestionGroups(game: 'trap-answer' | 'educated-merchant' | 'prison', category?: string): Promise<Map<string, { id: string; createdAt: Timestamp }[]>> {
-    let collectionName: string;
-    switch(game) {
-        case 'trap-answer': collectionName = 'trap_answer_questions'; break;
-        case 'educated-merchant': collectionName = 'educated_merchant_questions'; break;
-        case 'prison': collectionName = 'prison_questions'; break;
-    }
-    
-    let q = query(collection(db, collectionName));
-    if (category && (game === 'trap-answer' || game === 'educated-merchant')) {
-        q = query(q, where("category", "==", category));
-    }
-    
-    const querySnapshot = await getDocs(q);
-    const groups = new Map<string, { id: string; createdAt: Timestamp }[]>();
-
-    querySnapshot.forEach(doc => {
-        const data = doc.data();
-        const signature = data.similaritySignature;
-        if (!signature) return;
-        
-        const group = groups.get(signature) || [];
-        group.push({ id: doc.id, createdAt: doc.data().createdAt || Timestamp.now() });
-        groups.set(signature, group);
-    });
-
-    return groups;
+    await commitChunks(ops);
+    return { success: true, count: unique.length };
+  } catch (e) {
+    console.error('Error uploading word war words:', e);
+    return { error: 'حدث خطأ أثناء رفع كلمات حرب الكلمات.' };
+  }
 }
 
+/* ====================== العد والحذف (معايير) ====================== */
 
-export async function deleteSimilarQuestions(game: 'trap-answer' | 'educated-merchant', category?: string): Promise<{ success: boolean; count?: number; error?: string; message?: string }> {
-    try {
-        const duplicateGroups = await findDuplicateQuestionGroups(game, category);
-        if (duplicateGroups.size === 0) {
-            return { success: true, count: 0, message: 'لم يتم العثور على أسئلة مكررة.' };
-        }
-
-        const batch = writeBatch(db);
-        const collectionName = game === 'trap-answer' ? 'trap_answer_questions' : 'educated_merchant_questions';
-        let deletedCount = 0;
-
-        for (const [signature, items] of duplicateGroups.entries()) {
-            if (items.length > 1) {
-                // Sort by createdAt timestamp descending (newest first)
-                items.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-                
-                // Keep the newest one (at index 0), delete the rest
-                const itemsToDelete = items.slice(1);
-                
-                itemsToDelete.forEach(item => {
-                    const docRef = doc(db, collectionName, item.id);
-                    batch.delete(docRef);
-                    deletedCount++;
-                });
-            }
-        }
-
-        if (deletedCount > 0) {
-            await batch.commit();
-        }
-        
-        return { success: true, count: deletedCount };
-
-    } catch (error) {
-        console.error("Error deleting similar questions:", error);
-        if (isFirebaseError(error)) {
-            return { success: false, error: `فشل حذف الأسئلة المكررة: ${error.message}` };
-        }
-        return { success: false, error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
-    }
+type CountCriteria = {
+  game: 'trap-answer' | 'prison' | 'word_war' | 'educated-merchant';
+  category?: string;
+  searchTerm?: string;
+  answerSearchTerm?: string;
+  all?: boolean;
+  duplicates?: { threshold: number } | 'word_war_duplicates';
 };
 
-export async function deleteSimilarPrisonQuestions(): Promise<{ success: boolean; count?: number; error?: string; message?: string }> {
-    try {
-        const duplicateGroups = await findDuplicateQuestionGroups('prison');
-        if (duplicateGroups.size === 0) {
-            return { success: true, count: 0, message: 'لم يتم العثور على أسئلة مكررة في السجن.' };
-        }
+export async function countQuestions(criteria: CountCriteria) {
+  if (
+    !criteria.category &&
+    !criteria.searchTerm &&
+    !criteria.answerSearchTerm &&
+    !criteria.all &&
+    !criteria.duplicates
+  ) {
+    return { success: false, error: 'يجب تحديد معيار للعد.' };
+  }
 
-        const batch = writeBatch(db);
-        let deletedCount = 0;
+  let collectionName = '';
+  let textFieldName: 'text' | 'question' = 'text';
 
-        for (const items of duplicateGroups.values()) {
-            if (items.length > 1) {
-                items.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-                const itemsToDelete = items.slice(1);
-                
-                itemsToDelete.forEach(item => {
-                    const docRef = doc(db, 'prison_questions', item.id);
-                    batch.delete(docRef);
-                    deletedCount++;
-                });
-            }
-        }
+  switch (criteria.game) {
+    case 'trap-answer':
+      collectionName = 'trap_answer_questions';
+      textFieldName = 'question';
+      break;
+    case 'educated-merchant':
+      collectionName = 'educated_merchant_questions';
+      textFieldName = 'question';
+      break;
+    case 'prison':
+      collectionName = 'prison_questions';
+      textFieldName = 'text';
+      break;
+    case 'word_war':
+      collectionName = 'word_war_words';
+      textFieldName = 'text';
+      break;
+    default:
+      return { success: false, error: 'نوع لعبة غير مدعوم.' };
+  }
 
-        if (deletedCount > 0) {
-            await batch.commit();
-        }
-        
-        return { success: true, count: deletedCount };
+  try {
+    const itemsCol = collection(db, collectionName);
 
-    } catch (error: any) {
-        console.error("Error deleting similar prison questions:", error);
-        return { success: false, error: error.message || 'فشل حذف أسئلة السجن المكررة.' };
+    if (criteria.all) {
+      const snapshot = await getCountFromServer(itemsCol);
+      return { success: true, count: snapshot.data().count };
     }
+
+    if (
+      criteria.category &&
+      (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')
+    ) {
+      const q = query(itemsCol, where('category', '==', normalize(criteria.category)));
+      const snapshot = await getCountFromServer(q);
+      return { success: true, count: snapshot.data().count };
+    }
+
+    if (criteria.searchTerm) {
+      const s = normalize(criteria.searchTerm);
+      const q = query(
+        itemsCol,
+        where(textFieldName, '>=', s),
+        where(textFieldName, '<=', s + '\uf8ff'),
+      );
+      const snapshot = await getDocs(q);
+      return { success: true, count: snapshot.size };
+    }
+
+    if (
+      criteria.answerSearchTerm &&
+      (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')
+    ) {
+      const s = normalize(criteria.answerSearchTerm);
+      const q = query(
+        itemsCol,
+        where('answer', '>=', s),
+        where('answer', '<=', s + '\uf8ff'),
+      );
+      const snapshot = await getDocs(q);
+      return { success: true, count: snapshot.size };
+    }
+
+    return { success: false, error: 'معايير العد غير صالحة.' };
+  } catch (error) {
+    console.error('Error counting items:', error);
+    return {
+      success: false,
+      error: `حدث خطأ أثناء عد العناصر. ${indexHintMsg}`,
+    };
+  }
 }
 
+type DeleteCriteria = {
+  game: 'trap-answer' | 'prison' | 'word_war' | 'educated-merchant';
+  category?: string;
+  searchTerm?: string;
+  answerSearchTerm?: string;
+  all?: boolean;
+};
+
+export async function deleteQuestions(criteria: DeleteCriteria) {
+  if (!criteria.category && !criteria.searchTerm && !criteria.answerSearchTerm && !criteria.all) {
+    return { error: 'يجب تحديد معيار للحذف.' };
+  }
+
+  let collectionName = '';
+  let textFieldName: 'text' | 'question' = 'text';
+
+  switch (criteria.game) {
+    case 'trap-answer':
+      collectionName = 'trap_answer_questions';
+      textFieldName = 'question';
+      break;
+    case 'educated-merchant':
+      collectionName = 'educated_merchant_questions';
+      textFieldName = 'question';
+      break;
+    case 'prison':
+      collectionName = 'prison_questions';
+      textFieldName = 'text';
+      break;
+    case 'word_war':
+      collectionName = 'word_war_words';
+      textFieldName = 'text';
+      break;
+    default:
+      return { error: 'نوع لعبة غير مدعوم.' };
+  }
+
+  try {
+    const itemsCol = collection(db, collectionName);
+    let q;
+
+    if (criteria.all) {
+      q = query(itemsCol);
+    } else if (
+      criteria.category &&
+      (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')
+    ) {
+      q = query(itemsCol, where('category', '==', normalize(criteria.category)));
+    } else if (criteria.searchTerm) {
+      const s = normalize(criteria.searchTerm);
+      q = query(itemsCol, where(textFieldName, '>=', s), where(textFieldName, '<=', s + '\uf8ff'));
+    } else if (
+      criteria.answerSearchTerm &&
+      (criteria.game === 'trap-answer' || criteria.game === 'educated-merchant')
+    ) {
+      const s = normalize(criteria.answerSearchTerm);
+      q = query(itemsCol, where('answer', '>=', s), where('answer', '<=', s + '\uf8ff'));
+    } else {
+      return { error: 'معايير الحذف غير صالحة.' };
+    }
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return { success: true, count: 0, message: 'لا عناصر مطابقة.' };
+
+    const refs = snapshot.docs.map((d) => d.ref);
+    let deleted = 0;
+
+    for (const group of chunkArray(refs)) {
+      const b = writeBatch(db);
+      group.forEach((r) => b.delete(r));
+      await b.commit();
+      deleted += group.length;
+    }
+
+    return { success: true, count: deleted };
+  } catch (error) {
+    console.error('Error deleting items:', error);
+    return {
+      error: `حدث خطأ أثناء حذف العناصر. ${indexHintMsg}`,
+    };
+  }
+}
+
+/* ====================== كشف/حذف المكرر ====================== */
+
+async function findDuplicateQuestionGroups(
+  game: 'trap-answer' | 'educated-merchant' | 'prison',
+  category?: string,
+): Promise<Map<string, { id: string; createdAt: Timestamp }[]>> {
+  let collectionName = '';
+  switch (game) {
+    case 'trap-answer':
+      collectionName = 'trap_answer_questions';
+      break;
+    case 'educated-merchant':
+      collectionName = 'educated_merchant_questions';
+      break;
+    case 'prison':
+      collectionName = 'prison_questions';
+      break;
+  }
+
+  let qRef = query(collection(db, collectionName));
+  if (category && (game === 'trap-answer' || game === 'educated-merchant')) {
+    qRef = query(qRef, where('category', '==', normalize(category)));
+  }
+
+  const snapshot = await getDocs(qRef);
+  const groups = new Map<string, { id: string; createdAt: Timestamp }[]>();
+
+  snapshot.forEach((d) => {
+    const data = d.data() as any;
+    const signature = data.similaritySignature;
+    if (!signature) return;
+    const createdAt = (data.createdAt as Timestamp) || Timestamp.now();
+    const arr = groups.get(signature) || [];
+    arr.push({ id: d.id, createdAt });
+    groups.set(signature, arr);
+  });
+
+  return groups;
+}
+
+export async function deleteSimilarQuestions(
+  game: 'trap-answer' | 'educated-merchant',
+  category?: string,
+) {
+  try {
+    const groups = await findDuplicateQuestionGroups(game, category);
+    if (groups.size === 0) return { success: true, count: 0, message: 'لم يتم العثور على أسئلة مكررة.' };
+
+    const collectionName =
+      game === 'trap-answer' ? 'trap_answer_questions' : 'educated_merchant_questions';
+
+    const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+    let deleted = 0;
+
+    for (const [, items] of groups) {
+      if (items.length > 1) {
+        items.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()); // احتفظ بالأحدث
+        const toDelete = items.slice(1);
+        toDelete.forEach((it) => {
+          const ref = doc(db, collectionName, it.id);
+          ops.push((b) => b.delete(ref));
+          deleted++;
+        });
+      }
+    }
+
+    await commitChunks(ops);
+    return { success: true, count: deleted };
+  } catch (e) {
+    console.error('Error deleting similar questions:', e);
+    if (isFirebaseError(e)) {
+      return { success: false, error: `فشل حذف الأسئلة المكررة: ${e.message}` };
+    }
+    return { success: false, error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
+  }
+}
+
+export async function deleteSimilarPrisonQuestions() {
+  try {
+    const groups = await findDuplicateQuestionGroups('prison');
+    if (groups.size === 0)
+      return { success: true, count: 0, message: 'لم يتم العثور على أسئلة مكررة في السجن.' };
+
+    const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+    let deleted = 0;
+
+    for (const [, items] of groups) {
+      if (items.length > 1) {
+        items.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+        const toDelete = items.slice(1);
+        toDelete.forEach((it) => {
+          const ref = doc(db, 'prison_questions', it.id);
+          ops.push((b) => b.delete(ref));
+          deleted++;
+        });
+      }
+    }
+
+    await commitChunks(ops);
+    return { success: true, count: deleted };
+  } catch (e: any) {
+    console.error('Error deleting similar prison questions:', e);
+    return { success: false, error: e?.message || 'فشل حذف أسئلة السجن المكررة.' };
+  }
+}
 
 async function findDuplicateWords() {
-    const wordsCol = collection(db, 'word_war_words');
-    const querySnapshot = await getDocs(wordsCol);
+  const wordsCol = collection(db, 'word_war_words');
+  const snapshot = await getDocs(wordsCol);
+  const map = new Map<string, string[]>();
 
-    const wordsMap = new Map<string, string[]>(); // Map from word text to array of document IDs
-    
-    querySnapshot.forEach(doc => {
-        const text = (doc.data().text as string)?.trim();
-        if (text) {
-            if (!wordsMap.has(text)) {
-                wordsMap.set(text, []);
-            }
-            wordsMap.get(text)!.push(doc.id);
-        }
-    });
+  snapshot.forEach((d) => {
+    const text = normalize((d.data() as any).text);
+    if (!text) return;
+    const key = text; // يمكن مستقبلاً اعتماد lower/normalize إضافي
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(d.id);
+  });
 
-    const groups: string[][] = [];
-    let deletedCount = 0;
+  const groups: string[][] = [];
+  let deletedCount = 0;
+  map.forEach((ids) => {
+    if (ids.length > 1) {
+      groups.push(ids);
+      deletedCount += ids.length - 1;
+    }
+  });
 
-    wordsMap.forEach((ids) => {
-        if (ids.length > 1) {
-            groups.push(ids);
-            deletedCount += ids.length - 1; // All but one will be deleted
-        }
-    });
-
-    return { groups, count: deletedCount };
+  return { groups, count: deletedCount };
 }
 
+export async function deleteDuplicateWords() {
+  try {
+    const { groups, count: deletedCount } = await findDuplicateWords();
+    if (groups.length === 0) return { success: true, count: 0, message: 'لم يتم العثور على كلمات مكررة.' };
 
-export async function deleteDuplicateWords(): Promise<{ success: boolean; count?: number; error?: string, message?: string }> {
-    try {
-        const { groups, count: deletedCount } = await findDuplicateWords();
+    const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+    groups.forEach((ids) => {
+      ids.sort(); // احتفظ بالأقدم (أول ID)
+      ids.shift();
+      ids.forEach((id) => {
+        const ref = doc(db, 'word_war_words', id);
+        ops.push((b) => b.delete(ref));
+      });
+    });
 
-        if (groups.length === 0) {
-            return { success: true, count: 0, message: 'لم يتم العثور على كلمات مكررة.' };
-        }
-
-        const batch = writeBatch(db);
-        
-        groups.forEach(groupOfIds => {
-            groupOfIds.sort(); // Sort to have a consistent "oldest" one to keep
-            groupOfIds.shift(); // Keep the first one (oldest ID), remove it from deletion list
-
-            groupOfIds.forEach(idToDelete => {
-                const docRef = doc(db, 'word_war_words', idToDelete);
-                batch.delete(docRef);
-            });
-        });
-        
-        if (deletedCount > 0) {
-            await batch.commit();
-        }
-        
-        return { success: true, count: deletedCount };
-
-    } catch (error) {
-        console.error("Error deleting duplicate words:", error);
-        if (isFirebaseError(error)) {
-            return { error: `فشل حذف الكلمات المكررة: ${error.message}` };
-        }
-        return { error: 'حدث خطأ غير متوقع أثناء حذف الكلمات المكررة.' };
+    await commitChunks(ops);
+    return { success: true, count: deletedCount };
+  } catch (e) {
+    console.error('Error deleting duplicate words:', e);
+    if (isFirebaseError(e)) {
+      return { error: `فشل حذف الكلمات المكررة: ${e.message}` };
     }
-};
+    return { error: 'حدث خطأ غير متوقع أثناء حذف الكلمات المكررة.' };
+  }
+}
+
+/* ====================== إعلان اللعبة ====================== */
 
 export async function setAnnouncement(text: string) {
-    try {
-        const settingsRef = doc(db, 'game_settings', 'announcement');
-        await setDoc(settingsRef, { text });
-        return { success: true };
-    } catch (error) {
-        console.error("Error setting announcement:", error);
-        return { error: "فشل حفظ الإعلان." };
-    }
-};
+  try {
+    const ref = doc(db, 'game_settings', 'announcement');
+    await setDoc(ref, { text: normalize(text) });
+    return { success: true };
+  } catch (e) {
+    console.error('Error setting announcement:', e);
+    return { error: 'فشل حفظ الإعلان.' };
+  }
+}
 
 export async function getAnnouncement() {
-    try {
-        const docRef = doc(db, 'game_settings', 'announcement');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { success: true, text: docSnap.data().text || '' };
-        }
-        return { success: true, text: '' };
-    } catch (error) {
-        console.error("Error getting announcement:", error);
-        return { error: "فشل جلب الإعلان." };
-    }
+  try {
+    const ref = doc(db, 'game_settings', 'announcement');
+    const snap = await getDoc(ref);
+    if (snap.exists()) return { success: true, text: snap.data().text || '' };
+    return { success: true, text: '' };
+  } catch (e) {
+    console.error('Error getting announcement:', e);
+    return { error: 'فشل جلب الإعلان.' };
+  }
 }
 
-export async function adminUpdateUser(userId: string, data: Partial<UserProfile>): Promise<{success: boolean, error?: string}> {
-    if(!userId) return {success: false, error: "User ID is required."};
-    
-    // Security enhancement: Prevent changing admin status via this function.
-    const sanitizedData = { ...data };
-    delete (sanitizedData as any).isAdmin;
-    delete (sanitizedData as any).isEditor;
-    
-    const userRef = doc(db, 'users', userId);
-    try {
-        await updateDoc(userRef, sanitizedData);
-        return {success: true}
-    } catch(error) {
-        console.error("Error updating user by admin:", error)
-        return {success: false, error: "Failed to update user profile."}
-    }
-};
+/* ====================== تحديث مستخدم (أدمن) ====================== */
 
-// --- Trap Answer Categories ---
-export async function getTrapAnswerCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
-    try {
-        const docRef = doc(db, 'game_settings', 'trap_answer_categories');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().list?.length > 0) {
-            return { success: true, categories: docSnap.data().list };
-        }
-        await setDoc(docRef, { list: DEFAULT_TRAP_ANSWER_CATEGORIES });
-        return { success: true, categories: DEFAULT_TRAP_ANSWER_CATEGORIES };
-    } catch (error) {
-        console.error("Error getting trap answer categories:", error);
-        return { success: false, error: 'Failed to fetch trap answer categories.' };
-    }
+export async function adminUpdateUser(userId: string, data: Partial<UserProfile>) {
+  if (!stringNonEmpty(userId)) return { success: false, error: 'User ID is required.' };
+
+  // حماية: منع تغيير الأعلام الحساسة
+  const sanitized = { ...data } as Partial<UserProfile> & Record<string, any>;
+  delete sanitized.isAdmin;
+  delete sanitized.isEditor;
+
+  try {
+    const ref = doc(db, 'users', userId);
+    await updateDoc(ref, sanitized);
+    return { success: true };
+  } catch (e) {
+    console.error('Error updating user by admin:', e);
+    return { success: false, error: 'Failed to update user profile.' };
+  }
 }
 
-export async function addTrapAnswerCategory(category: string): Promise<{success: boolean, error?: string}> {
-    if (!category || typeof category !== 'string' || category.trim() === '') {
-        return { error: 'اسم القسم غير صالح.' };
+/* ====================== أقسام الجواب المفخخ ====================== */
+
+export async function getTrapAnswerCategories() {
+  try {
+    const ref = doc(db, 'game_settings', 'trap_answer_categories');
+    const snap = await getDoc(ref);
+    if (snap.exists() && snap.data().list?.length > 0) {
+      return { success: true, categories: snap.data().list as string[] };
     }
-    try {
-        const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
-        await updateDoc(settingsRef, {
-            list: arrayUnion(category.trim())
-        });
-        return { success: true };
-    } catch (error) {
-        if (isFirebaseError(error) && error.code === 'not-found') {
-            await setDoc(doc(db, 'game_settings', 'trap_answer_categories'), {
-                list: [category.trim()]
-            });
-            return { success: true };
-        }
-        console.error("Error adding trap answer category:", error);
-        return { success: false, error: 'Failed to add trap answer category.' };
-    }
-};
-
-export async function editTrapAnswerCategory(oldCategory: string, newCategory: string): Promise<{ success: boolean; error?: string }> {
-    if (!oldCategory || !newCategory || oldCategory.trim() === '' || newCategory.trim() === '') {
-        return { error: 'الاسم القديم والجديد مطلوبان.' };
-    }
-    if (oldCategory.trim() === newCategory.trim()) {
-        return { error: 'الاسم الجديد للقسم يجب أن يختلف عن الاسم القديم.' };
-    }
-
-    const batch = writeBatch(db);
-    const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
-    
-    try {
-        const settingsSnap = await getDoc(settingsRef);
-        if (!settingsSnap.exists()) {
-            throw new Error("مستند إعدادات الأقسام غير موجود.");
-        }
-        
-        const categories: string[] = settingsSnap.data().list || [];
-        if (!categories.includes(oldCategory)) {
-            return { error: 'القسم القديم غير موجود.' };
-        }
-        if (categories.includes(newCategory.trim())) {
-            return { error: 'الاسم الجديد للقسم موجود بالفعل.' };
-        }
-
-        const updatedCategories = categories.map(c => c === oldCategory ? newCategory.trim() : c);
-        batch.update(settingsRef, { list: updatedCategories });
-        
-        const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", oldCategory));
-        const questionsSnapshot = await getDocs(questionsQuery);
-
-        questionsSnapshot.forEach(doc => {
-            batch.update(doc.ref, { category: newCategory.trim() });
-        });
-        
-        await batch.commit();
-        return { success: true };
-
-    } catch (error) {
-        console.error("Error editing category:", error);
-        return { success: false, error: 'فشل تعديل قسم الجواب المفخخ.' };
-    }
-};
-
-export async function deleteTrapAnswerCategory(categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> {
-    if (!categoryToDelete || categoryToDelete.trim() === '') {
-        return { error: 'يجب تحديد قسم للحذف.' };
-    }
-    
-    const batch = writeBatch(db);
-    const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
-
-    try {
-        const settingsSnap = await getDoc(settingsRef);
-        if (!settingsSnap.exists()) throw new Error("مستند إعدادات الأقسام غير موجود.");
-        
-        const categories: string[] = settingsSnap.data().list || [];
-        if (categories.length <= 1) {
-            return { error: "لا يمكن حذف آخر قسم متبقٍ." };
-        }
-        if (!categories.includes(categoryToDelete)) {
-            return { error: "القسم المحدد للحذف غير موجود." };
-        }
-        
-        batch.update(settingsRef, { list: arrayRemove(categoryToDelete) });
-
-        const questionsQuery = query(collection(db, 'trap_answer_questions'), where("category", "==", categoryToDelete));
-        const questionsSnapshot = await getDocs(questionsQuery);
-
-        questionsSnapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-
-        await batch.commit();
-        return { success: true, count: questionsSnapshot.size };
-
-    } catch (error) {
-        console.error("Error deleting category:", error);
-        return { success: false, error: 'فشل حذف قسم الجواب المفخخ والأسئلة المرتبطة به.' };
-    }
-};
-
-
-// --- Educated Merchant Categories ---
-export async function getEducatedMerchantCategories(): Promise<{success: boolean, categories?: string[], error?: string}> {
-    try {
-        const docRef = doc(db, 'game_settings', 'educated_merchant_categories');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().list?.length > 0) {
-            return { success: true, categories: docSnap.data().list };
-        }
-        // If it doesn't exist, create it with default values
-        await setDoc(docRef, { list: DEFAULT_EDUCATED_MERCHANT_CATEGORIES });
-        return { success: true, categories: DEFAULT_EDUCATED_MERCHANT_CATEGORIES };
-    } catch (error) {
-        console.error("Error getting educated merchant categories:", error);
-        return { success: false, error: 'Failed to fetch educated merchant categories.' };
-    }
+    await setDoc(ref, { list: DEFAULT_TRAP_ANSWER_CATEGORIES });
+    return { success: true, categories: DEFAULT_TRAP_ANSWER_CATEGORIES };
+  } catch (e) {
+    console.error('Error getting trap answer categories:', e);
+    return { success: false, error: 'Failed to fetch trap answer categories.' };
+  }
 }
 
-export async function addEducatedMerchantCategory(category: string): Promise<{success: boolean, error?: string}> {
-    if (!category || typeof category !== 'string' || category.trim() === '') {
-        return { error: 'اسم القسم غير صالح.' };
+export async function addTrapAnswerCategory(category: string) {
+  if (!stringNonEmpty(category)) return { error: 'اسم القسم غير صالح.' };
+  try {
+    const ref = doc(db, 'game_settings', 'trap_answer_categories');
+    await updateDoc(ref, { list: arrayUnion(normalize(category)) });
+    return { success: true };
+  } catch (e: any) {
+    if (isFirebaseError(e) && e.code === 'not-found') {
+      await setDoc(doc(db, 'game_settings', 'trap_answer_categories'), {
+        list: [normalize(category)],
+      });
+      return { success: true };
     }
-    try {
-        const settingsRef = doc(db, 'game_settings', 'educated_merchant_categories');
-        await updateDoc(settingsRef, {
-            list: arrayUnion(category.trim())
-        });
-        return { success: true };
-    } catch (error) {
-        if (isFirebaseError(error) && error.code === 'not-found') {
-            await setDoc(doc(db, 'game_settings', 'educated_merchant_categories'), {
-                list: [category.trim()]
-            });
-            return { success: true };
-        }
-        console.error("Error adding educated merchant category:", error);
-        return { success: false, error: 'Failed to add educated merchant category.' };
-    }
-};
-
-export async function editEducatedMerchantCategory(oldCategory: string, newCategory: string): Promise<{ success: boolean; error?: string }> {
-    if (!oldCategory || !newCategory || oldCategory.trim() === '' || newCategory.trim() === '') {
-        return { error: 'الاسم القديم والجديد مطلوبان.' };
-    }
-    if (oldCategory.trim() === newCategory.trim()) {
-        return { error: 'الاسم الجديد للقسم يجب أن يختلف عن الاسم القديم.' };
-    }
-
-    const batch = writeBatch(db);
-    const settingsRef = doc(db, 'game_settings', 'educated_merchant_categories');
-    
-    try {
-        const settingsSnap = await getDoc(settingsRef);
-        if (!settingsSnap.exists()) {
-            throw new Error("مستند إعدادات الأقسام غير موجود.");
-        }
-        
-        const categories: string[] = settingsSnap.data().list || [];
-        if (!categories.includes(oldCategory)) {
-            return { error: 'القسم القديم غير موجود.' };
-        }
-        if (categories.includes(newCategory.trim())) {
-            return { error: 'الاسم الجديد للقسم موجود بالفعل.' };
-        }
-
-        const updatedCategories = categories.map(c => c === oldCategory ? newCategory.trim() : c);
-        batch.update(settingsRef, { list: updatedCategories });
-        
-        const questionsQuery = query(collection(db, 'educated_merchant_questions'), where("category", "==", oldCategory));
-        const questionsSnapshot = await getDocs(questionsQuery);
-
-        questionsSnapshot.forEach(doc => {
-            batch.update(doc.ref, { category: newCategory.trim() });
-        });
-        
-        await batch.commit();
-        return { success: true };
-
-    } catch (error) {
-        console.error("Error editing category:", error);
-        return { success: false, error: 'فشل تعديل قسم التاجر المتعلم.' };
-    }
-};
-
-export async function deleteEducatedMerchantCategory(categoryToDelete: string): Promise<{ success: boolean; count?: number; error?: string }> {
-    if (!categoryToDelete || categoryToDelete.trim() === '') {
-        return { error: 'يجب تحديد قسم للحذف.' };
-    }
-    
-    const batch = writeBatch(db);
-    const settingsRef = doc(db, 'game_settings', 'educated_merchant_categories');
-
-    try {
-        const settingsSnap = await getDoc(settingsRef);
-        if (!settingsSnap.exists()) throw new Error("مستند إعدادات الأقسام غير موجود.");
-        
-        const categories: string[] = settingsSnap.data().list || [];
-        if (categories.length <= 1) {
-            return { error: "لا يمكن حذف آخر قسم متبقٍ." };
-        }
-        if (!categories.includes(categoryToDelete)) {
-            return { error: "القسم المحدد للحذف غير موجود." };
-        }
-        
-        batch.update(settingsRef, { list: arrayRemove(categoryToDelete) });
-
-        const questionsQuery = query(collection(db, 'educated_merchant_questions'), where("category", "==", categoryToDelete));
-        const questionsSnapshot = await getDocs(questionsQuery);
-
-        questionsSnapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-
-        await batch.commit();
-        return { success: true, count: questionsSnapshot.size };
-
-    } catch (error) {
-        console.error("Error deleting category:", error);
-        return { success: false, error: 'فشل حذف قسم التاجر المتعلم والأسئلة المرتبطة به.' };
-    }
-};
-
-
-
-export async function setAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
-    try {
-        const settingsRef = doc(db, 'game_settings', 'avatar_prices');
-        await setDoc(settingsRef, { prices });
-        return { success: true };
-    } catch (error) {
-        console.error("Error setting avatar prices:", error);
-        return { success: false, error: "Failed to save avatar prices." };
-    }
-};
-
-export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
-    try {
-        const docRef = doc(db, 'game_settings', 'avatar_prices');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { success: true, prices: docSnap.data().prices || [] };
-        }
-        return { success: true, prices: [] };
-    } catch (error) {
-        console.error("Error getting avatar prices:", error);
-        return { success: false, error: 'Failed to fetch avatar prices.' };
-    }
+    console.error('Error adding trap answer category:', e);
+    return { success: false, error: 'Failed to add trap answer category.' };
+  }
 }
 
-export async function setPunishmentAvatarPrices(prices: AvatarPrice[]): Promise<{success: boolean, error?: string}> {
-    try {
-        const settingsRef = doc(db, 'game_settings', 'punishment_avatar_prices');
-        await setDoc(settingsRef, { prices });
-        return { success: true };
-    } catch (error) {
-        console.error("Error setting punishment avatar prices:", error);
-        return { success: false, error: "Failed to save punishment avatar prices." };
-    }
-};
+export async function editTrapAnswerCategory(oldCategory: string, newCategory: string) {
+  if (!stringNonEmpty(oldCategory) || !stringNonEmpty(newCategory))
+    return { error: 'الاسم القديم والجديد مطلوبان.' };
+  if (normalize(oldCategory) === normalize(newCategory))
+    return { error: 'الاسم الجديد يجب أن يختلف عن القديم.' };
 
-export async function getPunishmentAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
-    try {
-        const docRef = doc(db, 'game_settings', 'punishment_avatar_prices');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { success: true, prices: docSnap.data().prices || [] };
-        }
-        return { success: true, prices: [] };
-    } catch (error) {
-        console.error("Error getting punishment avatar prices:", error);
-        return { success: false, error: 'Failed to fetch punishment avatar prices.' };
-    }
+  const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
+  const batch = writeBatch(db);
+
+  try {
+    const settingsSnap = await getDoc(settingsRef);
+    if (!settingsSnap.exists()) throw new Error('مستند إعدادات الأقسام غير موجود.');
+
+    const categories: string[] = settingsSnap.data().list || [];
+    if (!categories.includes(oldCategory)) return { error: 'القسم القديم غير موجود.' };
+    if (categories.includes(normalize(newCategory)))
+      return { error: 'الاسم الجديد للقسم موجود بالفعل.' };
+
+    const updated = categories.map((c) => (c === oldCategory ? normalize(newCategory) : c));
+    batch.update(settingsRef, { list: updated });
+
+    const qRef = query(
+      collection(db, 'trap_answer_questions'),
+      where('category', '==', oldCategory),
+    );
+    const qs = await getDocs(qRef);
+    qs.forEach((d) => batch.update(d.ref, { category: normalize(newCategory) }));
+
+    await batch.commit();
+    return { success: true };
+  } catch (e) {
+    console.error('Error editing category:', e);
+    return { success: false, error: 'فشل تعديل قسم الجواب المفخخ.' };
+  }
 }
 
+export async function deleteTrapAnswerCategory(categoryToDelete: string) {
+  if (!stringNonEmpty(categoryToDelete)) return { error: 'يجب تحديد قسم للحذف.' };
 
-export async function setDefaultAvatar(avatarId: string): Promise<{ success: boolean; error?: string }> {
-    if (!avatarId || avatarId.trim() === '') {
-        return { success: false, error: "Avatar ID is required." };
-    }
-    const batch = writeBatch(db);
-    const settingsRef = doc(db, 'game_settings', 'default_avatar');
-    const pricesRef = doc(db, 'game_settings', 'avatar_prices');
-    
-    try {
-        batch.set(settingsRef, { avatarId: avatarId });
-        const pricesDoc = await getDoc(pricesRef);
-        if (pricesDoc.exists()) {
-            const prices = (pricesDoc.data().prices || []) as AvatarPrice[];
-            const priceIndex = prices.findIndex(p => p.avatarId === avatarId);
-            if (priceIndex !== -1) {
-                prices[priceIndex].price = 0;
-            } else {
-                prices.push({ avatarId: avatarId, price: 0, currency: 'coins' });
-            }
-            batch.update(pricesRef, { prices });
-        } else {
-            batch.set(pricesRef, { prices: [{ avatarId, price: 0, currency: 'coins' }] });
-        }
-        
-        await batch.commit();
-        return { success: true };
-    } catch (error) {
-        console.error("Error setting default avatar:", error);
-        return { success: false, error: "Failed to set default avatar." };
-    }
-};
+  const settingsRef = doc(db, 'game_settings', 'trap_answer_categories');
+  const batch = writeBatch(db);
 
-export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
-    try {
-        const docRef = doc(db, 'game_settings', 'default_avatar');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { success: true, avatarId: docSnap.data().avatarId };
-        }
-        return { success: true, avatarId: 'Avatar00.png' }; 
-    } catch (error) {
-        console.error("Error getting default avatar:", error);
-        return { success: false, error: 'Failed to fetch default avatar.' };
-    }
+  try {
+    const snap = await getDoc(settingsRef);
+    if (!snap.exists()) throw new Error('مستند إعدادات الأقسام غير موجود.');
+
+    const categories: string[] = snap.data().list || [];
+    if (categories.length <= 1) return { error: 'لا يمكن حذف آخر قسم متبقٍ.' };
+    if (!categories.includes(categoryToDelete)) return { error: 'القسم المحدد غير موجود.' };
+
+    batch.update(settingsRef, { list: arrayRemove(categoryToDelete) });
+
+    const qRef = query(
+      collection(db, 'trap_answer_questions'),
+      where('category', '==', categoryToDelete),
+    );
+    const qs = await getDocs(qRef);
+    qs.forEach((d) => batch.delete(d.ref));
+
+    await batch.commit();
+    return { success: true, count: qs.size };
+  } catch (e) {
+    console.error('Error deleting category:', e);
+    return { success: false, error: 'فشل حذف قسم الجواب المفخخ والأسئلة المرتبطة به.' };
+  }
 }
 
-export async function setSocialRanks(ranks: SocialRank[]): Promise<{success: boolean, error?: string}> {
-    try {
-        const settingsRef = doc(db, 'game_settings', 'social_ranks');
-        await setDoc(settingsRef, { list: ranks });
-        return { success: true };
-    } catch (error) {
-        console.error("Error setting social ranks:", error);
-        return { success: false, error: 'فشل حفظ الألقاب الاجتماعية.' };
+/* ====================== أقسام التاجر المتعلم ====================== */
+
+export async function getEducatedMerchantCategories() {
+  try {
+    const ref = doc(db, 'game_settings', 'educated_merchant_categories');
+    const snap = await getDoc(ref);
+    if (snap.exists() && snap.data().list?.length > 0) {
+      return { success: true, categories: snap.data().list as string[] };
     }
-};
+    await setDoc(ref, { list: DEFAULT_EDUCATED_MERCHANT_CATEGORIES });
+    return { success: true, categories: DEFAULT_EDUCATED_MERCHANT_CATEGORIES };
+  } catch (e) {
+    console.error('Error getting educated merchant categories:', e);
+    return { success: false, error: 'Failed to fetch educated merchant categories.' };
+  }
+}
 
-export async function addPermissionToRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean, error?: string }> {
-    const settingsRef = doc(db, 'game_settings', 'social_ranks');
-    try {
-        await runTransaction(db, async (transaction) => {
-            const docSnap = await transaction.get(settingsRef);
-            if (!docSnap.exists()) throw new Error("مستند الألقاب غير موجود.");
-            
-            const ranks: SocialRank[] = docSnap.data().list || [];
-            const rankIndex = ranks.findIndex(r => r.name === rankName);
-            if (rankIndex === -1) throw new Error("اللقب غير موجود.");
-            
-            if (!ranks[rankIndex].permissions?.includes(permissionId)) {
-                if(!ranks[rankIndex].permissions) ranks[rankIndex].permissions = [];
-                ranks[rankIndex].permissions.push(permissionId);
-            }
-            
-            transaction.update(settingsRef, { list: ranks });
-        });
-        return { success: true };
-    } catch (error: any) {
-        return { success: false, error: error.message || "فشل إضافة الصلاحية." };
+export async function addEducatedMerchantCategory(category: string) {
+  if (!stringNonEmpty(category)) return { error: 'اسم القسم غير صالح.' };
+  try {
+    const ref = doc(db, 'game_settings', 'educated_merchant_categories');
+    await updateDoc(ref, { list: arrayUnion(normalize(category)) });
+    return { success: true };
+  } catch (e: any) {
+    if (isFirebaseError(e) && e.code === 'not-found') {
+      await setDoc(doc(db, 'game_settings', 'educated_merchant_categories'), {
+        list: [normalize(category)],
+      });
+      return { success: true };
     }
-};
+    console.error('Error adding educated merchant category:', e);
+    return { success: false, error: 'Failed to add educated merchant category.' };
+  }
+}
 
+export async function editEducatedMerchantCategory(oldCategory: string, newCategory: string) {
+  if (!stringNonEmpty(oldCategory) || !stringNonEmpty(newCategory))
+    return { error: 'الاسم القديم والجديد مطلوبان.' };
+  if (normalize(oldCategory) === normalize(newCategory))
+    return { error: 'الاسم الجديد يجب أن يختلف عن القديم.' };
 
-export async function removePermissionFromRank(rankName: string, permissionId: PermissionId): Promise<{ success: boolean; error?: string }> {
-    const settingsRef = doc(db, 'game_settings', 'social_ranks');
-    try {
-        await runTransaction(db, async (transaction) => {
-            const docSnap = await transaction.get(settingsRef);
-            if (!docSnap.exists()) throw new Error("مستند الألقاب غير موجود.");
-            
-            const ranks: SocialRank[] = docSnap.data().list || [];
-            const rankIndex = ranks.findIndex(r => r.name === rankName);
-            if (rankIndex === -1) throw new Error("اللقب غير موجود.");
-            
-            if (ranks[rankIndex].permissions) {
-                ranks[rankIndex].permissions = ranks[rankIndex].permissions.filter(p => p !== permissionId);
-            }
-            
-            transaction.update(settingsRef, { list: ranks });
-        });
-        return { success: true };
-    } catch (error: any) {
-        return { success: false, error: error.message || "فشل إزالة الصلاحية." };
+  const settingsRef = doc(db, 'game_settings', 'educated_merchant_categories');
+  const batch = writeBatch(db);
+
+  try {
+    const settingsSnap = await getDoc(settingsRef);
+    if (!settingsSnap.exists()) throw new Error('مستند إعدادات الأقسام غير موجود.');
+
+    const categories: string[] = settingsSnap.data().list || [];
+    if (!categories.includes(oldCategory)) return { error: 'القسم القديم غير موجود.' };
+    if (categories.includes(normalize(newCategory)))
+      return { error: 'الاسم الجديد للقسم موجود بالفعل.' };
+
+    const updated = categories.map((c) => (c === oldCategory ? normalize(newCategory) : c));
+    batch.update(settingsRef, { list: updated });
+
+    const qRef = query(
+      collection(db, 'educated_merchant_questions'),
+      where('category', '==', oldCategory),
+    );
+    const qs = await getDocs(qRef);
+    qs.forEach((d) => batch.update(d.ref, { category: normalize(newCategory) }));
+
+    await batch.commit();
+    return { success: true };
+  } catch (e) {
+    console.error('Error editing category:', e);
+    return { success: false, error: 'فشل تعديل قسم التاجر المتعلم.' };
+  }
+}
+
+export async function deleteEducatedMerchantCategory(categoryToDelete: string) {
+  if (!stringNonEmpty(categoryToDelete)) return { error: 'يجب تحديد قسم للحذف.' };
+
+  const settingsRef = doc(db, 'game_settings', 'educated_merchant_categories');
+  const batch = writeBatch(db);
+
+  try {
+    const snap = await getDoc(settingsRef);
+    if (!snap.exists()) throw new Error('مستند إعدادات الأقسام غير موجود.');
+
+    const categories: string[] = snap.data().list || [];
+    if (categories.length <= 1) return { error: 'لا يمكن حذف آخر قسم متبقٍ.' };
+    if (!categories.includes(categoryToDelete)) return { error: 'القسم المحدد غير موجود.' };
+
+    batch.update(settingsRef, { list: arrayRemove(categoryToDelete) });
+
+    const qRef = query(
+      collection(db, 'educated_merchant_questions'),
+      where('category', '==', categoryToDelete),
+    );
+    const qs = await getDocs(qRef);
+    qs.forEach((d) => batch.delete(d.ref));
+
+    await batch.commit();
+    return { success: true, count: qs.size };
+  } catch (e) {
+    console.error('Error deleting category:', e);
+    return { success: false, error: 'فشل حذف قسم التاجر المتعلم والأسئلة المرتبطة به.' };
+  }
+}
+
+/* ====================== أسعار الأفاتارات والعقوبات ====================== */
+
+export async function setAvatarPrices(prices: AvatarPrice[]) {
+  try {
+    const ref = doc(db, 'game_settings', 'avatar_prices');
+    await setDoc(ref, { prices: prices || [] });
+    return { success: true };
+  } catch (e) {
+    console.error('Error setting avatar prices:', e);
+    return { success: false, error: 'Failed to save avatar prices.' };
+  }
+}
+
+export async function getAvatarPrices() {
+  try {
+    const ref = doc(db, 'game_settings', 'avatar_prices');
+    const snap = await getDoc(ref);
+    if (snap.exists()) return { success: true, prices: (snap.data().prices || []) as AvatarPrice[] };
+    return { success: true, prices: [] };
+  } catch (e) {
+    console.error('Error getting avatar prices:', e);
+    return { success: false, error: 'Failed to fetch avatar prices.' };
+  }
+}
+
+export async function setPunishmentAvatarPrices(prices: AvatarPrice[]) {
+  try {
+    const ref = doc(db, 'game_settings', 'punishment_avatar_prices');
+    await setDoc(ref, { prices: prices || [] });
+    return { success: true };
+  } catch (e) {
+    console.error('Error setting punishment avatar prices:', e);
+    return { success: false, error: 'Failed to save punishment avatar prices.' };
+  }
+}
+
+export async function getPunishmentAvatarPrices() {
+  try {
+    const ref = doc(db, 'game_settings', 'punishment_avatar_prices');
+    const snap = await getDoc(ref);
+    if (snap.exists()) return { success: true, prices: (snap.data().prices || []) as AvatarPrice[] };
+    return { success: true, prices: [] };
+  } catch (e) {
+    console.error('Error getting punishment avatar prices:', e);
+    return { success: false, error: 'Failed to fetch punishment avatar prices.' };
+  }
+}
+
+export async function setDefaultAvatar(avatarId: string) {
+  if (!stringNonEmpty(avatarId)) return { success: false, error: 'Avatar ID is required.' };
+
+  const settingsRef = doc(db, 'game_settings', 'default_avatar');
+  const pricesRef = doc(db, 'game_settings', 'avatar_prices');
+  const batch = writeBatch(db);
+
+  try {
+    batch.set(settingsRef, { avatarId });
+
+    const pricesSnap = await getDoc(pricesRef);
+    if (pricesSnap.exists()) {
+      const prices = ((pricesSnap.data().prices || []) as AvatarPrice[]).slice();
+      const idx = prices.findIndex((p) => p.avatarId === avatarId);
+      if (idx !== -1) prices[idx].price = 0;
+      else prices.push({ avatarId, price: 0, currency: 'coins' });
+      batch.update(pricesRef, { prices });
+    } else {
+      batch.set(pricesRef, { prices: [{ avatarId, price: 0, currency: 'coins' }] });
     }
-};
 
+    await batch.commit();
+    return { success: true };
+  } catch (e) {
+    console.error('Error setting default avatar:', e);
+    return { success: false, error: 'Failed to set default avatar.' };
+  }
+}
+
+export async function getDefaultAvatar() {
+  try {
+    const ref = doc(db, 'game_settings', 'default_avatar');
+    const snap = await getDoc(ref);
+    if (snap.exists()) return { success: true, avatarId: snap.data().avatarId as string };
+    return { success: true, avatarId: 'Avatar00.png' };
+  } catch (e) {
+    console.error('Error getting default avatar:', e);
+    return { success: false, error: 'Failed to fetch default avatar.' };
+  }
+}
+
+/* ====================== الألقاب الاجتماعية والصلاحيات ====================== */
+
+export async function setSocialRanks(ranks: SocialRank[]) {
+  try {
+    const ref = doc(db, 'game_settings', 'social_ranks');
+    await setDoc(ref, { list: ranks || [] });
+    return { success: true };
+  } catch (e) {
+    console.error('Error setting social ranks:', e);
+    return { success: false, error: 'فشل حفظ الألقاب الاجتماعية.' };
+  }
+}
+
+export async function addPermissionToRank(rankName: string, permissionId: PermissionId) {
+  const ref = doc(db, 'game_settings', 'social_ranks');
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error('مستند الألقاب غير موجود.');
+      const ranks: SocialRank[] = snap.data().list || [];
+      const idx = ranks.findIndex((r) => r.name === rankName);
+      if (idx === -1) throw new Error('اللقب غير موجود.');
+      const permissions = ranks[idx].permissions || [];
+      if (!permissions.includes(permissionId)) permissions.push(permissionId);
+      ranks[idx].permissions = permissions;
+      tx.update(ref, { list: ranks });
+    });
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'فشل إضافة الصلاحية.' };
+  }
+}
+
+export async function removePermissionFromRank(rankName: string, permissionId: PermissionId) {
+  const ref = doc(db, 'game_settings', 'social_ranks');
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error('مستند الألقاب غير موجود.');
+      const ranks: SocialRank[] = snap.data().list || [];
+      const idx = ranks.findIndex((r) => r.name === rankName);
+      if (idx === -1) throw new Error('اللقب غير موجود.');
+      const permissions = (ranks[idx].permissions || []).filter((p) => p !== permissionId);
+      ranks[idx].permissions = permissions;
+      tx.update(ref, { list: ranks });
+    });
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'فشل إزالة الصلاحية.' };
+  }
+}
+
+/* ====================== إعادة حساب ملوك الألعاب ====================== */
 
 export async function recalculateGameKings() {
-    try {
-        const batch = writeBatch(db);
-        const gameKingsRef = collection(db, 'game_kings');
-        const usersRef = collection(db, 'users');
-
-        // 1. Delete all current game kings to reset
-        const currentKingsSnapshot = await getDocs(gameKingsRef);
-        currentKingsSnapshot.forEach(doc => batch.delete(doc.ref));
-
-        // 2. Get all users
-        const usersSnapshot = await getDocs(usersRef);
-        if (usersSnapshot.empty) {
-            await batch.commit();
-            return { success: true, updatedCount: 0 };
-        }
-
-        const users: UserProfile[] = usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-        
-        // 3. Find the new king for each game type
-        const newKings: Record<string, GameKing & { kingId: string }> = {};
-
-        users.forEach(user => {
-            const winCounts = user.winCounts || {};
-            Object.entries(winCounts).forEach(([gameType, count]) => {
-                if (!newKings[gameType] || count > newKings[gameType].winCount) {
-                    newKings[gameType] = {
-                        kingId: user.uid,
-                        name: user.name,
-                        avatarId: user.avatarId,
-                        winCount: count
-                    };
-                }
-            });
-        });
-
-        // 4. Set the new kings in the database
-        Object.entries(newKings).forEach(([gameType, kingData]) => {
-            const kingRef = doc(gameKingsRef, gameType);
-            batch.set(kingRef, kingData);
-        });
-
-        await batch.commit();
-
-        return { success: true, updatedCount: Object.keys(newKings).length };
-
-    } catch (error: any) {
-        console.error("Error recalculating game kings:", error);
-        return { success: false, error: error.message || "فشل إعادة حساب ملوك الألعاب." };
-    }
-};
-
-export async function backfillPunishmentStatus(): Promise<{ success: boolean; count: number; error?: string }> {
+  try {
+    const gameKingsRef = collection(db, 'game_kings');
     const usersRef = collection(db, 'users');
-    try {
-        const snapshot = await getDocs(usersRef);
-        if (snapshot.empty) {
-            return { success: true, count: 0 };
+
+    // امسح القدام
+    const current = await getDocs(gameKingsRef);
+    const delOps: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+    current.forEach((d) => delOps.push((b) => b.delete(d.ref)));
+    await commitChunks(delOps);
+
+    // جميع المستخدمين
+    const usersSnapshot = await getDocs(usersRef);
+    if (usersSnapshot.empty) return { success: true, updatedCount: 0 };
+
+    const users: UserProfile[] = usersSnapshot.docs.map(
+      (d) => ({ uid: d.id, ...d.data() } as UserProfile),
+    );
+
+    const newKings: Record<string, GameKing & { kingId: string }> = {};
+    users.forEach((u) => {
+      const winCounts = (u.winCounts || {}) as Record<string, number>;
+      for (const [gameType, count] of Object.entries(winCounts)) {
+        if (!newKings[gameType] || count > newKings[gameType].winCount) {
+          newKings[gameType] = {
+            kingId: u.uid!,
+            name: u.name,
+            avatarId: u.avatarId,
+            winCount: count,
+          };
         }
-        
-        const batch = writeBatch(db);
-        let updatedCount = 0;
+      }
+    });
 
-        snapshot.forEach(userDoc => {
-            const userData = userDoc.data() as UserProfile;
-            const now = new Date();
-
-            const hasHumiliation = userData.humiliation?.until && (userData.humiliation.until as any)?.toDate() > now;
-            const hasAvatarPunishment = userData.originalAvatarToRevert?.until && (userData.originalAvatarToRevert.until as any)?.toDate() > now;
-            const hasDecree = (userData.decrees || []).some(d => d.until && (d.until as any)?.toDate() > now);
-
-            const isCurrentlyPunished = !!(hasHumiliation || hasAvatarPunishment || hasDecree);
-
-            if (userData.isPunished !== isCurrentlyPunished) {
-                 batch.update(userDoc.ref, { isPunished: isCurrentlyPunished });
-                 updatedCount++;
-            }
-        });
-
-        await batch.commit();
-
-        return { success: true, count: snapshot.size };
-
-    } catch (error: any) {
-        console.error("Error backfilling punishment status:", error);
-        return { success: false, count: 0, error: "Failed to update user punishment statuses." };
+    const setOps: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+    for (const [gameType, king] of Object.entries(newKings)) {
+      const ref = doc(gameKingsRef, gameType);
+      setOps.push((b) => b.set(ref, king));
     }
-};
+    await commitChunks(setOps);
 
-export async function backfillUserPermissions(): Promise<{ success: boolean; count: number; error?: string }> {
-    const usersRef = collection(db, 'users');
-    try {
-        const [allRanks, usersSnapshot] = await Promise.all([
-            queryRanks(),
-            getDocs(usersRef)
-        ]);
-
-        if (usersSnapshot.empty) {
-            return { success: true, count: 0 };
-        }
-
-        const batch = writeBatch(db);
-
-        const getRank = (points: number, ranks: SocialRank[]): SocialRank | null => {
-            const sortedRanks = [...ranks].sort((a, b) => b.threshold - a.threshold);
-            for (const rank of sortedRanks) {
-                if (points >= rank.threshold) return rank;
-            }
-            return sortedRanks[sortedRanks.length - 1] || null;
-        };
-
-        usersSnapshot.forEach(userDoc => {
-            const userData = userDoc.data() as UserProfile;
-            const currentPoints = userData.leaderboardPoints || 0;
-            const currentRank = getRank(currentPoints, allRanks);
-            const newPermissions = currentRank?.permissions || [];
-            
-            // Compare arrays to see if an update is needed
-            const currentPermissions = userData.permissions || [];
-            const permissionsAreSame = currentPermissions.length === newPermissions.length && currentPermissions.every(p => newPermissions.includes(p));
-
-            if (!permissionsAreSame) {
-                batch.update(userDoc.ref, { permissions: newPermissions });
-            }
-        });
-
-        await batch.commit();
-        return { success: true, count: usersSnapshot.size };
-
-    } catch (error: any) {
-        console.error("Error backfilling user permissions:", error);
-        return { success: false, count: 0, error: "Failed to update user permissions." };
-    }
+    return { success: true, updatedCount: Object.keys(newKings).length };
+  } catch (e: any) {
+    console.error('Error recalculating game kings:', e);
+    return { success: false, error: e?.message || 'فشل إعادة حساب ملوك الألعاب.' };
+  }
 }
 
+/* ====================== Backfill حالات العقوبة/الصلاحيات ====================== */
 
-export async function adminGiveReward(actorId: string, targetId: string, reward: { points?: number, coins?: number }, reason: string): Promise<{ success: boolean; error?: string }> {
-    return givePlayerReward(actorId, targetId, reward, reason);
+export async function backfillPunishmentStatus() {
+  const usersRef = collection(db, 'users');
+  try {
+    const snap = await getDocs(usersRef);
+    if (snap.empty) return { success: true, count: 0 };
+
+    const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+    let updated = 0;
+    const now = NOW();
+
+    snap.forEach((d) => {
+      const u = d.data() as UserProfile;
+
+      const hasHumiliation =
+        (u.humiliation as any)?.until && toJSDate((u.humiliation as any).until)?.getTime()! > now.getTime();
+
+      const hasAvatarPunishment =
+        (u.originalAvatarToRevert as any)?.until &&
+        toJSDate((u.originalAvatarToRevert as any).until)?.getTime()! > now.getTime();
+
+      const hasDecree = (u.decrees || []).some(
+        (dec: any) => dec?.until && toJSDate(dec.until)?.getTime()! > now.getTime(),
+      );
+
+      const isPunished = !!(hasHumiliation || hasAvatarPunishment || hasDecree);
+      if (u.isPunished !== isPunished) {
+        ops.push((b) => b.update(d.ref, { isPunished }));
+        updated++;
+      }
+    });
+
+    await commitChunks(ops);
+    return { success: true, count: snap.size };
+  } catch (e: any) {
+    console.error('Error backfilling punishment status:', e);
+    return { success: false, count: 0, error: 'Failed to update user punishment statuses.' };
+  }
 }
 
-export async function adminApplyPunishment(actorId: string, targetId: string, penalty: { points?: number, coins?: number}, reason: string): Promise<{ success: boolean; error?: string }> {
-    return applyPlayerPunishment(actorId, targetId, penalty, reason);
+export async function backfillUserPermissions() {
+  const usersRef = collection(db, 'users');
+  try {
+    const [allRanks, usersSnap] = await Promise.all([queryRanks(), getDocs(usersRef)]);
+    if (usersSnap.empty) return { success: true, count: 0 };
+
+    const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+
+    const getRank = (points: number, ranks: SocialRank[]): SocialRank | null => {
+      const sorted = [...ranks].sort((a, b) => b.threshold - a.threshold);
+      for (const r of sorted) if (points >= r.threshold) return r;
+      return sorted[sorted.length - 1] || null;
+    };
+
+    usersSnap.forEach((d) => {
+      const u = d.data() as UserProfile;
+      const points = u.leaderboardPoints || 0;
+      const rank = getRank(points, allRanks);
+      const newPerms = rank?.permissions || [];
+      const curPerms = u.permissions || [];
+      const same =
+        curPerms.length === newPerms.length && curPerms.every((p) => newPerms.includes(p));
+      if (!same) ops.push((b) => b.update(d.ref, { permissions: newPerms }));
+    });
+
+    await commitChunks(ops);
+    return { success: true, count: usersSnap.size };
+  } catch (e: any) {
+    console.error('Error backfilling user permissions:', e);
+    return { success: false, count: 0, error: 'Failed to update user permissions.' };
+  }
 }
 
-export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number): Promise<UserProfile[]> {
-    return queryTopUsers(field, count);
+/* ====================== مكافآت/عقوبات (تفويض) ====================== */
+
+export async function adminGiveReward(
+  actorId: string,
+  targetId: string,
+  reward: { points?: number; coins?: number },
+  reason: string,
+) {
+  return givePlayerReward(actorId, targetId, reward, reason);
 }
 
-export async function generateGeniusChallenge(input: GenerateGeniusChallengeInput): Promise<GenerateGeniusChallengeOutput> {
-    return generateGeniusChallengeFlow(input);
+export async function adminApplyPunishment(
+  actorId: string,
+  targetId: string,
+  penalty: { points?: number; coins?: number },
+  reason: string,
+) {
+  return applyPlayerPunishment(actorId, targetId, penalty, reason);
+}
+
+export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: number) {
+  return queryTopUsers(field, count);
+}
+
+/* ====================== تحديات العبقري ====================== */
+
+export async function generateGeniusChallenge(
+  input: GenerateGeniusChallengeInput,
+): Promise<GenerateGeniusChallengeOutput> {
+  return generateGeniusChallengeFlow(input);
+}
+
+/* ====================== المراسل الذكي (ذكاء اصطناعي) ====================== */
+
+async function getPunishedUsers(): Promise<UserProfile[]> {
+  const usersRef = collection(db, 'users');
+  const q = query(usersRef, where('isPunished', '==', true));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ uid: d.id, ...d.data() } as UserProfile));
+}
+
+async function getRecentFinishedGames(countNum: number): Promise<Game[]> {
+  try {
+    const gamesCol = collection(db, 'games');
+    const qRef = query(
+      gamesCol,
+      where('gameState', '==', 'final_results'),
+      orderBy('createdAt', 'desc'),
+      limit(countNum),
+    );
+    const snapshot = await getDocs(qRef);
+    return snapshot.docs.map((d) => d.data() as Game);
+  } catch (e) {
+    console.error('Error fetching recent games:', e);
+    return [];
+  }
 }
 
 async function getJournalistSourceMaterial(directive?: string) {
-    const oneDayAgo = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
-    const eventsQuery = query(collection(db, 'social_events'), where('timestamp', '>=', oneDayAgo), orderBy('timestamp', 'desc'));
+  const oneDayAgo = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const articlesQuery = query(collection(db, 'articles'), where('createdAt', '>=', sevenDaysAgo), orderBy('createdAt', 'desc'));
+  const eventsQuery = query(
+    collection(db, 'social_events'),
+    where('timestamp', '>=', oneDayAgo),
+    orderBy('timestamp', 'desc'),
+  );
 
-    const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges, recent_games] = await Promise.all([
-        getDocs(eventsQuery),
-        getDocs(articlesQuery),
-        getTopUsers('leaderboardPoints', 5),
-        getAllUsers('punished'),
-        getTopPunisher(),
-        getChallenges(),
-        getRecentFinishedGames(10), // This function needs to be defined
+  const articlesQuery = query(
+    collection(db, 'articles'),
+    where('createdAt', '>=', sevenDaysAgo),
+    orderBy('createdAt', 'desc'),
+  );
+
+  const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges, recent_games] =
+    await Promise.all([
+      getDocs(eventsQuery),
+      getDocs(articlesQuery),
+      getTopUsers('leaderboardPoints', 5),
+      getPunishedUsers(),
+      queryTopPunisher(),
+      getChallenges(),
+      getRecentFinishedGames(10),
     ]);
 
-    const events = eventsSnapshot.docs.map(doc => ({ ...doc.data(), timestamp: doc.data().timestamp.toDate() } as SocialEvent));
-    const previous_articles = articlesSnapshot.docs.map(doc => ({ ...doc.data(), createdAt: doc.data().createdAt.toDate() } as Article));
+  const events = eventsSnapshot.docs.map(
+    (d) => ({ ...d.data(), timestamp: (d.data().timestamp as Timestamp).toDate() } as SocialEvent),
+  );
+  const previous_articles = articlesSnapshot.docs.map(
+    (d) => ({ ...d.data(), createdAt: (d.data().createdAt as Timestamp).toDate() } as Article),
+  );
 
-    return { 
-        events, 
-        previous_articles, 
-        leaderboard, 
-        punished_players, 
-        top_punisher, 
-        active_challenges, 
-        recent_games,
-        directive,
-        date: new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-    };
+  return {
+    events,
+    previous_articles,
+    leaderboard,
+    punished_players,
+    top_punisher,
+    active_challenges,
+    recent_games,
+    directive,
+    date: new Date().toLocaleDateString('ar-EG', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }),
+  };
 }
 
-async function getRecentFinishedGames(count: number): Promise<Game[]> {
-    try {
-        const gamesCol = collection(db, 'games');
-        const q = query(
-            gamesCol,
-            where('gameState', '==', 'final_results'),
-            orderBy('createdAt', 'desc'),
-            limit(count)
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => doc.data() as Game);
-    } catch (error) {
-        console.error("Error fetching recent games:", error);
-        return [];
+export async function runAiJournalist(
+  directive?: string,
+): Promise<{ success: boolean; article?: { headline: string }; error?: string }> {
+  try {
+    const sourceMaterial = await getJournalistSourceMaterial(directive);
+    const generatedArticle = await generateNewsArticle(sourceMaterial);
+
+    if (!generatedArticle.headline || !generatedArticle.body) {
+      throw new Error('فشل الذكاء الاصطناعي في توليد مقال متكامل.');
     }
+
+    await addDoc(collection(db, 'articles'), {
+      title: generatedArticle.headline,
+      content: generatedArticle.body,
+      category: generatedArticle.category,
+      imageUrl: '',
+      authorName: 'المراسل الذكي',
+      authorId: 'ai_journalist',
+      isPublished: true,
+      audience: ['public'],
+      createdAt: serverTimestamp(),
+      views: 0,
+    });
+
+    return { success: true, article: { headline: generatedArticle.headline } };
+  } catch (e: any) {
+    console.error('Error running AI journalist:', e);
+    return { success: false, error: e?.message || 'حدث خطأ غير متوقع.' };
+  }
 }
 
-export async function runAiJournalist(directive?: string): Promise<{success: boolean, article?: { headline: string }, error?: string}> {
-    try {
-        const sourceMaterial = await getJournalistSourceMaterial(directive);
-        
-        const generatedArticle = await generateNewsArticle(sourceMaterial);
+/* ====================== تنظيف المقالات القديمة ====================== */
 
-        if (!generatedArticle.headline || !generatedArticle.body) {
-            throw new Error("فشل الذكاء الاصطناعي في توليد مقال متكامل.");
-        }
-        
-        await addDoc(collection(db, 'articles'), {
-            title: generatedArticle.headline,
-            content: generatedArticle.body,
-            category: generatedArticle.category,
-            imageUrl: "",
-            authorName: "المراسل الذكي",
-            authorId: "ai_journalist",
-            isPublished: true,
-            audience: ['public'],
-            createdAt: serverTimestamp(),
-            views: 0,
-        });
-        
-        return { success: true, article: { headline: generatedArticle.headline } };
-    } catch (error: any) {
-        console.error("Error running AI journalist:", error);
-        return { success: false, error: error.message || "حدث خطأ غير متوقع." };
+export async function deleteOldArticles() {
+  try {
+    const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const qRef = query(collection(db, 'articles'), where('createdAt', '<', sevenDaysAgo));
+    const snap = await getDocs(qRef);
+    if (snap.empty) return { success: true, deletedCount: 0 };
+
+    const refs = snap.docs.map((d) => d.ref);
+    let deleted = 0;
+
+    for (const group of chunkArray(refs)) {
+      const b = writeBatch(db);
+      group.forEach((r) => b.delete(r));
+      await b.commit();
+      deleted += group.length;
     }
+
+    return { success: true, deletedCount: deleted };
+  } catch (e: any) {
+    console.error('Error deleting old articles:', e);
+    return { success: false, error: 'فشل حذف المقالات القديمة.' };
+  }
 }
-
-
-export async function deleteOldArticles(): Promise<{success: boolean, deletedCount?: number, error?: string}> {
-    try {
-        const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        const q = query(collection(db, 'articles'), where('createdAt', '<', sevenDaysAgo));
-        const snapshot = await getDocs(q);
-
-        if (snapshot.empty) {
-            return { success: true, deletedCount: 0 };
-        }
-        
-        const batch = writeBatch(db);
-        snapshot.docs.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-        
-        await batch.commit();
-
-        return { success: true, deletedCount: snapshot.size };
-    } catch (error: any) {
-        console.error("Error deleting old articles:", error);
-        return { success: false, error: "فشل حذف المقالات القديمة." };
-    }
-}
-
-    
