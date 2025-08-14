@@ -7,7 +7,7 @@ import type { UserProfile, SocialRank } from "@/types";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { Button } from "@/components/ui/button";
-import { CircleDollarSign, Diamond, Edit, Star, Trophy, History } from "lucide-react";
+import { CircleDollarSign, Diamond, Edit, Star, Trophy, History, Users } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
@@ -88,150 +88,150 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
           ].join(" ")}
           aria-label="بطاقة الملف الشخصي"
         >
-          <CardContent className="p-5 md:p-6">
-            <div className="grid grid-cols-1 md:grid-cols-[auto,1fr,auto] items-center gap-6">
-              {/* الصورة الرمزية + تعديل */}
-              <div className="relative place-self-center md:place-self-start">
-                <motion.div
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.28 }}
-                >
-                  <PlayerAvatar
-                    avatarId={userProfile.avatarId}
-                    className="w-24 h-24 rounded-full ring-4 ring-violet-200/70 dark:ring-violet-700/30 shadow-sm"
-                    temporaryTitle={userProfile.temporaryTitle}
-                    priority
-                  />
-                </motion.div>
-                
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="absolute -bottom-2 -left-1/2 translate-x-1/2 rounded-full h-9 w-9 border-violet-300/60 bg-white/70 hover:bg-white/90 dark:bg-white/10 dark:hover:bg-white/15"
-                  asChild
-                  aria-label="تعديل الملف الشخصي"
-                >
-                  <Link href="/profile" aria-label="فتح صفحة تعديل الملف الشخصي">
-                    <Edit className="w-4 h-4 text-violet-700 dark:text-violet-200" />
-                  </Link>
-                </Button>
-              </div>
+          <CardContent className="p-5 md:p-6 flex flex-col items-center gap-4">
 
-              {/* معلومات المستخدم */}
-              <div className="text-center md:text-right">
-                 <p className="text-sm text-violet-800/70 dark:text-violet-200/70 mb-1">مرحباً بك يا</p>
-                  <CardTitle className="text-4xl font-extrabold tracking-tight font-serif text-slate-800 dark:text-slate-200">
-                    {userProfile.name}
-                  </CardTitle>
+            {/* الصورة الرمزية + تعديل */}
+            <div className="relative">
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28 }}
+              >
+                <PlayerAvatar
+                  avatarId={userProfile.avatarId}
+                  className="w-28 h-28 rounded-full ring-4 ring-violet-200/70 dark:ring-violet-700/30 shadow-md"
+                  temporaryTitle={userProfile.temporaryTitle}
+                  priority
+                />
+              </motion.div>
+              
+              <Button
+                variant="outline"
+                size="icon"
+                className="absolute -bottom-2 -left-1 rounded-full h-9 w-9 border-violet-300/60 bg-white/70 hover:bg-white/90 dark:bg-white/10 dark:hover:bg-white/15"
+                asChild
+                aria-label="تعديل الملف الشخصي"
+              >
+                <Link href="/profile" aria-label="فتح صفحة تعديل الملف الشخصي">
+                  <Edit className="w-4 h-4 text-violet-700 dark:text-violet-200" />
+                </Link>
+              </Button>
+            </div>
 
-                  {effectiveCurrentRank && (
-                    <motion.span
-                      initial={{ y: -4, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ duration: 0.22, delay: 0.05 }}
-                      className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-xs dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100"
-                    >
-                      {RankIcon ? (
-                        <RankIcon className="w-4 h-4 text-violet-700 dark:text-violet-200" />
-                      ) : (
-                        <Star className="w-4 h-4" />
-                      )}
-                      <span>{activeDecree?.title ?? effectiveCurrentRank?.name}</span>
-                    </motion.span>
-                  )}
+            {/* معلومات المستخدم */}
+            <div className="text-center">
+               <p className="text-sm text-violet-800/70 dark:text-violet-200/70">مرحباً بك يا</p>
+                <CardTitle className="text-4xl font-extrabold tracking-tight font-serif text-slate-800 dark:text-slate-200">
+                  {userProfile.name}
+                </CardTitle>
 
-                {/* الإحصاءات */}
-                <div
-                  className="flex flex-wrap items-center justify-center md:justify-start gap-3 md:gap-4 font-semibold mt-3"
-                  aria-describedby={balanceId}
-                >
-                  <p id={balanceId} className="sr-only">
-                    رصيدك من الكوينز والألماس ونقاط الصدارة
-                  </p>
+                {effectiveCurrentRank && (
+                  <motion.span
+                    initial={{ y: -4, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ duration: 0.22, delay: 0.05 }}
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-xs dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100"
+                  >
+                    {RankIcon ? (
+                      <RankIcon className="w-4 h-4 text-violet-700 dark:text-violet-200" />
+                    ) : (
+                      <Star className="w-4 h-4" />
+                    )}
+                    <span>{activeDecree?.title ?? effectiveCurrentRank?.name}</span>
+                  </motion.span>
+                )}
+            </div>
+            
+            {/* الإحصاءات */}
+            <div
+              className="grid grid-cols-3 gap-2 w-full max-w-sm"
+              aria-describedby={balanceId}
+            >
+              <p id={balanceId} className="sr-only">
+                رصيدك من الكوينز والألماس ونقاط الصدارة
+              </p>
 
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
-                        <CircleDollarSign className="w-5 h-5 text-violet-700 dark:text-violet-200" />
-                        <span>{nf.format(userProfile.coins || 0)} كوينز</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>رصيد الكوينز الخاص بك</TooltipContent>
-                  </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex flex-col items-center gap-1 rounded-xl px-3 py-1.5 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
+                    <CircleDollarSign className="w-5 h-5 text-violet-700 dark:text-violet-200" />
+                    <span className="font-semibold">{nf.format(userProfile.coins || 0)}</span>
+                    <span className="text-xs">كوينز</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>رصيد الكوينز الخاص بك</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex flex-col items-center gap-1 rounded-xl px-3 py-1.5 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
+                    <Trophy className="w-5 h-5 text-violet-700 dark:text-violet-200" />
+                    <span className="font-semibold">{nf.format(userProfile.leaderboardPoints || 0)}</span>
+                    <span className="text-xs">نقاط</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>إجمالي نقاط الصدارة</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex flex-col items-center gap-1 rounded-xl px-3 py-1.5 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
+                    <Diamond className="w-5 h-5 text-violet-700 dark:text-violet-200" />
+                    <span className="font-semibold">{nf.format(userProfile.diamonds || 0)}</span>
+                    <span className="text-xs">ألماس</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>أحجارك الكريمة</TooltipContent>
+              </Tooltip>
+            </div>
 
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
-                        <Diamond className="w-5 h-5 text-violet-700 dark:text-violet-200" />
-                        <span>{nf.format(userProfile.diamonds || 0)} ألماس</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>أحجارك الكريمة</TooltipContent>
-                  </Tooltip>
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 bg-white/80 border border-violet-200/70 text-slate-900 hover:bg-white/90 cursor-default dark:bg-white/10 dark:text-white dark:border-violet-700/30">
-                        <Trophy className="w-5 h-5 text-violet-700 dark:text-violet-200" />
-                        <span>{nf.format(userProfile.leaderboardPoints || 0)} نقاط</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>إجمالي نقاط الصدارة</TooltipContent>
-                  </Tooltip>
+            {/* شريط التقدّم */}
+            {nextRank ? (
+              <div className="w-full max-w-sm" aria-live="polite">
+                <div className="flex justify-between text-[11px] font-semibold text-violet-900/70 dark:text-violet-200/70 mb-1">
+                  <span>
+                    اللقب التالي: <span className="text-violet-900 dark:text-violet-100">{nextRank.name}</span>
+                  </span>
+                  <span>
+                    {nf.format(userProfile.leaderboardPoints || 0)} / {nf.format(pointsForNextRank)}
+                  </span>
                 </div>
 
-                {/* شريط التقدّم */}
-                {nextRank ? (
-                  <div className="w-full max-w-md mt-4 mx-auto md:mx-0" aria-live="polite">
-                    <div className="flex justify-between text-[11px] font-semibold text-violet-900/70 dark:text-violet-200/70 mb-1">
-                      <span>
-                        اللقب التالي: <span className="text-violet-900 dark:text-violet-100">{nextRank.name}</span>
-                      </span>
-                      <span>
-                        {nf.format(userProfile.leaderboardPoints || 0)} / {nf.format(pointsForNextRank)}
-                      </span>
-                    </div>
-
-                    <div className="relative" aria-labelledby={progressId}>
-                      <span id={progressId} className="sr-only">
-                        التقدّم نحو الرتبة التالية
-                      </span>
-                      <Progress
-                        value={progress}
-                        className="h-2 overflow-hidden bg-violet-100 dark:bg-white/10"
-                        aria-label="التقدّم نحو الرتبة التالية"
-                        aria-valuenow={Math.round(progress)}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-3 text-xs font-bold text-violet-800 flex items-center gap-1 justify-center md:justify-start dark:text-violet-200">
-                    <Star className="w-4 h-4" /> مبروك! وصلت لأعلى رتبة.
-                  </div>
-                )}
+                <div className="relative" aria-labelledby={progressId}>
+                  <span id={progressId} className="sr-only">
+                    التقدّم نحو الرتبة التالية
+                  </span>
+                  <Progress
+                    value={progress}
+                    className="h-2 overflow-hidden bg-violet-100 dark:bg-white/10"
+                    aria-label="التقدّم نحو الرتبة التالية"
+                    aria-valuenow={Math.round(progress)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                </div>
               </div>
-
-              {/* الأزرار */}
-              <div className="w-full md:w-auto flex md:flex-col gap-2 justify-center md:items-stretch">
-                <Button asChild className="rounded-xl bg-violet-700 text-white hover:bg-violet-800">
-                  <Link href="/society">المجتمع</Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  asChild
-                  className="rounded-xl border-violet-200 text-violet-900 hover:bg-violet-50 dark:border-violet-700/40 dark:text-violet-100 dark:hover:bg-white/10"
-                >
-                  <Link href="/clan-wars">حروب الفرق</Link>
-                </Button>
-                <Button variant="ghost" asChild className="rounded-xl text-violet-900 hover:bg-violet-50 dark:text-violet-100 dark:hover:bg-white/10">
-                   <Link href="/profile/history" className="inline-flex items-center gap-2">
-                    <History className="h-4 w-4" /> سجل المباريات
-                  </Link>
-                </Button>
+            ) : (
+              <div className="mt-1 text-xs font-bold text-violet-800 flex items-center gap-1 justify-center md:justify-start dark:text-violet-200">
+                <Star className="w-4 h-4" /> مبروك! وصلت لأعلى رتبة.
               </div>
+            )}
+            
+            {/* الأزرار */}
+            <div className="w-full flex flex-col sm:flex-row gap-2 justify-center">
+              <Button asChild className="rounded-xl bg-violet-700 text-white hover:bg-violet-800">
+                <Link href="/society"><Users className="ml-2 h-4 w-4" />المجتمع</Link>
+              </Button>
+              <Button
+                variant="outline"
+                asChild
+                className="rounded-xl border-violet-200 text-violet-900 hover:bg-violet-50 dark:border-violet-700/40 dark:text-violet-100 dark:hover:bg-white/10"
+              >
+                <Link href="/clan-wars">حروب الفرق</Link>
+              </Button>
+              <Button variant="ghost" asChild className="rounded-xl text-violet-900 hover:bg-violet-50 dark:text-violet-100 dark:hover:bg-white/10">
+                 <Link href="/profile/history" className="inline-flex items-center gap-2">
+                  <History className="h-4 w-4" /> سجل المباريات
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>
