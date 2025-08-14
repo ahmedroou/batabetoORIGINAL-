@@ -188,7 +188,13 @@ export async function createGameRoom(userId: string, gameType: Game['gameType'],
         }
 
         await removePlayerFromPreviousLobbies(userId, gameId);
-        await setDoc(gameRef, newGame);
+        
+        // Increment popularity counter
+        const statsRef = doc(db, 'game_stats', 'popularity');
+        await runTransaction(db, async (transaction) => {
+            transaction.set(statsRef, { [gameType]: increment(1) }, { merge: true });
+            transaction.set(gameRef, newGame);
+        });
 
         return { gameId, player };
     } catch(error) {
@@ -421,3 +427,4 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
     });
 }
 
+    
