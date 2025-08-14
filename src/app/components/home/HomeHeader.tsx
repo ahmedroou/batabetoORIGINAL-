@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -224,7 +225,7 @@ export const ComplaintDialog = ({ userProfile, trigger }: { userProfile: UserPro
   );
 };
 
-/****************
+/*************
  * MailboxDialog
  ****************/
 const MailboxDialog = () => {
@@ -489,11 +490,11 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
           </TooltipProvider>
         </div>
 
-        {/* وسط: شعار/عنوان بسيط */}
-        <div className="pointer-events-none select-none">
-          <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary text-lg font-extrabold tracking-tight">
-            أهلاً {userProfile.name}
-          </span>
+        {/* وسط: عبارة ترحيب واضحة */}
+        <div className="hidden md:block rounded-full bg-background/50 border border-border/50 px-4 py-1 shadow-sm">
+            <span className="font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary text-lg tracking-tight">
+                أهلاً بك يا {userProfile.name}!
+            </span>
         </div>
 
         {/* يمين: متجر/أدمن */}
