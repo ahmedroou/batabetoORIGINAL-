@@ -3,7 +3,7 @@
 'use server';
 
 import { db, auth } from '@/lib/firebase';
-import { doc, serverTimestamp, updateDoc, collection, getDoc, increment, runTransaction, arrayUnion, setDoc, deleteField, Timestamp } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc, collection, getDoc, increment, runTransaction, arrayUnion, arrayRemove, deleteField, Timestamp, writeBatch, type Transaction } from 'firebase/firestore';
 import type { UserProfile, SocialRank, Humiliation, AllegianceRequest, ActiveAllegiance, TaxDemand, Alliance, Decree, DuelChallenge, SocialEvent } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { sendSystemMail } from './mail';
@@ -130,7 +130,7 @@ export async function humiliatePlayer(actorId: string, targetId: string, duratio
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك إذلال لاعب من نفس طبقتك أو أعلى.");
         
         // Protection check
-        if (target.allegiance) {
+        if (target.allegiance && target.allegiance.until && target.allegiance.until > new Date()) {
             const protectorRef = doc(db, "users", target.allegiance.to);
             const protectorDoc = await transaction.get(protectorRef);
             if (protectorDoc.exists()) {
@@ -205,7 +205,7 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
         }
 
         // Protection Check
-        if (target.allegiance) {
+        if (target.allegiance && target.allegiance.until && target.allegiance.until > new Date()) {
              const protectorRef = doc(db, "users", target.allegiance.to);
              const protectorDoc = await transaction.get(protectorRef);
              if (protectorDoc.exists()) {
@@ -506,7 +506,7 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         }
 
         // Protection Check
-        if (target.allegiance) {
+        if (target.allegiance && target.allegiance.until && target.allegiance.until > new Date()) {
              const protectorRef = doc(db, "users", target.allegiance.to);
              const protectorDoc = await transaction.get(protectorRef);
              if (protectorDoc.exists()) {
