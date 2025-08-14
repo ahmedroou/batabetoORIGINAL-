@@ -39,14 +39,8 @@ const nextConfig = {
   },
 
   experimental: {
-    // يقلل حجم الحِزم ويحسّن سرعة التطوير والإنتاج مع مكتبات كبيرة
-    optimizePackageImports: [
-      'lucide-react',
-      'date-fns',
-      'lodash'
-    ],
-    // The new correct way to handle this server package
-    serverComponentsExternalPackages: ['@opentelemetry/instrumentation'],
+    // The new correct way to handle server packages
+    serverComponentsExternalPackages: ['@opentelemetry/instrumentation', '@genkit-ai/core', 'dotprompt', 'firebase', '@firebase/app'],
   },
 };
 
