@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useId } from "react";
@@ -6,7 +7,7 @@ import type { UserProfile, SocialRank } from "@/types";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { Button } from "@/components/ui/button";
-import { CircleDollarSign, Diamond, Edit, Star, Trophy, ShoppingBag } from "lucide-react";
+import { CircleDollarSign, Diamond, Edit, Star, Trophy, ShoppingBag, History } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
@@ -103,7 +104,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                     priority
                   />
                 </motion.div>
-
+                
                 <Button
                   variant="outline"
                   size="icon"
@@ -115,13 +116,25 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                     <Edit className="w-4 h-4 text-violet-700 dark:text-violet-200" />
                   </Link>
                 </Button>
+                
+                 <Button
+                  variant="outline"
+                  size="icon"
+                  className="absolute -bottom-2 -right-2 rounded-full h-9 w-9 border-violet-300/60 bg-white/70 hover:bg-white/90 dark:bg-white/10 dark:hover:bg-white/15"
+                  asChild
+                  aria-label="سجل المباريات"
+                >
+                  <Link href="/profile/history" aria-label="فتح سجل المباريات">
+                    <History className="w-4 h-4 text-violet-700 dark:text-violet-200" />
+                  </Link>
+                </Button>
               </div>
 
               {/* معلومات المستخدم */}
               <div className="text-center md:text-right">
                 <div className="flex items-center justify-center md:justify-start gap-3 flex-wrap">
                   <p className="text-sm text-violet-800/70 dark:text-violet-200/70">مرحباً بك يا</p>
-                  <CardTitle className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                  <CardTitle className="text-3xl font-extrabold tracking-tight font-serif bg-clip-text text-transparent bg-gradient-to-br from-slate-800 to-slate-600 dark:from-white dark:to-slate-300">
                     {userProfile.name}
                   </CardTitle>
 

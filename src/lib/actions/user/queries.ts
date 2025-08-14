@@ -3,8 +3,8 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch, increment } from 'firebase/firestore';
-import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge, Game } from '@/types';
+import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch, increment, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
+import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge, Game, MatchHistoryItem } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getTopUsers as adminGetTopUsers } from '../admin/users';
 
@@ -287,5 +287,36 @@ export async function getUsersByRank(minPoints: number, maxPoints: number | null
     } catch (error) {
         console.error("Error getting users by rank:", error);
         return [];
+    }
+}
+
+export async function recordMatchHistory(game: Game): Promise<void> {
+    const playersToRecord = game.players.filter(p => p.status !== 'left');
+    if (playersToRecord.length === 0) return;
+
+    const matchData: Omit<MatchHistoryItem, 'id'> = {
+        gameId: game.id,
+        gameType: game.gameType,
+        createdAt: Timestamp.now(),
+        finalScores: game.playerScores || {},
+        players: playersToRecord.map(p => ({
+            id: p.id,
+            name: p.name,
+            avatarId: p.avatarId,
+        })),
+        winner: typeof game.gameResult?.winner === 'string' ? game.gameResult.winner : undefined,
+    };
+
+    const batch = writeBatch(db);
+
+    for (const player of playersToRecord) {
+        const historyRef = doc(collection(db, `users/${player.id}/matchHistory`));
+        batch.set(historyRef, matchData);
+    }
+    
+    try {
+        await batch.commit();
+    } catch (error) {
+        console.error("Failed to record match history:", error);
     }
 }

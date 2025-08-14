@@ -6,7 +6,7 @@ import { db } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, getDoc, where, increment, runTransaction, arrayUnion, arrayRemove, deleteField, Timestamp, writeBatch, type Transaction } from 'firebase/firestore';
 import { generateLeagueId } from '../helpers';
 import type { UserProfile, League, Game, Challenge, SocialRank } from '@/types';
-import { updateUserWinCount } from './queries';
+import { updateUserWinCount, recordMatchHistory } from './queries';
 import { calculateEndOfGameAwards } from './awards';
 import { sendSystemMail } from './mail';
 import { getRanks } from './queries';
@@ -392,6 +392,9 @@ export async function distributeEndOfGameAwards(game: Game) {
  */
 export async function updateLeagueScoresForGameEnd(game: Game) {
     if (!game.gameResult) return;
+    
+    // Save match to history
+    await recordMatchHistory(game);
     
     // This is the only place we call distributeEndOfGameAwards, ensuring it's outside any transaction.
     await distributeEndOfGameAwards(game);

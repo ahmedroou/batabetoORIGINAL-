@@ -376,6 +376,16 @@ export interface ClanInvitation {
     invitedBy: string;
 }
 
+export interface MatchHistoryItem {
+    id: string; // gameId
+    gameType: Game['gameType'];
+    createdAt: Timestamp;
+    finalScores: Record<string, number>; // { [playerId]: score }
+    players: { id: string; name: string; avatarId: string }[];
+    winner?: string; // Player or Team name
+}
+
+
 export interface UserProfile {
   uid: string;
   name: string;
@@ -419,6 +429,7 @@ export interface UserProfile {
   permissions?: PermissionId[]; // All permissions granted by the user's current rank
   isPunished?: boolean;
   punishmentsIssued?: number;
+  matchHistory?: MatchHistoryItem[];
 }
 
 export interface GameKing {
