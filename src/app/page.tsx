@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { CompactChallengeList } from './components/home/CompactChallengeList';
 import ComplaintBubble from './components/home/ComplaintBubble';
 import type { Game } from '@/types';
+import { getGamePopularityStats } from '@/lib/actions/user';
 
 export default function Home() {
   const router = useRouter();
@@ -38,6 +39,17 @@ export default function Home() {
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const [showAnnouncement, setShowAnnouncement] = useState<boolean>(true);
   const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
+  const [popularityStats, setPopularityStats] = useState<Record<string, number>>({});
+
+
+  useEffect(() => {
+    const fetchPopularity = async () => {
+        const stats = await getGamePopularityStats();
+        setPopularityStats(stats);
+    };
+    fetchPopularity();
+  }, []);
+
 
   const handleLobbiesUpdate = useCallback((lobbies: Game[]) => {
     setActiveLobbies(lobbies);
@@ -55,15 +67,10 @@ export default function Home() {
       }
     });
 
-    // Determine popular game based on active lobbies
-    const lobbyCounts: Record<string, number> = {};
-    activeLobbies.forEach(lobby => {
-        lobbyCounts[lobby.gameType] = (lobbyCounts[lobby.gameType] || 0) + 1;
-    });
-
+    // Determine popular game based on historical stats
     let popGame: string | null = null;
-    let maxLobbies = 0;
-    Object.entries(lobbyCounts).forEach(([gameType, count]) => {
+    let maxLobbies = -1;
+    Object.entries(popularityStats).forEach(([gameType, count]) => {
         if (count > maxLobbies) {
             maxLobbies = count;
             popGame = gameType;
@@ -71,7 +78,7 @@ export default function Home() {
     });
 
     return { favoriteGame: favGame, popularGame: popGame };
-  }, [userProfile?.winCounts, activeLobbies]);
+  }, [userProfile?.winCounts, popularityStats]);
 
 
   useEffect(() => {
