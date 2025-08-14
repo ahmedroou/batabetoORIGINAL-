@@ -298,7 +298,7 @@ export async function submitHint(
   playerId: string,
   word: string,
   count: number,
-  clientSentAtMs?: number // for metrics (optional)
+  opts?: { expectedTurnId?: number; clientSentAtMs?: number } 
 ) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (t) => {
@@ -316,7 +316,7 @@ export async function submitHint(
       'wordWarState.currentHint': { word, count },
       'wordWarState.guessesLeft': count,
       'metrics.lastHintAt': serverTimestamp(),
-      ...(clientSentAtMs ? { 'metrics.latency.lastHintMsApprox': Math.max(0, nowMs() - clientSentAtMs) } : {}),
+      ...(opts?.clientSentAtMs ? { 'metrics.latency.lastHintMsApprox': Math.max(0, nowMs() - opts.clientSentAtMs) } : {}),
     });
 
     setTimer(t, gameRef, 'guess', turnTime);
@@ -327,8 +327,7 @@ export async function revealCard(
   gameId: string,
   playerId: string,
   cardText: string,
-  expectedTurnId?: number,
-  clientSentAtMs?: number // for metrics (optional)
+  opts?: { expectedTurnId?: number; clientSentAtMs?: number }
 ) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (t) => {
@@ -355,13 +354,13 @@ export async function revealCard(
     if (game.gameState !== 'guesser_turn') return; // ignore stale
 
     // Optional guard to drop late clicks from a previous turn
-    if (expectedTurnId != null && ww.turnId != null && expectedTurnId !== ww.turnId) {
+    if (opts?.expectedTurnId != null && ww.turnId != null && opts.expectedTurnId !== ww.turnId) {
       metricInc(t, gameRef, 'metrics.rejected.staleTurn');
       return;
     }
 
     const player = ensurePlayerInGame(game, playerId);
-    if (player.team !== ww.turn) throw new Error('ليس دور فريقك للاختيار الآن.');
+    if (player.team !== ww.turn) throw new Error('It is not your team\'s turn to act.');
 
     // Prefer Map if exists
     const hasMap = !!ww.cardsMap && !!ww.cardsOrder;
@@ -403,11 +402,17 @@ export async function revealCard(
     if (color === 'assassin') {
       updates['gameResult'] = { winner: ww.turn === 'red' ? 'blue' : 'red', message: 'تم كشف القاتل!' };
     } else if (!updates['gameResult']) {
-      if (color !== ww.turn || (ww.guessesLeft! - 1) <= 0) {
-        updates['wordWarState.turn'] = nextTeam(ww.turn);
-      } else {
-        updates['wordWarState.guessesLeft'] = Math.max(0, (ww.guessesLeft || 0) - 1);
-      }
+        if (color !== ww.turn || (ww.guessesLeft! - 1) <= 0) {
+            updates['gameState'] = 'guide_turn';
+            updates['wordWarState.turn'] = nextTeam(ww.turn);
+            updates['wordWarState.currentHint'] = null;
+            updates['wordWarState.guessesLeft'] = 0;
+            updates['wordWarState.suspicions'] = {};
+            bumpTurnId(t, gameRef, ww.turnId);
+            setTimer(t, gameRef, 'guide', getTurnTime(game));
+        } else {
+            updates['wordWarState.guessesLeft'] = Math.max(0, (ww.guessesLeft || 0) - 1);
+        }
     }
 
     if (!updates['gameResult'] && win) updates['gameResult'] = win;
@@ -415,26 +420,12 @@ export async function revealCard(
     if (updates['gameResult']) {
       updates['gameState'] = 'board_reveal';
       clearTimer(t, gameRef);
-    } else if (updates['wordWarState.turn']) {
-      updates['gameState'] = 'guide_turn';
-      updates['wordWarState.currentHint'] = null;
-      updates['wordWarState.guessesLeft'] = 0;
-      updates['wordWarState.suspicions'] = {};
-      bumpTurnId(t, gameRef, ww.turnId);
-      t.update(gameRef, updates);
-      setTimer(t, gameRef, 'guide', getTurnTime(game));
-      // metrics
-      t.update(gameRef, {
-        'metrics.lastRevealAt': serverTimestamp(),
-        ...(clientSentAtMs ? { 'metrics.latency.lastRevealMsApprox': Math.max(0, nowMs() - clientSentAtMs) } : {}),
-      });
-      return;
-    }
-
+    } 
+    
     t.update(gameRef, {
       ...updates,
       'metrics.lastRevealAt': serverTimestamp(),
-      ...(clientSentAtMs ? { 'metrics.latency.lastRevealMsApprox': Math.max(0, nowMs() - clientSentAtMs) } : {}),
+      ...(opts?.clientSentAtMs ? { 'metrics.latency.lastRevealMsApprox': Math.max(0, nowMs() - opts.clientSentAtMs) } : {}),
     });
   });
 }
@@ -575,3 +566,4 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
     await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
   }
 }
+    
