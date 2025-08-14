@@ -24,9 +24,6 @@ const nextConfig = {
     }
     return config;
   },
-  experimental: {
-    serverComponentsExternalPackages: ['@opentelemetry/instrumentation'],
-  },
 };
 
 module.exports = nextConfig;
