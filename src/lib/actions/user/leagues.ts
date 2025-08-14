@@ -42,6 +42,8 @@ export async function getLeagueData(leagueId: string): Promise<{ league: League 
                      const userData = doc.data();
                      const leaguePoints = league.scores?.[doc.id] || 0;
                      const gamesPlayedInLeague = league.gamesPlayed?.[doc.id] || 0;
+                     // Important: When showing league leaderboard, we must override the global points/games with the league-specific ones.
+                     // The UserProfile type has optional 'gamesPlayed' so we construct it here.
                      members.push({ ...userData, uid: doc.id, leaderboardPoints: leaguePoints, gamesPlayed: { [game.gameType]: gamesPlayedInLeague } } as UserProfile);
                 });
             });
@@ -426,3 +428,5 @@ export async function updateLeagueScoresForGameEnd(game: Game) {
         console.error("Error updating league scores after game end:", error);
     }
 }
+
+    
