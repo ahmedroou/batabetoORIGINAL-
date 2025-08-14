@@ -1,7 +1,8 @@
 
 "use client";
 
-import type { Game, Player, WordWarCard } from "@/types";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import type { Game, Player, WordWarCard } from '@/types';
 import {
   Card,
   CardContent,
@@ -14,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import * as wordWarActions from "@/lib/actions/word-war";
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -41,9 +41,9 @@ import {
   Timer,
 } from "lucide-react";
 import { PlayerAvatar } from "../PlayerAvatar";
-import * as roomActions from "@/lib/actions/room";
+import * as roomActions from '@/lib/actions/room';
 import { useRouter } from "next/navigation";
-import { Label } from "@/components/ui/label";
+import { Label } from '@/components/ui/label';
 import {
   Tooltip,
   TooltipProvider,
@@ -161,17 +161,20 @@ function CountdownTimer({ expiryTimestamp, onExpire }: { expiryTimestamp: number
   const [timeLeft, setTimeLeft] = useState(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000));
 
   useEffect(() => {
+    let id: ReturnType<typeof setInterval> | null = null;
     const update = () => {
       const remaining = Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000);
       setTimeLeft(remaining);
       if (remaining <= 0) {
         onExpire();
-        clearInterval(id);
+        if (id) clearInterval(id);
       }
     };
     update();
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
+    id = setInterval(update, 1000);
+    return () => {
+        if(id) clearInterval(id);
+    };
   }, [expiryTimestamp, onExpire]);
 
   return <span>{timeLeft}</span>;
