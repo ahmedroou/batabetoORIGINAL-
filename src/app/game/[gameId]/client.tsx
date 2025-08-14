@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -11,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Loader2, LogOut, Users, Crown, Gamepad2, Timer } from 'lucide-react';
 import { KingOfGeniusGame } from '@/components/game/king-of-genius/KingOfGeniusGame';
 import { TrapAnswerGame } from '@/components/game/trap-answer/TrapAnswerGame';
-import { WordWarGame } from '@/components/game/word-war/WordWarGame';
+import WordWarGame from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { EducatedMerchantGame } from '@/components/game/educated-merchant/EducatedMerchantGame';
