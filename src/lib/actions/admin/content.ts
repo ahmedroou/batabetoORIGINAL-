@@ -250,7 +250,7 @@ export async function deleteQuestions(criteria: DeleteCriteria) {
         if (all) {
             q = query(itemsCol);
         } else if (category) {
-            q = query(itemsCol, where('category', '==', normalize(category)));
+            q = query(itemsCol, where("category", "==", normalize(category)));
         } else if (searchTerm) {
             const s = normalize(searchTerm);
             q = query(itemsCol, where(field, '>=', s), where(field, '<=', s + '\uf8ff'));
@@ -277,5 +277,94 @@ export async function deleteQuestions(criteria: DeleteCriteria) {
     } catch (error) {
         console.error("Error deleting questions:", error);
         return { error: 'فشل حذف العناصر.' };
+    }
+}
+
+export async function deleteDuplicateWords(): Promise<{ success: boolean; count?: number; error?: string, message?: string }> {
+    try {
+        const wordsCol = collection(db, 'word_war_words');
+        const querySnapshot = await getDocs(wordsCol);
+        if(querySnapshot.empty) return { success: true, count: 0, message: 'لا توجد كلمات.' };
+
+        const wordsMap = new Map<string, string[]>(); 
+        querySnapshot.forEach(doc => {
+            const text = normalize(doc.data().text as string);
+            if (text) {
+                if (!wordsMap.has(text)) wordsMap.set(text, []);
+                wordsMap.get(text)!.push(doc.id);
+            }
+        });
+
+        const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+        let deletedCount = 0;
+        wordsMap.forEach((ids) => {
+            if (ids.length > 1) {
+                ids.shift(); // Keep one
+                ids.forEach(idToDelete => ops.push(b => b.delete(doc(db, 'word_war_words', idToDelete))));
+                deletedCount += ids.length;
+            }
+        });
+
+        if (ops.length === 0) return { success: true, count: 0, message: 'لم يتم العثور على كلمات مكررة.' };
+        
+        await commitChunks(ops);
+        return { success: true, count: deletedCount };
+    } catch (error) {
+        console.error("Error deleting duplicate words:", error);
+        return { error: 'حدث خطأ غير متوقع أثناء حذف الكلمات المكررة.' };
+    }
+}
+
+
+export async function deleteSimilarQuestions(
+  game: 'trap-answer' | 'prison' | 'educated-merchant',
+  category?: string
+): Promise<{ success: boolean; count?: number; error?: string; message?: string }> {
+    const getCollectionInfo = () => {
+        switch (game) {
+          case 'trap-answer': return 'trap_answer_questions';
+          case 'educated-merchant': return 'educated_merchant_questions';
+          case 'prison': return 'prison_questions';
+          default: throw new Error('نوع لعبة غير مدعوم.');
+        }
+    };
+    
+    try {
+        const collectionName = getCollectionInfo();
+        let q = query(collection(db, collectionName));
+        if(category && game !== 'prison') {
+            q = query(q, where('category', '==', category));
+        }
+
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) return { success: true, count: 0, message: 'لم يتم العثور على أسئلة.' };
+
+        const sigMap = new Map<string, string[]>();
+        snapshot.forEach(doc => {
+            const sig = doc.data().similaritySignature as string;
+            if (sig) {
+                if (!sigMap.has(sig)) sigMap.set(sig, []);
+                sigMap.get(sig)!.push(doc.id);
+            }
+        });
+
+        const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+        let deletedCount = 0;
+        sigMap.forEach((ids) => {
+            if (ids.length > 1) {
+                ids.sort((a,b) => b.localeCompare(a)).shift(); // Keep newest
+                ids.forEach(idToDelete => ops.push(b => b.delete(doc(db, collectionName, idToDelete))));
+                deletedCount += ids.length;
+            }
+        });
+
+        if (ops.length === 0) return { success: true, count: 0, message: 'لم يتم العثور على أسئلة مكررة.' };
+
+        await commitChunks(ops);
+        return { success: true, count: deletedCount };
+
+    } catch (e: any) {
+        console.error("Error deleting similar questions:", e);
+        return { error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
     }
 }

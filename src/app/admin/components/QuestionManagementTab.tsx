@@ -68,9 +68,9 @@ import {
     uploadPrisonQuestionsFromJson,
     uploadEducatedMerchantQuestionsFromJson,
     deleteDuplicateWords,
-    deleteSimilarQuestions as deleteSimilarTrapAnswerQuestions
+    deleteSimilarQuestions
 } from "@/lib/actions/admin/content";
-import { deleteSimilarPrisonQuestions } from '@/lib/actions/admin/maintenance';
+
 
 import type { Game } from "@/types";
 import { Info, Upload, Trash2, Sparkles, Edit, Save, Loader2, FileUp, FileX2, X, RefreshCw, Filter, Download, Check } from "lucide-react";
@@ -671,12 +671,10 @@ const QuestionManagementTab: React.FC = () => {
     let result: { success?: boolean; count?: number; error?: string; message?: string } | undefined;
     try {
       if (deletionParams.duplicates) {
-        if (deletionParams.game === "trap-answer") {
-          result = await deleteSimilarTrapAnswerQuestions(deletionParams.game, 0.95, deletionParams.category);
+        if (deletionParams.game === "trap-answer" || deletionParams.game === 'prison' || deletionParams.game === 'educated-merchant') {
+          result = await deleteSimilarQuestions(deletionParams.game, deletionParams.category);
         } else if (deletionParams.game === "word_war") {
           result = await deleteDuplicateWords();
-        } else if (deletionParams.game === "prison") {
-          result = await deleteSimilarPrisonQuestions();
         }
       } else {
         result = await deleteQuestions(deletionParams as any);
