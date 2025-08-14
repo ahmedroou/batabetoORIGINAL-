@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -33,6 +34,7 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
       
       if (remaining <= 0 && isHost && user && !timeoutCalledRef.current) {
         timeoutCalledRef.current = true;
+        // The timeout will trigger puzzle generation and state transition on the backend.
         handleTimeout(game.id, user.uid).catch(e => console.error("Error in timeout handler:", e));
       }
     };

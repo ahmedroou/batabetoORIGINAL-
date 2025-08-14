@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -15,9 +16,8 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Award, Star, ArrowLeft, Plus, RefreshCcw } from 'lucide-react';
-import { nextKingOfGenius } from '@/lib/actions/king-of-genius';
-import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { handleTimeout } from '@/lib/actions/king-of-genius';
+import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { useAuth } from '@/hooks/useAuth';
 
 interface RoundResultsProps {
@@ -45,18 +45,18 @@ export function RoundResults({
       const endTime = game.challengeState.timerEndsAt.toMillis();
       const delay = endTime - Date.now();
       
-      if (delay > 0) {
-        const timer = setTimeout(() => {
-            if (!timeoutCalledRef.current) {
-                timeoutCalledRef.current = true;
-                handleTimeout(game.id, user.uid).catch(e => console.error("Error in timeout handler:", e));
-            }
-        }, delay);
-        return () => clearTimeout(timer);
-      } else if (!timeoutCalledRef.current) {
-          // If timer has already expired, call it immediately
+      const triggerTimeout = () => {
+        if (!timeoutCalledRef.current) {
           timeoutCalledRef.current = true;
           handleTimeout(game.id, user.uid).catch(e => console.error("Error in timeout handler:", e));
+        }
+      };
+
+      if (delay <= 0) {
+        triggerTimeout();
+      } else {
+        const timer = setTimeout(triggerTimeout, delay);
+        return () => clearTimeout(timer);
       }
     }
   }, [isHost, game.id, user, game.challengeState?.timerEndsAt]);
