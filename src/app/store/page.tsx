@@ -1,5 +1,6 @@
+
 import { Suspense } from 'react';
-import dynamic from 'next/dynamic';
+import dynamicImport from 'next/dynamic';
 import type { Metadata, Viewport } from 'next';
 
 /**
@@ -43,7 +44,7 @@ export const viewport: Viewport = {
 };
 
 // Client component is heavy/UI-rich—hydrate only on client.
-const StoreClient = dynamic(() => import('./client'), {
+const StoreClient = dynamicImport(() => import('./client'), {
   ssr: false,
   loading: () => <LoadingFallback />,
 });
