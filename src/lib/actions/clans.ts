@@ -25,6 +25,8 @@ import {
   updateDoc,
   where,
   writeBatch,
+  limit,
+  startAfter
 } from 'firebase/firestore';
 import type {
   Clan,
@@ -139,8 +141,9 @@ async function getClanDoc(clanId: string) {
   const ref = doc(db, 'clans', clanId);
   const snapshot = await getDoc(ref);
   if (!snapshot.exists()) throw new Error('لم يتم العثور على الفريق.');
-  return { ref, data: snapshot.data() as Clan };
+  return { ref, data: snapshot.data() as Clan, snapshot };
 }
+
 
 async function logClanEvent(clanId: string, entry: Omit<ClanLogEntry, 'createdAt'>) {
   const logsRef = collection(db, 'clans', clanId, 'logs');
@@ -244,26 +247,27 @@ export async function createClan(
  * Paginated clan listing with flexible sorting for leaderboards UI.
  */
 export async function getClans(opts: PaginationOpts = {}): Promise<Clan[]> {
-  const { limit = 20, cursor, sortBy = 'totalPoints', order = 'desc' } = opts;
-  try {
-    const col = collection(db, 'clans');
-    const qBase = query(col, orderBy(sortBy, order));
-    const snap = await getDocs(qBase);
+    const { limit: queryLimit = 20, cursor, sortBy = 'totalPoints', order = 'desc' } = opts;
+    try {
+        const col = collection(db, 'clans');
+        let q = query(col, orderBy(sortBy, order), limit(queryLimit));
 
-    let docs = snap.docs;
-    if (cursor) {
-      const idx = docs.findIndex((d) => d.id === cursor);
-      if (idx >= 0) docs = docs.slice(idx + 1);
+        if (cursor) {
+            const cursorDoc = await getDoc(doc(db, 'clans', cursor));
+            if (cursorDoc.exists()) {
+                q = query(col, orderBy(sortBy, order), startAfter(cursorDoc), limit(queryLimit));
+            }
+        }
+        
+        const snap = await getDocs(q);
+        const clans: Clan[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        return clans;
+    } catch (e) {
+        console.error('Error fetching clans:', e);
+        return [];
     }
-
-    const page = docs.slice(0, limit);
-    const clans: Clan[] = page.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    return clans;
-  } catch (e) {
-    console.error('Error fetching clans:', e);
-    return [];
-  }
 }
+
 
 /**
  * Update clan profile: name, emblem, color, description, privacy, region.
@@ -323,7 +327,7 @@ export async function requestToJoinClan(
   message?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { ref: clanRef, data: clan } = await getClanDoc(clanId);
+    const { ref: clanRef } = await getClanDoc(clanId);
     const userRef = doc(db, 'users', userId);
 
     await runTransaction(db, async (tx) => {
