@@ -105,7 +105,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border bg-gradient-to-r ${palette.from} ${palette.to} text-background shadow-sm`}
                 >
                   {RankIcon ? <RankIcon className="w-4 h-4" /> : <Star className="w-4 h-4" />}
-                  <span>{currentRank.name}</span>
+                  <span>{activeDecree?.title ?? currentRank.name}</span>
                 </motion.span>
               )}
             </div>
@@ -115,9 +115,9 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 bg-background/60 backdrop-blur hover:shadow-md cursor-default">
-                      <CircleDollarSign className="w-4 h-4 text-yellow-500" />
-                      <span>{nf.format(userProfile.coins || 0)} كوينز</span>
+                    <div className="inline-flex items-center gap-2 rounded-full border border-yellow-500/30 px-3 py-1.5 bg-black/20 backdrop-blur-sm hover:shadow-md cursor-default">
+                      <CircleDollarSign className="w-5 h-5 text-yellow-400" />
+                      <span className="text-white">{nf.format(userProfile.coins || 0)} كوينز</span>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent>رصيد الكوينز الخاص بك</TooltipContent>
@@ -127,9 +127,9 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 bg-background/60 backdrop-blur hover:shadow-md cursor-default">
-                      <Diamond className="w-4 h-4 text-blue-500" />
-                      <span>{nf.format(userProfile.diamonds || 0)} ألماس</span>
+                    <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 px-3 py-1.5 bg-black/20 backdrop-blur-sm hover:shadow-md cursor-default">
+                      <Diamond className="w-5 h-5 text-blue-400" />
+                      <span className="text-white">{nf.format(userProfile.diamonds || 0)} ألماس</span>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent>أحجارك الكريمة</TooltipContent>
@@ -139,9 +139,9 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 bg-background/60 backdrop-blur hover:shadow-md cursor-default">
-                      <Trophy className="w-4 h-4 text-amber-500" />
-                      <span>{nf.format(userProfile.leaderboardPoints || 0)} نقاط</span>
+                    <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 px-3 py-1.5 bg-black/20 backdrop-blur-sm hover:shadow-md cursor-default">
+                      <Trophy className="w-5 h-5 text-amber-400" />
+                      <span className="text-white">{nf.format(userProfile.leaderboardPoints || 0)} نقاط</span>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent>إجمالي نقاط الصدارة</TooltipContent>
