@@ -1,12 +1,32 @@
+// next.config.mjs
+// @ts-check
+
+const isCI = !!process.env.CI;
+const isProd = process.env.NODE_ENV === 'production';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // صرامة رياكت وفوائده في اكتشاف المشاكل مبكرًا
+  reactStrictMode: true,
+
+  // شوية تحصينات وأفضلية للنشر
+  poweredByHeader: false,
+  compress: true,
+  output: 'standalone',
+
+  // خليك صارم في CI، مرن محليًا
   typescript: {
-    ignoreBuildErrors: true,
+    // يمنع تجاهل أخطاء الـ TS في CI، ويسمح محليًا لو CI مش مفعّل
+    ignoreBuildErrors: !isCI,
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    // فشل البناء في CI لو في أخطاء لينت؛ محليًا يسمح يكمل
+    ignoreDuringBuilds: !isCI,
   },
+
   images: {
+    // صيغ حديثة للصور عند الإمكان
+    formats: ['image/avif', 'image/webp'],
     remotePatterns: [
       {
         protocol: 'https',
@@ -15,14 +35,19 @@ const nextConfig = {
         pathname: '/**',
       },
     ],
+    // تقدر تزود deviceSizes أو imageSizes حسب احتياجك
   },
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        fs: false
-      };
-    }
-    return config;
+
+  // البديل المستقر بدل الإعداد التجريبي القديم
+  serverExternalPackages: ['@opentelemetry/instrumentation'],
+
+  experimental: {
+    // يقلل حجم الحِزم ويحسّن سرعة التطوير والإنتاج مع مكتبات كبيرة
+    optimizePackageImports: [
+      'lucide-react',
+      'date-fns',
+      'lodash'
+    ],
   },
 };
 
