@@ -97,6 +97,101 @@ function PrizeRow({ rank, points, coins }: { rank: string; points: number; coins
   );
 }
 
+
+const gameCardsData = [
+    {
+      type: 'trap-answer',
+      title: 'الجواب المفخخ',
+      description: 'لعبة الذكاء والخداع. اصنع فخًا للاعبين الآخرين أو كن أنت الضحية!',
+      prizes: [
+        { rank: '1st', points: 3, coins: 2 },
+        { rank: '2nd', points: 2, coins: 1 },
+        { rank: '3rd', points: 1, coins: 0 },
+      ],
+      accent: {
+        from: 'from-fuchsia-500/40',
+        to: 'to-transparent',
+      },
+      defaultTag: "خداع",
+    },
+    {
+      type: 'king-of-genius',
+      title: 'ساحة العباقرة',
+      description: 'تحديات العقل والسرعة. أثبت أنك الأذكى في ساحة الألعاب المصغرة.',
+       prizes: [
+        { rank: '1st', points: 3, coins: 2 },
+        { rank: '2nd', points: 2, coins: 1 },
+        { rank: '3rd', points: 1, coins: 0 },
+      ],
+      accent: {
+        from: 'from-amber-400/40',
+        to: 'to-transparent',
+      },
+      defaultTag: "ذكاء",
+    },
+    {
+      type: 'behind-the-mask',
+      title: 'خلف القناع',
+      description: 'لعبة الأدوار الخفية والمافيا. هل ستكشف القاتل أم ستكون الضحية؟',
+       prizes: [
+        { rank: '1st', points: 3, coins: 2 },
+        { rank: '2nd', points: 2, coins: 1 },
+        { rank: '3rd', points: 1, coins: 0 },
+      ],
+      accent: {
+        from: 'from-rose-500/40',
+        to: 'to-transparent',
+      },
+       defaultTag: "غموض",
+    },
+    {
+      type: 'prison',
+      title: 'السجن',
+      description: 'اختبر معرفتك في مزادات علنية ومغلقة. إجاباتك هي مفتاح حريتك!',
+       prizes: [
+        { rank: '1st', points: 3, coins: 2 },
+        { rank: '2nd', points: 2, coins: 1 },
+        { rank: '3rd', points: 1, coins: 0 },
+      ],
+      accent: {
+        from: 'from-sky-500/40',
+        to: 'to-transparent',
+      },
+       defaultTag: "معرفة",
+    },
+    {
+      type: 'word_war',
+      title: 'حرب الكلمات',
+      description: 'تلميح من كلمة واحدة يربط كلمات فريقك. هل سيفهم فريقك قصدك؟',
+       prizes: [
+        { rank: '1st', points: 3, coins: 2 },
+        { rank: '2nd', points: 2, coins: 1 },
+        { rank: '3rd', points: 1, coins: 0 },
+      ],
+      accent: {
+        from: 'from-emerald-500/40',
+        to: 'to-transparent',
+      },
+      defaultTag: "فطنة",
+    },
+    {
+      type: 'educated-merchant',
+      title: 'التاجر المتعلم',
+      description: 'أجب عن الأسئلة لتشتري العقارات وتزيد ثروتك. لعبة استراتيجية وثقافة!',
+       prizes: [
+        { rank: '1st', points: 4, coins: 3 },
+        { rank: '2nd', points: 2, coins: 1 },
+        { rank: '3rd', points: 1, coins: 1 },
+      ],
+      accent: {
+        from: 'from-lime-500/40',
+        to: 'to-transparent',
+      },
+       defaultTag: "استراتيجية",
+    },
+];
+
+
 // -----------------------------
 // Main improved GameGrid component
 // - Premium black/gold/white theme
