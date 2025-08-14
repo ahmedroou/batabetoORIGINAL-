@@ -133,7 +133,7 @@ export default function AdminPage() {
     const fromQuery = searchParams?.get("tab");
     const fromStorage = typeof window !== "undefined" ? localStorage.getItem("admin_active_tab") : null;
     return (fromQuery || fromStorage || "society") as (typeof tabMap)[number]["value"];
-  }, [searchParams, tabMap]);
+  }, [searchParams]);
 
   const [activeTab, setActiveTab] = useState<(typeof tabMap)[number]["value"]>(initialTab);
 
@@ -251,19 +251,23 @@ export default function AdminPage() {
       <div className="mx-auto w-full max-w-6xl px-4 py-8 space-y-6">
         {/* Header */}
         <Card className="backdrop-blur supports-[backdrop-filter]:bg-background/70">
-          <CardHeader className="relative">
-            <div className="absolute top-4 right-4 flex gap-2">
-              <Button variant="outline" asChild aria-label="إدارة المتجر والألقاب">
-                <Link href="/admin/store">
-                  <Store className="mr-2" /> إدارة المتجر والألقاب
-                </Link>
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => router.push("/")} aria-label="عودة للرئيسية">
-                <ArrowLeft />
-              </Button>
-            </div>
-            <CardTitle className="text-2xl md:text-3xl">لوحة تحكم الأدمن</CardTitle>
-            <CardDescription>إدارة محتوى اللعبة وإعداداتها.</CardDescription>
+          <CardHeader>
+             <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-2xl md:text-3xl">لوحة تحكم الأدمن</CardTitle>
+                  <CardDescription>إدارة محتوى اللعبة وإعداداتها.</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" asChild aria-label="إدارة المتجر والألقاب">
+                    <Link href="/admin/store">
+                      <Store className="mr-2" /> إدارة المتجر والألقاب
+                    </Link>
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => router.push("/")} aria-label="عودة للرئيسية">
+                    <ArrowLeft />
+                  </Button>
+                </div>
+              </div>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
