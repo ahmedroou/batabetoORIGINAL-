@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
@@ -93,14 +94,14 @@ export default function TestingTab({ onTestChallenge, isGeneratingTest, testingC
             {/* شريط الأدوات */}
             <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
               <div className="relative w-full md:max-w-md">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   ref={inputRef}
                   placeholder="ابحث باسم التحدّي… (Ctrl/⌘+K)"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={onEnterToRunFirst}
-                  className="pr-9"
+                  className="pl-9"
                   aria-label="بحث"
                 />
               </div>

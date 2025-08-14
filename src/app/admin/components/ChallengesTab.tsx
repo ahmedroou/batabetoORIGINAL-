@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -514,34 +515,34 @@ export default function ChallengesTab() {
           {isEnded && !isFinalized && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button size="sm" variant="default" className="gap-1">
+                <Button size="sm" variant="default" className="gap-1" onClick={() => setChallengeToFinalize(c)}>
                   <Award className="w-4 h-4 ml-1" /> توزيع الجوائز
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>تأكيد توزيع الجوائز</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    سيتم إنهاء البطولة وتوزيع الجوائز على الفائزين. هل أنت متأكد؟
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => { setChallengeToFinalize(c); }}>
-                    متابعة
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
             </AlertDialog>
           )}
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button size="icon" variant="ghost" className="text-destructive" onClick={() => setChallengeToDelete(c)} aria-label="حذف">
+              <Button size="icon" variant="ghost" className="text-destructive" aria-label="حذف">
                 <Trash2 className="w-4 h-4" />
               </Button>
             </AlertDialogTrigger>
             {/* The shared dialog below actually executes the deletion */}
+             <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
+                    <AlertDialogDescription>
+                    هل تريد حقًا حذف بطولة "{c.title}"؟ لا يمكن التراجع عن هذا الإجراء.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setChallengeToDelete(null)}>إلغاء</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => { setChallengeToDelete(c); handleDeleteChallenge() }} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
+                    {isSubmitting ? "جاري الحذف..." : "نعم، قم بالحذف"}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
           </AlertDialog>
         </div>
       </div>
@@ -549,7 +550,7 @@ export default function ChallengesTab() {
   };
 
   return (
-    <AlertDialog>
+    <div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Creator / Editor */}
         <Card className="relative overflow-hidden">
@@ -665,38 +666,25 @@ export default function ChallengesTab() {
           </CardContent>
         </Card>
 
-        {/* Shared Delete Dialog */}
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
-            <AlertDialogDescription>
-              هل تريد حقًا حذف بطولة "{challengeToDelete?.title}"؟ لا يمكن التراجع عن هذا الإجراء.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setChallengeToDelete(null)}>إلغاء</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteChallenge} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
-              {isSubmitting ? "جاري الحذف..." : "نعم، قم بالحذف"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-
-        {/* Shared Finalize Dialog (confirmation already above, this executes) */}
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد نهائي</AlertDialogTitle>
-            <AlertDialogDescription>
-              سيتم الآن تنفيذ عملية التوزيع. هل تريد المتابعة؟
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setChallengeToFinalize(null)}>إلغاء</AlertDialogCancel>
-            <AlertDialogAction onClick={handleFinalize} disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "تنفيذ التوزيع"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
+        {/* Finalize Dialog */}
+         {challengeToFinalize && <AlertDialog open={!!challengeToFinalize} onOpenChange={() => setChallengeToFinalize(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>تأكيد توزيع الجوائز</AlertDialogTitle>
+                <AlertDialogDescription>
+                  سيتم الآن إنهاء البطولة وتوزيع الجوائز على الفائزين. هل أنت متأكد؟
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                <AlertDialogAction onClick={handleFinalize} disabled={isSubmitting}>
+                   {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "تنفيذ التوزيع"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>}
       </div>
-    </AlertDialog>
+    </div>
   );
 }
+

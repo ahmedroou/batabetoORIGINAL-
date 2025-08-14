@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -35,7 +36,7 @@ import { motion } from "framer-motion";
 // Data
 import { GENIUS_CHALLENGES, type GeniusChallenge } from "@/data/genius-challenges";
 
-// Server Actions
+// Server Actions - Import from new central point
 import { generateGeniusChallenge } from "@/lib/actions/admin";
 
 /**
@@ -61,6 +62,11 @@ const ComplaintsTab = dynamic(() => import("./components/ComplaintsTab"), {
   ssr: false,
   loading: () => <TabLoader label="الشكاوى" />,
 });
+const TestingTab = dynamic(() => import("./components/TestingTab"), {
+  ssr: false,
+  loading: () => <TabLoader label="الاختبار" />,
+});
+
 
 // Challenge host is heavier; keep it lazy with a nice loader
 const ChallengeHost = dynamic(
@@ -304,7 +310,7 @@ export default function AdminPage() {
             </TabsContent>
 
             <TabsContent value="testing" className="mt-4">
-              <TestingTabEnhanced onTestChallenge={handleTestChallenge} isGeneratingTest={isGeneratingTest} testingChallenge={testingChallenge} />
+              <TestingTab onTestChallenge={handleTestChallenge} isGeneratingTest={isGeneratingTest} testingChallenge={testingChallenge} />
             </TabsContent>
           </Tabs>
         </motion.div>
@@ -353,60 +359,5 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
     </main>
-  );
-}
-
-/**
- * A thin wrapper over your existing TestingTab to add GPT-5 niceties without touching the original component.
- */
-function TestingTabEnhanced({
-  onTestChallenge,
-  isGeneratingTest,
-  testingChallenge,
-}: {
-  onTestChallenge: (c: GeniusChallenge) => Promise<void>;
-  isGeneratingTest: boolean;
-  testingChallenge: GeniusChallenge | null;
-}) {
-  // Build a friendly list with quick actions
-  const items = useMemo(() => GENIUS_CHALLENGES, []);
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <TestTube2 className="h-5 w-5" /> وضع الاختبار السريع
-        </CardTitle>
-        <CardDescription>
-          شغّل أي تحدٍّ فورًا بنقرة واحدة، مع ضبط وقت افتراضي مناسب لكل نوع.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {items.map((c) => (
-            <motion.div key={c.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-              <Card className="h-full">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{c.name}</CardTitle>
-                  <CardDescription className="text-xs line-clamp-2">{c.description}</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <Button
-                    className="w-full"
-                    disabled={isGeneratingTest}
-                    onClick={() => onTestChallenge(c)}
-                    aria-label={`بدء اختبار ${c.name}`}
-                  >
-                    {isGeneratingTest && testingChallenge?.id === c.id ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    جرّب الآن
-                  </Button>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
   );
 }
