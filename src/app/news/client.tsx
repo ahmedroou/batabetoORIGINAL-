@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -262,11 +263,14 @@ export default function NewsClient() {
 
   const fetchArticles = async () => {
     setIsLoading(true);
-    const fetchedArticles = await getPublishedArticles(userProfile?.uid);
-    if (fetchedArticles.length > 0 && fetchedArticles[0].createdAt.getTime() !== latestArticleDate?.getTime()) {
-      if (setLatestArticleDate) setLatestArticleDate(fetchedArticles[0].createdAt);
+    const result = await getPublishedArticles(userProfile?.uid);
+    if (result.success && result.data) {
+      const fetchedArticles = result.data.articles;
+       if (fetchedArticles.length > 0 && fetchedArticles[0].createdAt.getTime() !== latestArticleDate?.getTime()) {
+        if (setLatestArticleDate) setLatestArticleDate(fetchedArticles[0].createdAt);
+       }
+       setArticles(fetchedArticles);
     }
-    setArticles(fetchedArticles);
     setIsLoading(false);
   };
 

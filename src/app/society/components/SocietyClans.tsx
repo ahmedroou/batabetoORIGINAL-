@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -120,7 +121,7 @@ export default function SocietyClans() {
   const fetchClans = useCallback(async () => {
     setIsLoading(true);
     const fetchedClans = await getClans();
-    setClans(fetchedClans);
+    setClans(fetchedClans.clans);
     setIsLoading(false);
   }, []);
 
@@ -199,7 +200,7 @@ export default function SocietyClans() {
               index === 0 ? 'ring-2 ring-yellow-400/60 shadow-yellow-400/20' :
               index === 1 ? 'ring-2 ring-slate-300/60 shadow-slate-300/20' :
               index === 2 ? 'ring-2 ring-amber-500/60 shadow-amber-500/20' : 'ring-1 ring-purple-500/20';
-            const RoleIcon = (role: string) => (role === 'leader' ? Crown : role === 'vice-leader' ? Shield : User);
+            const RoleIcon = (role: string) => (role === 'leader' ? Crown : role === 'officer' ? Shield : User);
 
             const isExpanded = expandedId === clan.id;
 

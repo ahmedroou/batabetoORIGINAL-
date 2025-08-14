@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -139,8 +140,8 @@ const CreateWarDialog = ({
 
   const fetchClans = useCallback(async () => {
     setIsLoadingClans(true);
-    const clans = await getClans();
-    setAllClans(clans.filter((c) => c.id !== userProfile.clan?.id));
+    const clansResult = await getClans();
+    setAllClans(clansResult.clans.filter((c) => c.id !== userProfile.clan?.id));
     setIsLoadingClans(false);
   }, [userProfile.clan?.id]);
 

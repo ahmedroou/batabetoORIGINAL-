@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -242,7 +243,7 @@ export async function createClan(
 /**
  * Paginated clan listing with flexible sorting for leaderboards UI.
  */
-export async function getClans(opts: PaginationOpts = {}): Promise<{ clans: Clan[]; nextCursor?: string }> {
+export async function getClans(opts: PaginationOpts = {}): Promise<Clan[]> {
   const { limit = 20, cursor, sortBy = 'totalPoints', order = 'desc' } = opts;
   try {
     const col = collection(db, 'clans');
@@ -257,11 +258,10 @@ export async function getClans(opts: PaginationOpts = {}): Promise<{ clans: Clan
 
     const page = docs.slice(0, limit);
     const clans: Clan[] = page.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    const nextCursor = docs.length > limit ? docs[limit]?.id : undefined;
-    return { clans, nextCursor };
+    return clans;
   } catch (e) {
     console.error('Error fetching clans:', e);
-    return { clans: [] };
+    return [];
   }
 }
 
@@ -555,7 +555,7 @@ export async function leaveClan(userId: string, clanId: string) {
       const update: any = { members: updatedMembers, updatedAt: Timestamp.now() };
       if (updatedMembers.length === 0) update.disbandedAt = Timestamp.now();
       tx.update(clanRef, update);
-      tx.update(userRef, { clan: deleteDoc, clanRole: deleteDoc } as any);
+      tx.update(userRef, { clan: deleteField(), clanRole: deleteField() });
     });
 
     await logClanEvent(clanId, {
@@ -666,7 +666,7 @@ export async function kickMember(clanId: string, actingUserId: string, targetUse
 
       const updated = clan.members.filter((m) => m.id !== targetUserId);
       tx.update(clanRef, { members: updated, updatedAt: Timestamp.now() });
-      if (targetUser.clan?.id === clanId) tx.update(userRef, { clan: deleteDoc, clanRole: deleteDoc } as any);
+      if (targetUser.clan?.id === clanId) tx.update(userRef, { clan: deleteField(), clanRole: deleteField() });
     });
 
     await logClanEvent(clanId, {

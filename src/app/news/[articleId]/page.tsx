@@ -1,3 +1,4 @@
+
 import { getArticleById, getPublishedArticles } from '@/lib/actions/news';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
@@ -20,7 +21,8 @@ export async function generateMetadata(
   parent: ResolvingMetadata
 ): Promise<Metadata> {
   const articleId = params.articleId;
-  const article = await getArticleById(articleId);
+  const articleResult = await getArticleById(articleId);
+  const article = articleResult.success ? articleResult.data : null;
 
   if (!article) {
     return {
@@ -53,7 +55,8 @@ export async function generateMetadata(
 // -----------------------------
 
 const Sidebar = async () => {
-  const latestArticles = await getPublishedArticles();
+  const articlesResult = await getPublishedArticles();
+  const latestArticles = articlesResult.success ? articlesResult.data?.articles ?? [] : [];
   return (
     <aside className="space-y-6 lg:sticky lg:top-6">
       {/* Box: Latest News */}
@@ -90,14 +93,17 @@ const Sidebar = async () => {
 // -----------------------------
 
 export default async function ArticlePage({ params }: Props) {
-  const article = await getArticleById(params.articleId);
+  const articleResult = await getArticleById(params.articleId);
+  const article = articleResult.success ? articleResult.data : null;
 
   if (!article || !article.isPublished) {
     notFound();
   }
 
   // Prepare related & navigation
-  const allArticles = await getPublishedArticles();
+  const allArticlesResult = await getPublishedArticles();
+  const allArticles = allArticlesResult.success ? allArticlesResult.data?.articles ?? [] : [];
+
   const sorted = allArticles; // نفترض أنها مرتبة من المصدر تنازليًا بالتاريخ
   const currentIndex = sorted.findIndex(a => a.id === article.id);
   const prevArticle = currentIndex > 0 ? sorted[currentIndex - 1] : null;
@@ -253,7 +259,8 @@ export default async function ArticlePage({ params }: Props) {
 // -----------------------------
 
 export async function generateStaticParams() {
-  const articles = await getPublishedArticles();
+  const articlesResult = await getPublishedArticles();
+  const articles = articlesResult.success ? articlesResult.data?.articles ?? [] : [];
   return articles.map(article => ({
     articleId: article.id,
   }));

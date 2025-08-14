@@ -222,7 +222,7 @@ export async function deleteArticle(articleId: string, actorId?: string): Promis
 /**
  * Fetch articles for admin with pagination.
  */
-export async function getArticlesForAdmin(opts?: { limit?: number; startAfterId?: string }): Promise<ServiceResult<Article[]>> {
+export async function getArticlesForAdmin(opts?: { limit?: number; startAfterId?: string }): Promise<ServiceResult<{data: Article[]}>> {
   try {
     const pageLimit = opts?.limit ?? 50;
     const articlesCol = collection(db, ARTICLES_COLLECTION);
@@ -298,7 +298,7 @@ export async function getPublishedArticles(
 /**
  * Get single article by id. Optionally increment views atomically.
  */
-export async function getArticleById(articleId: string, incrementViews = false): Promise<ServiceResult<Article | null>> {
+export async function getArticleById(articleId: string, incrementViews = false): Promise<Article | null> {
   try {
     const ref = doc(db, ARTICLES_COLLECTION, articleId);
     if (incrementViews) {
@@ -310,14 +310,15 @@ export async function getArticleById(articleId: string, incrementViews = false):
         tx.update(ref, { views: increment(1) });
         return data;
       });
-      return { success: true, data: res };
+      return res;
     } else {
       const snap = await getDoc(ref);
-      if (!snap.exists()) return { success: true, data: null };
-      return { success: true, data: toArticleDoc(snap as any) };
+      if (!snap.exists()) return null;
+      return toArticleDoc(snap as any);
     }
   } catch (err) {
-    return { success: false, error: handleError(err, 'فشل جلب المقالة') };
+    handleError(err, 'فشل جلب المقالة');
+    return null;
   }
 }
 

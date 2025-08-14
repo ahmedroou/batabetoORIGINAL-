@@ -1,3 +1,4 @@
+
 "use client";
 
 import NewsClient from './client';
