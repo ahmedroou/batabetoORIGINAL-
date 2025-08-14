@@ -6,7 +6,7 @@ import { useState, useEffect, createContext, useContext, type ReactNode, useRef,
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId, Challenge } from '@/types';
+import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId, Challenge, AllegianceRequest } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/types';
 import { getRanks } from '@/lib/actions/user/queries';
 import { getPublishedArticles } from '@/lib/actions/news';
@@ -128,6 +128,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           audienceGroups: data.audienceGroups || [],
           humiliation: data.humiliation || null,
           allegiance: data.allegiance || null,
+          allegianceRequests: (data.allegianceRequests || []).filter((r: AllegianceRequest) => r.status === 'pending'),
           taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
           alliances: data.alliances || [],
           decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date()),
@@ -208,6 +209,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             audienceGroups: data.audienceGroups || [],
             humiliation: data.humiliation || null,
             allegiance: data.allegiance || null,
+            allegianceRequests: (data.allegianceRequests || []).filter((r: AllegianceRequest) => r.status === 'pending'),
             taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
             alliances: data.alliances || [],
             decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date()),
