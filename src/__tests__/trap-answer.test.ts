@@ -34,7 +34,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p4: 'هيروشيما'// Guessed p3's answer, was tricked by p3
         };
 
-        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, [], ['طوكيو', 'نارا', 'سابورو', 'هيروشيما', 'فوكوكا']);
 
         // Alice (p1) guessed correctly (+2) AND tricked Bob (p2) (+1) = 3
         expect(roundScores['p1'].points).toBe(3); 
@@ -56,7 +56,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p4: 'يوكوهاما' // Dana was tricked by Alice
         };
 
-        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, [], ['طوكيو', 'يوكوهاما', 'كيوتو', 'أوكيناوا', 'جينزا']);
 
         expect(roundScores['p1'].points).toBe(1); // Alice tricked Dana
         expect(roundScores['p2'].points).toBe(4); // Bob guessed correctly (+2) and tricked Alice and Charlie (+1 each) = 4
@@ -74,7 +74,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p4: 'طوكيو',
         };
 
-        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, [], ['طوكيو', 'كوبي', 'ناغويا', 'تشيبا', 'سaitama']);
 
         expect(roundScores['p1'].points).toBe(-1); // Penalty for self-vote
         expect(roundScores['p2'].points).toBe(2);
@@ -92,7 +92,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p4: 'أوساكا'    // Dana was tricked by Bob
         };
 
-        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, [], ['طوكيو', 'كيوتو', 'أوساكا', 'سيدني']);
 
         // Alice: Correct guess (+2) + Bob's vote (+1) = 3
         expect(roundScores['p1'].points).toBe(3); 
@@ -115,7 +115,8 @@ describe('Trap Answer Game - Scoring Logic', () => {
             mockQuestion,
             playerAnswers,
             playerGuesses,
-            []
+            [],
+            ['طوكيو', 'إجابة مفخخة', 'إجابة أخرى']
         );
 
         // p1 gets 2 points for correct guess
@@ -146,7 +147,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p4: 'فخ تشارلي' // Dana gets tricked by Charlie
         };
 
-        const { roundScores, resultsByAnswer } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
+        const { roundScores, resultsByAnswer } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, [], ['طوكيو', 'فخ أليس', 'فخ تشارلي']);
 
         // Alice: Correct guess (+2) + Bob's vote (+1) = 3
         expect(roundScores['p1'].points).toBe(3);
@@ -172,7 +173,7 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p2: 'نارا',  // Bob votes for Alice's answer (+1 for Alice)
         };
 
-        const { roundScores } = calculateTrapAnswerScores(mockPlayers.slice(0, 2), mockQuestion, playerAnswers, playerGuesses, []);
+        const { roundScores } = calculateTrapAnswerScores(mockPlayers.slice(0, 2), mockQuestion, playerAnswers, playerGuesses, [], ['طوكيو', 'نارا', 'سابورو']);
 
         // Alice gets -1 for self-vote and +1 for tricking Bob. Net score = 0
         expect(roundScores['p1'].points).toBe(0);
@@ -191,8 +192,8 @@ describe('Trap Answer Game - Scoring Logic', () => {
             p3: 'أوساكا',// Charlie guesses another dummy answer
             p4: 'نارا'  // Dana guesses Alice's trap
         };
-
-        const { resultsByAnswer } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, []);
+        const displayed = ['طوكيو', 'كيوتو', 'أوساكا', 'نارا'];
+        const { resultsByAnswer } = calculateTrapAnswerScores(mockPlayers, mockQuestion, playerAnswers, playerGuesses, [], displayed);
         
         const displayedAnswerTexts = resultsByAnswer.map(r => r.text);
         
@@ -229,7 +230,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game, []);
 
         expect(updates['p1']?.leaderboardPoints).toBe(3);
         expect(updates['p1']?.coins).toBe(2);
@@ -261,7 +262,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game);
+        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game, []);
 
         expect(updates['p1'].leaderboardPoints).toBe(3);
         expect(updates['p2'].leaderboardPoints).toBe(2);
@@ -290,7 +291,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
 
-        const { updates, specialAwards } = calculateEndOfGameAwards(mockGame as Game);
+        const { updates, specialAwards } = calculateEndOfGameAwards(mockGame as Game, []);
 
         // p1 gets 3 points for 1st place + 1 bonus point
         expect(updates['p1'].leaderboardPoints).toBe(3 + 1);
@@ -310,10 +311,13 @@ describe('Trap Answer Game - Away Player Feature', () => {
             mockQuestion,
             {},
             {},
-            awayPlayerIds
+            awayPlayerIds,
+            []
         );
 
         expect(awayPlayerIdsDuringRound).toBeDefined();
         expect(awayPlayerIdsDuringRound).toContain('p1');
     });
 });
+
+    
