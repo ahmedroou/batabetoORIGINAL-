@@ -77,7 +77,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
         <div className="absolute -inset-20 opacity-20 blur-2xl bg-[conic-gradient(var(--tw-gradient-stops))] animate-[spin_12s_linear_infinite]" />
       </div>
 
-      <Card className="rounded-[22px] overflow-hidden backdrop-blur-xl bg-background/70 border-transparent">
+      <Card className="rounded-[22px] overflow-hidden backdrop-blur-xl bg-background/50 border-transparent">
         <div className="absolute -top-24 -left-20 h-64 w-64 rounded-full opacity-20 blur-3xl bg-gradient-to-br from-primary/40 to-purple-500/40" />
         <div className="absolute -bottom-24 -right-20 h-64 w-64 rounded-full opacity-20 blur-3xl bg-gradient-to-br from-amber-400/30 to-fuchsia-500/30" />
 
@@ -103,7 +103,10 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
           {/* Main info */}
           <div className="flex-grow text-center md:text-right w-full">
             <div className="flex items-center justify-center md:justify-start gap-3 flex-wrap">
-              <CardTitle className="text-2xl leading-tight">مرحبًا بك يا {userProfile.name}!</CardTitle>
+              <p className="text-xl">أهلاً بك يا</p>
+              <CardTitle className="text-3xl font-serif font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-200 to-pink-300">
+                {userProfile.name}!
+              </CardTitle>
               {currentRank && (
                 <motion.span
                   initial={{ y: -6, opacity: 0 }}
@@ -210,4 +213,3 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
     </div>
   );
 }
-
