@@ -234,7 +234,6 @@ function AmbientBackground() {
       <div className="absolute inset-0 opacity-40 [mask-image:radial-gradient(60%_60%_at_50%_30%,black,transparent)]">
         <div className="h-full w-full bg-[linear-gradient(to_right,hsl(var(--muted-foreground)/.08)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--muted-foreground)/.08)_1px,transparent_1px)] bg-[size:36px_36px]" />
       </div>
-      <div className="absolute inset-x-0 -top-24 h-40 bg-gradient-to-b from-primary/30 to-transparent" />
     </div>
   );
 }
