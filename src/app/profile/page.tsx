@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
@@ -250,7 +251,7 @@ export default function ProfilePage() {
 
   if (loading || !userProfile) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-muted/40">
+      <main className="flex min-h-screen items-center justify-center bg-muted/20">
         <Card className="w-full max-w-lg p-6 animate-fade-in">
           <CardHeader>
             <div className="h-6 w-40 bg-muted rounded mb-2" />
@@ -267,11 +268,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-gray-900 to-black py-8 px-4">
+    <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-600/10 via-gray-800 to-gray-950 py-8 px-4">
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-          <Card className="overflow-hidden border-purple-500/20 bg-gradient-to-br from-purple-900/30 via-gray-900 to-black">
-            <div className="relative h-32 w-full bg-[radial-gradient(circle_at_30%_20%,_rgba(168,85,247,0.35),_transparent_40%),_radial-gradient(circle_at_70%_0%,_rgba(99,102,241,0.25),_transparent_40%)]" />
+          <Card className="overflow-hidden border-purple-500/20 bg-gradient-to-br from-purple-900/10 via-gray-800 to-gray-950">
+            <div className="relative h-32 w-full bg-[radial-gradient(circle_at_30%_20%,_rgba(168,85,247,0.25),_transparent_40%),_radial-gradient(circle_at_70%_0%,_rgba(99,102,241,0.18),_transparent_40%)]" />
             <CardHeader className="pt-0">
               <div className="-mt-12 flex items-center gap-4">
                 <div className="relative">
@@ -280,7 +281,7 @@ export default function ProfilePage() {
                     style={{ background: `conic-gradient(from 0deg, ${rankHue}, transparent 70%)` }}
                     aria-hidden
                   >
-                    <PlayerAvatar avatarId={userProfile.avatarId} className="h-20 w-20 rounded-full border-4 border-black" />
+                    <PlayerAvatar avatarId={userProfile.avatarId} className="h-20 w-20 rounded-full border-4 border-white/20" />
                   </div>
                   {activeDecree && (
                     <Badge className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-destructive text-destructive-foreground shadow">مرسوم</Badge>
@@ -288,8 +289,8 @@ export default function ProfilePage() {
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-2xl font-bold tracking-wide">{userProfile.name}</h1>
-                    <Badge variant="secondary" className="gap-1">
+                    <h1 className="text-3xl md:text-4xl font-bold tracking-wide text-white">{userProfile.name}</h1>
+                    <Badge variant="secondary" className="gap-1 bg-white/10 text-white/90">
                       {currentRank?.icon ? <currentRank.icon className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
                       <span>{activeDecree?.title ?? currentRank?.name ?? "—"}</span>
                     </Badge>
@@ -300,7 +301,7 @@ export default function ProfilePage() {
                         <span>التقدم نحو {rankProgress.nextName ?? rankProgress.label}</span>
                         <span>{Math.round(rankProgress.pct)}%</span>
                       </div>
-                      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-gray-800">
+                      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-white/20">
                         <div className="h-full rounded-full" style={{ width: `${rankProgress.pct}%`, background: rankHue }} />
                       </div>
                       {rankProgress.nextName && (
@@ -328,26 +329,26 @@ export default function ProfilePage() {
           <StatPill icon={<ShieldCheck className="h-4 w-4" />} label="الشرف" value={userProfile.honorPoints ?? 0} />
           <StatPill icon={<Handshake className="h-4 w-4" />} label="الولاء" value={userProfile.loyaltyPoints ?? 0} />
           <StatPill icon={<Star className="h-4 w-4" />} label="التمرد" value={userProfile.rebellionPoints ?? 0} />
-          <StatPill icon={<Gamepad2 className="h-4 w-4" />} label="مباريات" value={userProfile.gamesPlayed ?? 0} />
+          <StatPill icon={<Gamepad2 className="h-4 w-4" />} label="مباريات" value={Object.values(userProfile.gamesPlayed || {}).reduce((sum, count) => sum + count, 0)} />
         </div>
 
-        <Card className="border-purple-500/20 bg-black/30 backdrop-blur-sm">
+        <Card className="border-purple-500/20 bg-white/5 backdrop-blur-sm">
           <CardHeader>
             <CardTitle>التحكم الكامل</CardTitle>
             <CardDescription>خصص هويتك وادِر حسابك بسهولة.</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="customize" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 bg-gray-900/50">
-                <TabsTrigger value="customize">التخصيص</TabsTrigger>
-                <TabsTrigger value="security">الحساب</TabsTrigger>
-                <TabsTrigger value="status">الحالة</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-3 bg-white/10">
+                <TabsTrigger value="customize" className="data-[state=active]:bg-white/15 data-[state=active]:text-white/90 hover:bg-white/10">التخصيص</TabsTrigger>
+                <TabsTrigger value="security" className="data-[state=active]:bg-white/15 data-[state=active]:text-white/90 hover:bg-white/10">الحساب</TabsTrigger>
+                <TabsTrigger value="status" className="data-[state=active]:bg-white/15 data-[state=active]:text-white/90 hover:bg-white/10">الحالة</TabsTrigger>
               </TabsList>
 
               <TabsContent value="customize" className="mt-6 space-y-6">
                 <section>
                   <h3 className="mb-2 text-lg font-semibold">اختر شخصيتك</h3>
-                  <ScrollArea className="h-64 w-full rounded-md border border-purple-500/20 bg-gray-900/30 p-4">
+                  <ScrollArea className="h-64 w-full rounded-md border border-purple-500/20 bg-white/5 p-4">
                     {userProfile.unlockedAvatars && userProfile.unlockedAvatars.length > 0 ? (
                       <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
                         {userProfile.unlockedAvatars.map((avatarId) => {
@@ -473,7 +474,7 @@ export default function ProfilePage() {
                     )}
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-emerald-600/30 bg-emerald-900/10 p-4">
+                  <div className="rounded-lg border border-emerald-600/30 bg-emerald-500/10 p-4">
                     <div className="flex items-center gap-2 text-emerald-400">
                       <ShieldCheck className="h-5 w-5" />
                       <h4 className="font-bold">لا توجد عقوبات حالية</h4>
@@ -513,8 +514,8 @@ export default function ProfilePage() {
 
 function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | string }) {
   return (
-    <div className="rounded-xl border border-purple-500/20 bg-gray-900/40 p-3 text-center shadow-sm">
-      <div className="mx-auto mb-1 flex h-7 w-7 items-center justify-center rounded-full bg-gray-800/60">{icon}</div>
+    <div className="rounded-xl border border-purple-500/20 bg-white/10 p-3 text-center shadow-sm">
+      <div className="mx-auto mb-1 flex h-7 w-7 items-center justify-center rounded-full bg-white/20">{icon}</div>
       <div className="text-lg font-bold">{value}</div>
       <div className="text-[11px] text-muted-foreground">{label}</div>
     </div>
