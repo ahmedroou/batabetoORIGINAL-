@@ -7,7 +7,7 @@ import type { GameKing, Game, UserProfile, SocialRank } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
-import { GAME_TYPE_NAMES } from "@/data/icons";
+import { GAME_TYPE_NAMES, GAME_ICONS } from "@/data/icons";
 import { Crown, Star, Trophy, Shield } from "lucide-react";
 import { motion } from "framer-motion";
 import { getKingsPageData } from "@/lib/actions/user/queries";
@@ -287,4 +287,3 @@ export default function KingsClient() {
     </div>
   );
 }
-
