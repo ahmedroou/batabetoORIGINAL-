@@ -8,7 +8,7 @@
 // Explicitly import and export to avoid namespace collisions and help bundlers.
 import { createUserProfile, updateUserName, updateUserAvatar, updateUserGender } from './profile';
 import { purchaseAvatar, purchasePunishmentAvatar, exchangeCoinsForHonor, exchangeCoinsForRebellion, exchangeCoinsForLoyaltyPoints } from './currency';
-import { getPlayerFromUserId, getGameKings, getKingOfGames, getAllUsers, updateUserWinCount, getRanks, getUsersByRank, getTopUsers, getTopPunisher, getKingsPageData } from './queries';
+import { getPlayerFromUserId, getGameKings, getKingOfGames, getAllUsers, updateUserWinCount, getRanks, getUsersByRank, getTopUsers, getTopPunisher, getKingsPageData, getGamePopularityStats } from './queries';
 import { sendSystemMail, getMail, markMailAsRead, claimMailCoins } from './mail';
 import { 
     getLeagueData, 
@@ -78,6 +78,7 @@ export {
     respondToAllegianceRequest,
     liftPunishment,
     getKingsPageData,
+    getGamePopularityStats,
 };
 
 
@@ -88,6 +89,8 @@ export {
     
 
     
+
+
 
 
 

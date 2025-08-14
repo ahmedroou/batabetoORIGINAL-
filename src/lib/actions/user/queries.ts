@@ -215,6 +215,20 @@ export async function getAllUsers(filter?: 'punished', queryLimit?: number): Pro
     }
 }
 
+export async function getGamePopularityStats(): Promise<Record<Game['gameType'], number>> {
+    try {
+        const statsRef = doc(db, 'game_stats', 'popularity');
+        const docSnap = await getDoc(statsRef);
+        if (docSnap.exists()) {
+            return docSnap.data() as Record<Game['gameType'], number>;
+        }
+        return {} as Record<Game['gameType'], number>;
+    } catch (error) {
+        console.error("Error fetching game popularity stats:", error);
+        return {} as Record<Game['gameType'], number>;
+    }
+}
+
 
 // Internal function to update win counts and check for new Game Kings
 export async function updateUserWinCount(gameType: Game['gameType'], userId: string, batch: WriteBatch) {
