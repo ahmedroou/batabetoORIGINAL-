@@ -1,490 +1,926 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import {
+  ArrowLeft,
+  Save,
+  Loader2,
+  CircleDollarSign,
+  Trash2,
+  PlusCircle,
+  Trophy,
+  Crown,
+  Gem,
+  Shield,
+  Star,
+  Award,
+  Settings,
+  Filter,
+  Download,
+  Upload,
+  Check,
+  Search,
+  Sparkles,
+  Lock,
+  Unlock,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-
-import { Loader2, Lock, Check, CircleDollarSign, Diamond, ShoppingCart, Search, Filter, Sparkles, ShieldAlert, Info, Star } from "lucide-react";
-
 import { AVATAR_IDS } from "@/data/avatars";
 import { PUNISHMENT_AVATAR_IDS } from "@/data/punishment-avatars";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
-
-import type { AvatarPrice } from "@/types";
-import { getAvatarPrices, getPunishmentAvatarPrices } from "@/lib/actions/admin";
-import { purchaseAvatar, purchasePunishmentAvatar } from "@/lib/actions/user";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { AvatarPrice, SocialRank, UserProfile } from "@/types";
+import type { LucideIcon } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  setAvatarPrices,
+  setPunishmentAvatarPrices,
+  setDefaultAvatar,
+  setSocialRanks,
+  addPermissionToRank,
+  removePermissionFromRank,
+  getAvatarPrices,
+  getPunishmentAvatarPrices,
+  getDefaultAvatar,
+} from "@/lib/actions/admin/settings";
+import { getRanks, getTopUsers } from "@/lib/actions/user/queries";
 import { cn } from "@/lib/utils";
+import { ALL_PERMISSIONS } from "@/data/permissions";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
-// ————————————————————————————————————————————————
-// GPT‑5 Enhanced Store Client
-// Visual polish + scalable filters + responsive grid + graceful loading
-// ————————————————————————————————————————————————
+// -----------------------------
+// Helpers & Maps
+// -----------------------------
+const rankIconMap: Record<string, LucideIcon> = {
+  Shield,
+  Award,
+  Gem,
+  Crown,
+  Star,
+};
 
-type Currency = "coins" | "diamonds";
+const prettyCurrency = (c: "coins" | "diamonds") =>
+  c === "coins" ? "كوينز" : "ألماس";
 
-type StoreTab = "regular" | "punishment";
+// A tiny debounce hook to keep the UI responsive on large lists
+function useDebounced<T>(value: T, delay = 250) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
 
-type SortKey = "price-asc" | "price-desc" | "alpha-asc" | "alpha-desc" | "owned-first" | "unowned-first";
+// Deep-equality-like compare for simple price objects
+const isSamePrice = (
+  a?: Omit<AvatarPrice, "avatarId">,
+  b?: Omit<AvatarPrice, "avatarId">
+) => !a || !b ? a === b : a.price === b.price && a.currency === b.currency;
 
-type FilterKey = "all" | "owned" | "unowned" | "affordable" | "free";
+// -----------------------------
+// Avatar Card (reusable & memoized)
+// -----------------------------
+interface AvatarTileProps {
+  avatarId: string;
+  price: Omit<AvatarPrice, "avatarId"> | undefined;
+  basePrice: Omit<AvatarPrice, "avatarId"> | undefined;
+  isDefault: boolean;
+  disabled?: boolean;
+  onPriceChange: (id: string, price: number) => void;
+  onCurrencyChange: (id: string, currency: "coins" | "diamonds") => void;
+  onSetDefault?: (id: string) => void;
+}
 
-export default function StoreClient() {
+const AvatarTile = React.memo(function AvatarTile({
+  avatarId,
+  price,
+  basePrice,
+  isDefault,
+  disabled,
+  onPriceChange,
+  onCurrencyChange,
+  onSetDefault,
+}: AvatarTileProps) {
+  const changed = !isSamePrice(price, basePrice);
+  const showLock = !price || price.price < 0;
+
+  return (
+    <div className="space-y-2">
+      <div className="relative group">
+        <PlayerAvatar
+          avatarId={avatarId}
+          className={cn(
+            "w-full aspect-square rounded-xl border-2 transition-all",
+            changed ? "border-purple-400" : "border-muted",
+            isDefault && "ring-2 ring-yellow-400/60"
+          )}
+        />
+        {isDefault && (
+          <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-xs">
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>الافتراضية</span>
+          </div>
+        )}
+        {showLock && (
+          <div className="absolute inset-0 grid place-items-center rounded-xl bg-black/60 text-white">
+            <Lock className="h-8 w-8" />
+          </div>
+        )}
+        {!!onSetDefault && (
+          <button
+            type="button"
+            title="تعيين كشخصية افتراضية"
+            onClick={() => onSetDefault(avatarId)}
+            className={cn(
+              "absolute top-2 left-2 grid h-8 w-8 place-items-center rounded-full bg-black/40 backdrop-blur hover:bg-black/60 transition",
+              isDefault && "text-yellow-400"
+            )}
+          >
+            <Star className={cn("h-5 w-5", isDefault && "fill-current")}/>
+          </button>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <Input
+          type="number"
+          inputMode="numeric"
+          className="text-center"
+          value={price?.price ?? ""}
+          onChange={(e) => onPriceChange(avatarId, Number(e.target.value))}
+          placeholder="السعر"
+          disabled={disabled || isDefault}
+        />
+        <Select
+          value={(price?.currency as "coins" | "diamonds") || "coins"}
+          onValueChange={(v: "coins" | "diamonds") => onCurrencyChange(avatarId, v)}
+          disabled={disabled || isDefault}
+        >
+          <SelectTrigger className="w-24">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="coins">
+              <div className="flex items-center gap-2">
+                <CircleDollarSign className="h-4 w-4 text-yellow-500" />
+                <span>كوينز</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="diamonds">
+              <div className="flex items-center gap-2">
+                <Gem className="h-4 w-4 text-blue-400" />
+                <span>ألماس</span>
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {changed && (
+        <div className="text-xs text-purple-300">لم يتم الحفظ</div>
+      )}
+    </div>
+  );
+});
+
+// -----------------------------
+// Rank Row (with own state)
+// -----------------------------
+interface RankRowProps {
+  rank: SocialRank;
+  onUpdate: (field: keyof SocialRank, value: any) => void;
+  onRemove: () => void;
+  disabled?: boolean;
+}
+
+const RankRow = React.memo(function RankRow({ rank, onUpdate, onRemove, disabled }: RankRowProps) {
+  const IconComp = rankIconMap[rank.icon] || Star;
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-black/20 p-2">
+      <Input
+        type="number"
+        className="w-28"
+        value={rank.threshold}
+        onChange={(e) => onUpdate("threshold", parseInt(e.target.value || "0", 10))}
+        placeholder="النقاط"
+        disabled={disabled}
+      />
+      <Input
+        className="flex-1"
+        value={rank.name}
+        onChange={(e) => onUpdate("name", e.target.value)}
+        placeholder="اسم اللقب"
+        disabled={disabled}
+      />
+      <Select value={rank.icon} onValueChange={(v) => onUpdate("icon", v)} disabled={disabled}>
+        <SelectTrigger className="w-36">
+          <SelectValue>
+            <div className="flex items-center gap-2">
+              <IconComp className="h-4 w-4" />
+              <span>{rank.icon}</span>
+            </div>
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {Object.keys(rankIconMap).map((name) => {
+            const I = rankIconMap[name];
+            return (
+              <SelectItem key={name} value={name}>
+                <div className="flex items-center gap-2"><I className="h-4 w-4"/><span>{name}</span></div>
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+      <Button size="icon" variant="destructive" onClick={onRemove} disabled={disabled}>
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+});
+
+
+// -----------------------------
+// Main Admin Store
+// -----------------------------
+export default function AdminStoreClient() {
   const { toast } = useToast();
   const router = useRouter();
-  const { userProfile, loading, refreshUserProfile } = useAuth();
+  const { userProfile, loading } = useAuth();
 
-  // Remote price maps
+  // Avatars State
+  const [basePrices, setBasePrices] = useState<Record<string, Omit<AvatarPrice, "avatarId">>>({});
   const [prices, setPrices] = useState<Record<string, Omit<AvatarPrice, "avatarId">>>({});
+  const [basePunishmentPrices, setBasePunishmentPrices] = useState<Record<string, Omit<AvatarPrice, "avatarId">>>({});
   const [punishmentPrices, setPunishmentPrices] = useState<Record<string, Omit<AvatarPrice, "avatarId">>>({});
+  const [defaultAvatarId, setDefaultAvatarId] = useState<string>("Avatar00.png");
+
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Ranks State
+  const [ranks, setRanks] = useState<SocialRank[]>([]);
+  const [isSavingRanks, setIsSavingRanks] = useState(false);
+  const [selectedRankForPermissions, setSelectedRankForPermissions] = useState<SocialRank | null>(null);
+  const [isUpdatingPermission, setIsUpdatingPermission] = useState(false);
+
+  // Leaderboards
+  const [topCoinsUsers, setTopCoinsUsers] = useState<UserProfile[]>([]);
+  const [topPointsUsers, setTopPointsUsers] = useState<UserProfile[]>([]);
 
   // UI state
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingData, setIsLoadingData] = useState(true);
-  const [purchaseCandidate, setPurchaseCandidate] = useState<{ avatar: AvatarPrice; type: StoreTab } | null>(null);
+  const [activeTab, setActiveTab] = useState<"avatars" | "ranks">("avatars");
+  const [storeTab, setStoreTab] = useState<"regular" | "punishment">("regular");
+  const [query, setQuery] = useState("");
+  const [showOnlyChanged, setShowOnlyChanged] = useState(false);
+  const [density, setDensity] = useState<"cozy" | "compact">("cozy");
+  const [pendingRemoveIndex, setPendingRemoveIndex] = useState<number | null>(null);
 
-  const [activeTab, setActiveTab] = useState<StoreTab>("regular");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState<SortKey>("owned-first");
-  const [filterBy, setFilterBy] = useState<FilterKey>("all");
-  const [visibleCount, setVisibleCount] = useState(24);
-
-  // Local favorites (purely cosmetic)
-  const [favorites, setFavorites] = useState<Record<string, boolean>>({});
-
-  const fetchPageData = useCallback(async () => {
-    setIsLoadingData(true);
-    const [pricesResult, punishmentPricesResult] = await Promise.all([
-      getAvatarPrices(),
-      getPunishmentAvatarPrices(),
-    ]);
-
-    if (pricesResult.success && pricesResult.prices) {
-      const map = pricesResult.prices.reduce((acc, item) => {
-        acc[item.avatarId] = { price: item.price, currency: item.currency || "coins" };
-        return acc;
-      }, {} as Record<string, Omit<AvatarPrice, "avatarId">>);
-      setPrices(map);
-    }
-
-    if (punishmentPricesResult.success && punishmentPricesResult.prices) {
-      const map = punishmentPricesResult.prices.reduce((acc, item) => {
-        acc[item.avatarId] = { price: item.price, currency: item.currency || "coins" };
-        return acc;
-      }, {} as Record<string, Omit<AvatarPrice, "avatarId">>);
-      setPunishmentPrices(map);
-    }
-    setIsLoadingData(false);
-  }, []);
+  const debouncedQuery = useDebounced(query, 250);
 
   useEffect(() => {
-    fetchPageData();
-  }, [fetchPageData]);
-
-  // Auth redirect if not logged in
-  useEffect(() => {
-    if (!loading && !userProfile) {
-      router.push("/login");
+    if (!loading && !userProfile?.isAdmin) {
+      router.push("/");
     }
   }, [userProfile, loading, router]);
 
-  const currentPrices = activeTab === "regular" ? prices : punishmentPrices;
-  const avatarList = activeTab === "regular" ? AVATAR_IDS : PUNISHMENT_AVATAR_IDS;
-  const unlocked = activeTab === "regular" ? userProfile?.unlockedAvatars || [] : userProfile?.unlockedPunishmentAvatars || [];
+  const fetchPageData = useCallback(async () => {
+    setIsLoadingData(true);
+    const [pricesResult, punishmentPricesResult, ranksResult, defaultAvatarResult, topCoinsResult, topPointsResult] =
+      await Promise.all([
+        getAvatarPrices(),
+        getPunishmentAvatarPrices(),
+        getRanks(),
+        getDefaultAvatar(),
+        getTopUsers("coins", 5),
+        getTopUsers("leaderboardPoints", 5),
+      ]);
 
-  const balances = useMemo(() => ({
-    coins: userProfile?.coins ?? 0,
-    diamonds: userProfile?.diamonds ?? 0,
-  }), [userProfile]);
+    // Regular
+    if (pricesResult.success && pricesResult.prices) {
+      const priceMap = pricesResult.prices.reduce((acc, item) => {
+        acc[item.avatarId] = { price: item.price, currency: item.currency || "coins" };
+        return acc;
+      }, {} as Record<string, Omit<AvatarPrice, "avatarId">>);
+      setBasePrices(priceMap);
+      setPrices(priceMap);
+    } else if (!pricesResult.success) {
+      toast({ title: "خطأ", description: pricesResult.error, variant: "destructive" });
+    }
 
-  // Enriched list for UI
-  const enriched = useMemo(() => {
-    return avatarList.map((id) => {
-      const p = currentPrices[id];
-      return {
-        id,
-        price: p?.price ?? -1,
-        currency: (p?.currency ?? "coins") as Currency,
-        isOwned: unlocked.includes(id),
-        isFree: (p?.price ?? -1) === 0,
-      };
-    });
-  }, [avatarList, currentPrices, unlocked]);
+    // Punishment
+    if (punishmentPricesResult.success && punishmentPricesResult.prices) {
+      const priceMap = punishmentPricesResult.prices.reduce((acc, item) => {
+        acc[item.avatarId] = { price: item.price, currency: item.currency || "coins" };
+        return acc;
+      }, {} as Record<string, Omit<AvatarPrice, "avatarId">>);
+      setBasePunishmentPrices(priceMap);
+      setPunishmentPrices(priceMap);
+    } else if (!punishmentPricesResult.success) {
+      toast({ title: "خطأ", description: punishmentPricesResult.error, variant: "destructive" });
+    }
 
-  // Filters
-  const filtered = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    const byText = (x: typeof enriched[number]) => (q ? x.id.toLowerCase().includes(q) : true);
+    // Default avatar
+    if (defaultAvatarResult.success && defaultAvatarResult.avatarId) {
+      setDefaultAvatarId(defaultAvatarResult.avatarId);
+    }
 
-    const byFilter = (x: typeof enriched[number]) => {
-      switch (filterBy) {
-        case "owned":
-          return x.isOwned;
-        case "unowned":
-          return !x.isOwned;
-        case "affordable":
-          if (x.price < 0) return false;
-          const bal = x.currency === "coins" ? balances.coins : balances.diamonds;
-          return bal >= x.price;
-        case "free":
-          return x.isFree;
-        default:
-          return true;
+    // Ranks
+    if (ranksResult) {
+      const sorted = ranksResult.sort((a, b) => a.threshold - b.threshold);
+      setRanks(sorted);
+      setSelectedRankForPermissions(sorted[0] ?? null);
+    }
+
+    setTopCoinsUsers(topCoinsResult || []);
+    setTopPointsUsers(topPointsResult || []);
+
+    setIsLoadingData(false);
+  }, [toast]);
+
+  useEffect(() => {
+    if (userProfile?.isAdmin) fetchPageData();
+  }, [userProfile?.isAdmin, fetchPageData]);
+
+  const dirtyRegular = useMemo(() =>
+    AVATAR_IDS.some((id) => !isSamePrice(prices[id], basePrices[id])),
+  [prices, basePrices]);
+
+  const dirtyPunish = useMemo(() =>
+    PUNISHMENT_AVATAR_IDS.some((id) => !isSamePrice(punishmentPrices[id], basePunishmentPrices[id])),
+  [punishmentPrices, basePunishmentPrices]);
+
+  const hasDirty = dirtyRegular || dirtyPunish;
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (hasDirty) {
+        e.preventDefault();
+        e.returnValue = "";
       }
     };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasDirty]);
 
-    const bySort = (a: typeof enriched[number], b: typeof enriched[number]) => {
-      switch (sortBy) {
-        case "price-asc":
-          return (a.price === -1 ? Infinity : a.price) - (b.price === -1 ? Infinity : b.price);
-        case "price-desc":
-          return (b.price === -1 ? Infinity : b.price) - (a.price === -1 ? Infinity : a.price);
-        case "alpha-asc":
-          return a.id.localeCompare(b.id);
-        case "alpha-desc":
-          return b.id.localeCompare(a.id);
-        case "unowned-first":
-          return Number(a.isOwned) - Number(b.isOwned);
-        case "owned-first":
-        default:
-          return Number(b.isOwned) - Number(a.isOwned);
-      }
-    };
+  const handleSavePrices = async (tab: "regular" | "punishment") => {
+    setIsSaving(true);
+    const current = tab === "regular" ? prices : punishmentPrices;
+    const allIds = tab === "regular" ? AVATAR_IDS : PUNISHMENT_AVATAR_IDS;
 
-    return enriched.filter(byText).filter(byFilter).sort(bySort);
-  }, [enriched, searchTerm, filterBy, sortBy, balances]);
+    const payload: AvatarPrice[] = allIds.map(id => ({
+      avatarId: id,
+      price: current[id]?.price ?? -1, // -1 or another sentinel for "not for sale"
+      currency: current[id]?.currency ?? 'coins'
+    }));
 
-  // Pagination (within ScrollArea)
-  const visibleItems = filtered.slice(0, visibleCount);
-  const hasMore = visibleCount < filtered.length;
-
-  // Purchase
-  const handlePurchaseConfirm = async () => {
-    if (!userProfile || !purchaseCandidate) return;
-    setIsSubmitting(true);
-
-    const { avatar, type } = purchaseCandidate;
-    const result = type === "regular"
-      ? await purchaseAvatar(userProfile.uid, avatar.avatarId)
-      : await purchasePunishmentAvatar(userProfile.uid, avatar.avatarId);
-
-    if (result.success) {
-      toast({ title: "تم الشراء بنجاح!", description: "تمت إضافة الشخصية إلى مجموعتك." });
-      await refreshUserProfile?.();
+    const action = tab === "regular" ? setAvatarPrices : setPunishmentAvatarPrices;
+    const res = await action(payload);
+    if (res.success) {
+      toast({ title: "تم الحفظ", description: `تم حفظ أسعار ${tab === 'regular' ? 'المتجر العادي' : 'متجر العقوبات'}.` });
+      if (tab === "regular") setBasePrices({ ...prices });
+      else setBasePunishmentPrices({ ...punishmentPrices });
     } else {
-      toast({ title: "فشل الشراء", description: result.error, variant: "destructive" });
+      toast({ title: "فشل الحفظ", description: res.error, variant: "destructive" });
     }
+    setIsSaving(false);
+  };
+  
+  // Keyboard: Ctrl/Cmd+S to save current store tab
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isSave = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s";
+      if (isSave) {
+        e.preventDefault();
+        if (activeTab === "avatars") {
+          handleSavePrices(storeTab);
+        } else if (activeTab === "ranks") {
+          handleSaveRanks();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, storeTab, prices, punishmentPrices, ranks]);
 
-    setIsSubmitting(false);
-    setPurchaseCandidate(null);
+  // -----------------------------
+  // Prices helpers
+  // -----------------------------
+  const visibleAvatarIds = useMemo(() => {
+    const all = storeTab === "regular" ? AVATAR_IDS : PUNISHMENT_AVATAR_IDS;
+    const map = storeTab === "regular" ? prices : punishmentPrices;
+    const base = storeTab === "regular" ? basePrices : basePunishmentPrices;
+    const filtered = all.filter((id) => id.toLowerCase().includes(debouncedQuery.toLowerCase()));
+    if (!showOnlyChanged) return filtered;
+    return filtered.filter((id) => !isSamePrice(map[id], base[id]));
+  }, [storeTab, prices, punishmentPrices, basePrices, basePunishmentPrices, debouncedQuery, showOnlyChanged]);
+
+  const handlePriceChange = useCallback((id: string, value: number) => {
+    const setter = storeTab === 'regular' ? setPrices : setPunishmentPrices;
+    setter(p => ({ ...p, [id]: { ...(p[id] || { price: 0, currency: 'coins'}), price: value }}));
+  }, [storeTab]);
+
+  const handleCurrencyChange = useCallback((id: string, value: 'coins' | 'diamonds') => {
+      const setter = storeTab === 'regular' ? setPrices : setPunishmentPrices;
+      setter(p => ({ ...p, [id]: { ...(p[id] || { price: 0, currency: 'coins'}), currency: value }}));
+  }, [storeTab]);
+  
+
+  const handleSetDefault = async (id: string) => {
+    const res = await setDefaultAvatar(id);
+    if (res.success) {
+      setDefaultAvatarId(id);
+      setPrices((p) => ({ ...p, [id]: { price: 0, currency: "coins" } }));
+      toast({ title: "تم التعيين", description: `${id} أصبحت الشخصية الافتراضية (مجانية).` });
+    } else {
+      toast({ title: "خطأ", description: res.error, variant: "destructive" });
+    }
   };
 
-  const onCardClick = (id: string) => {
-    const p = currentPrices[id];
-    const isOwned = unlocked.includes(id);
-    if (isOwned) {
-      toast({ title: "مملوكة بالفعل", description: "أنت تملك هذه الشخصية." });
-      return;
+
+  const bulkApply = (payload: { price?: number; currency?: "coins" | "diamonds" }) => {
+    const ids = visibleAvatarIds; // apply on currently visible (after search/filter)
+    if (storeTab === "regular") {
+      setPrices((prev) => {
+        const next = { ...prev };
+        ids.forEach((id) => {
+          next[id] = {
+            price: payload.price ?? next[id]?.price ?? 0,
+            currency: payload.currency ?? (next[id]?.currency || "coins"),
+          };
+        });
+        return next;
+      });
+    } else {
+      setPunishmentPrices((prev) => {
+        const next = { ...prev };
+        ids.forEach((id) => {
+          next[id] = {
+            price: payload.price ?? next[id]?.price ?? 0,
+            currency: payload.currency ?? (next[id]?.currency || "coins"),
+          };
+        });
+        return next;
+      });
     }
-    if (!p || p.price < 0) {
-      toast({ title: "غير متاحة", description: "هذه الشخصية غير متاحة للبيع حاليًا.", variant: "destructive" });
-      return;
-    }
-    setPurchaseCandidate({ avatar: { avatarId: id, price: p.price, currency: p.currency || "coins" }, type: activeTab });
   };
 
-  const toggleFavorite = (id: string) => setFavorites((f) => ({ ...f, [id]: !f[id] }));
+  // Export / Import (JSON)
+  const downloadRef = useRef<HTMLAnchorElement | null>(null);
+  const handleExport = () => {
+    const data = {
+      regular: prices,
+      punishment: punishmentPrices,
+      defaultAvatarId,
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    if (!downloadRef.current) return;
+    downloadRef.current.href = url;
+    downloadRef.current.download = `store-config-${Date.now()}.json`;
+    downloadRef.current.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 
-  // — UI —
-  if (!userProfile) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const json = JSON.parse(String(reader.result));
+        if (json?.regular) setPrices(json.regular);
+        if (json?.punishment) setPunishmentPrices(json.punishment);
+        if (json?.defaultAvatarId) setDefaultAvatarId(json.defaultAvatarId);
+        toast({ title: "تم الاستيراد", description: "تم تحميل الإعدادات من الملف." });
+      } catch (err: any) {
+        toast({ title: "فشل الاستيراد", description: err?.message || "صيغة الملف غير صحيحة.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  // -----------------------------
+  // Ranks
+  // -----------------------------
+  const handleRankChange = useCallback((index: number, field: keyof SocialRank, value: string | number) => {
+    setRanks((prev) => {
+      const copy = [...prev];
+      if (copy[index]) {
+        (copy[index] as any)[field] = value;
+      }
+      return copy;
+    });
+  }, []);
+
+  const handleRemoveRank = useCallback((index: number) => {
+    setPendingRemoveIndex(index);
+  }, []);
+  
+  const confirmRemoveRank = () => {
+    if (pendingRemoveIndex == null) return;
+    setRanks((prev) => prev.filter((_, i) => i !== pendingRemoveIndex));
+    setPendingRemoveIndex(null);
+  };
+
+  const handleAddRank = () => {
+    const last = ranks[ranks.length - 1]?.threshold ?? 0;
+    setRanks((prev) => [
+      ...prev,
+      { threshold: last + 100, name: "لقب جديد", icon: "Star", permissions: [] },
+    ]);
+  };
+
+  const handleSaveRanks = async () => {
+    setIsSavingRanks(true);
+    const sorted = [...ranks].sort((a, b) => a.threshold - b.threshold);
+    const dup = new Set<number>();
+    let hasDup = false;
+    sorted.forEach((r) => {
+      if (dup.has(r.threshold)) hasDup = true;
+      dup.add(r.threshold);
+    });
+    if(hasDup) {
+      toast({ title: "تحذير", description: "هناك عتبات مكررة للألقاب. تأكد من تفرّدها.", variant: "destructive" });
+      setIsSavingRanks(false);
+      return;
+    }
+
+    const res = await setSocialRanks(sorted);
+    if (res.success) {
+      toast({ title: "تم الحفظ", description: "تم حفظ الألقاب بنجاح." });
+      setRanks(sorted);
+    } else {
+      toast({ title: "فشل الحفظ", description: res.error, variant: "destructive" });
+    }
+    setIsSavingRanks(false);
+  };
+
+  const handlePermissionToggle = async (permissionId: string) => {
+    if (!selectedRankForPermissions) return;
+    setIsUpdatingPermission(true);
+    const has = selectedRankForPermissions.permissions?.includes(permissionId as any);
+    const action = has ? removePermissionFromRank : addPermissionToRank;
+    const res = await action(selectedRankForPermissions.name, permissionId);
+    if (res.success) {
+      await fetchPageData();
+    } else {
+      toast({ title: "خطأ", description: res.error, variant: "destructive" });
+    }
+    setIsUpdatingPermission(false);
+  };
+
+  // -----------------------------
+  // Render helpers
+  // -----------------------------
+  const renderTopUsers = (users: UserProfile[], field: "coins" | "leaderboardPoints") => {
+    if (isLoadingData) {
+      return (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
+      );
+    }
+    if (!users.length) return <p className="text-center text-muted-foreground">لا يوجد بيانات.</p>;
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-900">
-        <Loader2 className="h-10 w-10 animate-spin text-purple-400" />
+      <div className="space-y-2">
+        {users.map((u, i) => (
+          <div key={u.uid} className="flex items-center justify-between rounded-md bg-muted p-2">
+            <div className="flex items-center gap-2">
+              <span className="w-6 text-center font-bold">{i + 1}.</span>
+              <PlayerAvatar avatarId={u.avatarId} className="h-8 w-8" />
+              <span className="font-semibold">{u.name}</span>
+            </div>
+            <span className="font-bold text-primary">
+              {u[field]} {field === "coins" ? "كوينز" : "نقطة"}
+            </span>
+          </div>
+        ))}
       </div>
     );
-  }
+  };
+
+  const currentPrices = storeTab === "regular" ? prices : punishmentPrices;
+  const currentBase = storeTab === "regular" ? basePrices : basePunishmentPrices;
 
   return (
-    <main className="min-h-screen w-full bg-gray-900 bg-gradient-to-tr from-black via-gray-900 to-purple-900/50 text-white">
-      {/* Cosmic background (from global.css) */}
-      <div className="fixed inset-0 stars z-0" />
-      <div className="fixed inset-0 twinkling z-0" />
+    <main dir="rtl" className="min-h-screen bg-[radial-gradient(50%_50%_at_50%_10%,rgba(147,51,234,0.12),transparent_60%),linear-gradient(to_bottom_right,rgba(2,6,23,0.9),rgba(17,24,39,0.9))] text-foreground">
+      <a ref={downloadRef} className="hidden" />
+      <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={handleImport} />
 
-      <div className="relative z-10 container mx-auto px-4 py-8">
-        {/* Header */}
-        <header className="mb-6 flex flex-col items-center gap-4 text-center">
-          <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-4xl md:text-5xl font-extrabold text-purple-300 tracking-wider flex items-center gap-3">
-            <ShoppingCart className="h-10 w-10" /> متجر الشخصيات
-          </motion.h1>
-          <p className="text-gray-300/90">اشترِ شخصيات أسطورية وتألق داخل المجتمع 👑</p>
-
-          {/* Balance strip */}
-          <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="w-full">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Card className="bg-black/40 border-purple-500/30 backdrop-blur-md">
-                <CardContent className="p-3 flex items-center justify-between">
-                  <span className="text-sm text-gray-300">كوينز</span>
-                  <span className="inline-flex items-center gap-1 text-yellow-400 font-mono text-lg"><CircleDollarSign className="h-5 w-5" />{balances.coins}</span>
-                </CardContent>
-              </Card>
-              <Card className="bg-black/40 border-purple-500/30 backdrop-blur-md">
-                <CardContent className="p-3 flex items-center justify-between">
-                  <span className="text-sm text-gray-300">ألماس</span>
-                  <span className="inline-flex items-center gap-1 text-blue-300 font-mono text-lg"><Diamond className="h-5 w-5" />{balances.diamonds}</span>
-                </CardContent>
-              </Card>
-              <Card className="hidden sm:block bg-black/40 border-purple-500/30 backdrop-blur-md">
-                <CardContent className="p-3 flex items-center justify-between">
-                  <span className="text-sm text-gray-300">المملوكة</span>
-                  <span className="font-mono text-lg">{unlocked.length}</span>
-                </CardContent>
-              </Card>
-              <Card className="hidden sm:block bg-black/40 border-purple-500/30 backdrop-blur-md">
-                <CardContent className="p-3 flex items-center justify-between">
-                  <span className="text-sm text-gray-300">المعروضة</span>
-                  <span className="font-mono text-lg">{filtered.length}</span>
-                </CardContent>
-              </Card>
-            </div>
-          </motion.div>
+      <div className="container relative z-10 mx-auto px-4 py-8">
+        <header className="relative mb-8 text-center">
+          <h1 className="mx-auto inline-flex items-center gap-3 rounded-2xl bg-black/20 px-6 py-3 text-2xl font-bold text-purple-200 backdrop-blur">
+            <Settings className="h-6 w-6" /> لوحة إدارة المتجر والألقاب
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">تعديل أسعار الشخصيات، الأفاتارات العقابية، الألقاب والصلاحيات — بسرعة وأمان.</p>
+          <Button variant="ghost" size="icon" onClick={() => router.push("/admin")} className="absolute start-0 top-0">
+            <ArrowLeft />
+          </Button>
         </header>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as StoreTab); setVisibleCount(24); }} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-black/30 backdrop-blur-sm border border-purple-500/30 text-purple-300">
-            <TabsTrigger value="regular">المتجر العادي</TabsTrigger>
-            <TabsTrigger value="punishment">متجر العقوبات</TabsTrigger>
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Card className="bg-black/30">
+            <CardHeader className="pb-2">
+              <CardDescription>الشخصيات</CardDescription>
+              <CardTitle className="text-2xl">{AVATAR_IDS.length}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card className="bg-black/30">
+            <CardHeader className="pb-2">
+              <CardDescription>العقوبات</CardDescription>
+              <CardTitle className="text-2xl">{PUNISHMENT_AVATAR_IDS.length}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card className="bg-black/30">
+            <CardHeader className="pb-2">
+              <CardDescription>ألقاب مفعّلة</CardDescription>
+              <CardTitle className="text-2xl">{ranks.length}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card className="bg-black/30">
+            <CardHeader className="pb-2">
+              <CardDescription>حالة التعديلات</CardDescription>
+              <CardTitle className={cn("text-2xl", hasDirty ? "text-yellow-400" : "text-emerald-400")}>{hasDirty ? "غير محفوظ" : "محفوظ"}</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="mt-8">
+          <TabsList className="grid w-full grid-cols-2 bg-black/30">
+            <TabsTrigger value="avatars">إدارة الشخصيات</TabsTrigger>
+            <TabsTrigger value="ranks">إدارة الألقاب والصلاحيات</TabsTrigger>
           </TabsList>
 
-          {/* Toolbar */}
-          <div className="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
-            <div className="lg:col-span-5">
-              <div className="relative">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  dir="auto"
-                  className="w-full rounded-md border border-purple-500/30 bg-gray-900/70 px-10 py-2 text-sm outline-none ring-0 focus:border-purple-400"
-                  placeholder="ابحث عن شخصية بالاسم…"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
+          {/* Avatars */}
+          <TabsContent value="avatars" className="space-y-6 pt-4">
+            <Card className="border-purple-500/20 bg-black/30">
+              <CardHeader className="gap-4">
+                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+                  <div>
+                    <CardTitle>متجر الشخصيات</CardTitle>
+                    <CardDescription>عدّل الأسعار ونوع العملة وابحث بسرعة. الشخصية الافتراضية مجانية دائمًا.</CardDescription>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 rounded-xl bg-black/30 p-2">
+                      <Button variant={storeTab === "regular" ? "default" : "outline"} onClick={() => setStoreTab("regular")}>
+                        المتجر العادي
+                      </Button>
+                      <Button variant={storeTab === "punishment" ? "default" : "outline"} onClick={() => setStoreTab("punishment")}>
+                        متجر العقوبات
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center gap-2 rounded-xl bg-black/30 p-2">
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute end-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحث برقم/اسم الصورة" className="w-[220px] pe-8" />
+                      </div>
+                      <Button variant={showOnlyChanged ? "default" : "outline"} onClick={() => setShowOnlyChanged((s) => !s)}>
+                        <Filter className="me-2 h-4 w-4" /> فقط المعدّلة
+                      </Button>
+                      <Select value={density} onValueChange={(v: any) => setDensity(v)}>
+                        <SelectTrigger className="w-28"><SelectValue placeholder="الكثافة"/></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cozy">مريح</SelectItem>
+                          <SelectItem value="compact">مضغوط</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex items-center gap-2 rounded-xl bg-black/30 p-2">
+                      <Button variant="outline" onClick={() => bulkApply({ currency: "coins" })}>اجعل العملة كوينز</Button>
+                      <Button variant="outline" onClick={() => bulkApply({ currency: "diamonds" })}>اجعل العملة ألماس</Button>
+                      <Button variant="outline" onClick={() => bulkApply({ price: 0 })}>تصفير الأسعار الظاهرة</Button>
+                    </div>
+
+                    <div className="flex items-center gap-2 rounded-xl bg-black/30 p-2">
+                      <Button variant="outline" onClick={handleExport}>
+                        <Download className="me-2 h-4 w-4" /> تصدير JSON
+                      </Button>
+                      <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                        <Upload className="me-2 h-4 w-4" /> استيراد JSON
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent>
+                {isLoadingData ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                    {Array.from({ length: 18 }).map((_, i) => (
+                      <Skeleton key={i} className="aspect-square w-full rounded-xl" />
+                    ))}
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[65vh] rounded-md border border-purple-500/20 bg-black/20 p-3">
+                    <div className={cn(
+                      "grid gap-3",
+                      density === "cozy" && "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+                      density === "compact" && "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10"
+                    )}>
+                      {visibleAvatarIds.map((id) => (
+                        <AvatarTile
+                          key={id}
+                          avatarId={id}
+                          price={currentPrices[id]}
+                          basePrice={currentBase[id]}
+                          isDefault={storeTab === "regular" && id === defaultAvatarId}
+                          disabled={isLoadingData}
+                          onPriceChange={handlePriceChange}
+                          onCurrencyChange={handleCurrencyChange}
+                          onSetDefault={storeTab === "regular" ? handleSetDefault : undefined}
+                        />
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+
+              <CardFooter className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="text-sm text-muted-foreground">
+                  {storeTab === "regular" ? (
+                    <>الشخصية الافتراضية الحالية: <span className="font-medium text-purple-300">{defaultAvatarId}</span></>
+                  ) : (
+                    <>عدد العناصر الظاهرة: <span className="font-medium text-purple-300">{visibleAvatarIds.length}</span></>
+                  )}
+                </div>
+                <Button onClick={() => handleSavePrices(storeTab)} disabled={isSaving || isLoadingData}>
+                  {isSaving ? <Loader2 className="me-2 h-4 w-4 animate-spin" /> : <Save className="me-2 h-4 w-4" />}
+                  {isSaving ? "جاري الحفظ..." : "حفظ التغييرات"}
+                </Button>
+              </CardFooter>
+            </Card>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card className="border-purple-500/20 bg-black/30">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><Trophy className="h-5 w-5"/> أقوى اللاعبين</CardTitle>
+                  <CardDescription>أعلى 5 لاعبين من حيث نقاط الصدارة.</CardDescription>
+                </CardHeader>
+                <CardContent>{renderTopUsers(topPointsUsers, "leaderboardPoints")}</CardContent>
+              </Card>
+              <Card className="border-purple-500/20 bg-black/30">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><CircleDollarSign className="h-5 w-5 text-yellow-500"/> أغنى اللاعبين</CardTitle>
+                  <CardDescription>أعلى 5 لاعبين من حيث الكوينز.</CardDescription>
+                </CardHeader>
+                <CardContent>{renderTopUsers(topCoinsUsers, "coins")}</CardContent>
+              </Card>
             </div>
-            <div className="lg:col-span-7 grid grid-cols-2 md:grid-cols-4 gap-2">
-              <select
-                className="rounded-md border border-purple-500/30 bg-gray-900/70 px-3 py-2 text-sm"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortKey)}
-              >
-                <option value="owned-first">المملوك أولاً</option>
-                <option value="unowned-first">غير المملوك أولاً</option>
-                <option value="price-asc">الأقل سعراً</option>
-                <option value="price-desc">الأعلى سعراً</option>
-                <option value="alpha-asc">أ-ي</option>
-                <option value="alpha-desc">ي-أ</option>
-              </select>
-
-              <select
-                className="rounded-md border border-purple-500/30 bg-gray-900/70 px-3 py-2 text-sm"
-                value={filterBy}
-                onChange={(e) => setFilterBy(e.target.value as FilterKey)}
-              >
-                <option value="all">الكل</option>
-                <option value="owned">المملوكة</option>
-                <option value="unowned">غير المملوكة</option>
-                <option value="affordable">المتاح شراؤها</option>
-                <option value="free">المجانية</option>
-              </select>
-
-              <Button variant="outline" className="border-purple-500/30" onClick={() => { setSearchTerm(""); setFilterBy("all"); setSortBy("owned-first"); }}>
-                <Filter className="ml-2 h-4 w-4" />تصفية افتراضية
-              </Button>
-
-              <Button variant="secondary" className="bg-purple-600/30 hover:bg-purple-600/40 border-purple-400/30" onClick={() => toast({ title: "تلميح", description: "انقر على البطاقة للشراء السريع. استعمل النجمة للإضافة للمفضلة." })}>
-                <Info className="ml-2 h-4 w-4" />مساعدة
-              </Button>
-            </div>
-          </div>
-
-          {/* Grid */}
-          <TabsContent value="regular" className="mt-4">
-            <StoreGrid
-              isLoadingData={isLoadingData}
-              items={visibleItems}
-              hasMore={hasMore}
-              onLoadMore={() => setVisibleCount((c) => c + 24)}
-              onCardClick={onCardClick}
-              favorites={favorites}
-              onToggleFavorite={toggleFavorite}
-            />
           </TabsContent>
-          <TabsContent value="punishment" className="mt-4">
-            <StoreGrid
-              isLoadingData={isLoadingData}
-              items={visibleItems}
-              hasMore={hasMore}
-              onLoadMore={() => setVisibleCount((c) => c + 24)}
-              onCardClick={onCardClick}
-              favorites={favorites}
-              onToggleFavorite={toggleFavorite}
-            />
+
+          {/* Ranks */}
+          <TabsContent value="ranks" className="space-y-6 pt-4">
+            <div className="grid gap-6 lg:grid-cols-3">
+              <Card className="border-purple-500/20 bg-black/30 lg:col-span-2">
+                <CardHeader>
+                  <CardTitle>إدارة الألقاب الاجتماعية</CardTitle>
+                  <CardDescription>تحكم في ألقاب اللاعبين حسب نقاط الصدارة. استخدم Ctrl/Cmd+S للحفظ السريع.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {isLoadingData ? (
+                      <div className="space-y-2">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Skeleton key={i} className="h-12 w-full" />
+                        ))}
+                      </div>
+                    ) : (
+                      ranks.map((rank, index) => (
+                        <RankRow
+                          key={`${rank.name}-${index}`}
+                          rank={rank}
+                          onUpdate={(field, value) => handleRankChange(index, field, value)}
+                          onRemove={() => handleRemoveRank(index)}
+                          disabled={isSavingRanks}
+                        />
+                      ))
+                    )}
+                    <Button variant="outline" className="w-full" onClick={handleAddRank}>
+                      <PlusCircle className="me-2 h-4 w-4" /> إضافة لقب جديد
+                    </Button>
+                  </div>
+                </CardContent>
+                <CardFooter>
+                  <Button onClick={handleSaveRanks} disabled={isSavingRanks}>
+                    {isSavingRanks ? <Loader2 className="me-2 h-4 w-4 animate-spin" /> : <Save className="me-2 h-4 w-4" />}
+                    {isSavingRanks ? "جاري الحفظ..." : "حفظ تغييرات الألقاب"}
+                  </Button>
+                </CardFooter>
+              </Card>
+
+              <Card className="border-purple-500/20 bg-black/30">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><Settings className="h-5 w-5"/> صلاحيات الألقاب</CardTitle>
+                  <CardDescription>اختر لقبًا ثم فعّل/عطّل الصلاحيات.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="mb-2 inline-block">اختر اللقب</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {ranks.map((r) => (
+                        <Button key={r.name} variant={selectedRankForPermissions?.name === r.name ? "default" : "outline"} className="justify-start" onClick={() => setSelectedRankForPermissions(r)}>
+                          {r.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="mb-2 inline-block">قائمة الصلاحيات</Label>
+                    <ScrollArea className="h-[45vh] rounded-md border border-purple-500/20 bg-black/20 p-3">
+                      <div className="space-y-3">
+                        {selectedRankForPermissions ? (
+                          ALL_PERMISSIONS.map((perm) => {
+                            const has = selectedRankForPermissions.permissions?.includes(perm.id as any);
+                            return (
+                              <div key={perm.id} className="flex items-center justify-between rounded-lg bg-black/30 p-2">
+                                <div>
+                                  <p className="font-semibold">{perm.name}</p>
+                                  <p className="text-xs text-muted-foreground">{perm.description}</p>
+                                </div>
+                                <Button size="icon" variant={has ? "secondary" : "default"} onClick={() => handlePermissionToggle(perm.id)} disabled={isUpdatingPermission}>
+                                  {isUpdatingPermission ? <Loader2 className="h-4 w-4 animate-spin" /> : has ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                                </Button>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p className="text-center text-muted-foreground">اختر لقبًا لتعديل صلاحياته.</p>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* Confirm */}
-      <AlertDialog open={!!purchaseCandidate} onOpenChange={(o) => !o && setPurchaseCandidate(null)}>
-        <AlertDialogContent className="bg-gray-900 text-white border-purple-500/40">
+      {/* Sticky Save Bar */}
+      {hasDirty && (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-purple-500/20 bg-black/70 backdrop-blur">
+          <div className="container mx-auto flex items-center justify-between gap-3 p-3">
+            <p className="text-sm text-yellow-300">لديك تعديلات غير محفوظة. استخدم Ctrl/Cmd+S للحفظ السريع.</p>
+            {activeTab === "avatars" ? (
+              <Button onClick={() => handleSavePrices(storeTab)} disabled={isSaving}>
+                {isSaving ? <Loader2 className="me-2 h-4 w-4 animate-spin" /> : <Save className="me-2 h-4 w-4" />}
+                {isSaving ? "جاري الحفظ..." : "حفظ المتجر"}
+              </Button>
+            ) : (
+              <Button onClick={handleSaveRanks} disabled={isSavingRanks}>
+                {isSavingRanks ? <Loader2 className="me-2 h-4 w-4 animate-spin" /> : <Save className="me-2 h-4 w-4" />}
+                {isSavingRanks ? "جاري الحفظ..." : "حفظ الألقاب"}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirm remove rank */}
+      <AlertDialog open={pendingRemoveIndex !== null} onOpenChange={(open) => !open && setPendingRemoveIndex(null)}>
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الشراء</AlertDialogTitle>
-            <AlertDialogDescription className="text-gray-300">
-              هل تريد شراء هذه الشخصية مقابل
-              {" "}
-              <strong className={cn("font-bold", purchaseCandidate?.avatar.currency === "coins" ? "text-yellow-400" : "text-blue-300")}>{purchaseCandidate?.avatar.price || 0} {purchaseCandidate?.avatar.currency === "coins" ? "كوينز" : "ألماس"}</strong>؟ سيتم خصم المبلغ من رصيدك.
-            </AlertDialogDescription>
+            <AlertDialogTitle>حذف اللقب؟</AlertDialogTitle>
+            <AlertDialogDescription>سيتم حذف هذا اللقب نهائيًا. لا يمكن التراجع.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction onClick={handlePurchaseConfirm} disabled={isSubmitting}>
-              {isSubmitting ? "جاري الشراء…" : "شراء"}
+            <AlertDialogAction onClick={confirmRemoveRank} className="bg-destructive hover:bg-destructive/90">
+              حذف
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </main>
-  );
-}
-
-// ————————————————————————————————————————————————
-// Grid Component (stateless)
-// ————————————————————————————————————————————————
-
-type GridItem = {
-  id: string;
-  price: number; // -1 => not sold
-  currency: Currency;
-  isOwned: boolean;
-  isFree: boolean;
-};
-
-function StoreGrid({
-  isLoadingData,
-  items,
-  hasMore,
-  onLoadMore,
-  onCardClick,
-  favorites,
-  onToggleFavorite,
-}: {
-  isLoadingData: boolean;
-  items: GridItem[];
-  hasMore: boolean;
-  onLoadMore: () => void;
-  onCardClick: (id: string) => void;
-  favorites: Record<string, boolean>;
-  onToggleFavorite: (id: string) => void;
-}) {
-  return (
-    <Card className="bg-black/40 border-purple-500/30 backdrop-blur-md">
-      <CardContent className="p-0">
-        {isLoadingData ? (
-          <div className="p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-            {Array.from({ length: 18 }).map((_, i) => (
-              <div key={i} className="h-36 rounded-lg bg-gray-800/60 animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <ScrollArea className="h-[68vh]">
-            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-              {items.map((it) => (
-                <motion.button
-                  key={it.id}
-                  onClick={() => onCardClick(it.id)}
-                  whileHover={{ y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                  className={cn(
-                    "relative group text-left rounded-lg border-2 p-1 transition-all",
-                    it.isOwned ? "border-green-500/80 bg-green-900/10" : "border-gray-700/60 bg-gray-900/60 hover:border-purple-400/60"
-                  )}
-                >
-                  {/* Favorite */}
-                  <div className="absolute left-1 top-1 z-10">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onToggleFavorite(it.id); }}
-                      className={cn("rounded-full p-1 bg-black/40 border border-white/10", favorites[it.id] ? "text-yellow-300" : "text-white/60")}
-                      aria-label={favorites[it.id] ? "إزالة من المفضلة" : "أضف إلى المفضلة"}
-                    >
-                      <Star className={cn("h-4 w-4", favorites[it.id] && "fill-current")}/>
-                    </button>
-                  </div>
-
-                  {/* Badge owned */}
-                  {it.isOwned && (
-                    <div className="absolute right-1 top-1 z-10 rounded-full bg-green-600/90 text-white px-2 py-0.5 text-[10px] font-bold inline-flex items-center gap-1">
-                      <Check className="h-3 w-3" /> مملوكة
-                    </div>
-                  )}
-
-                  {/* Image */}
-                  <div className="rounded-md overflow-hidden">
-                    <PlayerAvatar avatarId={it.id} className="w-full aspect-square rounded-md border border-white/10" />
-                  </div>
-
-                  {/* Footer strip */}
-                  <div className="mt-2 flex items-center justify-between">
-                    <div className="truncate text-sm text-gray-200" title={it.id}>{it.id.replace(/\.png$/i, "")}</div>
-                    {it.price >= 0 ? (
-                      <div className={cn("ml-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold", it.currency === "coins" ? "bg-yellow-500/15 text-yellow-300" : "bg-blue-500/15 text-blue-300")}> 
-                        {it.currency === "coins" ? <CircleDollarSign className="h-4 w-4"/> : <Diamond className="h-4 w-4"/>}
-                        <span>{it.price}</span>
-                      </div>
-                    ) : (
-                      <div className="ml-2 inline-flex items-center gap-1 rounded-full bg-gray-600/20 text-gray-300 px-2 py-0.5 text-xs font-bold">
-                        <ShieldAlert className="h-4 w-4" /> غير متاح
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Hover CTA */}
-                  {!it.isOwned && it.price >= 0 && (
-                    <div className="pointer-events-none absolute inset-0 rounded-lg bg-gradient-to-t from-black/60 via-black/30 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-                  )}
-                  {!it.isOwned && it.price >= 0 && (
-                    <div className="absolute inset-x-2 bottom-2 flex justify-center">
-                      <div className="pointer-events-none inline-flex items-center gap-2 rounded-full bg-purple-600/90 px-3 py-1 text-xs font-extrabold text-white shadow-lg group-hover:scale-[1.02] transition">
-                        <Sparkles className="h-3.5 w-3.5" /> اضغط للشراء
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Locked overlay */}
-                  {!it.isOwned && it.price < 0 && (
-                    <div className="absolute inset-0 rounded-lg bg-black/60 grid place-items-center text-white">
-                      <Lock className="h-7 w-7" />
-                    </div>
-                  )}
-                </motion.button>
-              ))}
-            </div>
-
-            {hasMore && (
-              <div className="p-4 text-center">
-                <Button variant="outline" className="border-purple-500/30" onClick={onLoadMore}>عرض المزيد</Button>
-              </div>
-            )}
-          </ScrollArea>
-        )}
-      </CardContent>
-    </Card>
   );
 }
