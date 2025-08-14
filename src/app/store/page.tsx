@@ -11,7 +11,6 @@ import type { Metadata, Viewport } from 'next';
  * - Polished loading fallback that matches site visuals (stars/twinkling)
  */
 
-export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
