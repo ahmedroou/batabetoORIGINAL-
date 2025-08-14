@@ -15,8 +15,8 @@ import {
 } from '@/components/ui/card';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Swords } from 'lucide-react';
-import { selectTeam, startKingOfGeniusGame } from '@/lib/actions/king-of-genius';
+import { Users, Swords, Loader2, Shuffle } from 'lucide-react';
+import { selectTeam, startKingOfGeniusGame, randomizeTeams } from '@/lib/actions/king-of-genius';
 
 interface TeamSelectionProps {
   game: Game;
@@ -130,6 +130,17 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
     }
   };
 
+  const handleRandomizeTeams = async () => {
+    setIsSubmitting(true);
+    try {
+      await randomizeTeams(game.id, self.id);
+    } catch (error: any) {
+      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const activePlayers = game.players.filter((p) => p.status === 'alive');
   const teamA = activePlayers.filter((p) => p.team === 'A');
   const teamB = activePlayers.filter((p) => p.team === 'B');
@@ -182,7 +193,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
           />
           <TeamColumn
             teamId="B"
-            title="الفريق الوردي"
+            title="الفريق الأحمر"
             players={teamB}
             self={self}
             onSelectTeam={handleSelectTeam}
@@ -219,15 +230,26 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
       </CardContent>
       <CardFooter>
         {isHost ? (
-          <Button
-            className="w-full text-lg"
-            size="lg"
-            disabled={buttonState.disabled}
-            onClick={handleStartGame}
-          >
-            <Swords className="ml-2" />
-            {buttonState.text}
-          </Button>
+          <div className="w-full flex flex-col sm:flex-row gap-2">
+            <Button
+              className="w-full text-lg flex-grow"
+              size="lg"
+              disabled={buttonState.disabled}
+              onClick={handleStartGame}
+            >
+              <Swords className="ml-2" />
+              {isSubmitting ? <Loader2 className="animate-spin" /> : buttonState.text}
+            </Button>
+             <Button
+              variant="outline"
+              size="lg"
+              onClick={handleRandomizeTeams}
+              disabled={isSubmitting || activePlayers.length === 0}
+            >
+              <Shuffle className="ml-2" />
+              توزيع عشوائي
+            </Button>
+          </div>
         ) : (
           <p className="text-center w-full text-muted-foreground">
             في انتظار صاحب الغرفة لبدء اللعبة بعد اكتمال الفرق
@@ -237,3 +259,4 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
     </Card>
   );
 }
+```

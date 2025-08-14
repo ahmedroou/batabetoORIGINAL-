@@ -62,26 +62,13 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   const puzzle = game.challengeState?.puzzle as MazePuzzle;
   const { gridSize = 8, start = { x: 0, y: 0 }, end = { x: 7, y: 7 }, walls = [], initialHints = [] } = puzzle || {};
   
-  const [mazePhase, setMazePhase] = useState<MazePhase>('instructions');
+  const [mazePhase, setMazePhase] = useState<MazePhase>('playing'); // Start directly
   const [currentPosition, setCurrentPosition] = useState<Position>(start);
   const [points, setPoints] = useState<number>(STARTING_POINTS);
   const [timeLeft, setTimeLeft] = useState<number>(TIME_LIMIT_SECONDS);
   const [freezeMovement, setFreezeMovement] = useState<boolean>(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [visited, setVisited] = useState<Position[]>([start, ...initialHints]);
-
   const [revealedTiles, setRevealedTiles] = useState<Set<string>>(new Set());
-
-  const controls = useMemo(() => {
-    const directions: ('up' | 'down' | 'left' | 'right')[] = ['up', 'down', 'left', 'right'];
-    const shuffledDirections = [...directions].sort(() => Math.random() - 0.5);
-    return {
-        'ArrowUp': shuffledDirections[0]!,
-        'ArrowDown': shuffledDirections[1]!,
-        'ArrowLeft': shuffledDirections[2]!,
-        'ArrowRight': shuffledDirections[3]!,
-    };
-  }, []);
 
   const isPositionEqual = (pos1: Position, pos2: Position) => pos1.x === pos2.x && pos1.y === pos2.y;
   const isWall = useCallback((pos: Position) => walls.some((wall) => isPositionEqual(wall, pos)), [walls]);
@@ -178,7 +165,6 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         return;
       }
       
-
       if (isWall(newPos)) {
         setFreezeMovement(true);
         const newPoints = Math.max(0, points - WALL_HIT_COST);
@@ -199,20 +185,18 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         handleSubmit(true, points);
       }
     },
-    [currentPosition, gridSize, mazePhase, freezeMovement, isWall, points, end, game.id, self.id, toast, hasSubmitted, handleSubmit]
+    [currentPosition, gridSize, mazePhase, freezeMovement, isWall, points, end, toast, hasSubmitted, handleSubmit]
   );
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
         if (mazePhase !== 'playing' || freezeMovement) return;
         
-        const key = e.key;
         let moveDirection: 'up' | 'down' | 'left' | 'right' | undefined;
-
-        if (key === 'ArrowUp') moveDirection = controls['ArrowUp'];
-        else if (key === 'ArrowDown') moveDirection = controls['ArrowDown'];
-        else if (key === 'ArrowLeft') moveDirection = controls['ArrowLeft'];
-        else if (key === 'ArrowRight') moveDirection = controls['ArrowRight'];
+        if (e.key === 'ArrowUp') moveDirection = 'up';
+        else if (e.key === 'ArrowDown') moveDirection = 'down';
+        else if (e.key === 'ArrowLeft') moveDirection = 'left';
+        else if (e.key === 'ArrowRight') moveDirection = 'right';
 
         if (moveDirection) {
             e.preventDefault();
@@ -221,53 +205,14 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-}, [handleMove, mazePhase, freezeMovement, controls]);
-
-  const getMoveIcon = (direction: string) => {
-      switch(direction) {
-          case 'up': return MoveUp;
-          case 'down': return MoveDown;
-          case 'left': return MoveLeft;
-          case 'right': return MoveRight;
-          default: return MoveUp;
-      }
-  };
-
-  const renderInstructions = () => (
-    <Card className="w-full max-w-lg bg-gray-900 text-white border-gray-700">
-        <CardHeader className="text-center">
-            <CardTitle className="text-3xl text-primary">استعد للمتاهة!</CardTitle>
-            <CardDescription className="text-yellow-400 font-bold">
-                انتبه! تم تغيير أزرار التحكم في هذه الجولة.
-            </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 flex justify-center">
-            <div className='space-y-2 p-3 bg-slate-800 rounded-lg'>
-                <h4 className='font-bold text-lg text-center'>مفاتيح الأسهم</h4>
-                {Object.entries(controls).map(([key, direction]) => (
-                    <div key={key} className='flex items-center justify-center gap-4'>
-                       <KeyDisplay>{key === 'ArrowUp' ? <ArrowUp className="w-6 h-6"/> : key === 'ArrowDown' ? <ArrowDown className="w-6 h-6"/> : key === 'ArrowLeft' ? <ArrowLeft className="w-6 h-6"/> : <ArrowRight className="w-6 h-6"/>}</KeyDisplay>
-                       <ArrowRight className="w-6 h-6 text-slate-500" />
-                       <ArrowDisplay icon={getMoveIcon(direction)} direction={direction} />
-                    </div>
-                ))}
-            </div>
-        </CardContent>
-        <CardFooter>
-            <Button onClick={() => setMazePhase('playing')} className="w-full" size="lg">
-                <Play className="ml-2" />
-                ابدأ التحدي
-            </Button>
-        </CardFooter>
-    </Card>
-  );
-
+}, [handleMove, mazePhase, freezeMovement]);
+  
   const renderGame = () => (
     <Card className="w-full max-w-2xl bg-gray-900 text-white border-gray-700 p-4">
       <CardHeader className="text-center">
         <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
         <CardDescription className="text-red-500 font-bold">
-            تحرك باستخدام الأسهم.
+            استخدم الأسهم للتحرك والوصول للهدف.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center space-y-4">
@@ -321,22 +266,22 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         </div>
         <div className="grid grid-cols-3 grid-rows-2 gap-2 w-full max-w-xs pt-4">
             <div className="col-start-2 row-start-1">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowUp'])} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('up')} disabled={freezeMovement || hasSubmitted}>
                     <MoveUp />
                 </Button>
             </div>
             <div className="col-start-1 row-start-2">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowLeft'])} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('left')} disabled={freezeMovement || hasSubmitted}>
                     <MoveLeft />
                 </Button>
             </div>
             <div className="col-start-2 row-start-2">
-                   <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowDown'])} disabled={freezeMovement || hasSubmitted}>
+                   <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('down')} disabled={freezeMovement || hasSubmitted}>
                     <MoveDown />
                 </Button>
             </div>
               <div className="col-start-3 row-start-2">
-                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove(controls['ArrowRight'])} disabled={freezeMovement || hasSubmitted}>
+                <Button variant="outline" className="w-full h-full" size="icon" onClick={() => handleMove('right')} disabled={freezeMovement || hasSubmitted}>
                     <MoveRight />
                 </Button>
             </div>
@@ -380,10 +325,10 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3 }}
           >
-            {mazePhase === 'instructions' && renderInstructions()}
             {mazePhase === 'playing' && renderGame()}
             {mazePhase === 'ended' && renderEnded()}
           </motion.div>
       </AnimatePresence>
   );
 }
+```

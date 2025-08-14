@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,9 @@ import {
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Award, Star, ArrowLeft, Plus, RefreshCcw } from 'lucide-react';
-import { restartKingOfGeniusChallenge, nextKingOfGenius } from '@/lib/actions/king-of-genius';
+import { nextKingOfGenius } from '@/lib/actions/king-of-genius';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
+import { handleTimeout } from '@/lib/actions/king-of-genius';
 
 interface RoundResultsProps {
   game: Game;
@@ -34,50 +35,24 @@ export function RoundResults({
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleNextChallenge = async () => {
-    setIsSubmitting(true);
-    try {
-      await nextKingOfGenius(game.id, self.id);
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-  
-  const handleRestartChallenge = async () => {
-    setIsSubmitting(true);
-    try {
-      await restartKingOfGeniusChallenge(game.id, self.id);
-    } catch (error: any) {
-       toast({
-        title: 'خطأ في إعادة الجولة',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
+  // Automatically proceed after a delay
+  useEffect(() => {
+      if (isHost) {
+          const timer = setTimeout(() => {
+              handleTimeout(game.id, self.id);
+          }, 15000); // 15 seconds to view results
+          return () => clearTimeout(timer);
+      }
+  }, [isHost, game.id, self.id]);
 
   const results = game.challengeState?.results || [];
-
-  const isSpecialScoring =
-    challenge.id === 'hidden_maze' || challenge.id === 'smart_grid_puzzle';
 
   const sortedResults = [...results]
     .filter((r) => r.isCorrect)
     .sort((a, b) => {
-      // Primary sort: by score, descending
       if ((b.score ?? 0) !== (a.score ?? 0)) {
         return (b.score ?? 0) - (a.score ?? 0);
       }
-      // Secondary sort: by time, ascending (faster is better)
       return a.time - b.time;
     });
 
@@ -171,45 +146,19 @@ export function RoundResults({
                 <div className="flex flex-col items-center gap-2 text-pink-500">
                   <Star className="w-12 h-12" />
                   <span>{game.teamScores?.B || 0}</span>
-                  <p className="text-lg font-semibold">الفريق الوردي</p>
+                  <p className="text-lg font-semibold">الفريق الأحمر</p>
                 </div>
               </div>
             </div>
           </div>
         </CardContent>
-        <CardFooter className="flex-col sm:flex-row gap-2">
-           {isHost ? (
-            <>
-              <Button
-                onClick={handleNextChallenge}
-                disabled={isSubmitting}
-                size="lg"
-                variant="secondary"
-                className="w-full text-lg"
-              >
-                {isSubmitting ? 'جاري التحميل...' : 'الجولة التالية'}
-                <ArrowLeft className="mr-2" />
-              </Button>
-              <Button
-                  onClick={handleRestartChallenge}
-                  disabled={isSubmitting}
-                  size="lg"
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                >
-                  <RefreshCcw />
-                  {isSubmitting ? '...' : 'إعادة الجولة'}
-              </Button>
-            </>
-          ) : (
+         <CardFooter>
             <p className="w-full text-center text-muted-foreground animate-pulse">
-              في انتظار المضيف لبدء الجولة التالية...
+              في انتظار بدء الجولة التالية...
             </p>
-          )}
         </CardFooter>
       </Card>
     </div>
   );
 }
-
-    
+```

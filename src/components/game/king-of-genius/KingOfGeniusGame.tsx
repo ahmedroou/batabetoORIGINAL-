@@ -47,8 +47,8 @@ export function KingOfGeniusGame({
         return <TeamSelection game={game} self={self} isHost={isHost} />;
 
       case 'challenge_intro':
-        if (!currentChallenge)
-          return <LoadingState text="جاري تحميل التحدي..." />;
+        if (!currentChallenge || !game.puzzles?.[game.currentChallengeIndex ?? 0])
+          return <LoadingState text="جاري تجهيز التحدي..." />;
         return (
           <ChallengeIntro
             game={game}
@@ -59,7 +59,7 @@ export function KingOfGeniusGame({
         );
 
       case 'challenge_active':
-        if (!currentChallenge)
+        if (!currentChallenge || !game.challengeState?.puzzle)
           return <LoadingState text="جاري تحميل التحدي..." />;
         return (
           <ChallengeHost
@@ -83,17 +83,14 @@ export function KingOfGeniusGame({
         );
 
       case 'final_results':
-        const finalWinner =
-          game.gameResult?.winner ||
-          ((game.teamScores?.A || 0) > (game.teamScores?.B || 0)
-            ? 'الفريق الأزرق'
-            : (game.teamScores?.B || 0) > (game.teamScores?.A || 0)
-            ? 'الفريق الأحمر'
-            : 'تعادل');
+        const winner =
+          game.gameResult?.winner === 'A' ? 'الفريق الأزرق'
+          : game.gameResult?.winner === 'B' ? 'الفريق الأحمر'
+          : 'تعادل';
         const finalMessage =
           game.gameResult?.message || 'انتهت المواجهة!';
         return (
-          <FinalResults winner={finalWinner as any} message={finalMessage} />
+          <FinalResults winner={winner as any} message={finalMessage} />
         );
 
       default:

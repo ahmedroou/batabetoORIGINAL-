@@ -5,7 +5,8 @@ import { useState, useEffect } from 'react';
 import type { Game, GeniusChallenge, Player } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { motion } from 'framer-motion';
-import { beginChallenge } from '@/lib/actions/king-of-genius';
+import { beginChallenge, handleTimeout } from '@/lib/actions/king-of-genius';
+import { useAuth } from '@/hooks/useAuth';
 
 interface ChallengeIntroProps {
   game: Game;
@@ -14,35 +15,37 @@ interface ChallengeIntroProps {
   isHost: boolean;
 }
 
-const COUNTDOWN_SECONDS = 5;
+const INTRO_COUNTDOWN_SECONDS = 5;
 
 export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntroProps) {
-  const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
-  const [actionCalled, setActionCalled] = useState(false);
-
+  const [countdown, setCountdown] = useState(INTRO_COUNTDOWN_SECONDS);
+  const { user } = useAuth();
+  
   useEffect(() => {
-    // If there is no end time set, don't start the countdown logic.
     if (!game.challengeState?.challengeEndsAt) return;
 
-    const introEndTime = game.challengeState.challengeEndsAt.toMillis() - ((game.challengeState.duration || 90) * 1000);
+    const challengeActiveTime = game.challengeState?.duration || 90;
+    const introEndTime = game.challengeState.challengeEndsAt.toMillis() - (challengeActiveTime * 1000);
 
     const updateCountdown = () => {
       const remaining = Math.max(0, Math.ceil((introEndTime - Date.now()) / 1000));
       setCountdown(remaining);
-      
-      if (remaining === 0 && isHost && !actionCalled) {
-        setActionCalled(true);
-        beginChallenge(game.id, self.id);
-      }
     };
     
-    // Run once immediately
     updateCountdown();
-
     const timer = setInterval(updateCountdown, 1000);
 
     return () => clearInterval(timer);
-  }, [isHost, actionCalled, game.id, self.id, game.challengeState?.challengeEndsAt, game.challengeState?.duration]);
+  }, [game.challengeState?.challengeEndsAt, game.challengeState?.duration]);
+
+  // Effect for the host to automatically trigger the next state when the timer ends.
+  useEffect(() => {
+    if(countdown <= 0 && isHost && user) {
+        // Use handleTimeout to ensure consistent state transition logic
+        const timer = setTimeout(() => handleTimeout(game.id, user.uid), 500); // Add small buffer
+        return () => clearTimeout(timer);
+    }
+  }, [countdown, isHost, game.id, user]);
 
   return (
     <div className="w-full max-w-2xl">
@@ -66,7 +69,7 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
                             strokeDasharray="282.74"
                             initial={{ pathLength: 1 }}
                             animate={{ pathLength: 0 }}
-                            transition={{ duration: COUNTDOWN_SECONDS, ease: "linear" }}
+                            transition={{ duration: INTRO_COUNTDOWN_SECONDS, ease: "linear" }}
                         />
                     </svg>
                 </motion.div>
@@ -80,3 +83,4 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
     </div>
   );
 }
+```
