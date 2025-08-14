@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -279,7 +280,7 @@ export async function deleteChallenge(challengeId: string): Promise<{ success: b
 export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
      try {
         const challengesCol = collection(db, 'challenges');
-        const q = query(challengesCol, orderBy('createdAt', 'desc'));
+        const q = query(challengesCol, orderBy('createdAt', 'desc'), limit(15));
         const snapshot = await getDocs(q);
         
         return snapshot.docs.map(doc => {
@@ -372,3 +373,4 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         return { success: false, winnersCount: 0, error: error.message };
     });
 }
+
