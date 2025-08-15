@@ -421,8 +421,9 @@ export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type EducatedMerchantGameState = "lobby" | "rolling" | "movement" | "property_action" | "question" | "turn_end" | "final_results";
+export type QuizSwapGameState = 'lobby' | 'peek' | 'playing' | 'answering' | 'results';
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState | QuizSwapGameState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -530,6 +531,67 @@ export interface EducatedMerchantQuestion {
     createdAt?: Timestamp;
 }
 
+// -------------------------------------------------------------
+// QuizSwap Game Types
+// -------------------------------------------------------------
+export type QuizSwapDifficulty = 'easy' | 'medium' | 'hard';
+export type QuizSwapCardBase = { id: string; kind: 'question' | 'special'; name: string };
+
+export type QuizSwapQuestionCard = QuizSwapCardBase & {
+  kind: 'question';
+  difficulty: QuizSwapDifficulty;
+  question: string;
+  answer: string;
+  hints?: string[];
+};
+
+export type QuizSwapSpecialEffect =
+  | 'PeekSelf'
+  | 'PeekOpponent'
+  | 'FreeQuestion'
+  | 'SwapWithOpponent'
+  | 'Burden'
+  | 'BonusPoint'
+  | 'Expose'
+  | 'Shield';
+
+export type QuizSwapSpecialCard = QuizSwapCardBase & {
+  kind: 'special';
+  effect: QuizSwapSpecialEffect;
+  duration?: 'instant' | 'untilRoundEnd' | 'untilNextRoundEnd';
+};
+
+export type QuizSwapCard = QuizSwapQuestionCard | QuizSwapSpecialCard;
+
+export interface QuizSwapPlayerState extends Player {
+    hand: string[];           // Card IDs
+    protectedIds?: string[];  // Shielded card IDs
+    viewedSelf?: string[];    // IDs of cards the player has peeked in their own hand
+    viewedByOpp?: Record<string, string[]>; // { cardId: [opponentId1, opponentId2] }
+    score: number;            // Starts at 10
+    answers?: Record<string, { answer: string, isCorrect: boolean, time: number }>; // { questionId: { ... } }
+}
+
+export interface QuizSwapState {
+    settings: {
+        turnSeconds: number;
+        peekPhaseSeconds: number;
+        answerSeconds: number;
+        endAfterRounds: number;
+        penalty: { easy: number; medium: number; hard: number };
+    };
+    players: QuizSwapPlayerState[];
+    drawPile: string[];
+    discardPile: string[];
+    round: number;
+    turnIndex: number;
+    phase: 'setup' | 'peek' | 'playing' | 'finalize' | 'answering' | 'ended';
+    timerEndsAt?: Timestamp;
+    endGameRequestedBy?: string; // Player ID who initiated the end game
+    log: { t: number; event: string; payload?: any }[];
+}
+
+
 export interface Game {
   id: string;
   hostId: string;
@@ -542,7 +604,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'prison' | 'educated-merchant';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'prison' | 'educated-merchant' | 'quiz-swap';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -736,6 +798,9 @@ export interface Game {
     activeCountAtRoundStart?: number;
     questionToken?: string;
   };
+
+  // "QuizSwap" specific state
+  quizSwapState?: QuizSwapState;
 }
 
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
@@ -745,6 +810,7 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'prison': 'السجن',
     'educated-merchant': 'التاجر المتعلم',
+    'quiz-swap': 'تبديل الأسئلة'
 };
 
 // Sub-states for Mafia game
