@@ -32,6 +32,12 @@ const requireHost = (game: Game, hostId: string) => {
   if (game.hostId !== hostId) throw new Error('Only the host can perform this action.');
 };
 
+const isMyTurn = (game: Game, playerId: string): boolean => {
+    const state = game.quizSwapState;
+    if(!state) return false;
+    return state.players[state.turnIndex].id === playerId;
+}
+
 // --- Game Initialization ---
 
 export async function startGame(gameId: string, hostId: string) {
@@ -53,7 +59,7 @@ export async function startGame(gameId: string, hostId: string) {
       score: 10,
       protectedIds: [],
       viewedSelf: [],
-      viewedByOpp: [],
+      viewedByOpp: {},
     }));
     
     // Deal 4 cards to each player
@@ -98,7 +104,6 @@ export async function startGame(gameId: string, hostId: string) {
 }
 
 // --- Player Actions ---
-// NOTE: These are placeholders. The full logic for each action needs to be implemented.
 
 export async function drawFromDeck(gameId: string, playerId: string) {
   const gameRef = doc(db, 'games', gameId);
@@ -107,16 +112,21 @@ export async function drawFromDeck(gameId: string, playerId: string) {
       if(!gameDoc.exists()) throw new Error("Game not found.");
       const game = gameDoc.data() as Game;
 
-      const { players, drawPile, turnIndex } = game.quizSwapState!;
-      if(players[turnIndex].id !== playerId) throw new Error("Not your turn.");
+      if(!isMyTurn(game, playerId)) throw new Error("Not your turn.");
 
-      const newCardId = drawPile.pop();
+      const state = game.quizSwapState!;
+      const newCardId = state.drawPile.pop();
       if(!newCardId) throw new Error("Draw pile is empty.");
       
       const playerState = requirePlayer(game, playerId);
+      if(playerState.hand.length >= 5) throw new Error("Hand is full.");
       playerState.hand.push(newCardId);
 
-      tx.update(gameRef, { 'quizSwapState.players': players, 'quizSwapState.drawPile': drawPile });
+      tx.update(gameRef, { 
+          'quizSwapState.players': state.players, 
+          'quizSwapState.drawPile': state.drawPile,
+          'quizSwapState.phase': 'playing'
+      });
   });
 }
 
@@ -126,26 +136,94 @@ export async function drawFromDiscard(gameId: string, playerId: string) {
       const gameDoc = await tx.get(gameRef);
       if(!gameDoc.exists()) throw new Error("Game not found.");
       const game = gameDoc.data() as Game;
-      const { players, discardPile, turnIndex } = game.quizSwapState!;
-      if(players[turnIndex].id !== playerId) throw new Error("Not your turn.");
+      const state = game.quizSwapState!;
+      if(state.players[state.turnIndex].id !== playerId) throw new Error("Not your turn.");
 
-      const newCardId = discardPile.pop();
+      const newCardId = state.discardPile.pop();
       if(!newCardId) throw new Error("Discard pile is empty.");
       const newCard = QUIZ_SWAP_DECK_MAP.get(newCardId);
       if(newCard?.kind === 'special') {
-          discardPile.push(newCardId); // put it back
+          state.discardPile.push(newCardId); // put it back
           throw new Error("Cannot pick up a special card from the discard pile.");
       }
       
       const playerState = requirePlayer(game, playerId);
+      if(playerState.hand.length >= 5) throw new Error("Hand is full.");
       playerState.hand.push(newCardId);
 
-      tx.update(gameRef, { 'quizSwapState.players': players, 'quizSwapState.discardPile': discardPile });
+      tx.update(gameRef, { 
+          'quizSwapState.players': state.players, 
+          'quizSwapState.discardPile': state.discardPile,
+          'quizSwapState.phase': 'playing'
+        });
   });
 }
 
 export async function playCard(gameId: string, playerId: string, cardId: string, targetPlayerId?: string) {
-    // Placeholder for playing a card
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (tx) => {
+        const gameDoc = await tx.get(gameRef);
+        if(!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        const state = game.quizSwapState!;
+        if(!isMyTurn(game, playerId)) throw new Error("Not your turn.");
+        if(state.phase !== 'playing') throw new Error("You can only play cards during your turn.");
+        
+        const playerState = requirePlayer(game, playerId);
+        const cardIndex = playerState.hand.indexOf(cardId);
+        if(cardIndex === -1) throw new Error("Card not in hand.");
+        const card = QUIZ_SWAP_DECK_MAP.get(cardId);
+        if(!card) throw new Error("Invalid card.");
+        
+        // Remove card from hand
+        playerState.hand.splice(cardIndex, 1);
+
+        if(card.kind === 'question') {
+            state.discardPile.push(cardId);
+        } else { // Special card
+            switch(card.effect) {
+                case 'PeekSelf':
+                    playerState.viewedSelf = [...new Set([...(playerState.viewedSelf || []), cardId])];
+                    break;
+                case 'PeekOpponent': {
+                    if(!targetPlayerId) throw new Error("Target player required for PeekOpponent.");
+                    const targetPlayer = requirePlayer(game, targetPlayerId);
+                    if(!targetPlayer.hand[0]) throw new Error("Target player has no cards to peek.");
+                    const cardToPeek = targetPlayer.hand[0]; // Peek the first card for simplicity
+                    targetPlayer.viewedByOpp[cardToPeek] = [...(targetPlayer.viewedByOpp[cardToPeek] || []), playerId];
+                    break;
+                }
+                case 'SwapWithOpponent': {
+                    if(!targetPlayerId) throw new Error("Target player required for Swap.");
+                    const targetPlayer = requirePlayer(game, targetPlayerId);
+                    if(!targetPlayer.hand.length || !playerState.hand.length) throw new Error("Both players must have cards to swap.");
+                    // Simple swap: first card
+                    const myCardToSwap = playerState.hand.pop()!;
+                    const theirCardToSwap = targetPlayer.hand.pop()!;
+                    playerState.hand.push(theirCardToSwap);
+                    targetPlayer.hand.push(myCardToSwap);
+                    break;
+                }
+                case 'Burden': {
+                    if(!targetPlayerId) throw new Error("Target player required for Burden.");
+                    const targetPlayer = requirePlayer(game, targetPlayerId);
+                    if(playerState.hand.length < 1) throw new Error("You have no card to give.");
+                    const cardToGive = playerState.hand.pop()!;
+                    targetPlayer.hand.push(cardToGive);
+                    break;
+                }
+                case 'Shield':
+                     playerState.protectedIds = [...(playerState.protectedIds || []), cardId];
+                     break;
+                // Other effects can be implemented here
+            }
+            if (card.effect !== 'Shield') {
+                state.discardPile.push(cardId);
+            }
+        }
+        
+        tx.update(gameRef, { 'quizSwapState': state });
+    });
 }
 
 export async function endTurn(gameId: string, playerId: string) {
@@ -154,22 +232,39 @@ export async function endTurn(gameId: string, playerId: string) {
         const gameDoc = await tx.get(gameRef);
         if(!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        const { players, turnIndex } = game.quizSwapState!;
-        if(players[turnIndex].id !== playerId) throw new Error("Not your turn.");
+        const state = game.quizSwapState!;
+        if(!isMyTurn(game, playerId)) throw new Error("Not your turn.");
+        if (state.phase !== 'playing') throw new Error("Can only end turn during 'playing' phase.");
         
-        const newTurnIndex = (turnIndex + 1) % players.length;
-        const round = game.quizSwapState!.round + (newTurnIndex === 0 ? 1 : 0);
+        const playerState = requirePlayer(game, playerId);
+        if(playerState.hand.length > 4) throw new Error("You must discard down to 4 cards to end your turn.");
+        
+        const newTurnIndex = (state.turnIndex + 1) % state.players.length;
+        const round = state.round + (newTurnIndex === 0 ? 1 : 0);
 
         tx.update(gameRef, {
             'quizSwapState.turnIndex': newTurnIndex,
             'quizSwapState.round': round,
-            'quizSwapState.timerEndsAt': inSec(game.quizSwapState!.settings.turnSeconds),
+            'quizSwapState.timerEndsAt': inSec(state.settings.turnSeconds),
+            'quizSwapState.phase': 'playing'
         });
    });
 }
 
 export async function requestEndGame(gameId: string, playerId: string) {
-    // Placeholder for requesting to end the game
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (tx) => {
+        const gameDoc = await tx.get(gameRef);
+        if(!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+        if(game.quizSwapState!.round < game.quizSwapState!.settings.endAfterRounds) {
+            throw new Error("Cannot end the game before the minimum number of rounds.");
+        }
+        tx.update(gameRef, { 
+            'quizSwapState.phase': 'answering',
+            'quizSwapState.endGameRequestedBy': playerId
+        });
+    });
 }
 
 export async function submitAnswer(gameId: string, playerId: string, questionId: string, answer: string) {

@@ -534,12 +534,12 @@ export interface EducatedMerchantQuestion {
 // -------------------------------------------------------------
 // QuizSwap Game Types
 // -------------------------------------------------------------
-export type QuizSwapDifficulty = 'easy' | 'medium' | 'hard';
+export type Difficulty = 'easy' | 'medium' | 'hard';
 export type QuizSwapCardBase = { id: string; kind: 'question' | 'special'; name: string };
 
 export type QuizSwapQuestionCard = QuizSwapCardBase & {
   kind: 'question';
-  difficulty: QuizSwapDifficulty;
+  difficulty: Difficulty;
   question: string;
   answer: string;
   hints?: string[];
@@ -565,9 +565,9 @@ export type QuizSwapCard = QuizSwapQuestionCard | QuizSwapSpecialCard;
 
 export interface QuizSwapPlayerState extends Player {
     hand: string[];           // Card IDs
-    protectedIds?: string[];  // Shielded card IDs
-    viewedSelf?: string[];    // IDs of cards the player has peeked in their own hand
-    viewedByOpp?: Record<string, string[]>; // { cardId: [opponentId1, opponentId2] }
+    protectedIds: string[];  // Shielded card IDs
+    viewedSelf: string[];    // IDs of cards the player has peeked in their own hand
+    viewedByOpp: Record<string, string[]>; // { cardId: [opponentId1, opponentId2] }
     score: number;            // Starts at 10
     answers?: Record<string, { answer: string, isCorrect: boolean, time: number }>; // { questionId: { ... } }
 }
