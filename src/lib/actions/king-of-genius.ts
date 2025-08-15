@@ -90,7 +90,7 @@ export async function startKingOfGeniusGame(gameId: string, hostId: string) {
       teamScores: { A: 0, B: 0 },
       challengeState: {
         duration: INTRO_DURATION_S,
-        challengeEndsAt: inSec(INTRO_DURATION_S),
+        timerEndsAt: inSec(INTRO_DURATION_S),
         puzzle: null,
         results: [],
         playerProgress: {},
@@ -124,7 +124,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
         updates = {
           gameState: 'challenge_active',
-          challengeState: { ...game.challengeState, puzzle, duration, timerEndsAt: inSec(duration) },
+          challengeState: { ...game.challengeState, puzzle, duration, timerEndsAt: inSec(duration), results: [] },
         };
         break;
       }
@@ -179,7 +179,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
             currentChallengeIndex: nextChallengeIndex,
             challengeState: {
               duration: INTRO_DURATION_S,
-              challengeEndsAt: inSec(INTRO_DURATION_S),
+              timerEndsAt: inSec(INTRO_DURATION_S),
               puzzle: null, results: [], playerProgress: {},
             },
           };

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -90,7 +91,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
           // لا ننتظر هنا لتجنّب حظر الـ UI؛ مجرد إطلاق الوعد
           (async () => {
             try {
-              await submitKingOfGeniusResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+              await submitKingOfGeniusResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS, score: 0 });
             } catch {
               // في حال الفشل، نُظهر إشعارًا لطيفًا ولا نكسر الدورة
               toast({
@@ -159,7 +160,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
         const timeTaken = clamp(TIME_LIMIT_SECONDS - timeLeft, 0, TIME_LIMIT_SECONDS);
         setIsSubmitting(true);
         try {
-          await submitKingOfGeniusResult(game.id, self.id, { isCorrect: true, time: timeTaken });
+          await submitKingOfGeniusResult(game.id, self.id, { isCorrect: true, time: timeTaken, score: 5 });
           submittedRef.current = true;
           setHasSubmitted(true);
           setIsGameOver(true);

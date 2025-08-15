@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -56,7 +57,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                 if (!hasSubmitted && !isGameOver) {
                     setIsGameOver(true);
                     toast({ title: "انتهى الوقت!", description: "للأسف، لم تفك الشيفرة في الوقت المحدد.", variant: "destructive" });
-                    submitKingOfGeniusResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS });
+                    submitKingOfGeniusResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS, score: 0 });
                     setHasSubmitted(true);
                 }
                 clearInterval(timer);
@@ -143,12 +144,12 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         if (victory) {
             setIsGameOver(true);
             setHasSubmitted(true);
-            await submitKingOfGeniusResult(game.id, self.id, { isCorrect: true, time: timeTaken });
+            await submitKingOfGeniusResult(game.id, self.id, { isCorrect: true, time: timeTaken, score: 5 });
             toast({ title: "نجاح!", description: "لقد فككت الشيفرة بنجاح.", className: "bg-green-100 border-green-500 text-green-700" });
         } else if (newAttempts.length >= MAX_ATTEMPTS) {
             setIsGameOver(true);
             setHasSubmitted(true);
-            await submitKingOfGeniusResult(game.id, self.id, { isCorrect: false, time: timeTaken });
+            await submitKingOfGeniusResult(game.id, self.id, { isCorrect: false, time: timeTaken, score: 0 });
             toast({ title: "فشلت!", description: "لقد استنفدت كل محاولاتك.", variant: "destructive" });
         }
         
