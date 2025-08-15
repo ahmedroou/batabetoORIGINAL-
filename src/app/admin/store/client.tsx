@@ -47,8 +47,7 @@ import {
   addPermissionToRank,
   removePermissionFromRank,
 } from "@/lib/actions/admin/settings";
-import { getAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar } from "@/lib/actions/user/queries";
-import { getRanks, getTopUsers } from "@/lib/actions/user/queries";
+import { getAvatarPrices, getPunishmentAvatarPrices, getDefaultAvatar, getRanks, getTopUsers } from "@/lib/actions/user/queries";
 import { cn } from "@/lib/utils";
 import { ALL_PERMISSIONS } from "@/data/permissions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -198,6 +197,7 @@ const AvatarTile = React.memo(function AvatarTile({
     </div>
   );
 });
+AvatarTile.displayName = 'AvatarTile';
 
 // -----------------------------
 // Rank Row (with own state)
@@ -254,7 +254,7 @@ const RankRow = React.memo(function RankRow({ rank, onUpdate, onRemove, disabled
     </div>
   );
 });
-
+RankRow.displayName = 'RankRow';
 
 // -----------------------------
 // Main Admin Store
@@ -402,6 +402,31 @@ export default function AdminStoreClient() {
   };
   
   // Keyboard: Ctrl/Cmd+S to save current store tab
+  const handleSaveRanks = useCallback(async () => {
+    setIsSavingRanks(true);
+    const sorted = [...ranks].sort((a, b) => a.threshold - b.threshold);
+    const dup = new Set<number>();
+    let hasDup = false;
+    sorted.forEach((r) => {
+      if (dup.has(r.threshold)) hasDup = true;
+      dup.add(r.threshold);
+    });
+    if(hasDup) {
+      toast({ title: "تحذير", description: "هناك عتبات مكررة للألقاب. تأكد من تفرّدها.", variant: "destructive" });
+      setIsSavingRanks(false);
+      return;
+    }
+
+    const res = await setSocialRanks(sorted);
+    if (res.success) {
+      toast({ title: "تم الحفظ", description: "تم حفظ الألقاب بنجاح." });
+      setRanks(sorted);
+    } else {
+      toast({ title: "فشل الحفظ", description: res.error, variant: "destructive" });
+    }
+    setIsSavingRanks(false);
+  }, [ranks, toast]);
+  
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const isSave = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s";
@@ -416,8 +441,7 @@ export default function AdminStoreClient() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, storeTab, prices, punishmentPrices, ranks]);
+  }, [activeTab, storeTab, prices, punishmentPrices, ranks, handleSaveRanks]);
 
   // -----------------------------
   // Prices helpers
@@ -550,30 +574,7 @@ export default function AdminStoreClient() {
     ]);
   };
 
-  const handleSaveRanks = async () => {
-    setIsSavingRanks(true);
-    const sorted = [...ranks].sort((a, b) => a.threshold - b.threshold);
-    const dup = new Set<number>();
-    let hasDup = false;
-    sorted.forEach((r) => {
-      if (dup.has(r.threshold)) hasDup = true;
-      dup.add(r.threshold);
-    });
-    if(hasDup) {
-      toast({ title: "تحذير", description: "هناك عتبات مكررة للألقاب. تأكد من تفرّدها.", variant: "destructive" });
-      setIsSavingRanks(false);
-      return;
-    }
-
-    const res = await setSocialRanks(sorted);
-    if (res.success) {
-      toast({ title: "تم الحفظ", description: "تم حفظ الألقاب بنجاح." });
-      setRanks(sorted);
-    } else {
-      toast({ title: "فشل الحفظ", description: res.error, variant: "destructive" });
-    }
-    setIsSavingRanks(false);
-  };
+  
 
   const handlePermissionToggle = async (permissionId: string) => {
     if (!selectedRankForPermissions) return;

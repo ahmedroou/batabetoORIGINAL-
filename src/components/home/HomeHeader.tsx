@@ -46,6 +46,7 @@ import {
   X,
   Shield,
   Calendar,
+  Users as UsersIcon, // Renamed to avoid conflict with User icon
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -339,8 +340,8 @@ const MailboxDialog = () => {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleOpen} className="relative" aria-label="فتح صندوق البريد">
-                <MailIcon className="h-6 w-6 text-primary" />
+              <Button variant="ghost" size="icon" onClick={handleOpen} className="relative rounded-full" aria-label="فتح صندوق البريد">
+                <MailIcon className="h-5 w-5" />
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
                     {unreadCount}
@@ -485,6 +486,25 @@ const MailboxDialog = () => {
   );
 };
 
+
+const NavButton = ({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) => (
+    <TooltipProvider>
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <Link href={href} aria-label={label}>
+                    <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 bg-background/5 backdrop-blur-sm hover:bg-primary/10">
+                        <Icon className="h-6 w-6 text-primary" />
+                    </Button>
+                </Link>
+            </TooltipTrigger>
+            <TooltipContent>
+                <p>{label}</p>
+            </TooltipContent>
+        </Tooltip>
+    </TooltipProvider>
+);
+
+
 /*************
  * HomeHeader
  *************/
@@ -501,101 +521,61 @@ export default function HomeHeader({ userProfile }: HomeHeaderProps) {
   };
 
   return (
-    <header
+    <motion.header
       dir="rtl"
-      className="w-full"
+      className="w-full p-4"
+      initial={{ y: -20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
     >
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between rounded-2xl border border-white/10 bg-background/50 px-4 py-2 backdrop-blur-xl shadow-lg">
+        {/* Right side: Main navigation */}
+        <div className="flex items-center gap-1 md:gap-2">
+            <NavButton href="/society" label="المجتمع" icon={UsersIcon} />
+            <NavButton href="/kings" label="قاعة الملوك" icon={Crown} />
+            <NavButton href="/store" label="المتجر" icon={Store} />
+             {userProfile.isAdmin && (
+                <NavButton href="/admin" label="لوحة التحكم" icon={ShieldCheck} />
+             )}
+        </div>
+
+        {/* Center: App Name */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:block">
+            <Link href="/">
+                 <span className="text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-fuchsia-500">
+                    بطابيطو
+                </span>
+            </Link>
+        </div>
+
         {/* Left: User actions */}
         <div className="flex items-center gap-1 md:gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link href="/profile" aria-label="ملفك الشخصي">
-                  <Button variant="ghost" size="icon" className="rounded-xl">
-                    <User className="h-6 w-6 text-primary" />
-                  </Button>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>ملفك الشخصي</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <MailboxDialog />
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={handleSignOut} className="rounded-xl" aria-label="تسجيل الخروج">
-                  <LogOut className="h-6 w-6 text-destructive" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>تسجيل الخروج</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-
-        {/* Center: App Name (visible on medium screens and up) */}
-        <div className="hidden md:block">
-            <span className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-fuchsia-500">
-                بطابيطو
-            </span>
-        </div>
-
-        {/* Right: Main navigation */}
-        <div className="flex items-center gap-1 md:gap-2">
-          {userProfile.isAdmin && (
+            <MailboxDialog />
             <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link href="/admin" aria-label="لوحة تحكم الأدمن">
-                    <Button variant="ghost" size="icon" className="rounded-xl">
-                      <ShieldCheck className="h-6 w-6 text-destructive" />
-                    </Button>
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>لوحة تحكم الأدمن</p>
-                </TooltipContent>
-              </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Link href="/profile" aria-label="ملفك الشخصي">
+                            <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 bg-background/5 backdrop-blur-sm hover:bg-primary/10">
+                                <User className="h-6 w-6 text-primary" />
+                            </Button>
+                        </Link>
+                    </TooltipTrigger>
+                    <TooltipContent><p>ملفك الشخصي</p></TooltipContent>
+                </Tooltip>
             </TooltipProvider>
-          )}
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link href="/kings" aria-label="قاعة الملوك">
-                  <Button variant="ghost" size="icon" className="rounded-xl">
-                    <Crown className="h-6 w-6 text-yellow-400" />
-                  </Button>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>قاعة الملوك</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link href="/store" aria-label="المتجر">
-                  <Button variant="ghost" size="icon" className="rounded-xl">
-                    <Store className="h-6 w-6 text-primary" />
-                  </Button>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>المتجر</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={handleSignOut} className="rounded-full w-11 h-11 bg-background/5 backdrop-blur-sm hover:bg-red-500/10" aria-label="تسجيل الخروج">
+                            <LogOut className="h-6 w-6 text-destructive" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent><p>تسجيل الخروج</p></TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
         </div>
       </div>
     </header>
   );
 }
+

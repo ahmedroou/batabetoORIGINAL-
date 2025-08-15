@@ -32,6 +32,7 @@ import {
   Rocket,
   Keyboard,
   ShoppingCart,
+  Eye,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -254,14 +255,14 @@ function AdminPageContent() {
         {/* Header */}
         <Card className="backdrop-blur supports-[backdrop-filter]:bg-background/70">
           <CardHeader>
-             <div className="flex flex-wrap items-center justify-between gap-4">
+             <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <CardTitle className="text-2xl md:text-3xl">لوحة تحكم الأدمن</CardTitle>
                   <CardDescription>إدارة محتوى اللعبة وإعداداتها.</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="secondary" asChild>
-                      <Link href="/store"><ShoppingCart className="ml-2 h-4 w-4" /> عرض متجر اللاعبين</Link>
+                      <Link href="/store"><Eye className="ml-2 h-4 w-4" /> عرض متجر اللاعبين</Link>
                   </Button>
                   <Button variant="outline" asChild aria-label="إدارة المتجر والألقاب">
                     <Link href="/admin/store">
