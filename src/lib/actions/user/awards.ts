@@ -140,8 +140,16 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     };
 
 
-    Object.keys(updates).forEach(playerId => {
+    Object.keys(finalScores).forEach(playerId => {
         const player = playersToUpdate.find(p => p.id === playerId);
+        if(!updates[playerId]) {
+            updates[playerId] = {
+                leaderboardPoints: 0,
+                coins: 0,
+                gamesPlayed: { [game.gameType]: 1 },
+                challengePoints: 0
+            };
+        }
         if (player) {
             const currentPoints = finalScores[playerId] || 0;
             const awardedPoints = updates[playerId].leaderboardPoints || 0;
@@ -150,15 +158,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             if (newRank) {
                 updates[playerId].permissions = newRank.permissions;
             }
-        } else {
-             // Ensure all players have an entry to avoid crashes, even if no points were awarded.
-            updates[playerId] = {
-                leaderboardPoints: 0,
-                coins: 0,
-                gamesPlayed: { [game.gameType]: 1 },
-                challengePoints: 0
-            };
-        }
+        } 
     });
 
     return { success: true, data: { updates, winUpdate, specialAwards }};
