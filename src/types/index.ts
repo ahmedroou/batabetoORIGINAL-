@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -421,7 +420,8 @@ export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type EducatedMerchantGameState = "lobby" | "rolling" | "movement" | "property_action" | "question" | "turn_end" | "final_results";
-export type QuizSwapGameState = 'lobby' | 'peek' | 'playing' | 'answering' | 'results';
+export type QuizSwapGameState = 'lobby' | 'peek' | 'playing' | 'discarding' | 'answering' | 'final_results';
+
 
 export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState | QuizSwapGameState;
 
@@ -585,10 +585,13 @@ export interface QuizSwapState {
     discardPile: string[];
     round: number;
     turnIndex: number;
-    phase: 'setup' | 'peek' | 'playing' | 'finalize' | 'answering' | 'ended';
+    phase: 'setup' | 'peek' | 'playing' | 'discarding' | 'answering' | 'ended';
     timerEndsAt?: Timestamp;
     endGameRequestedBy?: string; // Player ID who initiated the end game
     log: { t: number; event: string; payload?: any }[];
+    answeringQueue?: string[];
+    currentPlayerAnswering?: string;
+    currentQuestionIndex?: number;
 }
 
 

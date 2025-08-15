@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -74,10 +73,16 @@ export async function startGame(gameId: string, hostId: string) {
     }
     
     const discardPile: string[] = [];
-    const firstDiscard = shuffledDeck.pop();
+    let firstDiscard = shuffledDeck.pop();
+    // Ensure the first discard is not a special card
+    while(firstDiscard && QUIZ_SWAP_DECK_MAP.get(firstDiscard)?.kind === 'special') {
+        shuffledDeck.unshift(firstDiscard); // Put it back at the bottom
+        firstDiscard = shuffledDeck.pop();
+    }
     if (firstDiscard) {
         discardPile.push(firstDiscard.id);
     }
+
 
     const quizSwapState: QuizSwapState = {
       settings: {
@@ -114,19 +119,21 @@ export async function drawFromDeck(gameId: string, playerId: string) {
       const game = gameDoc.data() as Game;
 
       if(!isMyTurn(game, playerId)) throw new Error("Not your turn.");
+      if(game.quizSwapState?.phase !== 'playing') throw new Error("You can only draw during the playing phase.");
 
       const state = game.quizSwapState!;
       const newCardId = state.drawPile.pop();
       if(!newCardId) throw new Error("Draw pile is empty.");
       
       const playerState = requirePlayer(game, playerId);
-      if(playerState.hand.length >= 5) throw new Error("Hand is full.");
       playerState.hand.push(newCardId);
+      
+      const newPhase = playerState.hand.length >= 5 ? 'discarding' : 'playing';
 
       tx.update(gameRef, { 
           'quizSwapState.players': state.players, 
           'quizSwapState.drawPile': state.drawPile,
-          'quizSwapState.phase': 'playing'
+          'quizSwapState.phase': newPhase,
       });
   });
 }
@@ -139,6 +146,7 @@ export async function drawFromDiscard(gameId: string, playerId: string) {
       const game = gameDoc.data() as Game;
       const state = game.quizSwapState!;
       if(state.players[state.turnIndex].id !== playerId) throw new Error("Not your turn.");
+      if(state.phase !== 'playing') throw new Error("You can only draw during the playing phase.");
 
       const newCardId = state.discardPile.pop();
       if(!newCardId) throw new Error("Discard pile is empty.");
@@ -149,13 +157,14 @@ export async function drawFromDiscard(gameId: string, playerId: string) {
       }
       
       const playerState = requirePlayer(game, playerId);
-      if(playerState.hand.length >= 5) throw new Error("Hand is full.");
       playerState.hand.push(newCardId);
+      
+      const newPhase = playerState.hand.length >= 5 ? 'discarding' : 'playing';
 
       tx.update(gameRef, { 
           'quizSwapState.players': state.players, 
           'quizSwapState.discardPile': state.discardPile,
-          'quizSwapState.phase': 'playing'
+          'quizSwapState.phase': newPhase,
         });
   });
 }
@@ -168,7 +177,7 @@ export async function playCard(gameId: string, playerId: string, cardId: string,
         const game = gameDoc.data() as Game;
         const state = game.quizSwapState!;
         if(!isMyTurn(game, playerId)) throw new Error("Not your turn.");
-        if(state.phase !== 'playing') throw new Error("You can only play cards during your turn.");
+        if(state.phase !== 'playing' && state.phase !== 'discarding') throw new Error("You can only play cards during your turn.");
         
         const playerState = requirePlayer(game, playerId);
         const cardIndex = playerState.hand.indexOf(cardId);
@@ -178,10 +187,15 @@ export async function playCard(gameId: string, playerId: string, cardId: string,
         
         // Remove card from hand
         playerState.hand.splice(cardIndex, 1);
-
-        if(card.kind === 'question') {
+        
+        // If discarding, just put it on the pile and go back to playing.
+        if (state.phase === 'discarding') {
             state.discardPile.push(cardId);
-        } else { // Special card
+            state.phase = 'playing';
+        }
+        else if(card.kind === 'question') {
+            state.discardPile.push(cardId);
+        } else { // Special card logic
             switch(card.effect) {
                 case 'PeekSelf':
                     playerState.viewedSelf = [...new Set([...(playerState.viewedSelf || []), cardId])];
@@ -191,35 +205,53 @@ export async function playCard(gameId: string, playerId: string, cardId: string,
                     const targetPlayer = requirePlayer(game, targetPlayerId);
                     if(!targetPlayer.hand[0]) throw new Error("Target player has no cards to peek.");
                     const cardToPeek = targetPlayer.hand[0]; // Peek the first card for simplicity
-                    targetPlayer.viewedByOpp = {
-                        ...targetPlayer.viewedByOpp,
-                        [cardToPeek]: [...(targetPlayer.viewedByOpp[cardToPeek] || []), playerId]
-                    };
+                    const viewedByOpp = targetPlayer.viewedByOpp || {};
+                    viewedByOpp[cardToPeek] = [...(viewedByOpp[cardToPeek] || []), playerId];
+                    targetPlayer.viewedByOpp = viewedByOpp;
                     break;
                 }
                 case 'SwapWithOpponent': {
                     if(!targetPlayerId) throw new Error("Target player required for Swap.");
                     const targetPlayer = requirePlayer(game, targetPlayerId);
-                    if(!targetPlayer.hand.length || playerState.hand.length < 1) throw new Error("Both players must have cards to swap.");
-                    // Simple swap: first card
-                    const myCardToSwap = playerState.hand.pop()!;
-                    const theirCardToSwap = targetPlayer.hand.pop()!;
-                    playerState.hand.push(theirCardToSwap);
-                    targetPlayer.hand.push(myCardToSwap);
+                    // This logic assumes the player playing the Swap card has another card to swap.
+                    const myCardToSwapId = playerState.hand.pop();
+                    if(!myCardToSwapId) throw new Error("You have no card to swap with.");
+
+                    // Choose a random card from target that is not protected
+                    const unprotectedTargetCards = targetPlayer.hand.filter(cid => !targetPlayer.protectedIds?.includes(cid));
+                    if(unprotectedTargetCards.length === 0) throw new Error("Target player has no unprotected cards.");
+
+                    const theirCardToSwapId = unprotectedTargetCards[Math.floor(Math.random() * unprotectedTargetCards.length)];
+                    const theirCardIndex = targetPlayer.hand.indexOf(theirCardToSwapId);
+                    
+                    // Perform the swap
+                    playerState.hand.push(theirCardToSwapId);
+                    targetPlayer.hand.splice(theirCardIndex, 1, myCardToSwapId);
+                    
                     break;
                 }
                 case 'Burden': {
                     if(!targetPlayerId) throw new Error("Target player required for Burden.");
                     const targetPlayer = requirePlayer(game, targetPlayerId);
-                    if(playerState.hand.length < 1) throw new Error("You have no card to give.");
-                    const cardToGive = playerState.hand.pop()!;
-                    targetPlayer.hand.push(cardToGive);
+                    const cardToGiveId = playerState.hand.pop();
+                    if(!cardToGiveId) throw new Error("You have no card to give.");
+                    targetPlayer.hand.push(cardToGiveId);
                     break;
                 }
                 case 'Shield':
                      playerState.protectedIds = [...(playerState.protectedIds || []), cardId];
                      break;
-                // Other effects can be implemented here
+                 case 'Expose': {
+                    if (!targetPlayerId) throw new Error("Target player required for Expose.");
+                    const targetPlayer = requirePlayer(game, targetPlayerId);
+                    const unprotectedTargetCards = targetPlayer.hand.filter(cid => !targetPlayer.protectedIds?.includes(cid));
+                    if (unprotectedTargetCards.length === 0) throw new Error("Target has no unprotected cards to expose.");
+                    const cardToExposeId = unprotectedTargetCards[0];
+                    const existingViewedBy = targetPlayer.viewedByOpp[cardToExposeId] || [];
+                    const viewers = game.players.map(p => p.id).filter(pid => pid !== targetPlayer.id && pid !== playerId); // Expose to everyone except target and self
+                    targetPlayer.viewedByOpp[cardToExposeId] = [...new Set([...existingViewedBy, ...viewers])];
+                    break;
+                }
             }
             if (card.effect !== 'Shield') {
                 state.discardPile.push(cardId);
@@ -229,6 +261,7 @@ export async function playCard(gameId: string, playerId: string, cardId: string,
         tx.update(gameRef, { 'quizSwapState': state });
     });
 }
+
 
 export async function endTurn(gameId: string, playerId: string) {
    const gameRef = doc(db, 'games', gameId);

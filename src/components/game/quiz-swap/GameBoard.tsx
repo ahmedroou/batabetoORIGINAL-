@@ -39,6 +39,9 @@ export function QuizSwapBoard({ game, self }: GameBoardProps) {
   const opponents = players.filter((p) => p.id !== self.id);
   const currentPlayer = players[turnIndex];
   const isMyTurn = currentPlayer?.id === self.id;
+  
+  const isDiscardingPhase = isMyTurn && phase === 'discarding';
+
 
   // top of draw/discard is last element — consistent everywhere
   const topDrawId = drawPile.length > 0 ? drawPile[drawPile.length - 1] : null;
@@ -108,7 +111,11 @@ export function QuizSwapBoard({ game, self }: GameBoardProps) {
   const onEndTurn = () => withSubmission('إنهاء الدور', () => endTurn(game.id, self.id));
 
   // play a card from hand (e.g., when taking / swapping) — generic wrapper
-  const onPlayCard = (cardId: string) => withSubmission('لعب البطاقة', () => playCard(game.id, self.id, cardId));
+  const onPlayCard = (cardId: string) => {
+      withSubmission('لعب البطاقة', () => playCard(game.id, self.id, cardId))
+      .then(() => setSelectedHandCardId(null)); // Deselect card after playing
+  };
+
 
   // keyboard navigation: left/right to cycle selected card
   const selectNext = (dir: number) => {
@@ -131,6 +138,7 @@ export function QuizSwapBoard({ game, self }: GameBoardProps) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedHandCardId, selfState?.hand, isMyTurn, isSubmitting]);
 
   // small utility: render count badge
@@ -186,7 +194,7 @@ export function QuizSwapBoard({ game, self }: GameBoardProps) {
           <div className="w-28 h-40 rounded-lg relative">
             <div className="absolute inset-0 rounded-lg border-2 border-dashed border-gray-600 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
               {topDrawCard ? (
-                <Button variant="ghost" className="w-full h-full" onClick={onDrawFromDeck} disabled={!isMyTurn || isSubmitting} aria-label="اسحب من كومة السحب">
+                <Button variant="ghost" className="w-full h-full" onClick={onDrawFromDeck} disabled={!isMyTurn || isSubmitting || isDiscardingPhase} aria-label="اسحب من كومة السحب">
                   <QuizSwapCardDisplay card={topDrawCard} faceUp={false} />
                 </Button>
               ) : (
@@ -202,7 +210,7 @@ export function QuizSwapBoard({ game, self }: GameBoardProps) {
           <div className="w-28 h-40 rounded-lg relative">
             <div className="absolute inset-0 rounded-lg flex items-center justify-center">
               {topDiscardCard ? (
-                <Button variant="ghost" className="w-full h-full" onClick={onDrawFromDiscard} disabled={!isMyTurn || isSubmitting} aria-label="اسحب من كومة الرمي">
+                <Button variant="ghost" className="w-full h-full" onClick={onDrawFromDiscard} disabled={!isMyTurn || isSubmitting || isDiscardingPhase} aria-label="اسحب من كومة الرمي">
                   <QuizSwapCardDisplay card={topDiscardCard} faceUp={true} />
                 </Button>
               ) : (
@@ -215,7 +223,7 @@ export function QuizSwapBoard({ game, self }: GameBoardProps) {
 
         <div className="flex flex-col items-center gap-2">
           {isMyTurn ? (
-            <Button onClick={onEndTurn} disabled={isSubmitting} aria-label="إنهاء الدور">
+            <Button onClick={onEndTurn} disabled={isSubmitting || isDiscardingPhase}>
               {isSubmitting ? (
                 <Loader2 className="animate-spin" />
               ) : (
@@ -236,6 +244,14 @@ export function QuizSwapBoard({ game, self }: GameBoardProps) {
       {/* Self hand */}
       <div className="flex flex-col items-center w-full">
         <p className="font-bold mb-2">{self.name} (أنت)</p>
+        <AnimatePresence>
+            {isDiscardingPhase && (
+                <motion.div initial={{opacity:0, y:-10}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-10}} className="mb-2 text-center bg-red-800/50 p-2 rounded-md border border-red-500/50">
+                    <p className="font-bold">يدك ممتلئة!</p>
+                    <p className="text-xs">يجب أن ترمي بطاقة لتكمل دورك.</p>
+                </motion.div>
+            )}
+        </AnimatePresence>
         <div className="flex gap-3" role="list" aria-label="يدك">
           {selfState.hand.map((cardId) => {
             const card = QUIZ_SWAP_DECK_MAP.get(cardId);
@@ -245,7 +261,13 @@ export function QuizSwapBoard({ game, self }: GameBoardProps) {
             return (
               <motion.button
                 key={cardId}
-                onClick={() => setSelectedHandCardId(cardId === selectedHandCardId ? null : cardId)}
+                onClick={() => {
+                  if (isDiscardingPhase) {
+                    onPlayCard(cardId);
+                  } else {
+                    setSelectedHandCardId(cardId === selectedHandCardId ? null : cardId);
+                  }
+                }}
                 onDoubleClick={() => isMyTurn && !isSubmitting && onPlayCard(cardId)}
                 className={`relative p-0 rounded outline-none focus:ring-2 focus:ring-offset-2 ${isSelected ? 'ring-4 ring-white/30' : ''}`}
                 aria-pressed={isSelected}
@@ -276,10 +298,12 @@ export function QuizSwapBoard({ game, self }: GameBoardProps) {
         {/* Quick actions for selected card */}
         <div className="mt-4 flex gap-2">
           <Button onClick={() => selectedHandCardId && isMyTurn && onPlayCard(selectedHandCardId)} disabled={!selectedHandCardId || !isMyTurn || isSubmitting}>
-            لعب / استبدال البطاقة المحددة
+            {isDiscardingPhase ? 'تأكيد الرمي' : 'لعب / استبدال البطاقة المحددة'}
           </Button>
 
-          <Button onClick={() => { setSelectedHandCardId(null); }} variant="ghost">إلغاء الاختيار</Button>
+          {!isDiscardingPhase && (
+            <Button onClick={() => { setSelectedHandCardId(null); }} variant="ghost">إلغاء الاختيار</Button>
+          )}
         </div>
       </div>
 
