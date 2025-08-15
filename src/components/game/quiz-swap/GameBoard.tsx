@@ -101,11 +101,13 @@ export function QuizSwapBoard({ game, self }: GameBoardProps) {
       return;
     }
 
-    // confirm because this forces a swap (game rule)
-    const ok = await confirm('سحب البطاقة المكشوفة سيطلب منك استبدالها ببطاقة من يدك — تأكيد؟');
-    if (!ok) return;
+    const handCardToSwap = selectedHandCardId;
+    if(!handCardToSwap) {
+        toast({ title: 'اختر بطاقة', description: 'يجب اختيار بطاقة من يدك لاستبدالها.', variant: 'destructive' });
+        return;
+    }
 
-    return withSubmission('سحب من كومة الرمي', () => drawFromDiscard(game.id, self.id));
+    return withSubmission('سحب من كومة الرمي', () => drawFromDiscard(game.id, self.id, handCardToSwap));
   };
 
   const onEndTurn = () => withSubmission('إنهاء الدور', () => endTurn(game.id, self.id));

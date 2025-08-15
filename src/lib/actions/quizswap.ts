@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -63,7 +64,7 @@ const reshuffleIfNeeded = (state: QuizSwapState) => {
   state.discardPile = [keepTop];
 };
 
-const ensurePhase = (state: QuizSwapState, phases: QuizSwapState['phase'] | QuizSwapState['phase'][]): void => {
+const ensurePhase = (state: QuizSwapState, phases: QuizSwapState['phase'] | QuizSwapState['phase'][]) => {
   const ok = Array.isArray(phases) ? phases.includes(state.phase) : state.phase === phases;
   if (!ok) throw new Error('Invalid phase for this action.');
 };
@@ -203,11 +204,15 @@ export async function drawFromDeck(gameId: string, playerId: string) {
     if (player.hand.length >= 5) throw new Error('Hand is full (max 5 during actions).');
 
     player.hand.push(newCardId);
+    
+    // NEW LOGIC: check for hand size after draw
+    if (player.hand.length >= 5) {
+        state.phase = 'discarding';
+    }
 
     tx.update(gameRef, {
-      'quizSwapState.players': state.players,
-      'quizSwapState.drawPile': state.drawPile,
-      'quizSwapState.phase': 'playing',
+      'quizSwapState': state,
+      'gameState': state.phase
     });
   });
 }
@@ -252,11 +257,12 @@ export async function drawFromDiscard(gameId: string, playerId: string, swapOutC
     player.hand.splice(idx, 1);
 
     discard(state, swapOutCardId);
+    
+    // Hand size does not change, so no need for 'discarding' phase check here.
 
     tx.update(gameRef, {
       'quizSwapState.players': state.players,
       'quizSwapState.discardPile': state.discardPile,
-      'quizSwapState.phase': 'playing',
     });
   });
 }
@@ -283,7 +289,7 @@ export async function playCard(
     if (!isMyTurn(game, playerId)) throw new Error('Not your turn.');
 
     const state = game.quizSwapState!;
-    ensurePhase(state, ['playing']);
+    ensurePhase(state, ['playing', 'discarding']);
 
     const player = requirePlayer(game, playerId);
     ensureCardInHand(player, cardId);
@@ -301,6 +307,11 @@ export async function playCard(
       // Remove & discard
       player.hand.splice(player.hand.indexOf(cardId), 1);
       discard(state, cardId);
+      
+      // If we were in discarding phase, move back to playing
+      if(state.phase === 'discarding') {
+          state.phase = 'playing';
+      }
 
     } else {
       // Special effects
@@ -311,6 +322,9 @@ export async function playCard(
         const i = player.hand.indexOf(cardId);
         if (i >= 0) player.hand.splice(i, 1);
         discard(state, cardId);
+        if(state.phase === 'discarding') {
+            state.phase = 'playing';
+        }
       };
 
       switch (effect) {
@@ -403,6 +417,9 @@ export async function playCard(
           // @ts-expect-error augment
           player.activatedSpecials = Array.from(new Set([...(player.activatedSpecials || []), cardId]));
           // NOTE: do NOT discard the FreeQuestion card; it remains in hand as the slot placeholder
+          if(state.phase === 'discarding') {
+            state.phase = 'playing';
+          }
           break;
         }
         case 'BonusPoint': {
@@ -417,6 +434,9 @@ export async function playCard(
           // mark as activated to prevent re-playing semantics (though it sits in hand)
           // @ts-expect-error augment
           player.activatedSpecials = Array.from(new Set([...(player.activatedSpecials || []), cardId]));
+           if(state.phase === 'discarding') {
+            state.phase = 'playing';
+          }
           break;
         }
         default: {
@@ -426,7 +446,7 @@ export async function playCard(
       }
     }
 
-    tx.update(gameRef, { 'quizSwapState': state });
+    tx.update(gameRef, { 'quizSwapState': state, gameState: state.phase });
   });
 }
 
@@ -441,11 +461,6 @@ export async function endTurn(gameId: string, playerId: string) {
 
     if (!isMyTurn(game, playerId)) throw new Error('Not your turn.');
     ensurePhase(state, ['playing']);
-
-    const me = requirePlayer(game, playerId);
-
-    // Enforce end-of-turn hand-size rules (simple version): cannot end with >4; <4 is allowed but not ideal
-    if (me.hand.length > 4) throw new Error('You must discard down to 4 cards before ending your turn.');
 
     // Advance turn & possibly round
     const nextTurn = (state.turnIndex + 1) % state.players.length;
@@ -563,6 +578,7 @@ export async function submitAnswer(gameId: string, playerId: string, answer: str
         // end game
         finishGame(state, game);
         tx.update(gameRef, { quizSwapState: state, gameState: game.gameState, gameResult: game.gameResult });
+        finalGame = game;
         return;
       } else {
         // advance to next player
@@ -601,6 +617,7 @@ export async function submitAnswer(gameId: string, playerId: string, answer: str
       const nextIdx = queue.indexOf(playerId) + 1;
       if (nextIdx >= queue.length) {
         finishGame(state, game);
+        finalGame = game;
       } else {
         // @ts-expect-error
         state.currentPlayerAnswering = queue[nextIdx];

@@ -817,7 +817,7 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
 };
 
 // Sub-states for Mafia game
-export type MafiaPhase = 'lobby' | 'role_reveal' | 'night' | 'day' | 'execution' | 'final_results';
+export type MafiaPhase = 'lobby' | 'role_reveal' | 'night' | 'day' | 'voting' | 'execution' | 'final_results';
 
 export type DayEventType = 'death' | 'protection' | 'execution' | 'no_execution';
 export interface DayEvent {
