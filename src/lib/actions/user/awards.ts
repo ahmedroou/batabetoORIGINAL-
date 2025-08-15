@@ -33,6 +33,16 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
     let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
     
+    // Initialize updates for all players to avoid undefined errors.
+    playersToUpdate.forEach(p => {
+        updates[p.id] = {
+            leaderboardPoints: 0,
+            coins: 0,
+            gamesPlayed: { [game.gameType]: 1 },
+            challengePoints: 0,
+        };
+    });
+    
     const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
     const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (game.trapAnswerState?.settings?.rounds || 10) <= 7;
     const isEducatedMerchantGame = game.gameType === 'educated-merchant';
@@ -42,13 +52,11 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         // Team-based awards
         const winningTeam = game.gameResult!.winner;
         playersToUpdate.forEach(player => {
-            const points = player.team === winningTeam ? 3 : 0;
-            updates[player.id] = { 
-                leaderboardPoints: points, 
-                coins: player.team === winningTeam ? 2 : 0, 
-                gamesPlayed: { [game.gameType]: 1 },
-                challengePoints: points,
-            };
+            const isWinner = player.team === winningTeam;
+            const points = isWinner ? 3 : 0;
+            updates[player.id].leaderboardPoints = points;
+            updates[player.id].coins = isWinner ? 2 : 0;
+            updates[player.id].challengePoints = points;
         });
     } else {
         // Individual awards
@@ -60,7 +68,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
              const score = finalScores[player.id] || 0;
              if (score !== lastScore) {
                 currentRank = index + 1;
-            } else if (index === 0) { // First player always gets rank 1
+            } else if (index === 0) {
                 currentRank = 1;
             }
             playerRanks.push({ id: player.id, rank: currentRank });
@@ -71,15 +79,16 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             let playerAwards = { leaderboardPoints: 0, coins: 0, challengePoints: 0 };
             
             if (isEducatedMerchantGame) {
-                const tier = (rank - 1) < educatedMerchantAwardTiers.length ? educatedMerchantAwardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
-                playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
-            } else {
-                 if (game.gameType !== 'trap-answer' || !isShortTrapAnswerGame) {
-                     const tier = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
-                     playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
-                 }
+                const tier = (rank - 1) < educatedMerchantAwardTiers.length ? educatedMerchantAwardTiers[rank-1] : null;
+                if(tier) playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
+            } else if (game.gameType !== 'trap-answer' || !isShortTrapAnswerGame) {
+                const tier = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : null;
+                if(tier) playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
             }
-             updates[id] = { ...playerAwards, gamesPlayed: { [game.gameType]: 1 } };
+            
+            updates[id].leaderboardPoints = playerAwards.leaderboardPoints;
+            updates[id].coins = playerAwards.coins;
+            updates[id].challengePoints = playerAwards.challengePoints;
         });
 
         if (playerRanks.length > 0 && playerRanks[0].rank === 1) {
@@ -99,24 +108,20 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
 
         if (Object.keys(trickStats.trickedOthers).length > 0) {
             const deceiverCandidates = Object.entries(trickStats.trickedOthers).sort((a, b) => b[1].length - a[1].length);
-            if (deceiverCandidates.length > 0) {
+            if (deceiverCandidates.length > 0 && deceiverCandidates[0][1].length > 0) {
                 const deceiverId = deceiverCandidates[0][0];
                 const deceiverPlayer = game.players.find(p => p.id === deceiverId);
                 if (deceiverPlayer) {
                     cunningDeceiver = { playerId: deceiverId, name: deceiverPlayer.name, avatarId: deceiverPlayer.avatarId, count: trickStats.trickedOthers[deceiverId]!.length };
-                    if (updates[deceiverId]) {
-                        updates[deceiverId].leaderboardPoints += 1;
-                        updates[deceiverId].challengePoints = (updates[deceiverId].challengePoints || 0) + 1;
-                    } else {
-                        updates[deceiverId] = { leaderboardPoints: 1, coins: 0, gamesPlayed: { [game.gameType]: 1 }, challengePoints: 1 };
-                    }
+                    updates[deceiverId].leaderboardPoints += 1;
+                    updates[deceiverId].challengePoints = (updates[deceiverId].challengePoints || 0) + 1;
                 }
             }
         }
         
         if (Object.keys(trickStats.trickedBy).length > 0) {
             const foolCandidates = Object.entries(trickStats.trickedBy).sort((a, b) => b[1].length - a[1].length);
-            if (foolCandidates.length > 0) {
+            if (foolCandidates.length > 0 && foolCandidates[0][1].length > 0) {
                 const foolId = foolCandidates[0][0];
                 const foolPlayer = game.players.find(p => p.id === foolId);
                 if (foolPlayer) {
@@ -140,16 +145,8 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     };
 
 
-    Object.keys(finalScores).forEach(playerId => {
+    Object.keys(updates).forEach(playerId => {
         const player = playersToUpdate.find(p => p.id === playerId);
-        if(!updates[playerId]) {
-            updates[playerId] = {
-                leaderboardPoints: 0,
-                coins: 0,
-                gamesPlayed: { [game.gameType]: 1 },
-                challengePoints: 0
-            };
-        }
         if (player) {
             const currentPoints = finalScores[playerId] || 0;
             const awardedPoints = updates[playerId].leaderboardPoints || 0;
