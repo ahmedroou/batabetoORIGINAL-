@@ -110,21 +110,18 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
               </div>
 
               {/* وسط: الاسم + الشارة + معلومات مختصرة */}
-              <div className="flex flex-col items-center sm:items-start justify-center text-center sm:text-right">
-                <div className="flex items-center justify-center sm:justify-start flex-wrap gap-2">
-                  <h2 className="text-base sm:text-lg md:text-xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
-                    {userProfile.name}
-                  </h2>
-                  {effectiveCurrentRank && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-sm dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100">
-                      <RankIcon className="w-4 h-4 text-violet-700 dark:text-violet-200" />
-                      {activeDecree?.title ?? effectiveCurrentRank?.name}
-                    </span>
-                  )}
-                </div>
-
-                {/* سطر الإحصاءات المدمج */}
-                <div className="mt-1 flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-1 text-[12px] font-semibold">
+              <div className="flex flex-col items-center justify-center text-center">
+                <h2 className="text-base sm:text-lg md:text-xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
+                  {userProfile.name}
+                </h2>
+                {effectiveCurrentRank && (
+                  <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-sm dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100">
+                    <RankIcon className="w-4 h-4 text-violet-700 dark:text-violet-200" />
+                    {activeDecree?.title ?? effectiveCurrentRank?.name}
+                  </span>
+                )}
+                 {/* سطر الإحصاءات المدمج */}
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[12px] font-semibold">
                   <span className="inline-flex items-center gap-1 text-slate-800 dark:text-slate-200">
                     <CircleDollarSign className="w-4 h-4 text-violet-700 dark:text-violet-300" />
                     {nf.format(userProfile.coins || 0)}
