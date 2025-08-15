@@ -1,6 +1,6 @@
 
 
-"use client";
+'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import type { Game, Player, WordWarCard } from '@/types';
@@ -245,20 +245,14 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
   const isGuideTurn = isMyTurn && isGuide && game.gameState === "guide_turn";
   const isSpectator = !self.team;
 
-  // Timeout handling — host nudges server when timer ends
+  // Timeout handling — any player can now trigger the timeout check
   const onTimeout = useCallback(() => {
-    if (
-      isHost &&
-      (game.gameState === "preparation" ||
-        game.gameState === "guide_turn" ||
-        game.gameState === "guesser_turn")
-    ) {
+      // No need to check for host, the action is now safe for anyone to call
       asAny(wordWarActions).handleTimeout(game.id, self.id, {
         expectedTurnId,
         clientSentAtMs: Date.now(),
       });
-    }
-  }, [game.id, self.id, game.gameState, isHost, expectedTurnId]);
+  }, [game.id, self.id, expectedTurnId]);
 
   useEffect(() => {
     if (game.gameState === "lobby" || game.gameState === "final_results") {

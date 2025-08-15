@@ -33,7 +33,7 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, WordWarCard } from '@/types';
 import { shuffle } from '@/lib/actions/helpers';
-import { updateLeagueScoresForGameEnd } from './user/leagues';
+import { updateLeagueScoresForGameEnd } from './user';
 import { WORD_WAR_WORDS } from '@/data/word-war-words';
 
 // =====================
@@ -466,14 +466,15 @@ export async function endTurn(gameId: string, playerId: string, opts?: { expecte
   });
 }
 
-export async function handleTimeout(gameId: string, hostId: string, opts?: { expectedTurnId?: number; clientSentAtMs?: number }) {
+export async function handleTimeout(gameId: string, actorId: string, opts?: { expectedTurnId?: number; clientSentAtMs?: number }) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (t) => {
     const gameDoc = await t.get(gameRef);
     if (!gameDoc.exists()) return;
     const game = gameDoc.data() as Game;
 
-    ensureHost(game, hostId);
+    // Any player can trigger a timeout check
+    ensurePlayerInGame(game, actorId);
 
     const timer = game.wordWarState?.timer;
     if (!timer?.startedAt || typeof timer.durationSec !== 'number') {
