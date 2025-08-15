@@ -7,16 +7,10 @@ import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId, Challenge, AllegianceRequest } from '@/types';
-import { DEFAULT_SOCIAL_RANKS } from '@/types';
+import { DEFAULT_SOCIAL_RANKS } from '@/data/social-ranks';
 import { getRanks } from '@/lib/actions/user/queries';
 import { getPublishedArticles } from '@/lib/actions/news';
 import { getChallenges } from '@/lib/actions/challenges';
-import { Award, Crown, Diamond, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
-
-
-const iconMap: Record<string, React.ElementType> = {
-    Shield, ShieldCheck, Award, Gem, Crown, Star
-};
 
 
 // This function now lives entirely on the client-side within the Auth provider context.
@@ -87,21 +81,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [socialRanks]);
 
 
-  const mappedSocialRanks = useMemo(() => {
-    return socialRanks.map(rank => ({
-        ...rank,
-        icon: iconMap[rank.icon as any] || Shield
-    }));
-  }, [socialRanks]);
-
-
   const fetchUserProfile = useCallback(async (firebaseUser: User) => {
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       const docSnap = await getDoc(userDocRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
         
-        const currentRank = memoizedGetSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+        const currentRank = memoizedGetSocialRankForUser(data.leaderboardPoints || 0, socialRanks);
         
         setUserProfile({
           uid: firebaseUser.uid,
@@ -142,7 +128,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUserProfile(null);
       }
       setLoading(false);
-  }, [mappedSocialRanks, memoizedGetSocialRankForUser]);
+  }, [socialRanks, memoizedGetSocialRankForUser]);
   
   useEffect(() => {
     const fetchRanks = async () => {
@@ -182,7 +168,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
 
-          const currentRank = memoizedGetSocialRankForUser(data.leaderboardPoints || 0, mappedSocialRanks);
+          const currentRank = memoizedGetSocialRankForUser(data.leaderboardPoints || 0, socialRanks);
 
           const profile: UserProfile = {
             uid: user.uid,
@@ -230,7 +216,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
       return () => unsubscribeProfile();
     }
-  }, [user, mappedSocialRanks, memoizedGetSocialRankForUser]);
+  }, [user, socialRanks, memoizedGetSocialRankForUser]);
   
   
    useEffect(() => {
@@ -312,7 +298,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         user, 
         userProfile, 
         loading, 
-        socialRanks: mappedSocialRanks, 
+        socialRanks, 
         refreshUserProfile, 
         getSocialRankForUser: memoizedGetSocialRankForUser, 
         latestArticleDate, 

@@ -4,6 +4,7 @@ import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
 import type { ALL_PERMISSIONS } from '@/data/permissions';
+import type { DEFAULT_SOCIAL_RANKS, DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES } from '@/data/social-ranks';
 
 
 // Zod Schemas for AI Flows
@@ -218,41 +219,14 @@ export interface Mail {
 export interface SocialRank {
   threshold: number;
   name: string;
-  icon: any; 
+  icon: React.ElementType; 
   permissions: PermissionId[];
 }
 
-export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
-    { threshold: 0, name: 'عامل وضيع', icon: 'Shield', permissions: [] },
-    { threshold: 50, name: 'مواطن صالح', icon: 'ShieldCheck', permissions: [] },
-    { threshold: 150, name: 'شخصية مرموقة', icon: 'Award', permissions: [] },
-    { threshold: 300, name: 'عضو مجلس', icon: 'Gem', permissions: ['can_view_player_balances'] },
-    { threshold: 500, name: 'زعيم المدينة', icon: 'Crown', permissions: ['can_view_player_balances', 'can_force_name_change'] },
-];
+export type { DEFAULT_SOCIAL_RANKS };
+export type { DEFAULT_TRAP_ANSWER_CATEGORIES };
+export type { DEFAULT_EDUCATED_MERCHANT_CATEGORIES };
 
-export const DEFAULT_TRAP_ANSWER_CATEGORIES = [
-    "تاريخ",
-    "رياضة",
-    "أدب",
-    "أنمي ومانجا",
-    "إسلاميات",
-    "فنون",
-    "جغرافيا",
-    "لغة عربية",
-    "معلومات غريبة",
-    "الحيوانات والطبيعة",
-    "النباتات",
-    "المطبخ"
-];
-
-export const DEFAULT_EDUCATED_MERCHANT_CATEGORIES = [
-    "علوم",
-    "رياضيات",
-    "برمجة",
-    "أحياء",
-    "كيمياء",
-    "قسم الغرامات"
-];
 
 export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
 export type PlayerTeam = 'mafia' | 'good' | 'neutral' | 'red' | 'blue';

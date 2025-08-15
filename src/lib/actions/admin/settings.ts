@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -20,7 +21,7 @@ import {
     arrayRemove,
 } from 'firebase/firestore';
 import type { UserProfile, AvatarPrice, SocialRank, TrapQuestion } from '@/types';
-import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, DEFAULT_EDUCATED_MERCHANT_CATEGORIES } from '@/types';
+import { DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_SOCIAL_RANKS, DEFAULT_EDUCATED_MERCHANT_CATEGORIES } from '@/data/social-ranks';
 import { isFirebaseError } from '../helpers';
 
 const normalize = (s: any) => (typeof s === 'string' ? s : String(s ?? '')).trim().replace(/\s+/g, ' ');
@@ -139,10 +140,11 @@ export async function getDefaultAvatar() {
 }
 
 // -- Social Ranks --
-export async function setSocialRanks(ranks: SocialRank[]) {
+export async function setSocialRanks(ranks: Omit<SocialRank, 'icon'>[]) {
     try {
         const ref = doc(db, 'game_settings', 'social_ranks');
-        await setDoc(ref, { list: ranks || [] });
+        const ranksToStore = ranks.map(r => ({...r, icon: (r.icon as any)?.displayName || r.icon}));
+        await setDoc(ref, { list: ranksToStore || [] });
         return { success: true };
     } catch (e) {
         console.error("Error setting social ranks:", e);
@@ -336,7 +338,7 @@ export async function addPermissionToRank(rankName: string, permissionId: string
         const snap = await getDoc(ref);
         if (!snap.exists()) throw new Error('مستند الألقاب غير موجود.');
 
-        const ranks: SocialRank[] = snap.data().list || [];
+        const ranks: Omit<SocialRank, 'icon'>[] = snap.data().list || [];
         const rankIndex = ranks.findIndex(r => r.name === rankName);
         if (rankIndex === -1) throw new Error('لم يتم العثور على الرتبة المحددة.');
 
@@ -345,7 +347,7 @@ export async function addPermissionToRank(rankName: string, permissionId: string
         if (rank.permissions.includes(permissionId as any)) return { success: true }; // Already exists
 
         rank.permissions.push(permissionId as any);
-        ranks[rankIndex] = rank;
+        (ranks as any)[rankIndex] = rank;
         
         await updateDoc(ref, { list: ranks });
         return { success: true };
@@ -365,7 +367,7 @@ export async function removePermissionFromRank(rankName: string, permissionId: s
         const snap = await getDoc(ref);
         if (!snap.exists()) throw new Error('مستند الألقاب غير موجود.');
 
-        const ranks: SocialRank[] = snap.data().list || [];
+        const ranks: Omit<SocialRank, 'icon'>[] = snap.data().list || [];
         const rankIndex = ranks.findIndex(r => r.name === rankName);
         if (rankIndex === -1) throw new Error('لم يتم العثور على الرتبة المحددة.');
 
@@ -373,7 +375,7 @@ export async function removePermissionFromRank(rankName: string, permissionId: s
         if (!rank.permissions) return { success: true }; // Nothing to remove
 
         rank.permissions = rank.permissions.filter(p => p !== permissionId);
-        ranks[rankIndex] = rank;
+        (ranks as any)[rankIndex] = rank;
 
         await updateDoc(ref, { list: ranks });
         return { success: true };

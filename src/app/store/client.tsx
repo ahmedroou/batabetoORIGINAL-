@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -69,7 +70,7 @@ import {
 // -----------------------------
 // Helpers & Maps
 // -----------------------------
-const rankIconMap: Record<string, LucideIcon> = {
+const rankIconMap: Record<string, React.ElementType> = {
   Shield,
   Award,
   Gem,
@@ -206,7 +207,7 @@ const AvatarTile = React.memo(function AvatarTile({
 // Rank Row (with own state)
 // -----------------------------
 interface RankRowProps {
-  rank: SocialRank;
+  rank: Omit<SocialRank, 'icon'> & { icon: string };
   onUpdate: (field: keyof SocialRank, value: any) => void;
   onRemove: () => void;
   disabled?: boolean;
@@ -549,7 +550,7 @@ export default function AdminStoreClient() {
     const last = ranks[ranks.length - 1]?.threshold ?? 0;
     setRanks((prev) => [
       ...prev,
-      { threshold: last + 100, name: "لقب جديد", icon: "Star", permissions: [] },
+      { threshold: last + 100, name: "لقب جديد", icon: Star, permissions: [] },
     ]);
   };
 
@@ -816,8 +817,8 @@ export default function AdminStoreClient() {
                     ) : (
                       ranks.map((rank, index) => (
                         <RankRow
-                          key={`${rank.name}-${index}`}
-                          rank={rank}
+                          key={`${(rank as any).name}-${index}`}
+                          rank={rank as any}
                           onUpdate={(field, value) => handleRankChange(index, field, value)}
                           onRemove={() => handleRemoveRank(index)}
                           disabled={isSavingRanks}

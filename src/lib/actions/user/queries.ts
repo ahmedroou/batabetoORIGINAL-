@@ -5,7 +5,7 @@
 import { db } from '@/lib/firebase';
 import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch, increment, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge, Game, MatchHistoryItem } from '@/types';
-import { DEFAULT_SOCIAL_RANKS } from '@/types';
+import { DEFAULT_SOCIAL_RANKS } from '@/data/social-ranks';
 import { getTopUsers as adminGetTopUsers } from '../admin/users';
 
 
@@ -15,13 +15,10 @@ export async function getRanks(): Promise<SocialRank[]> {
         const docRef = doc(db, 'game_settings', 'social_ranks');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists() && docSnap.data().list?.length > 0) {
-            const storedRanks: SocialRank[] = docSnap.data().list.map((rank: any) => ({
-                permissions: rank.permissions || [],
-                ...rank,
-            }));
+            const storedRanks: SocialRank[] = docSnap.data().list;
             return storedRanks;
         }
-        await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS });
+        await setDoc(docRef, { list: DEFAULT_SOCIAL_RANKS.map(r => ({...r, icon: (r.icon as any)?.displayName || r.icon})) });
         return DEFAULT_SOCIAL_RANKS;
     } catch(e) {
         console.error("Could not fetch ranks, returning default. Error: ", e);
