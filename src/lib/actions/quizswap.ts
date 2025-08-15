@@ -35,7 +35,8 @@ const requireHost = (game: Game, hostId: string) => {
 const isMyTurn = (game: Game, playerId: string): boolean => {
     const state = game.quizSwapState;
     if(!state) return false;
-    return state.players[state.turnIndex].id === playerId;
+    const currentPlayer = state.players[state.turnIndex];
+    return currentPlayer?.id === playerId;
 }
 
 // --- Game Initialization ---
@@ -190,13 +191,16 @@ export async function playCard(gameId: string, playerId: string, cardId: string,
                     const targetPlayer = requirePlayer(game, targetPlayerId);
                     if(!targetPlayer.hand[0]) throw new Error("Target player has no cards to peek.");
                     const cardToPeek = targetPlayer.hand[0]; // Peek the first card for simplicity
-                    targetPlayer.viewedByOpp[cardToPeek] = [...(targetPlayer.viewedByOpp[cardToPeek] || []), playerId];
+                    targetPlayer.viewedByOpp = {
+                        ...targetPlayer.viewedByOpp,
+                        [cardToPeek]: [...(targetPlayer.viewedByOpp[cardToPeek] || []), playerId]
+                    };
                     break;
                 }
                 case 'SwapWithOpponent': {
                     if(!targetPlayerId) throw new Error("Target player required for Swap.");
                     const targetPlayer = requirePlayer(game, targetPlayerId);
-                    if(!targetPlayer.hand.length || !playerState.hand.length) throw new Error("Both players must have cards to swap.");
+                    if(!targetPlayer.hand.length || playerState.hand.length < 1) throw new Error("Both players must have cards to swap.");
                     // Simple swap: first card
                     const myCardToSwap = playerState.hand.pop()!;
                     const theirCardToSwap = targetPlayer.hand.pop()!;
@@ -253,39 +257,33 @@ export async function endTurn(gameId: string, playerId: string) {
 
 export async function requestEndGame(gameId: string, playerId: string) {
     const gameRef = doc(db, 'games', gameId);
-    let finalGame: Game | null = null;
     await runTransaction(db, async (tx) => {
         const gameDoc = await tx.get(gameRef);
         if(!gameDoc.exists()) throw new Error("Game not found.");
         const game = gameDoc.data() as Game;
-        if(game.quizSwapState!.round < game.quizSwapState!.settings.endAfterRounds) {
+        const state = game.quizSwapState!;
+        if(state.round < state.settings.endAfterRounds) {
             throw new Error("Cannot end the game before the minimum number of rounds.");
         }
         
-        const playersWithQuestions = game.quizSwapState!.players.map(p => ({
+        const playersWithQuestions = state.players.map(p => ({
             ...p,
             questionsToAnswer: p.hand.map(cid => QUIZ_SWAP_DECK_MAP.get(cid)).filter((c): c is QuizSwapQuestionCard => !!c && c.kind === 'question')
         }));
         
         const updatedState = {
-            ...game.quizSwapState,
+            ...state,
             phase: 'answering',
             answeringQueue: playersWithQuestions.map(p => p.id),
             currentPlayerAnswering: playersWithQuestions[0]?.id,
             currentQuestionIndex: 0
         };
 
-        finalGame = { ...game, quizSwapState: updatedState, gameState: 'answering' };
-
         tx.update(gameRef, { 
             'quizSwapState': updatedState,
             gameState: 'answering',
         });
     });
-
-    if(finalGame) {
-        await updateLeagueScoresForGameEnd(finalGame);
-    }
 }
 
 export async function submitAnswer(gameId: string, playerId: string, questionId: string, answer: string) {

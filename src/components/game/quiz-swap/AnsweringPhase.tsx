@@ -40,7 +40,7 @@ export function AnsweringPhase({ game, self }: AnsweringPhaseProps) {
             setTimeLeft(prev => {
                 if (prev <= 1) {
                     clearInterval(timer);
-                    // Handle timeout
+                    // Handle timeout on server side if needed
                     return 0;
                 }
                 return prev - 1;
@@ -64,13 +64,14 @@ export function AnsweringPhase({ game, self }: AnsweringPhaseProps) {
     };
     
     if(!isMyTurn) {
+        const currentPlayer = state.players.find(p => p.id === state.currentPlayerAnswering);
         return (
              <Card className="w-full max-w-lg text-center">
                 <CardHeader>
                     <CardTitle>مرحلة الإجابة</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <p className="animate-pulse">في انتظار {state.players.find(p => p.id === state.currentPlayerAnswering)?.name} للإجابة على أسئلته...</p>
+                    <p className="animate-pulse">في انتظار {currentPlayer?.name || 'اللاعب التالي'} للإجابة على أسئلته...</p>
                 </CardContent>
             </Card>
         )
@@ -108,6 +109,7 @@ export function AnsweringPhase({ game, self }: AnsweringPhaseProps) {
                             onChange={(e) => setAnswer(e.target.value)}
                             placeholder="اكتب إجابتك هنا..."
                             disabled={isSubmitting}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAnswerSubmit()}
                         />
                         <Button onClick={handleAnswerSubmit} disabled={isSubmitting || !answer.trim()}>
                             {isSubmitting ? <Loader2 className="animate-spin" /> : "إرسال"}
