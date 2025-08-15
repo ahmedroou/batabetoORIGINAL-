@@ -322,7 +322,6 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
     let gameDataForLeagueUpdate: Game | null = null;
-
     try {
         await runTransaction(db, async (tx) => {
             const gameRef = doc(db, 'games', gameId);
@@ -339,7 +338,9 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             if (currentRound >= totalRounds) {
                 // Game over, calculate awards
                 const allRanks = await getRanks();
-                const finalAwardsResult = calculateEndOfGameAwards(game, allRanks);
+                // Create a temporary game object with the expected structure for award calculation
+                const preppedGameForAwards = { ...game, gameResult: { winner: 'TBD' } };
+                const finalAwardsResult = calculateEndOfGameAwards(preppedGameForAwards, allRanks);
                 const winnerId = finalAwardsResult.data.winUpdate?.userId || '';
 
                 const finalGameData: Game = {
@@ -354,7 +355,8 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
                         },
                     },
                 } as Game;
-
+                
+                // Store the final game data to be used for league score updates after the transaction
                 gameDataForLeagueUpdate = finalGameData;
 
                 tx.update(gameRef, {
@@ -388,9 +390,11 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
             }
         });
 
+        // If the game ended, update league scores outside the main transaction
         if (gameDataForLeagueUpdate) {
             await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
         }
+
     } catch (error) {
         console.error("Error in nextTrapAnswerRound:", error);
         // Optionally re-throw or handle as needed

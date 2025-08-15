@@ -1,7 +1,6 @@
 
 
-import type { Game, SocialRank } from '@/types';
-import { getRanks } from './queries';
+import type { Game, SocialRank, PermissionId } from '@/types';
 
 
 /**
@@ -78,7 +77,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
                  const tier = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
                  playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
             }
-            updates[id] = { ...playerAwards, gamesPlayed: { [game.gameType]: 1 } };
+             updates[id] = { ...playerAwards, gamesPlayed: { [game.gameType]: 1 } };
         });
 
         if (playerRanks.length > 0 && playerRanks[0].rank === 1) {
@@ -149,8 +148,16 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             if (newRank) {
                 updates[playerId].permissions = newRank.permissions;
             }
+        } else {
+             // Ensure all players have an entry to avoid crashes, even if no points were awarded.
+            updates[playerId] = {
+                leaderboardPoints: 0,
+                coins: 0,
+                gamesPlayed: { [game.gameType]: 1 },
+                challengePoints: 0
+            };
         }
     });
 
-    return { updates, winUpdate, specialAwards };
+    return { success: true, data: { updates, winUpdate, specialAwards }};
 }
