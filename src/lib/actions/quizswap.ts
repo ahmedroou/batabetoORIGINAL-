@@ -9,10 +9,10 @@
 
 import { db } from '@/lib/firebase';
 import { doc, runTransaction, Timestamp } from 'firebase/firestore';
-import type { Game, Player, QuizSwapCard, QuizSwapState, QuizSwapPlayerState } from '@/types';
-import { shuffle } from './helpers';
+import type { Game, Player, QuizSwapCard, QuizSwapState, QuizSwapPlayerState, QuizSwapQuestionCard } from '@/types';
+import { shuffle, safeCompareStrings } from './helpers';
 import { QUIZ_SWAP_DECK_MAP, QUIZ_SWAP_DECK } from '@/data/quiz-swap-cards';
-import { updateLeagueScoresForGameEnd } from './user';
+import { updateLeagueScoresForGameEnd } from './user/leagues';
 
 // --- Utilities & Constants ---
 const now = () => Timestamp.now();
@@ -253,6 +253,7 @@ export async function endTurn(gameId: string, playerId: string) {
 
 export async function requestEndGame(gameId: string, playerId: string) {
     const gameRef = doc(db, 'games', gameId);
+    let finalGame: Game | null = null;
     await runTransaction(db, async (tx) => {
         const gameDoc = await tx.get(gameRef);
         if(!gameDoc.exists()) throw new Error("Game not found.");
@@ -260,13 +261,89 @@ export async function requestEndGame(gameId: string, playerId: string) {
         if(game.quizSwapState!.round < game.quizSwapState!.settings.endAfterRounds) {
             throw new Error("Cannot end the game before the minimum number of rounds.");
         }
+        
+        const playersWithQuestions = game.quizSwapState!.players.map(p => ({
+            ...p,
+            questionsToAnswer: p.hand.map(cid => QUIZ_SWAP_DECK_MAP.get(cid)).filter((c): c is QuizSwapQuestionCard => !!c && c.kind === 'question')
+        }));
+        
+        const updatedState = {
+            ...game.quizSwapState,
+            phase: 'answering',
+            answeringQueue: playersWithQuestions.map(p => p.id),
+            currentPlayerAnswering: playersWithQuestions[0]?.id,
+            currentQuestionIndex: 0
+        };
+
+        finalGame = { ...game, quizSwapState: updatedState, gameState: 'answering' };
+
         tx.update(gameRef, { 
-            'quizSwapState.phase': 'answering',
-            'quizSwapState.endGameRequestedBy': playerId
+            'quizSwapState': updatedState,
+            gameState: 'answering',
         });
     });
+
+    if(finalGame) {
+        await updateLeagueScoresForGameEnd(finalGame);
+    }
 }
 
 export async function submitAnswer(gameId: string, playerId: string, questionId: string, answer: string) {
-    // Placeholder for submitting an answer
+    const gameRef = doc(db, 'games', gameId);
+    let finalGame: Game | null = null;
+
+    await runTransaction(db, async (tx) => {
+        const gameDoc = await tx.get(gameRef);
+        if (!gameDoc.exists()) throw new Error("Game not found.");
+        const game = gameDoc.data() as Game;
+
+        const state = game.quizSwapState!;
+        if (state.phase !== 'answering' || state.currentPlayerAnswering !== playerId) {
+            throw new Error("It's not your turn to answer.");
+        }
+        
+        const playerState = requirePlayer(game, playerId);
+        const question = QUIZ_SWAP_DECK_MAP.get(questionId) as QuizSwapQuestionCard;
+        if (!question) throw new Error("Question not found.");
+
+        const isCorrect = safeCompareStrings(answer, question.answer) > 0.7;
+        let scorePenalty = 0;
+        if(!isCorrect) {
+            scorePenalty = state.settings.penalty[question.difficulty];
+        }
+
+        playerState.score -= scorePenalty;
+        playerState.answers = {
+            ...playerState.answers,
+            [questionId]: { answer, isCorrect, time: 0 } // time can be improved
+        };
+        
+        const currentQuestionIndex = (state.currentQuestionIndex || 0) + 1;
+        const playerQuestions = playerState.hand.map(cid => QUIZ_SWAP_DECK_MAP.get(cid)).filter((c): c is QuizSwapQuestionCard => !!c && c.kind === 'question');
+
+        if(currentQuestionIndex >= playerQuestions.length) {
+            // Player finished answering, move to next player or end game
+            const currentAnsweringIdx = state.answeringQueue!.indexOf(playerId);
+            const nextAnsweringIdx = currentAnsweringIdx + 1;
+            if(nextAnsweringIdx >= state.answeringQueue!.length) {
+                // All players finished, end game
+                state.phase = 'final_results';
+                game.gameState = 'final_results';
+                const winner = state.players.sort((a,b) => b.score - a.score)[0];
+                game.gameResult = { winner: winner.id, message: `${winner.name} is the winner!` };
+                finalGame = game;
+            } else {
+                state.currentPlayerAnswering = state.answeringQueue![nextAnsweringIdx];
+                state.currentQuestionIndex = 0;
+            }
+        } else {
+            state.currentQuestionIndex = currentQuestionIndex;
+        }
+
+        tx.update(gameRef, { 'quizSwapState': state, gameState: game.gameState, gameResult: game.gameResult });
+    });
+    
+    if (finalGame) {
+        await updateLeagueScoresForGameEnd(finalGame);
+    }
 }

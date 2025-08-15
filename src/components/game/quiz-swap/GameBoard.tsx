@@ -1,169 +1,306 @@
+"use client";
 
-'use client';
-
-import type { Game, Player, QuizSwapCard, QuizSwapPlayerState } from '@/types';
-import { QUIZ_SWAP_DECK_MAP } from '@/data/quiz-swap-cards';
-import { Button } from '@/components/ui/button';
-import { QuizSwapCardDisplay } from './Card';
-import { AnimatePresence, motion } from 'framer-motion';
-import { drawFromDeck, drawFromDiscard, playCard, endTurn } from '@/lib/actions/quizswap';
-import { useToast } from '@/hooks/use-toast';
-import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { PlayerAvatar } from '../PlayerAvatar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Game, Player } from "@/types";
+import { QUIZ_SWAP_DECK_MAP } from "@/data/quiz-swap-cards";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { QuizSwapCardDisplay } from "./Card";
+import { AnimatePresence, motion } from "framer-motion";
+import { drawFromDeck, drawFromDiscard, playCard, endTurn } from "@/lib/actions/quizswap";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, Shield, Eye } from "lucide-react";
 
 interface GameBoardProps {
-    game: Game;
-    self: Player;
+  game: Game;
+  self: Player;
 }
+
+// Difficulty color map — centralized so it's easy to change
+const DIFFICULTY_COLOR: Record<string, string> = {
+  easy: "#28a745", // أخضر
+  medium: "#ffc107", // أصفر
+  hard: "#dc3545", // أحمر
+};
 
 export function QuizSwapBoard({ game, self }: GameBoardProps) {
-    const { toast } = useToast();
-    const [isSubmitting, setIsSubmitting] = useState<string | boolean>(false);
-    const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
-    const [targetPlayerId, setTargetPlayerId] = useState<string | null>(null);
-    
-    const quizSwapState = game.quizSwapState;
-    if (!quizSwapState) return <div>خطأ: حالة اللعبة غير موجودة.</div>;
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingActionLabel, setPendingActionLabel] = useState<string | null>(null);
+  const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
+  const [confirmTakeDiscard, setConfirmTakeDiscard] = useState(false);
+  const confirmResolveRef = useRef<(v: boolean) => void | null>(null);
 
-    const { players, drawPile, discardPile, turnIndex, phase } = quizSwapState;
-    const selfState = players.find(p => p.id === self.id);
-    const opponents = players.filter(p => p.id !== self.id);
-    const currentPlayer = players[turnIndex];
-    const isMyTurn = currentPlayer?.id === self.id;
-    
-    const topDiscardCard = discardPile.length > 0 ? QUIZ_SWAP_DECK_MAP.get(discardPile[discardPile.length - 1]) : null;
+  const quizSwapState = game.quizSwapState;
+  if (!quizSwapState) return <div role="alert">خطأ: حالة اللعبة غير موجودة.</div>;
 
-    const handleAction = async (action: () => Promise<any>, actionKey: string) => {
-        if (isSubmitting) return;
-        setIsSubmitting(actionKey);
-        try {
-            await action();
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: 'destructive' });
-        } finally {
-            setIsSubmitting(false);
-            setSelectedHandCardId(null);
-            setTargetPlayerId(null);
-        }
+  const { players, drawPile, discardPile, turnIndex, phase, timer } = quizSwapState;
+  const selfState = players.find((p) => p.id === self.id)!;
+  const opponents = players.filter((p) => p.id !== self.id);
+  const currentPlayer = players[turnIndex];
+  const isMyTurn = currentPlayer?.id === self.id;
+
+  // top of draw/discard is last element — consistent everywhere
+  const topDrawId = drawPile.length > 0 ? drawPile[drawPile.length - 1] : null;
+  const topDiscardId = discardPile.length > 0 ? discardPile[discardPile.length - 1] : null;
+  const topDiscardCard = topDiscardId ? QUIZ_SWAP_DECK_MAP.get(topDiscardId) : null;
+  const topDrawCard = topDrawId ? QUIZ_SWAP_DECK_MAP.get(topDrawId) : null;
+
+  // helper: show toast on error
+  const withSubmission = useCallback(async <T,>(label: string, fn: () => Promise<T>) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setPendingActionLabel(label);
+    try {
+      const res = await fn();
+      return res;
+    } catch (err: any) {
+      toast({ title: "خطأ", description: err?.message || String(err), variant: "destructive" });
+      throw err;
+    } finally {
+      setIsSubmitting(false);
+      setPendingActionLabel(null);
+    }
+  }, [isSubmitting, toast]);
+
+  // confirm modal helper for actions that require user confirmation
+  const confirm = useCallback((message: string) => {
+    return new Promise<boolean>((resolve) => {
+      confirmResolveRef.current = resolve;
+      setConfirmTakeDiscard(true);
+      // modal will show message via pendingActionLabel
+      setPendingActionLabel(message);
+    });
+  }, []);
+
+  // wire modal accept/decline
+  useEffect(() => {
+    if (!confirmTakeDiscard) return;
+    // no-op; resolution handled by handlers below
+  }, [confirmTakeDiscard]);
+
+  const handleConfirm = (accepted: boolean) => {
+    setConfirmTakeDiscard(false);
+    setPendingActionLabel(null);
+    if (confirmResolveRef.current) {
+      confirmResolveRef.current(accepted);
+      confirmResolveRef.current = null;
+    }
+  };
+
+  // Actions
+  const onDrawFromDeck = () => withSubmission('سحب من الكومة', () => drawFromDeck(game.id, self.id));
+
+  const onDrawFromDiscard = async () => {
+    if (!topDiscardCard) return;
+    if (topDiscardCard.kind === 'special') {
+      toast({ title: 'غير مسموح', description: 'لا يمكنك سحب بطاقة خاصة من كومة الرمي.', variant: 'destructive' });
+      return;
+    }
+
+    // confirm because this forces a swap (game rule)
+    const ok = await confirm('سحب البطاقة المكشوفة سيطلب منك استبدالها ببطاقة من يدك — تأكيد؟');
+    if (!ok) return;
+
+    return withSubmission('سحب من كومة الرمي', () => drawFromDiscard(game.id, self.id));
+  };
+
+  const onEndTurn = () => withSubmission('إنهاء الدور', () => endTurn(game.id, self.id));
+
+  // play a card from hand (e.g., when taking / swapping) — generic wrapper
+  const onPlayCard = (cardId: string) => withSubmission('لعب البطاقة', () => playCard(game.id, self.id, cardId));
+
+  // keyboard navigation: left/right to cycle selected card
+  const selectNext = (dir: number) => {
+    const hand = selfState.hand;
+    if (!hand || hand.length === 0) return;
+    const idx = selectedHandCardId ? hand.indexOf(selectedHandCardId) : -1;
+    let next = idx + dir;
+    if (next < 0) next = hand.length - 1;
+    if (next >= hand.length) next = 0;
+    setSelectedHandCardId(hand[next]);
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') selectNext(-1);
+      if (e.key === 'ArrowRight') selectNext(1);
+      if (e.key === 'Enter' && selectedHandCardId && isMyTurn && !isSubmitting) {
+        onPlayCard(selectedHandCardId);
+      }
     };
-    
-    const onDrawFromDeck = () => handleAction(() => drawFromDeck(game.id, self.id), 'drawDeck');
-    const onDrawFromDiscard = () => {
-        if(topDiscardCard?.kind === 'special') {
-             toast({ title: "غير مسموح", description: "لا يمكنك سحب بطاقة خاصة من كومة الرمي.", variant: "destructive" });
-             return;
-        }
-        handleAction(() => drawFromDiscard(game.id, self.id), 'drawDiscard');
-    };
-    const onEndTurn = () => handleAction(() => endTurn(game.id, self.id), 'endTurn');
-    
-    const onSelectHandCard = (cardId: string) => {
-        if (!isMyTurn || phase !== 'playing') return;
-        const card = QUIZ_SWAP_DECK_MAP.get(cardId);
-        if (!card) return;
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selectedHandCardId, selfState?.hand, isMyTurn, isSubmitting]);
 
-        if (card.kind === 'special') {
-            const needsTarget = ['PeekOpponent', 'SwapWithOpponent', 'Burden', 'Expose'].includes(card.effect);
-            if (needsTarget) {
-                setSelectedHandCardId(cardId); // Open target selection modal
-            } else {
-                // Play immediately
-                handleAction(() => playCard(game.id, self.id, cardId), `play-${cardId}`);
-            }
-        } else {
-            // It's a question card, just select it to discard
-            setSelectedHandCardId(cardId);
-        }
-    };
+  // small utility: render count badge
+  const CountBadge = ({ count }: { count: number }) => (
+    <div className="absolute -top-2 -right-2 text-xs bg-black/60 px-1 rounded">
+      {count}
+    </div>
+  );
 
-    const onPlaySelectedCard = (targetId?: string) => {
-        if (!selectedHandCardId) return;
-        handleAction(() => playCard(game.id, self.id, selectedHandCardId, targetId), `play-${selectedHandCardId}`);
-    };
-
-
-    return (
-        <>
-        <div className="w-full h-full p-4 flex flex-col items-center justify-between bg-gray-800 text-white">
-            {/* Opponents' hands at the top */}
-            <div className="flex justify-center gap-8">
-                {opponents.map(player => (
-                    <div key={player.id} className="flex flex-col items-center">
-                        <p className="font-bold mb-2">{player.name} {player.id === currentPlayer?.id ? '(دوره)' : ''}</p>
-                        <div className="flex gap-2">
-                            {player.hand.map(cardId => (
-                                <QuizSwapCardDisplay key={cardId} card={QUIZ_SWAP_DECK_MAP.get(cardId)} faceUp={false} />
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Deck and Discard Pile in the middle */}
-            <div className="flex gap-8 my-8 items-center">
-                <div className="flex flex-col items-center">
-                    <p className="font-semibold mb-2">كومة السحب ({drawPile.length})</p>
-                    <div className="w-24 h-36 border-2 border-dashed border-gray-500 rounded-lg flex items-center justify-center">
-                       {drawPile.length > 0 && phase === 'playing' && isMyTurn &&
-                        <Button variant="ghost" className="w-full h-full" onClick={onDrawFromDeck} disabled={!!isSubmitting}>
-                           <QuizSwapCardDisplay card={QUIZ_SWAP_DECK_MAP.get(drawPile[0])} faceUp={false} />
-                        </Button>
-                       }
-                    </div>
-                </div>
-                 <div className="flex flex-col items-center">
-                    <p className="font-semibold mb-2">كومة الرمي</p>
-                     <div className="w-24 h-36">
-                        {topDiscardCard && 
-                        <Button variant="ghost" className="w-full h-full" onClick={onDrawFromDiscard} disabled={!isMyTurn || !!isSubmitting || phase !== 'playing'}>
-                           <QuizSwapCardDisplay card={topDiscardCard} faceUp={true} />
-                        </Button>
-                        }
-                    </div>
-                </div>
-                 {isMyTurn && phase === 'playing' && (
-                     <Button onClick={onEndTurn} disabled={!!isSubmitting}>
-                        {isSubmitting === 'endTurn' ? <Loader2 className="animate-spin" /> : 'إنهاء الدور'}
-                     </Button>
-                 )}
-            </div>
-
-            {/* Self hand at the bottom */}
-            <div className="flex flex-col items-center bg-gray-900/50 p-4 rounded-lg">
-                 <p className="font-bold mb-2">{self.name} (أنت) {isMyTurn ? '(دورك)' : ''}</p>
-                <div className="flex gap-2">
-                    {selfState?.hand.map(cardId => (
-                        <button key={cardId} onClick={() => onSelectHandCard(cardId)} disabled={!isMyTurn || phase !== 'playing' || !!isSubmitting} className={cn(selectedHandCardId === cardId && "ring-2 ring-yellow-400 rounded-lg")}>
-                           <QuizSwapCardDisplay card={QUIZ_SWAP_DECK_MAP.get(cardId)} faceUp={true} />
-                        </button>
-                    ))}
-                </div>
-            </div>
+  // Render
+  return (
+    <div className="w-full h-full p-4 flex flex-col items-center justify-between bg-gray-900 text-white">
+      {/* Turn / timer bar */}
+      <div className="w-full flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="text-sm">اللاعب الحالي: <strong>{currentPlayer?.name}</strong></div>
+          <div className="text-sm">دور: {quizSwapState.round}</div>
         </div>
-        
-        <Dialog open={!!selectedHandCardId && QUIZ_SWAP_DECK_MAP.get(selectedHandCardId)?.kind === 'special' && ['PeekOpponent', 'SwapWithOpponent', 'Burden', 'Expose'].includes(QUIZ_SWAP_DECK_MAP.get(selectedHandCardId)!.effect)} onOpenChange={() => setSelectedHandCardId(null)}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>اختر لاعبًا مستهدفًا</DialogTitle>
-                    <DialogDescription>اختر اللاعب الذي تريد تطبيق تأثير البطاقة عليه.</DialogDescription>
-                </DialogHeader>
-                <div className="flex justify-center gap-4 py-4">
-                    {opponents.map(opp => (
-                         <Button key={opp.id} variant={targetPlayerId === opp.id ? "default" : "outline"} onClick={() => setTargetPlayerId(opp.id)} className="flex flex-col h-24 w-20">
-                            <PlayerAvatar avatarId={opp.avatarId} className="w-12 h-12 mb-1"/>
-                            <span>{opp.name}</span>
-                         </Button>
-                    ))}
-                </div>
-                <Button onClick={() => onPlaySelectedCard(targetPlayerId!)} disabled={!targetPlayerId || !!isSubmitting}>
-                    {isSubmitting ? <Loader2 className="animate-spin" /> : "تأكيد"}
+        <div className="flex items-center gap-2">
+          {/* Timer (server-driven if available) */}
+          <div aria-live="polite" className="text-sm">{isMyTurn ? 'دورك الآن' : 'انتظار'}</div>
+          {typeof timer === 'number' && (
+            <div className="px-2 py-1 bg-black/40 rounded text-sm">
+              {timer}s
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Opponents' hands */}
+      <div className="w-full flex justify-center gap-8">
+        {opponents.map((player) => (
+          <div key={player.id} className="flex flex-col items-center">
+            <p className="font-bold mb-2">{player.name} {player.id === currentPlayer?.id ? '(دوره)' : ''}</p>
+            <div className="flex gap-2" role="list" aria-label={`يد ${player.name}`}>
+              {player.hand.map((cardId) => {
+                const card = QUIZ_SWAP_DECK_MAP.get(cardId);
+                return (
+                  <div key={cardId} role="listitem">
+                    <QuizSwapCardDisplay card={card} faceUp={false} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Middle: draw + discard + actions */}
+      <div className="flex gap-8 my-6 items-center">
+        <div className="flex flex-col items-center relative">
+          <p className="font-semibold mb-2">كومة السحب</p>
+          <div className="w-28 h-40 rounded-lg relative">
+            <div className="absolute inset-0 rounded-lg border-2 border-dashed border-gray-600 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+              {topDrawCard ? (
+                <Button variant="ghost" className="w-full h-full" onClick={onDrawFromDeck} disabled={!isMyTurn || isSubmitting} aria-label="اسحب من كومة السحب">
+                  <QuizSwapCardDisplay card={topDrawCard} faceUp={false} />
                 </Button>
-            </DialogContent>
-        </Dialog>
-        </>
-    );
+              ) : (
+                <div className="text-xs text-gray-500">فارغة</div>
+              )}
+            </div>
+            <div className="absolute -bottom-2 left-2 text-sm text-gray-300">{drawPile.length}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center relative">
+          <p className="font-semibold mb-2">كومة الرمي</p>
+          <div className="w-28 h-40 rounded-lg relative">
+            <div className="absolute inset-0 rounded-lg flex items-center justify-center">
+              {topDiscardCard ? (
+                <Button variant="ghost" className="w-full h-full" onClick={onDrawFromDiscard} disabled={!isMyTurn || isSubmitting} aria-label="اسحب من كومة الرمي">
+                  <QuizSwapCardDisplay card={topDiscardCard} faceUp={true} />
+                </Button>
+              ) : (
+                <div className="text-xs text-gray-500">فارغة</div>
+              )}
+            </div>
+            <div className="absolute -bottom-2 left-2 text-sm text-gray-300">{discardPile.length}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center gap-2">
+          {isMyTurn ? (
+            <Button onClick={onEndTurn} disabled={isSubmitting} aria-label="إنهاء الدور">
+              {isSubmitting ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                'إنهاء الدور'
+              )}
+            </Button>
+          ) : (
+            <div className="text-sm text-gray-400">ليس دورك</div>
+          )}
+
+          {/* Pending action label */}
+          {pendingActionLabel && (
+            <div className="text-xs text-gray-300 mt-1">{pendingActionLabel}</div>
+          )}
+        </div>
+      </div>
+
+      {/* Self hand */}
+      <div className="flex flex-col items-center w-full">
+        <p className="font-bold mb-2">{self.name} (أنت)</p>
+        <div className="flex gap-3" role="list" aria-label="يدك">
+          {selfState.hand.map((cardId) => {
+            const card = QUIZ_SWAP_DECK_MAP.get(cardId);
+            const isSelected = selectedHandCardId === cardId;
+            const difficultyColor = card?.kind === 'question' ? DIFFICULTY_COLOR[card.difficulty] : undefined;
+
+            return (
+              <motion.button
+                key={cardId}
+                onClick={() => setSelectedHandCardId(cardId === selectedHandCardId ? null : cardId)}
+                onDoubleClick={() => isMyTurn && !isSubmitting && onPlayCard(cardId)}
+                className={`relative p-0 rounded outline-none focus:ring-2 focus:ring-offset-2 ${isSelected ? 'ring-4 ring-white/30' : ''}`}
+                aria-pressed={isSelected}
+                aria-label={card?.kind === 'question' ? `بطاقة سؤال - ${card.difficulty}` : `بطاقة خاصة`}
+              >
+                <div style={{ borderColor: difficultyColor }} className="border-2 rounded-lg shadow-md">
+                  <QuizSwapCardDisplay card={card} faceUp={false} />
+                </div>
+
+                {/* difficulty dot */}
+                {card?.kind === 'question' && (
+                  <div title={card.difficulty} style={{ background: difficultyColor }} className="absolute -top-2 -right-2 w-4 h-4 rounded-full border-2 border-black" />
+                )}
+
+                {/* protection / peek icons for owner */}
+                {card && selfState.protectedIds?.includes(cardId) && (
+                  <div className="absolute top-1 left-1"><Shield size={16} /></div>
+                )}
+
+                {card && selfState.viewedSelf?.includes(cardId) && (
+                  <div className="absolute top-1 right-1"><Eye size={16} /></div>
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
+
+        {/* Quick actions for selected card */}
+        <div className="mt-4 flex gap-2">
+          <Button onClick={() => selectedHandCardId && isMyTurn && onPlayCard(selectedHandCardId)} disabled={!selectedHandCardId || !isMyTurn || isSubmitting}>
+            لعب / استبدال البطاقة المحددة
+          </Button>
+
+          <Button onClick={() => { setSelectedHandCardId(null); }} variant="ghost">إلغاء الاختيار</Button>
+        </div>
+      </div>
+
+      {/* Confirm modal (simple inline) */}
+      <AnimatePresence>
+        {confirmTakeDiscard && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/60" onClick={() => handleConfirm(false)} />
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative bg-white text-black rounded-lg p-6 w-96">
+              <h3 className="font-bold mb-3">تأكيد</h3>
+              <p className="mb-4">{pendingActionLabel}</p>
+              <div className="flex justify-end gap-2">
+                <Button onClick={() => handleConfirm(false)} variant="ghost">إلغاء</Button>
+                <Button onClick={() => handleConfirm(true)}>تأكيد</Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
+
+export default QuizSwapBoard;

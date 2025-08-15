@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { QuizSwapLobby } from './Lobby';
 import { QuizSwapBoard } from './GameBoard';
 import { FinalResults } from './FinalResults';
+import { AnsweringPhase } from './AnsweringPhase';
 
 interface QuizSwapGameProps {
     game: Game;
@@ -20,6 +21,8 @@ export function QuizSwapGame({ game, self }: QuizSwapGameProps) {
             case 'peek':
             case 'playing':
                 return <QuizSwapBoard game={game} self={self} />;
+            case 'answering':
+                return <AnsweringPhase game={game} self={self} />;
             case 'final_results':
                  return <FinalResults game={game} self={self} />;
             default:
