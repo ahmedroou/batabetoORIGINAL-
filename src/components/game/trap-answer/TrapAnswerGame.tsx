@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -248,7 +249,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
       <Card className="w-full max-w-lg animate-pop-in relative">
         {game.trapAnswerState?.timerEndsAt && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-            <CountdownTimer expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()} onExpire={onTimeout} />
+            <CountdownTimer gameId={game.id} gameType='trap-answer' expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()} selfId={self.id} isHost={isHost} />
           </div>
         )}
         <CardHeader className="text-center pt-20">
@@ -298,7 +299,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
       <Card className="w-full max-w-lg animate-pop-in relative">
         {game.trapAnswerState?.timerEndsAt && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-            <CountdownTimer expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()} onExpire={onTimeout} />
+            <CountdownTimer gameId={game.id} gameType='trap-answer' expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()} selfId={self.id} isHost={isHost} />
           </div>
         )}
         <CardHeader className="text-center pt-20">
@@ -352,7 +353,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
       <Card className="w-full max-w-lg animate-pop-in relative">
         {game.trapAnswerState?.timerEndsAt && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-            <CountdownTimer expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()} onExpire={onTimeout} />
+            <CountdownTimer gameId={game.id} gameType='trap-answer' expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()} selfId={self.id} isHost={isHost} />
           </div>
         )}
         <CardHeader className="text-center pt-20">
@@ -730,7 +731,6 @@ function TrapAnswerLobby({ game, self }: { game: Game; self: Player }) {
     [game?.players]
   );
 
-  // الإعدادات الافتراضية مع حراسة
   const defaultSettings = useMemo(
     () => ({ categories: [] as string[], rounds: 10, answerTime: 60 }),
     []

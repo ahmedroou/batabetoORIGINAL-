@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -32,7 +33,9 @@ import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { calculateTrapAnswerScores } from './helpers/trap-answer-helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { getTrapAnswerCategories } from './admin/settings';
-import { getRanks } from './user';
+import { getRanks, recordMatchHistory } from './user/queries';
+import { calculateEndOfGameAwards } from './user/awards';
+
 
 // -----------------------------------------------------------------------------
 // Constants & small helpers
@@ -425,42 +428,36 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
       const totalRounds = (game as any)[FIELD_TRAP_STATE]?.settings?.rounds || 10;
 
       if (currentRound >= totalRounds) {
-        // ------------------------ Game Over ------------------------
-        // Compute final awards/winner (kept simple + robust)
+        // --- GAME OVER ---
         const allRanks = await getRanks();
-        const finalAwardsResult = await calculateEndOfGameAwardsSafe(game, allRanks);
+        const awardsResult = calculateEndOfGameAwards(game, allRanks);
+        
+        const finalAwards = awardsResult.data.specialAwards;
+        const winUpdate = awardsResult.data.winUpdate;
 
-        const finalGameData: Game = {
-          ...game,
-          gameState: 'final_results',
-          gameResult: {
-            winner: finalAwardsResult.data.winUpdate?.userId || '',
-            message: 'انتهت اللعبة',
-          },
-          trapAnswerState: {
-            ...(game as any).trapAnswerState,
-            finalAwards: {
-              ...finalAwardsResult.data.specialAwards,
-              afkStats: ((game as any).trapAnswerState?.afkStats || {}),
-            },
-          },
+        gameDataForLeagueUpdate = {
+            ...game,
+            gameState: 'final_results',
+            gameResult: { winner: winUpdate?.userId || 'none', message: 'انتهت اللعبة'},
+            trapAnswerState: {
+                ...(game as any).trapAnswerState,
+                finalAwards: {
+                    ...finalAwards,
+                    afkStats: (game as any).trapAnswerState?.afkStats || {}
+                },
+            }
         } as Game;
-
-        gameDataForLeagueUpdate = finalGameData; // used outside tx
-
+        
         tx.update(gameRef, {
-          gameState: 'final_results',
-          gameResult: finalGameData.gameResult,
-          [`${FIELD_TRAP_STATE}.finalAwards`]: finalGameData.trapAnswerState!.finalAwards,
-          [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
-          [`${FIELD_TRAP_STATE}.reactions`]: {},
+            gameState: 'final_results',
+            gameResult: gameDataForLeagueUpdate.gameResult,
+            [`${FIELD_TRAP_STATE}.finalAwards`]: gameDataForLeagueUpdate.trapAnswerState!.finalAwards,
+            [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
         });
       } else {
-        // ------------------------ Next Round ------------------------
+        // --- NEXT ROUND ---
         const nextTurnIndex = (((game as any)[FIELD_TRAP_STATE]?.currentTurnIndex || 0) + 1) % game.players.length;
         const availableCategories = (game as any)[FIELD_TRAP_STATE]?.settings?.categories || [];
-
-        // If settings.categories is empty, fallback to 5 random from last round's list (or empty)
         const sourceCats: string[] = Array.isArray(availableCategories) && availableCategories.length > 0
           ? availableCategories
           : (((game as any)[FIELD_TRAP_STATE]?.fiveRandomCategories as string[]) || []);
@@ -478,7 +475,6 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
           [`${FIELD_TRAP_STATE}.selectedCategory`]: deleteField(),
           [`${FIELD_TRAP_STATE}.currentQuestion`]: deleteField(),
           [`${FIELD_TRAP_STATE}.timerEndsAt`]: tsFromNowS(CATEGORY_SELECTION_TIME_S),
-          [`${FIELD_TRAP_STATE}.reactions`]: {},
           [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
           [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
           [`${FIELD_TRAP_STATE}.awayPlayerIdsInAnsweringPhase`]: [],
@@ -486,13 +482,11 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
       }
     });
 
-    // If the game ended, update league scores outside the main transaction
     if (gameDataForLeagueUpdate) {
       await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
     }
   } catch (error) {
     console.error('Error in nextTrapAnswerRound:', error);
-    // Swallow intentionally; callers can observe state transitions
   }
 }
 
@@ -504,13 +498,13 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
-    if (!snap.exists()) return; // original benign behavior
+    if (!snap.exists()) return;
 
     const game = snap.data() as Game;
     const timerEndsAt = (game as any)[FIELD_TRAP_STATE]?.timerEndsAt as Timestamp | undefined;
-    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return; // not due yet
+    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
 
-    if (game.hostId !== hostId) return; // host-only
+    if (game.hostId !== hostId) return;
 
     // Clear timer first
     tx.update(gameRef, { [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField() });
@@ -523,10 +517,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
       const answerTime = (game as any)[FIELD_TRAP_STATE]?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
       const newTimer = tsFromNowS(answerTime);
 
-      // Fetch question OUTSIDE tx — but we're inside. To keep tx hygiene, do a two-phase approach:
-      // We set a placeholder state then return; a follow-up update happens after the transaction.
       tx.update(gameRef, {
-        // move to intermediary so UI knows a question is being prepared; but to keep compatibility we directly set answer-submission
         gameState: 'answer-submission',
         [`${FIELD_TRAP_STATE}.selectedCategory`]: randomCategory,
         [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
@@ -535,8 +526,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
         [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
         [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
       });
-
-      // Note: We cannot await external I/O inside tx reliably; use post-tx continuation below
     } else if (game.gameState === 'answer-submission') {
       await _advanceToGuessing(tx, gameRef, game, true);
     } else if (game.gameState === 'guessing') {
@@ -544,7 +533,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
     }
   });
 
-  // Post-transaction continuation for category-selection timeout fetching question
   const snap2 = await getDocs(query(collection(db, 'games'), where('__name__', '==', gameId)));
   if (!snap2.empty) {
     const g = snap2.docs[0].data() as Game;
@@ -695,78 +683,4 @@ async function _advanceToResults(
     [`${FIELD_TRAP_STATE}.afkStats`]: afkStats,
     [`${FIELD_TRAP_STATE}.reactions`]: {},
   });
-}
-
-// -----------------------------------------------------------------------------
-// Finals computation (replacement for missing calculateEndOfGameAwards)
-// -----------------------------------------------------------------------------
-
-/**
- * Calculates end-of-game awards in a resilient way if helper is missing.
- * Keeps output shape compatible with UI expectations used in this code.
- */
-async function calculateEndOfGameAwardsSafe(
-  game: Game,
-  allRanks: SocialRank[]
-): Promise<{
-  data: {
-    winUpdate?: { userId: string };
-    specialAwards: Record<string, any>;
-  };
-}> {
-  const scores = game.playerScores || {};
-  const entries = Object.entries(scores);
-  let winner: string | undefined;
-
-  if (entries.length > 0) {
-    entries.sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
-    winner = entries[0][0];
-  }
-
-  const trickStats = (game as any)[FIELD_TRAP_STATE]?.trickStats || { trickedOthers: {}, trickedBy: {} };
-  const afkStats = (game as any)[FIELD_TRAP_STATE]?.afkStats || {};
-
-  // Simple awards derived from available data
-  const mostAFK = pickMaxKey(afkStats);
-  const trickMaster = pickMaxKey(mapToCounts(trickStats.trickedOthers));
-  const mostGullible = pickMaxKey(mapToCounts(trickStats.trickedBy));
-
-  const specialAwards = {
-    winner,
-    mostAFK: mostAFK ?? null,
-    trickMaster: trickMaster ?? null,
-    mostGullible: mostGullible ?? null,
-    // Keep a place for rank suggestions if your UI needs it
-    suggestedRankUp: suggestRankUp(winner, allRanks),
-  } as Record<string, any>;
-
-  return {
-    data: {
-      winUpdate: winner ? { userId: winner } : undefined,
-      specialAwards,
-    },
-  };
-}
-
-function pickMaxKey(map: Record<string, number> | undefined): string | undefined {
-  if (!map) return undefined;
-  let topKey: string | undefined;
-  let topVal = -Infinity;
-  for (const [k, v] of Object.entries(map)) {
-    const nv = typeof v === 'number' ? v : 0;
-    if (nv > topVal) { topVal = nv; topKey = k; }
-  }
-  return topKey;
-}
-
-function mapToCounts(map: Record<string, string[]>) {
-  const counts: Record<string, number> = {};
-  Object.entries(map || {}).forEach(([k, arr]) => { counts[k] = Array.isArray(arr) ? arr.length : 0; });
-  return counts;
-}
-
-function suggestRankUp(userId: string | undefined, ranks: SocialRank[]) {
-  if (!userId) return null;
-  // Placeholder: apps can hook real logic here
-  return { userId, suggested: ranks?.[0]?.name ?? null };
 }
