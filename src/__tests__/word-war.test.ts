@@ -186,7 +186,7 @@ describe('Word War - End of Game Awards', () => {
         const game = createMockGame(mockPlayers, {red: 'p1', blue: 'p3'}, mockCards);
         game.gameResult = { winner: 'red', message: 'الفريق الأحمر فاز!' };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(game, []);
+        const { data: { updates, winUpdate } } = calculateEndOfGameAwards(game, []);
         
         // Red team (winners)
         expect(updates['p1'].leaderboardPoints).toBe(3);

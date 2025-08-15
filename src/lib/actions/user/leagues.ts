@@ -321,10 +321,13 @@ export async function distributeEndOfGameAwards(game: Game) {
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     if (playersToUpdate.length === 0) return;
     
-    // This is a READ operation, which is why it was causing transaction errors.
     const allRanks = await getRanks();
+    const { data: awards } = calculateEndOfGameAwards(game, allRanks);
+    
+    if(!awards) return;
 
-    const { updates, winUpdate, specialAwards } = calculateEndOfGameAwards(game, allRanks);
+    const { updates, winUpdate, specialAwards } = awards;
+
     const batch = writeBatch(db);
 
     const shouldUpdateChallenges = Object.values(updates).some(upd => (upd.challengePoints || 0) > 0);
@@ -405,7 +408,7 @@ export async function updateLeagueScoresForGameEnd(game: Game) {
     if(playersWithLeagues.length === 0) return;
     
     const allRanks = await getRanks();
-    const { updates } = calculateEndOfGameAwards(game, allRanks);
+    const { data: { updates } } = calculateEndOfGameAwards(game, allRanks);
     
     const batch = writeBatch(db);
 
@@ -428,5 +431,3 @@ export async function updateLeagueScoresForGameEnd(game: Game) {
         console.error("Error updating league scores after game end:", error);
     }
 }
-
-    

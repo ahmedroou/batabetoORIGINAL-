@@ -253,7 +253,7 @@ describe('Behind The Mask - Win Conditions & Awards', () => {
             gameResult: { winner: 'good', message: 'Good team wins!' }
         };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game, []);
+        const { data: { updates, winUpdate } } = calculateEndOfGameAwards(mockGame as Game, []);
         
         // Good team members get awards
         expect(updates['p1'].leaderboardPoints).toBe(3);
@@ -281,7 +281,7 @@ describe('Behind The Mask - Win Conditions & Awards', () => {
             gameResult: { winner: 'mafia', message: 'Mafia team wins!' }
         };
 
-        const { updates } = calculateEndOfGameAwards(mockGame as Game, []);
+        const { data: { updates } } = calculateEndOfGameAwards(mockGame as Game, []);
         
         // Good team member gets no awards
         expect(updates['p1'].leaderboardPoints).toBe(0);

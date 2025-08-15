@@ -9,6 +9,8 @@
  * ✔️ Zero unused imports & tighter types
  */
 
+import type { Timestamp } from "firebase/firestore";
+
 // ---------------------------------------------------------------------------
 // Random utilities
 // ---------------------------------------------------------------------------
@@ -98,6 +100,15 @@ export function secureRandomInt(maxExclusive: number): number {
     sorted.forEach((p, i) => { playerMap[p.id] = `لاعب ${i + 1}`; });
     return playerMap;
   }
+
+/**
+ * Returns an array of active players.
+ * @param game The game object.
+ * @returns An array of active players.
+ */
+export const getActivePlayers = (game: Game): Player[] => {
+    return game.players.filter((player) => player.status === 'alive');
+};
   
   // ---------------------------------------------------------------------------
   // Text normalization & similarity
@@ -176,3 +187,11 @@ export function secureRandomInt(maxExclusive: number): number {
     return jaccardSimilarity(a, b);
   }
   
+  /**
+ * Gets a Timestamp from a given number of seconds in the future.
+ * @param {number} seconds - The number of seconds from now.
+ * @returns {Timestamp} A Firestore Timestamp object.
+ */
+export const tsFromNowS = (seconds: number): Timestamp => {
+    return Timestamp.fromMillis(Date.now() + seconds * 1000);
+};

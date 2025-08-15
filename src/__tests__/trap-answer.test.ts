@@ -230,7 +230,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game, []);
+        const { data: { updates, winUpdate } } = calculateEndOfGameAwards(mockGame as Game, []);
 
         expect(updates['p1']?.leaderboardPoints).toBe(3);
         expect(updates['p1']?.coins).toBe(2);
@@ -262,7 +262,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game, []);
+        const { data: { updates, winUpdate } } = calculateEndOfGameAwards(mockGame as Game, []);
 
         expect(updates['p1'].leaderboardPoints).toBe(3);
         expect(updates['p2'].leaderboardPoints).toBe(2);
@@ -291,7 +291,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
 
-        const { updates, specialAwards } = calculateEndOfGameAwards(mockGame as Game, []);
+        const { data: { updates, specialAwards } } = calculateEndOfGameAwards(mockGame as Game, []);
 
         // p1 gets 3 points for 1st place + 1 bonus point
         expect(updates['p1'].leaderboardPoints).toBe(3 + 1);

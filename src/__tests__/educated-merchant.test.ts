@@ -254,7 +254,7 @@ describe('Educated Merchant - End of Game Awards', () => {
         game.playerScores = { p1: 5000, p2: 3000, p3: 1000 };
         game.gameResult = { winner: 'p1', message: 'Game Over' };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(game, []);
+        const { data: { updates, winUpdate } } = calculateEndOfGameAwards(game, []);
         
         // P1 (1st)
         expect(updates['p1'].leaderboardPoints).toBe(4);
@@ -276,7 +276,7 @@ describe('Educated Merchant - End of Game Awards', () => {
         game.playerScores = { p1: 5000, p2: 3000, p3: 3000 }; // p2 and p3 tied for 2nd
         game.gameResult = { winner: 'p1', message: 'Game Over' };
 
-        const { updates } = calculateEndOfGameAwards(game, []);
+        const { data: { updates } } = calculateEndOfGameAwards(game, []);
         
         // P1 (1st)
         expect(updates['p1'].leaderboardPoints).toBe(4);
