@@ -11,14 +11,14 @@ import type { Game, SocialRank, PermissionId } from '@/types';
  */
 export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     const finalScores = game.playerScores || {};
-    // Get all player IDs that have a score.
-    const playerIdsWithScores = Object.keys(finalScores);
+    // This now correctly gets all player IDs from the game object itself.
+    const playerIdsInGame = game.players.map(p => p.id);
 
     const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<string, number>, challengePoints?: number, permissions?: PermissionId[] }> = {};
     
-    // Ensure every player in the game has an entry in `updates`.
-    game.players.forEach(p => {
-        updates[p.id] = {
+    // Initialize updates for all players in the game.
+    playerIdsInGame.forEach(pid => {
+        updates[pid] = {
             leaderboardPoints: 0,
             coins: 0,
             gamesPlayed: { [game.gameType]: 1 },
@@ -60,7 +60,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         });
     } else {
         // Individual awards
-        const sortedPlayerIds = playerIdsWithScores.sort((a, b) => (finalScores[b] || 0) - (finalScores[a] || 0));
+        const sortedPlayerIds = Object.keys(finalScores).sort((a, b) => (finalScores[b] || 0) - (finalScores[a] || 0));
         const playerRanks: { id: string, rank: number }[] = [];
         let currentRank = 0;
         let lastScore = Infinity;
