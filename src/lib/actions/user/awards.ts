@@ -11,26 +11,23 @@ import type { Game, SocialRank, PermissionId } from '@/types';
  */
 export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     const finalScores = game.playerScores || {};
-    // Ensure we consider all players who have a score, even if they left.
+    // Get all player IDs that have a score.
     const playerIdsWithScores = Object.keys(finalScores);
-    const playersInGame = game.players.filter(p => playerIdsWithScores.includes(p.id));
-
-    // Sort players by final score
-    const sortedPlayerIds = playerIdsWithScores.sort((a, b) => (finalScores[b] || 0) - (finalScores[a] || 0));
 
     const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<string, number>, challengePoints?: number, permissions?: PermissionId[] }> = {};
-    let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
-    let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
     
-    // Initialize updates for all players to avoid undefined errors.
-    playerIdsWithScores.forEach(id => {
-        updates[id] = {
+    // Ensure every player in the game has an entry in `updates`.
+    game.players.forEach(p => {
+        updates[p.id] = {
             leaderboardPoints: 0,
             coins: 0,
             gamesPlayed: { [game.gameType]: 1 },
             challengePoints: 0,
         };
     });
+
+    let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
+    let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
     
     const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
     const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (game.trapAnswerState?.settings?.rounds || 10) <= 7;
@@ -53,7 +50,8 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     if (isTeamGame) {
         // Team-based awards
         const winningTeam = game.gameResult!.winner;
-        playersInGame.forEach(player => {
+        game.players.forEach(player => {
+            if (!player.team) return;
             const isWinner = player.team === winningTeam;
             const points = isWinner ? 3 : 0;
             updates[player.id].leaderboardPoints = points;
@@ -62,6 +60,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         });
     } else {
         // Individual awards
+        const sortedPlayerIds = playerIdsWithScores.sort((a, b) => (finalScores[b] || 0) - (finalScores[a] || 0));
         const playerRanks: { id: string, rank: number }[] = [];
         let currentRank = 0;
         let lastScore = Infinity;
@@ -146,7 +145,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
 
 
     Object.keys(updates).forEach(playerId => {
-        const player = playersInGame.find(p => p.id === playerId);
+        const player = game.players.find(p => p.id === playerId);
         if (player) {
             const currentPoints = finalScores[playerId] || 0;
             const awardedPoints = updates[playerId].leaderboardPoints || 0;
