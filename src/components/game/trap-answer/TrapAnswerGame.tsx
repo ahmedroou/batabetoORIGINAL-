@@ -71,7 +71,6 @@ import { DEFAULT_TRAP_ANSWER_CATEGORIES } from '@/data/social-ranks';
  * - تصحيح مشاكل types مثل hasOwnProperty على كائنات اختيارية.
  * - تحسين عرض النتائج النهائية والتعامل مع حالات عدم وجود فائز/لاعبين.
  * - تنظيف التبعيات في hooks ومنع الحالات الحديّة عند المؤقّت والتفاعلات.
- * - تحسين تجربة المستخدم برسائل واضحة وحالات تحميل.
  */
 
 // أدوات مساعدة صغيرة
@@ -587,19 +586,21 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     const sortedPlayers = [...(game.players ?? [])]
       .map((p) => ({ ...p, score: game.playerScores?.[p.id] ?? 0 }))
       .sort((a, b) => b.score - a.score);
-
+  
     let rank = 0;
-    let lastScore = Number.POSITIVE_INFINITY; // لبدء الترتيب الصحيح
-
+    let lastScore = Number.POSITIVE_INFINITY;
+  
     const rankedPlayers = sortedPlayers.map((p, index) => {
-      if (p.score !== lastScore) rank = index + 1;
+      if (p.score !== lastScore) {
+        rank = index + 1;
+      }
       lastScore = p.score;
       return { ...p, rank };
     });
-
+  
     const winner = rankedPlayers[0];
-    const { cunningDeceiver, deceivedFool, afkStats } = game.trapAnswerState?.finalAwards ?? {} as any;
-
+    const { cunningDeceiver, deceivedFool, afkStats } = game.trapAnswerState?.finalAwards ?? {};
+  
     const afkPlayers = Object.entries(afkStats ?? {})
       .map(([playerId, count]) => {
         const pl = game.players.find((pp) => pp.id === playerId);
@@ -608,7 +609,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
       .filter(isDefined)
       .sort((a, b) => b.afkCount - a.afkCount)
       .slice(0, 3);
-
+  
     return (
       <Card className="w-full max-w-2xl animate-pop-in">
         <CardHeader className="text-center">
@@ -618,28 +619,42 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
-            {cunningDeceiver && (
-              <div className="p-3 rounded-lg bg-red-100 border border-red-300">
-                <h3 className="font-bold text-red-800 flex items-center justify-center gap-2">
-                  <VenetianMask /> المخادع المكار
-                </h3>
-                <PlayerAvatar avatarId={cunningDeceiver.avatarId} className="w-16 h-16 mx-auto my-2" />
-                <p className="font-bold text-lg">{cunningDeceiver.name}</p>
-                <p className="text-sm text-muted-foreground">خدع {cunningDeceiver.count} لاعبين</p>
-              </div>
-            )}
-            {deceivedFool && (
-              <div className="p-3 rounded-lg bg-blue-100 border border-blue-300">
-                <h3 className="font-bold text-blue-800 flex items-center justify-center gap-2">
-                  <UserRound /> الأبله المخدوع
-                </h3>
-                <PlayerAvatar avatarId={deceivedFool.avatarId} className="w-16 h-16 mx-auto my-2" />
-                <p className="font-bold text-lg">{deceivedFool.name}</p>
-                <p className="text-sm text-muted-foreground">وقع في الفخ {deceivedFool.count} مرات</p>
-              </div>
-            )}
+            {/* Cunning Deceiver Card */}
+            <div className="p-3 rounded-lg bg-red-100 border border-red-300">
+              <h3 className="font-bold text-red-800 flex items-center justify-center gap-2">
+                <VenetianMask /> المخادع المكار
+              </h3>
+              {cunningDeceiver ? (
+                <>
+                  <PlayerAvatar avatarId={cunningDeceiver.avatarId} className="w-16 h-16 mx-auto my-2" />
+                  <p className="font-bold text-lg">{cunningDeceiver.name}</p>
+                  <p className="text-sm text-muted-foreground">خدع {cunningDeceiver.count} لاعبين</p>
+                </>
+              ) : (
+                <div className="py-8">
+                  <p className="text-muted-foreground">لا يوجد فائز بهذا اللقب</p>
+                </div>
+              )}
+            </div>
+            {/* Deceived Fool Card */}
+            <div className="p-3 rounded-lg bg-blue-100 border border-blue-300">
+              <h3 className="font-bold text-blue-800 flex items-center justify-center gap-2">
+                <UserRound /> الأبله المخدوع
+              </h3>
+              {deceivedFool ? (
+                <>
+                  <PlayerAvatar avatarId={deceivedFool.avatarId} className="w-16 h-16 mx-auto my-2" />
+                  <p className="font-bold text-lg">{deceivedFool.name}</p>
+                  <p className="text-sm text-muted-foreground">وقع في الفخ {deceivedFool.count} مرات</p>
+                </>
+              ) : (
+                <div className="py-8">
+                  <p className="text-muted-foreground">لا يوجد فائز بهذا اللقب</p>
+                </div>
+              )}
+            </div>
           </div>
-
+  
           {afkPlayers.length > 0 && (
             <div className="p-3 rounded-lg bg-yellow-100 border border-yellow-300 mt-4">
               <h3 className="font-bold text-yellow-800 flex items-center justify-center gap-2">
@@ -658,7 +673,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
               </div>
             </div>
           )}
-
+  
           <div className="space-y-2 pt-4">
             <h3 className="font-bold text-center">الترتيب النهائي</h3>
             {rankedPlayers.length === 0 && (
@@ -833,7 +848,7 @@ function TrapAnswerLobby({ game, self }: { game: Game; self: Player }) {
     <>
       <Card className="w-full max-w-2xl">
         <CardHeader className="text-center">
-          <CardTitle className="text-صxl md:text-2xl">غرفة لعبة: الجواب المفخخ</CardTitle>
+          <CardTitle className="text-xl md:text-2xl">غرفة لعبة: الجواب المفخخ</CardTitle>
           <CardDescription>ادعُ أصدقاءك للانضمام باستخدام معرف الغرفة</CardDescription>
           <div
             className="flex items-center justify-center gap-2 mt-2 p-2 bg-muted rounded-md cursor-pointer hover:bg-muted/80"
