@@ -70,12 +70,20 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         playerRanks.forEach(({ id, rank }) => {
             let playerAwards = { leaderboardPoints: 0, coins: 0, challengePoints: 0 };
             
+            // AFK Check for Trap Answer game
+            if (game.gameType === 'trap-answer') {
+                const afkCount = game.trapAnswerState?.afkStats?.[id] || 0;
+                if (afkCount >= 3) {
+                    updates[id] = { ...playerAwards, gamesPlayed: { [game.gameType]: 1 }};
+                    return; // Skip awards for this AFK player
+                }
+            }
+            
             if (isEducatedMerchantGame) {
                 const tier = (rank - 1) < educatedMerchantAwardTiers.length ? educatedMerchantAwardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
                 playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
             } else {
-                 const isTrapAnswer = game.gameType === 'trap-answer';
-                 if (!isTrapAnswer || (isTrapAnswer && !isShortTrapAnswerGame)) {
+                 if (game.gameType !== 'trap-answer' || !isShortTrapAnswerGame) {
                      const tier = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
                      playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
                  }
