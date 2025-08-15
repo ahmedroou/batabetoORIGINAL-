@@ -11,10 +11,30 @@ import type { Game, SocialRank, PermissionId } from '@/types';
  */
 export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     const finalScores = game.playerScores || {};
-    const playersToUpdate = game.players.filter(p => p.status !== 'left');
-    
+    // Ensure we consider all players who have a score, even if they left.
+    const playerIdsWithScores = Object.keys(finalScores);
+    const playersInGame = game.players.filter(p => playerIdsWithScores.includes(p.id));
+
     // Sort players by final score
-    const sortedPlayers = [...playersToUpdate].sort((a, b) => (finalScores[b.id] || 0) - (finalScores[a.id] || 0));
+    const sortedPlayerIds = playerIdsWithScores.sort((a, b) => (finalScores[b] || 0) - (finalScores[a] || 0));
+
+    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<string, number>, challengePoints?: number, permissions?: PermissionId[] }> = {};
+    let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
+    let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
+    
+    // Initialize updates for all players to avoid undefined errors.
+    playerIdsWithScores.forEach(id => {
+        updates[id] = {
+            leaderboardPoints: 0,
+            coins: 0,
+            gamesPlayed: { [game.gameType]: 1 },
+            challengePoints: 0,
+        };
+    });
+    
+    const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
+    const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (game.trapAnswerState?.settings?.rounds || 10) <= 7;
+    const isEducatedMerchantGame = game.gameType === 'educated-merchant';
 
     // Define awards based on rank
     const awardTiers = [
@@ -29,29 +49,11 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         { leaderboardPoints: 1, coins: 1 }, // 3rd place
     ];
 
-    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<string, number>, challengePoints?: number, permissions?: PermissionId[] }> = {};
-    let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
-    let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
-    
-    // Initialize updates for all players to avoid undefined errors.
-    playersToUpdate.forEach(p => {
-        updates[p.id] = {
-            leaderboardPoints: 0,
-            coins: 0,
-            gamesPlayed: { [game.gameType]: 1 },
-            challengePoints: 0,
-        };
-    });
-    
-    const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
-    const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (game.trapAnswerState?.settings?.rounds || 10) <= 7;
-    const isEducatedMerchantGame = game.gameType === 'educated-merchant';
-
     
     if (isTeamGame) {
         // Team-based awards
         const winningTeam = game.gameResult!.winner;
-        playersToUpdate.forEach(player => {
+        playersInGame.forEach(player => {
             const isWinner = player.team === winningTeam;
             const points = isWinner ? 3 : 0;
             updates[player.id].leaderboardPoints = points;
@@ -62,16 +64,14 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         // Individual awards
         const playerRanks: { id: string, rank: number }[] = [];
         let currentRank = 0;
-        let lastScore = -Infinity;
+        let lastScore = Infinity;
         
-        sortedPlayers.forEach((player, index) => {
-             const score = finalScores[player.id] || 0;
-             if (score !== lastScore) {
-                currentRank = index + 1;
-            } else if (index === 0) {
-                currentRank = 1;
+        sortedPlayerIds.forEach((playerId, index) => {
+            const score = finalScores[playerId] || 0;
+            if (score < lastScore) {
+               currentRank = index + 1;
             }
-            playerRanks.push({ id: player.id, rank: currentRank });
+            playerRanks.push({ id: playerId, rank: currentRank });
             lastScore = score;
         });
         
@@ -79,10 +79,10 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             let playerAwards = { leaderboardPoints: 0, coins: 0, challengePoints: 0 };
             
             if (isEducatedMerchantGame) {
-                const tier = (rank - 1) < educatedMerchantAwardTiers.length ? educatedMerchantAwardTiers[rank-1] : null;
+                const tier = (rank - 1) < educatedMerchantAwardTiers.length ? educatedMerchantAwardTiers[rank - 1] : null;
                 if(tier) playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
             } else if (game.gameType !== 'trap-answer' || !isShortTrapAnswerGame) {
-                const tier = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : null;
+                const tier = (rank - 1) < awardTiers.length ? awardTiers[rank - 1] : null;
                 if(tier) playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
             }
             
@@ -93,7 +93,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
 
         if (playerRanks.length > 0 && playerRanks[0].rank === 1) {
             const firstPlaceScore = finalScores[playerRanks[0].id] || 0;
-            const winners = sortedPlayers.filter(p => (finalScores[p.id] || 0) === firstPlaceScore);
+            const winners = sortedPlayerIds.filter(pid => (finalScores[pid] || 0) === firstPlaceScore);
             if (winners.length === 1) {
                 winUpdate = { userId: playerRanks[0].id, gameType: game.gameType };
             }
@@ -111,7 +111,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             if (deceiverCandidates.length > 0 && deceiverCandidates[0][1].length > 0) {
                 const deceiverId = deceiverCandidates[0][0];
                 const deceiverPlayer = game.players.find(p => p.id === deceiverId);
-                if (deceiverPlayer) {
+                if (deceiverPlayer && updates[deceiverId]) {
                     cunningDeceiver = { playerId: deceiverId, name: deceiverPlayer.name, avatarId: deceiverPlayer.avatarId, count: trickStats.trickedOthers[deceiverId]!.length };
                     updates[deceiverId].leaderboardPoints += 1;
                     updates[deceiverId].challengePoints = (updates[deceiverId].challengePoints || 0) + 1;
@@ -146,7 +146,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
 
 
     Object.keys(updates).forEach(playerId => {
-        const player = playersToUpdate.find(p => p.id === playerId);
+        const player = playersInGame.find(p => p.id === playerId);
         if (player) {
             const currentPoints = finalScores[playerId] || 0;
             const awardedPoints = updates[playerId].leaderboardPoints || 0;
