@@ -73,9 +73,12 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             if (isEducatedMerchantGame) {
                 const tier = (rank - 1) < educatedMerchantAwardTiers.length ? educatedMerchantAwardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
                 playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
-            } else if (!isShortTrapAnswerGame) {
-                 const tier = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
-                 playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
+            } else {
+                 const isTrapAnswer = game.gameType === 'trap-answer';
+                 if (!isTrapAnswer || (isTrapAnswer && !isShortTrapAnswerGame)) {
+                     const tier = (rank - 1) < awardTiers.length ? awardTiers[rank-1] : { leaderboardPoints: 0, coins: 0 };
+                     playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
+                 }
             }
              updates[id] = { ...playerAwards, gamesPlayed: { [game.gameType]: 1 } };
         });
