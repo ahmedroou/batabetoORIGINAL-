@@ -115,7 +115,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                   {userProfile.name}
                 </h2>
                 {effectiveCurrentRank && (
-                  <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-sm dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100">
+                  <span className="mt-1.5 inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-sm dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100">
                     <RankIcon className="w-4 h-4 text-violet-700 dark:text-violet-200" />
                     {activeDecree?.title ?? effectiveCurrentRank?.name}
                   </span>
@@ -156,7 +156,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                   <TooltipTrigger asChild>
                     <Button asChild size="icon" className="h-9 w-9 rounded-xl bg-violet-700 text-white hover:bg-violet-800">
                       <Link href="/society" aria-label="المجتمع">
-                        <Users className="h-4 w-4" />
+                        <Users className="h-4 h-4" />
                       </Link>
                     </Button>
                   </TooltipTrigger>
@@ -167,7 +167,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                   <TooltipTrigger asChild>
                     <Button asChild size="icon" variant="outline" className="h-9 w-9 rounded-xl border-violet-300/70 text-slate-900 hover:bg-violet-50 dark:border-violet-700/40 dark:text-violet-100 dark:hover:bg-white/10">
                       <Link href="/clan-wars" aria-label="حروب الفرق">
-                        <Shield className="h-4 w-4" />
+                        <Shield className="h-4 h-4" />
                       </Link>
                     </Button>
                   </TooltipTrigger>
@@ -178,7 +178,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
                   <TooltipTrigger asChild>
                     <Button asChild size="icon" variant="ghost" className="h-9 w-9 rounded-xl text-slate-900 hover:bg-violet-50 dark:text-violet-100 dark:hover:bg-white/10">
                       <Link href="/profile/history" aria-label="سجل المباريات">
-                        <History className="h-4 w-4" />
+                        <History className="h-4 h-4" />
                       </Link>
                     </Button>
                   </TooltipTrigger>

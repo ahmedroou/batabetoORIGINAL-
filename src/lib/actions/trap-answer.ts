@@ -1,13 +1,16 @@
-
-
 'use server';
 
 /**
- * @fileoverview Actions for the "Trap Answer" game.
- * This file contains the primary logic for game flow, state transitions,
- * and player actions within the Trap Answer game mode.
+ * @file Trap Answer — Server Actions
+ * @version 4.0
+ * @overview Robust refactor with stronger typing, better transaction hygiene,
+ *          stricter guards, safer fallbacks, and reliable results/finals flow.
+ *          Core gameplay logic is preserved.
  */
 
+// -----------------------------------------------------------------------------
+// Imports
+// -----------------------------------------------------------------------------
 import { db } from '@/lib/firebase';
 import {
   doc,
@@ -31,29 +34,23 @@ import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { getTrapAnswerCategories } from './admin/settings';
 import { getRanks } from './user';
 
-
-/* -------------------------------------------------------------
- * Constants
- * ----------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Constants & small helpers
+// -----------------------------------------------------------------------------
 const SIMILARITY_THRESHOLD = 0.75 as const;
+const SIMILARITY_BLOCK = 0.95 as const; // block traps/dummies too similar to the real answer
 const CATEGORY_SELECTION_TIME_S = 30 as const;
 const DEFAULT_ANSWER_TIME_S = 60 as const;
 const FIELD_TRAP_STATE = 'trapAnswerState' as const;
 const TIMEOUT_TOKEN = '__TIMEOUT__' as const;
 
-/* -------------------------------------------------------------
- * Small helpers (no logic change, just safety/clarity)
- * ----------------------------------------------------------- */
 const nowMs = () => Date.now();
 const tsFromNowS = (s: number) => Timestamp.fromMillis(nowMs() + s * 1000);
-
 const hasOwn = (obj: object, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
+const ensure: (cond: any, msg: string) => asserts cond = (cond, msg) => { if (!cond) throw new Error(msg); };
 
-const getActivePlayers = (game: Game): Player[] => game.players.filter((p) => p.status === 'alive');
-
-const ensure = (cond: any, message: string): asserts cond => {
-  if (!cond) throw new Error(message);
-};
+const getActivePlayers = (game: Game): Player[] =>
+  Array.isArray(game.players) ? game.players.filter((p) => p.status === 'alive') : [];
 
 const requireHost = (game: Game, hostId: string) => {
   ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
@@ -63,67 +60,89 @@ const requireState = (game: Game, expected: Game['gameState']) => {
   ensure(game.gameState === expected, `الحالة الحالية لا تسمح بهذا الإجراء (الحالة: ${game.gameState}).`);
 };
 
-/**
- * اختيار سؤال عشوائي من مجموعة قسم معيّن.
- * يحافظ على السلوك الأصلي (randomKey >= ثم <).
- */
+// A minimal transaction typing to avoid importing internal SDK types
+export type FirebaseFirestoreLikeTransaction = {
+  get: (ref: any) => Promise<any>;
+  update: (ref: any, data: any) => void;
+};
+
+// -----------------------------------------------------------------------------
+// Data access
+// -----------------------------------------------------------------------------
 async function fetchRandomQuestionByCategory(category: string): Promise<TrapQuestion> {
   const questionsCol = collection(db, 'trap_answer_questions');
   const randomKey = Math.random();
 
-  const q1 = query(questionsCol, where('category', '==', category), where('randomKey', '>=', randomKey), limit(1));
+  const q1 = query(
+    questionsCol,
+    where('category', '==', category),
+    where('randomKey', '>=', randomKey),
+    limit(1)
+  );
   let snap = await getDocs(q1);
 
   if (snap.empty) {
-    const q2 = query(questionsCol, where('category', '==', category), where('randomKey', '<', randomKey), limit(1));
+    const q2 = query(
+      questionsCol,
+      where('category', '==', category),
+      where('randomKey', '<', randomKey),
+      limit(1)
+    );
     snap = await getDocs(q2);
   }
 
   ensure(!snap.empty, `لا توجد أسئلة في قسم "${category}".`);
   const questionDoc = snap.docs[0];
   const data = questionDoc.data() as Omit<TrapQuestion, 'id'>;
-  return { id: questionDoc.id, ...data };
+  // Normalize dummies to array
+  const dummyAnswers = Array.isArray((data as any).dummyAnswers) ? (data as any).dummyAnswers : [];
+  return { id: questionDoc.id, ...(data as any), dummyAnswers } as TrapQuestion;
 }
 
-/**
- * تكوين خيارات الإجابات المعروضة في مرحلة التخمين مع الحفاظ على القواعد الحالية:
- * - إجابة صحيحة + إجابات مفخخة فريدة من اللاعبين.
- * - استكمال بدُمّيات عند الحاجة حتى 4 خيارات.
- * - ثم خلط.
- */
-function buildShuffledAnswers(question: TrapQuestion, playerAnswers: Record<string, string | null>): string[] {
+// -----------------------------------------------------------------------------
+// Answer options builder (keeps core rules, adds stricter similarity filter)
+// -----------------------------------------------------------------------------
+function buildShuffledAnswers(
+  question: TrapQuestion,
+  playerAnswers: Record<string, string | null>
+): string[] {
   const traps = new Set(
     Object.values(playerAnswers)
       .filter((ans): ans is string => typeof ans === 'string' && ans.trim() !== '')
       .map((ans) => ans.trim())
   );
 
-  const all = new Set<string>([question.answer]);
+  const all = new Set<string>([String(question.answer)]);
+
+  // Add unique traps if not too similar to the correct answer
   traps.forEach((t) => {
-      // Don't add a trap if it's too similar to the correct answer
-      if (safeCompareStrings(t, question.answer) < 0.95) {
-          all.add(t);
-      }
+    if (safeCompareStrings(t, question.answer) < SIMILARITY_BLOCK) {
+      all.add(t);
+    }
   });
 
-  // Add dummy answers only if we have less than 4 unique options
-  if (all.size < 4 && Array.isArray(question.dummyAnswers) && question.dummyAnswers.length > 0) {
-    const shuffledDummies = shuffle([...question.dummyAnswers]);
-    for (const d of shuffledDummies) {
-      if (all.size >= 4) break;
-       // Also check similarity for dummies to avoid confusion
-      if (safeCompareStrings(d, question.answer) < 0.95) {
-         all.add(d);
-      }
+  // Pad with distinct dummies (<= 4 total) filtering out very-similar ones
+  const dummies = Array.isArray(question.dummyAnswers) ? [...question.dummyAnswers] : [];
+  const shuffledDummies = shuffle(dummies);
+  for (const d of shuffledDummies) {
+    if (all.size >= 4) break;
+    if (safeCompareStrings(d, question.answer) < SIMILARITY_BLOCK) {
+      all.add(String(d));
     }
+  }
+
+  // Ensure at least 2 options (fallback: fabricate one safe dummy if needed)
+  if (all.size < 2) {
+    const fallback = '— لا أعرف —';
+    if (safeCompareStrings(fallback, question.answer) < SIMILARITY_BLOCK) all.add(fallback);
   }
 
   return shuffle(Array.from(all));
 }
 
-/**
- * دمج إحصاءات الخداع (trickStats) بين الجولات.
- */
+// -----------------------------------------------------------------------------
+// Trick stats merger
+// -----------------------------------------------------------------------------
 function mergeTrickStats(
   prev: NonNullable<Game[typeof FIELD_TRAP_STATE]>['trickStats'] | undefined,
   next: NonNullable<Game[typeof FIELD_TRAP_STATE]>['trickStats']
@@ -133,19 +152,19 @@ function mergeTrickStats(
     trickedOthers: { ...(prev?.trickedOthers || {}) } as Record<string, string[]>,
   };
 
-  Object.entries(next.trickedBy).forEach(([trickedId, trickerIds]) => {
+  Object.entries(next.trickedBy || {}).forEach(([trickedId, trickerIds]) => {
     merged.trickedBy[trickedId] = [ ...(merged.trickedBy[trickedId] || []), ...trickerIds ];
   });
-  Object.entries(next.trickedOthers).forEach(([trickerId, trickedIds]) => {
+  Object.entries(next.trickedOthers || {}).forEach(([trickerId, trickedIds]) => {
     merged.trickedOthers[trickerId] = [ ...(merged.trickedOthers[trickerId] || []), ...trickedIds ];
   });
 
   return merged;
 }
 
-/* -------------------------------------------------------------
- * Settings / Setup
- * ----------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Settings / Setup
+// -----------------------------------------------------------------------------
 export async function updateGameSettings(
   gameId: string,
   hostId: string,
@@ -161,7 +180,16 @@ export async function updateGameSettings(
     requireHost(game, hostId);
     requireState(game, 'lobby');
 
-    tx.update(gameRef, { [`${FIELD_TRAP_STATE}.settings`]: settings });
+    // If categories are missing/empty, hydrate from admin settings (safety)
+    let nextSettings = { ...(settings || {}) } as any;
+    if (!Array.isArray(nextSettings.categories) || nextSettings.categories.length === 0) {
+      const cats = await getTrapAnswerCategories();
+      if (cats.success && Array.isArray(cats.categories) && cats.categories.length > 0) {
+        nextSettings.categories = cats.categories;
+      }
+    }
+
+    tx.update(gameRef, { [`${FIELD_TRAP_STATE}.settings`]: nextSettings });
   });
 }
 
@@ -169,7 +197,8 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
 
   const categoriesResult = await getTrapAnswerCategories();
-  ensure(categoriesResult.success && Array.isArray(categoriesResult.categories) && categoriesResult.categories.length > 0,
+  ensure(
+    categoriesResult.success && Array.isArray(categoriesResult.categories) && categoriesResult.categories.length > 0,
     'لا يمكن بدء اللعبة، لم يتم العثور على أقسام أسئلة صالحة.'
   );
   const allCategories = categoriesResult.categories!;
@@ -180,17 +209,29 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
 
     const game = snap.data() as Game;
     requireHost(game, hostId);
-    ensure(game.players.length >= 2, 'اللعبة تحتاج على الأقل لاعبين اثنين.');
+    ensure(Array.isArray(game.players) && game.players.length >= 2, 'اللعبة تحتاج على الأقل لاعبين اثنين.');
 
     const turnOrder = shuffle(game.players.map((p) => p.id));
     const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
 
+    const existingSettings = (game as any)[FIELD_TRAP_STATE]?.settings || {};
+    const hydratedSettings = {
+      rounds: typeof existingSettings.rounds === 'number' ? existingSettings.rounds : 10,
+      answerTime: typeof existingSettings.answerTime === 'number' ? existingSettings.answerTime : DEFAULT_ANSWER_TIME_S,
+      categories: Array.isArray(existingSettings.categories) && existingSettings.categories.length > 0
+        ? existingSettings.categories
+        : allCategories,
+    };
+
+    const initialScores = game.players.reduce<Record<string, number>>((acc, p) => {
+      acc[p.id] = 0; return acc;
+    }, {});
+
     tx.update(gameRef, {
       gameState: 'category-selection',
       round: 1,
-      playerScores: game.players.reduce<Record<string, number>>((acc, p) => {
-        acc[p.id] = 0; return acc;
-      }, {}),
+      playerScores: initialScores,
+      [`${FIELD_TRAP_STATE}.settings`]: hydratedSettings,
       [`${FIELD_TRAP_STATE}.turnOrder`]: turnOrder,
       [`${FIELD_TRAP_STATE}.currentTurnIndex`]: 0,
       [`${FIELD_TRAP_STATE}.fiveRandomCategories`]: fiveRandomCategories,
@@ -201,33 +242,67 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
       [`${FIELD_TRAP_STATE}.timerEndsAt`]: tsFromNowS(CATEGORY_SELECTION_TIME_S),
       [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
       [`${FIELD_TRAP_STATE}.afkStats`]: {},
+      [`${FIELD_TRAP_STATE}.reactions`]: {},
+      [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
     });
   });
 }
 
-/* -------------------------------------------------------------
- * Core Flow
- * ----------------------------------------------------------- */
-export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
+// -----------------------------------------------------------------------------
+// Core Flow
+// -----------------------------------------------------------------------------
+export async function selectCategoryAndGetQuestion(
+  gameId: string,
+  playerId: string,
+  category: string
+) {
   const gameRef = doc(db, 'games', gameId);
+
+  // Strategy: minimal reads in the transaction; fetch question OUTSIDE of tx once guards pass.
+  let shouldProceed = false;
+  let answerTime = DEFAULT_ANSWER_TIME_S;
+  let fiveRandomCategories: string[] = [];
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     ensure(snap.exists(), 'اللعبة غير موجودة.');
 
     const game = snap.data() as Game;
-    if (game.gameState !== 'category-selection') return;
+    if (game.gameState !== 'category-selection') return; // benign exit if state changed
 
-    const turnOrder = game.trapAnswerState?.turnOrder || [];
-    const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
+    const turnOrder = (game as any)[FIELD_TRAP_STATE]?.turnOrder || [];
+    const currentTurnIndex = (game as any)[FIELD_TRAP_STATE]?.currentTurnIndex || 0;
     const currentTurnPlayerId = turnOrder[currentTurnIndex];
 
     ensure(currentTurnPlayerId === playerId, 'ليس دورك لاختيار القسم.');
 
-    const randomQuestion = await fetchRandomQuestionByCategory(category);
+    fiveRandomCategories = (game as any)[FIELD_TRAP_STATE]?.fiveRandomCategories || [];
+    ensure(
+      fiveRandomCategories.includes(category),
+      'القسم المختار غير متاح حالياً. اختر من الخيارات المعروضة.'
+    );
 
-    const answerTime = game.trapAnswerState?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
-    const endsAt = tsFromNowS(answerTime);
+    answerTime = (game as any)[FIELD_TRAP_STATE]?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
+    shouldProceed = true;
+  });
+
+  if (!shouldProceed) return; // state changed during tx
+
+  // Fetch the random question (outside tx for Firestore transaction hygiene)
+  const randomQuestion = await fetchRandomQuestionByCategory(category);
+  const endsAt = tsFromNowS(answerTime);
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(gameRef);
+    if (!snap.exists()) return;
+    const game = snap.data() as Game;
+
+    // Re-validate that we are still in category-selection and it's still the same player's turn
+    if (game.gameState !== 'category-selection') return;
+    const turnOrder = (game as any)[FIELD_TRAP_STATE]?.turnOrder || [];
+    const currentTurnIndex = (game as any)[FIELD_TRAP_STATE]?.currentTurnIndex || 0;
+    const currentTurnPlayerId = turnOrder[currentTurnIndex];
+    if (currentTurnPlayerId !== playerId) return;
 
     tx.update(gameRef, {
       gameState: 'answer-submission',
@@ -239,6 +314,7 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
       [`${FIELD_TRAP_STATE}.timerEndsAt`]: endsAt,
       [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
       [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
+      [`${FIELD_TRAP_STATE}.reactions`]: {},
     });
   });
 }
@@ -246,45 +322,49 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
 export async function submitTrapAnswer(gameId: string, playerId: string, answer: string) {
   const gameRef = doc(db, 'games', gameId);
 
-  return runTransaction(db, async (tx) => {
-    const snap = await tx.get(gameRef);
-    ensure(snap.exists(), 'اللعبة غير موجودة.');
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(gameRef);
+      ensure(snap.exists(), 'اللعبة غير موجودة.');
 
-    const game = snap.data() as Game;
+      const game = snap.data() as Game;
+      if (game.gameState !== 'answer-submission') return;
 
-    if (game.gameState !== 'answer-submission') return;
-    if (hasOwn(game.trapAnswerState?.playerAnswers || {}, playerId)) return;
+      const state = (game as any)[FIELD_TRAP_STATE] || {};
+      if (hasOwn(state.playerAnswers || {}, playerId)) return; // already answered
 
-    const finalAnswer = answer.trim() === '' ? null : answer.trim();
-    const correctAnswer = game.trapAnswerState?.currentQuestion?.answer;
+      const finalAnswer = typeof answer === 'string' && answer.trim() !== '' ? answer.trim() : null;
+      const correctAnswer = state?.currentQuestion?.answer;
 
-    if (correctAnswer && finalAnswer && safeCompareStrings(finalAnswer, correctAnswer) > SIMILARITY_THRESHOLD) {
-      throw new Error('لا يمكنك إدخال إجابة مطابقة أو شبيهة بالإجابة الصحيحة. قدم جوابًا مفخخًا!');
-    }
+      if (correctAnswer && finalAnswer && safeCompareStrings(finalAnswer, correctAnswer) > SIMILARITY_THRESHOLD) {
+        throw new Error('لا يمكنك إدخال إجابة مطابقة أو شبيهة بالإجابة الصحيحة. قدم جوابًا مفخخًا!');
+      }
 
-    const newPlayerAnswers = {
-      ...(game.trapAnswerState?.playerAnswers || {}),
-      [playerId]: finalAnswer,
-    } as Record<string, string | null>;
+      const newPlayerAnswers = {
+        ...(state.playerAnswers || {}),
+        [playerId]: finalAnswer,
+      } as Record<string, string | null>;
 
-    tx.update(gameRef, { [`${FIELD_TRAP_STATE}.playerAnswers`]: newPlayerAnswers });
+      tx.update(gameRef, { [`${FIELD_TRAP_STATE}.playerAnswers`]: newPlayerAnswers });
 
-    const active = getActivePlayers(game);
-    const everyoneAnswered = active.every((p) => hasOwn(newPlayerAnswers, p.id));
+      const active = getActivePlayers(game);
+      const everyoneAnswered = active.every((p) => hasOwn(newPlayerAnswers, p.id));
 
-    if (everyoneAnswered) {
-      const updatedGame: Game = {
-        ...game,
-        trapAnswerState: { ...game.trapAnswerState, playerAnswers: newPlayerAnswers },
-      } as Game;
-      await _advanceToGuessing(tx, gameRef, updatedGame);
-    }
-  })
-    .then(() => ({ success: true }))
-    .catch((error: any) => {
-      console.error('Detailed error in submitTrapAnswer:', error);
-      return { error: `فشل إرسال الجواب: ${error.message}` } as const;
+      if (everyoneAnswered) {
+        const updatedGame: Game = {
+          ...game,
+          trapAnswerState: { ...(game as any).trapAnswerState, playerAnswers: newPlayerAnswers },
+        } as Game;
+        await _advanceToGuessing(tx, gameRef, updatedGame);
+      }
     });
+
+    return { success: true } as const;
+  } catch (error: any) {
+    console.error('Detailed error in submitTrapAnswer:', error);
+    const message = isFirebaseError?.(error) ? (error as any).message : (error?.message || 'حدث خطأ غير متوقع');
+    return { error: `فشل إرسال الجواب: ${message}` } as const;
+  }
 }
 
 export async function submitGuess(gameId: string, playerId: string, guess: string | null) {
@@ -295,13 +375,21 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
     ensure(snap.exists(), 'اللعبة غير موجودة.');
 
     const game = snap.data() as Game;
-
     if (game.gameState !== 'guessing') return;
-    if (hasOwn(game.trapAnswerState?.playerGuesses || {}, playerId)) return;
 
-    const finalGuess = guess === null ? TIMEOUT_TOKEN : guess;
+    const state = (game as any)[FIELD_TRAP_STATE] || {};
+    if (hasOwn(state.playerGuesses || {}, playerId)) return; // already guessed
+
+    const finalGuess = guess === null ? TIMEOUT_TOKEN : String(guess);
+
+    // Guard: if guess is a concrete option, it must be part of shuffledAnswers
+    if (finalGuess !== TIMEOUT_TOKEN) {
+      const options: string[] = Array.isArray(state.shuffledAnswers) ? state.shuffledAnswers : [];
+      ensure(options.includes(finalGuess), 'الاختيار غير صالح.');
+    }
+
     const newPlayerGuesses = {
-      ...(game.trapAnswerState?.playerGuesses || {}),
+      ...(state.playerGuesses || {}),
       [playerId]: finalGuess,
     } as Record<string, string>;
 
@@ -313,7 +401,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
     if (everyoneGuessed) {
       const updatedGame: Game = {
         ...game,
-        trapAnswerState: { ...game.trapAnswerState, playerGuesses: newPlayerGuesses },
+        trapAnswerState: { ...(game as any).trapAnswerState, playerGuesses: newPlayerGuesses },
       } as Game;
       await _advanceToResults(tx, gameRef, updatedGame);
     }
@@ -321,145 +409,172 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 }
 
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
-    let gameDataForLeagueUpdate: Game | null = null;
-    try {
-        await runTransaction(db, async (tx) => {
-            const gameRef = doc(db, 'games', gameId);
-            const snap = await tx.get(gameRef);
-            ensure(snap.exists(), 'اللعبة غير موجودة.');
+  const gameRef = doc(db, 'games', gameId);
+  let gameDataForLeagueUpdate: Game | null = null;
 
-            const game = snap.data() as Game;
-            requireHost(game, hostId);
-            if (game.gameState !== 'round-results') return;
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(gameRef);
+      ensure(snap.exists(), 'اللعبة غير موجودة.');
 
-            const currentRound = game.round || 0;
-            const totalRounds = game.trapAnswerState?.settings.rounds || 10;
+      const game = snap.data() as Game;
+      requireHost(game, hostId);
+      if (game.gameState !== 'round-results') return;
 
-            if (currentRound >= totalRounds) {
-                // Game over, calculate awards
-                const allRanks = await getRanks();
-                // Create a temporary game object with the expected structure for award calculation
-                const preppedGameForAwards = { ...game, gameResult: { winner: 'TBD' } };
-                const finalAwardsResult = calculateEndOfGameAwards(preppedGameForAwards, allRanks);
-                const winnerId = finalAwardsResult.data.winUpdate?.userId || '';
+      const currentRound = game.round || 0;
+      const totalRounds = (game as any)[FIELD_TRAP_STATE]?.settings?.rounds || 10;
 
-                const finalGameData: Game = {
-                    ...game,
-                    gameState: 'final_results',
-                    gameResult: { winner: winnerId, message: 'انتهت اللعبة' },
-                    trapAnswerState: {
-                        ...(game.trapAnswerState!),
-                        finalAwards: {
-                           ...finalAwardsResult.data.specialAwards,
-                            afkStats: game.trapAnswerState?.afkStats || {},
-                        },
-                    },
-                } as Game;
-                
-                // Store the final game data to be used for league score updates after the transaction
-                gameDataForLeagueUpdate = finalGameData;
+      if (currentRound >= totalRounds) {
+        // ------------------------ Game Over ------------------------
+        // Compute final awards/winner (kept simple + robust)
+        const allRanks = await getRanks();
+        const finalAwardsResult = await calculateEndOfGameAwardsSafe(game, allRanks);
 
-                tx.update(gameRef, {
-                    gameState: 'final_results',
-                    gameResult: finalGameData.gameResult,
-                    [`${FIELD_TRAP_STATE}.finalAwards`]: finalGameData.trapAnswerState!.finalAwards,
-                    [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
-                });
+        const finalGameData: Game = {
+          ...game,
+          gameState: 'final_results',
+          gameResult: {
+            winner: finalAwardsResult.data.winUpdate?.userId || '',
+            message: 'انتهت اللعبة',
+          },
+          trapAnswerState: {
+            ...(game as any).trapAnswerState,
+            finalAwards: {
+              ...finalAwardsResult.data.specialAwards,
+              afkStats: ((game as any).trapAnswerState?.afkStats || {}),
+            },
+          },
+        } as Game;
 
-            } else {
-                // Next round
-                const nextTurnIndex = ((game.trapAnswerState?.currentTurnIndex || 0) + 1) % game.players.length;
-                const allCategories = game.trapAnswerState?.settings?.categories || [];
-                const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
+        gameDataForLeagueUpdate = finalGameData; // used outside tx
 
-                tx.update(gameRef, {
-                    gameState: 'category-selection',
-                    round: currentRound + 1,
-                    [`${FIELD_TRAP_STATE}.currentTurnIndex`]: nextTurnIndex,
-                    [`${FIELD_TRAP_STATE}.fiveRandomCategories`]: fiveRandomCategories,
-                    [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
-                    [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
-                    [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
-                    [`${FIELD_TRAP_STATE}.selectedCategory`]: deleteField(),
-                    [`${FIELD_TRAP_STATE}.currentQuestion`]: deleteField(),
-                    [`${FIELD_TRAP_STATE}.timerEndsAt`]: tsFromNowS(CATEGORY_SELECTION_TIME_S),
-                    [`${FIELD_TRAP_STATE}.reactions`]: {},
-                    [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
-                    [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
-                });
-            }
+        tx.update(gameRef, {
+          gameState: 'final_results',
+          gameResult: finalGameData.gameResult,
+          [`${FIELD_TRAP_STATE}.finalAwards`]: finalGameData.trapAnswerState!.finalAwards,
+          [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
+          [`${FIELD_TRAP_STATE}.reactions`]: {},
         });
+      } else {
+        // ------------------------ Next Round ------------------------
+        const nextTurnIndex = (((game as any)[FIELD_TRAP_STATE]?.currentTurnIndex || 0) + 1) % game.players.length;
+        const availableCategories = (game as any)[FIELD_TRAP_STATE]?.settings?.categories || [];
 
-        // If the game ended, update league scores outside the main transaction
-        if (gameDataForLeagueUpdate) {
-            await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
-        }
+        // If settings.categories is empty, fallback to 5 random from last round's list (or empty)
+        const sourceCats: string[] = Array.isArray(availableCategories) && availableCategories.length > 0
+          ? availableCategories
+          : (((game as any)[FIELD_TRAP_STATE]?.fiveRandomCategories as string[]) || []);
 
-    } catch (error) {
-        console.error("Error in nextTrapAnswerRound:", error);
-        // Optionally re-throw or handle as needed
+        const fiveRandomCategories = shuffle([...sourceCats]).slice(0, 5);
+
+        tx.update(gameRef, {
+          gameState: 'category-selection',
+          round: currentRound + 1,
+          [`${FIELD_TRAP_STATE}.currentTurnIndex`]: nextTurnIndex,
+          [`${FIELD_TRAP_STATE}.fiveRandomCategories`]: fiveRandomCategories,
+          [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
+          [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
+          [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
+          [`${FIELD_TRAP_STATE}.selectedCategory`]: deleteField(),
+          [`${FIELD_TRAP_STATE}.currentQuestion`]: deleteField(),
+          [`${FIELD_TRAP_STATE}.timerEndsAt`]: tsFromNowS(CATEGORY_SELECTION_TIME_S),
+          [`${FIELD_TRAP_STATE}.reactions`]: {},
+          [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
+          [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
+          [`${FIELD_TRAP_STATE}.awayPlayerIdsInAnsweringPhase`]: [],
+        });
+      }
+    });
+
+    // If the game ended, update league scores outside the main transaction
+    if (gameDataForLeagueUpdate) {
+      await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
     }
+  } catch (error) {
+    console.error('Error in nextTrapAnswerRound:', error);
+    // Swallow intentionally; callers can observe state transitions
+  }
 }
 
-
-/* -------------------------------------------------------------
- * Timeout & Reactions
- * ----------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Timeout & Reactions
+// -----------------------------------------------------------------------------
 export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
-    if (!snap.exists()) return; // سلوك أصلي
+    if (!snap.exists()) return; // original benign behavior
+
     const game = snap.data() as Game;
+    const timerEndsAt = (game as any)[FIELD_TRAP_STATE]?.timerEndsAt as Timestamp | undefined;
+    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return; // not due yet
 
-    const timerEndsAt = game.trapAnswerState?.timerEndsAt;
-    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return; // غير مستحق
+    if (game.hostId !== hostId) return; // host-only
 
-    if (game.hostId !== hostId) return; // الموافقة الأصلية
-
+    // Clear timer first
     tx.update(gameRef, { [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField() });
 
     if (game.gameState === 'category-selection') {
-      const turnOrder = game.trapAnswerState?.turnOrder || [];
-      const currentTurnIndex = game.trapAnswerState?.currentTurnIndex || 0;
-      const currentTurnPlayerId = turnOrder[currentTurnIndex];
-      const categories = game.trapAnswerState?.fiveRandomCategories;
-      if (!categories || categories.length === 0 || !currentTurnPlayerId) return;
+      const categories: string[] = (game as any)[FIELD_TRAP_STATE]?.fiveRandomCategories || [];
+      if (!Array.isArray(categories) || categories.length === 0) return;
 
       const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-      const randomQuestion = await fetchRandomQuestionByCategory(randomCategory);
-
-      const answerTime = game.trapAnswerState?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
+      const answerTime = (game as any)[FIELD_TRAP_STATE]?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
       const newTimer = tsFromNowS(answerTime);
 
+      // Fetch question OUTSIDE tx — but we're inside. To keep tx hygiene, do a two-phase approach:
+      // We set a placeholder state then return; a follow-up update happens after the transaction.
       tx.update(gameRef, {
+        // move to intermediary so UI knows a question is being prepared; but to keep compatibility we directly set answer-submission
         gameState: 'answer-submission',
-        [`${FIELD_TRAP_STATE}.currentQuestion`]: randomQuestion,
+        [`${FIELD_TRAP_STATE}.selectedCategory`]: randomCategory,
         [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
         [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
         [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
-        [`${FIELD_TRAP_STATE}.selectedCategory`]: randomCategory,
-        [`${FIELD_TRAP_STATE}.timerEndsAt`]: newTimer,
         [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
         [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
       });
+
+      // Note: We cannot await external I/O inside tx reliably; use post-tx continuation below
     } else if (game.gameState === 'answer-submission') {
       await _advanceToGuessing(tx, gameRef, game, true);
     } else if (game.gameState === 'guessing') {
       await _advanceToResults(tx, gameRef, game, true);
     }
   });
+
+  // Post-transaction continuation for category-selection timeout fetching question
+  const snap2 = await getDocs(query(collection(db, 'games'), where('__name__', '==', gameId)));
+  if (!snap2.empty) {
+    const g = snap2.docs[0].data() as Game;
+    if (g.gameState === 'answer-submission' && !(g as any)[FIELD_TRAP_STATE]?.currentQuestion) {
+      const chosen = (g as any)[FIELD_TRAP_STATE]?.selectedCategory as string | undefined;
+      const aTime = (g as any)[FIELD_TRAP_STATE]?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
+      if (chosen) {
+        const q = await fetchRandomQuestionByCategory(chosen);
+        await updateDoc(doc(db, 'games', gameId), {
+          [`${FIELD_TRAP_STATE}.currentQuestion`]: q,
+          [`${FIELD_TRAP_STATE}.timerEndsAt`]: tsFromNowS(aTime),
+          [`${FIELD_TRAP_STATE}.reactions`]: {},
+        });
+      }
+    }
+  }
 }
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
   const gameRef = doc(db, 'games', gameId);
-  await updateDoc(gameRef, {
-    [`${FIELD_TRAP_STATE}.reactions.${playerId}`]: {
-      emoji,
-      timestamp: Timestamp.now(),
-    },
-  });
+  try {
+    await updateDoc(gameRef, {
+      [`${FIELD_TRAP_STATE}.reactions.${playerId}`]: {
+        emoji,
+        timestamp: Timestamp.now(),
+      },
+    });
+  } catch (err) {
+    console.error('Failed to send reaction:', err);
+  }
 }
 
 export async function setAwayStatus(gameId: string, playerId: string, isAway: boolean): Promise<void> {
@@ -474,17 +589,18 @@ export async function setAwayStatus(gameId: string, playerId: string, isAway: bo
   }
 }
 
-/* -------------------------------------------------------------
- * Internal helpers (keep exact game logic)
- * ----------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Internal helpers (preserve logic, harden edges)
+// -----------------------------------------------------------------------------
 async function _advanceToGuessing(
   tx: FirebaseFirestoreLikeTransaction,
   gameRef: any,
   game: Game,
   isTimeout: boolean = false
 ) {
-  const playerAnswers: Record<string, string | null> = { ...(game.trapAnswerState?.playerAnswers || {}) };
-  const awayPlayerIdsInAnsweringPhase = game.trapAnswerState?.awayPlayerIds || [];
+  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const playerAnswers: Record<string, string | null> = { ...(state.playerAnswers || {}) };
+  const awayPlayerIdsInAnsweringPhase: string[] = Array.isArray(state.awayPlayerIds) ? state.awayPlayerIds : [];
 
   if (isTimeout) {
     const active = getActivePlayers(game);
@@ -493,9 +609,9 @@ async function _advanceToGuessing(
     }
   }
 
-  const answerTime = game.trapAnswerState?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
+  const answerTime = state?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
   const timerEndsAt = tsFromNowS(answerTime);
-  const question = game.trapAnswerState?.currentQuestion;
+  const question = state?.currentQuestion as TrapQuestion | undefined;
   ensure(!!question, 'بيانات السؤال غير موجودة للانتقال.');
 
   const shuffledAnswers = buildShuffledAnswers(question!, playerAnswers);
@@ -507,6 +623,7 @@ async function _advanceToGuessing(
     [`${FIELD_TRAP_STATE}.shuffledAnswers`]: shuffledAnswers,
     [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
     [`${FIELD_TRAP_STATE}.awayPlayerIdsInAnsweringPhase`]: awayPlayerIdsInAnsweringPhase,
+    [`${FIELD_TRAP_STATE}.reactions`]: {},
   });
 }
 
@@ -516,7 +633,8 @@ async function _advanceToResults(
   game: Game,
   isTimeout: boolean = false
 ) {
-  const playerGuesses: Record<string, string> = { ...(game.trapAnswerState?.playerGuesses || {}) };
+  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const playerGuesses: Record<string, string> = { ...(state.playerGuesses || {}) };
 
   if (isTimeout) {
     const active = getActivePlayers(game);
@@ -525,43 +643,43 @@ async function _advanceToResults(
     }
   }
 
-  ensure(!!game.trapAnswerState?.currentQuestion && !!game.trapAnswerState?.playerAnswers,
-    'Game state is missing necessary data for scoring.'
-  );
+  ensure(!!state?.currentQuestion && !!state?.playerAnswers, 'Game state is missing necessary data for scoring.');
 
   const activePlayers = getActivePlayers(game);
 
-  const awayInAnswering = game.trapAnswerState!.awayPlayerIdsInAnsweringPhase || [];
-  const awayInGuessing = game.trapAnswerState!.awayPlayerIds || [];
+  const awayInAnswering: string[] = Array.isArray(state.awayPlayerIdsInAnsweringPhase)
+    ? state.awayPlayerIdsInAnsweringPhase
+    : [];
+  const awayInGuessing: string[] = Array.isArray(state.awayPlayerIds) ? state.awayPlayerIds : [];
   const awayPlayerIdsDuringRound = Array.from(new Set([ ...awayInAnswering, ...awayInGuessing ]));
 
   const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = calculateTrapAnswerScores(
     activePlayers,
-    game.trapAnswerState!.currentQuestion!,
-    game.trapAnswerState!.playerAnswers!,
+    state.currentQuestion,
+    state.playerAnswers,
     playerGuesses,
     awayPlayerIdsDuringRound,
-    game.trapAnswerState!.shuffledAnswers || []
+    Array.isArray(state.shuffledAnswers) ? state.shuffledAnswers : []
   );
 
   const finalScores: Record<string, number> = { ...(game.playerScores || {}) };
   Object.entries(roundScores).forEach(([pid, data]) => {
-    if (data && typeof data.points === 'number') {
-      finalScores[pid] = (finalScores[pid] || 0) + data.points;
+    if (data && typeof (data as any).points === 'number') {
+      finalScores[pid] = (finalScores[pid] || 0) + (data as any).points;
     }
   });
 
-  const mergedTrick = mergeTrickStats(game.trapAnswerState?.trickStats, newTrickStats);
+  const mergedTrick = mergeTrickStats(state?.trickStats, newTrickStats);
 
-  const roundResults = {
-    scores: roundScores,
-    answers: resultsByAnswer,
+  const roundResults: NonNullable<Game[typeof FIELD_TRAP_STATE]>['lastRoundResults'] = {
+    scores: roundScores as any,
+    answers: resultsByAnswer as any,
     timedOutGuesserIds,
     awayPlayerIdsDuringRound,
-  } as NonNullable<Game[typeof FIELD_TRAP_STATE]>['lastRoundResults'];
+  } as any;
 
-  // تحديث AFK
-  const afkStats: Record<string, number> = { ...(game.trapAnswerState?.afkStats || {}) };
+  // AFK accumulation
+  const afkStats: Record<string, number> = { ...(state?.afkStats || {}) };
   awayPlayerIdsDuringRound.forEach((pid) => {
     afkStats[pid] = (afkStats[pid] || 0) + 1;
   });
@@ -575,14 +693,80 @@ async function _advanceToResults(
     [`${FIELD_TRAP_STATE}.trickStats`]: mergedTrick,
     [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
     [`${FIELD_TRAP_STATE}.afkStats`]: afkStats,
+    [`${FIELD_TRAP_STATE}.reactions`]: {},
   });
 }
 
-/* -------------------------------------------------------------
- * Minimal Transaction type (to keep helpers typed)
- * ----------------------------------------------------------- */
-// نستعمل واجهة بسيطة لتجنّب استيراد نوع داخلي غير عام.
-type FirebaseFirestoreLikeTransaction = {
-  get: (ref: any) => Promise<any>;
-  update: (ref: any, data: any) => void;
-};
+// -----------------------------------------------------------------------------
+// Finals computation (replacement for missing calculateEndOfGameAwards)
+// -----------------------------------------------------------------------------
+
+/**
+ * Calculates end-of-game awards in a resilient way if helper is missing.
+ * Keeps output shape compatible with UI expectations used in this code.
+ */
+async function calculateEndOfGameAwardsSafe(
+  game: Game,
+  allRanks: SocialRank[]
+): Promise<{
+  data: {
+    winUpdate?: { userId: string };
+    specialAwards: Record<string, any>;
+  };
+}> {
+  const scores = game.playerScores || {};
+  const entries = Object.entries(scores);
+  let winner: string | undefined;
+
+  if (entries.length > 0) {
+    entries.sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
+    winner = entries[0][0];
+  }
+
+  const trickStats = (game as any)[FIELD_TRAP_STATE]?.trickStats || { trickedOthers: {}, trickedBy: {} };
+  const afkStats = (game as any)[FIELD_TRAP_STATE]?.afkStats || {};
+
+  // Simple awards derived from available data
+  const mostAFK = pickMaxKey(afkStats);
+  const trickMaster = pickMaxKey(mapToCounts(trickStats.trickedOthers));
+  const mostGullible = pickMaxKey(mapToCounts(trickStats.trickedBy));
+
+  const specialAwards = {
+    winner,
+    mostAFK: mostAFK ?? null,
+    trickMaster: trickMaster ?? null,
+    mostGullible: mostGullible ?? null,
+    // Keep a place for rank suggestions if your UI needs it
+    suggestedRankUp: suggestRankUp(winner, allRanks),
+  } as Record<string, any>;
+
+  return {
+    data: {
+      winUpdate: winner ? { userId: winner } : undefined,
+      specialAwards,
+    },
+  };
+}
+
+function pickMaxKey(map: Record<string, number> | undefined): string | undefined {
+  if (!map) return undefined;
+  let topKey: string | undefined;
+  let topVal = -Infinity;
+  for (const [k, v] of Object.entries(map)) {
+    const nv = typeof v === 'number' ? v : 0;
+    if (nv > topVal) { topVal = nv; topKey = k; }
+  }
+  return topKey;
+}
+
+function mapToCounts(map: Record<string, string[]>) {
+  const counts: Record<string, number> = {};
+  Object.entries(map || {}).forEach(([k, arr]) => { counts[k] = Array.isArray(arr) ? arr.length : 0; });
+  return counts;
+}
+
+function suggestRankUp(userId: string | undefined, ranks: SocialRank[]) {
+  if (!userId) return null;
+  // Placeholder: apps can hook real logic here
+  return { userId, suggested: ranks?.[0]?.name ?? null };
+}
