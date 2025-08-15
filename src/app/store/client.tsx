@@ -58,14 +58,6 @@ import {
 // -----------------------------
 // Helpers & Maps
 // -----------------------------
-const rankIconMap: Record<string, React.ElementType> = {
-  Shield,
-  Award,
-  Gem,
-  Crown,
-  Star,
-};
-
 const prettyCurrency = (c: "coins" | "diamonds") =>
   c === "coins" ? "كوينز" : "ألماس";
 
@@ -142,20 +134,24 @@ const AvatarTile = React.memo(function AvatarTile({
   );
 });
 
+AvatarTile.displayName = 'AvatarTile';
+
 // -----------------------------
-// Main Admin Store
+// Main Store Client
 // -----------------------------
 export default function AdminStoreClient() {
   const { toast } = useToast();
   const router = useRouter();
   const { userProfile, loading, refreshUserProfile } = useAuth();
 
+  // Avatars State
   const [prices, setPrices] = useState<Record<string, Omit<AvatarPrice, "avatarId">>>({});
   const [punishmentPrices, setPunishmentPrices] = useState<Record<string, Omit<AvatarPrice, "avatarId">>>({});
-
+  
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
+  
+  // UI state
   const [storeTab, setStoreTab] = useState<"regular" | "punishment">("regular");
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounced(query, 250);
@@ -198,8 +194,7 @@ export default function AdminStoreClient() {
 
   const visibleAvatarIds = useMemo(() => {
     const all = storeTab === "regular" ? AVATAR_IDS : PUNISHMENT_AVATAR_IDS;
-    const filtered = all.filter((id) => id.toLowerCase().includes(debouncedQuery.toLowerCase()));
-    return filtered;
+    return all.filter((id) => id.toLowerCase().includes(debouncedQuery.toLowerCase()));
   }, [storeTab, debouncedQuery]);
   
   const handleConfirmPurchase = async () => {
@@ -221,10 +216,8 @@ export default function AdminStoreClient() {
 
   const handleEquip = async (avatarId: string) => {
        if(!userProfile) return;
-       // Logic to equip avatar (will be added in a future step)
        toast({title: "قيد التطوير", description: `تم اختيار ${avatarId} كشخصية لك (سيتم حفظها قريبًا).`});
   }
-
 
   if (loading) {
       return (

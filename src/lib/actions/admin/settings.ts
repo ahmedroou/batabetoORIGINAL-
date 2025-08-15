@@ -63,18 +63,6 @@ export async function setAvatarPrices(prices: AvatarPrice[]) {
     }
 }
 
-export async function getAvatarPrices() {
-    try {
-        const ref = doc(db, 'game_settings', 'avatar_prices');
-        const snap = await getDoc(ref);
-        if (snap.exists()) return { success: true, prices: (snap.data().prices || []) as AvatarPrice[] };
-        return { success: true, prices: [] };
-    } catch (e) {
-        console.error("Error getting avatar prices:", e);
-        return { success: false, error: 'Failed to fetch avatar prices.' };
-    }
-}
-
 export async function setPunishmentAvatarPrices(prices: AvatarPrice[]) {
     try {
         const ref = doc(db, 'game_settings', 'punishment_avatar_prices');
@@ -83,18 +71,6 @@ export async function setPunishmentAvatarPrices(prices: AvatarPrice[]) {
     } catch (e) {
         console.error("Error setting punishment avatar prices:", e);
         return { success: false, error: "Failed to save punishment avatar prices." };
-    }
-}
-
-export async function getPunishmentAvatarPrices() {
-    try {
-        const ref = doc(db, 'game_settings', 'punishment_avatar_prices');
-        const snap = await getDoc(ref);
-        if (snap.exists()) return { success: true, prices: (snap.data().prices || []) as AvatarPrice[] };
-        return { success: true, prices: [] };
-    } catch (e) {
-        console.error("Error getting punishment avatar prices:", e);
-        return { success: false, error: 'Failed to fetch punishment avatar prices.' };
     }
 }
 
@@ -124,18 +100,6 @@ export async function setDefaultAvatar(avatarId: string) {
     } catch (e) {
         console.error("Error setting default avatar:", e);
         return { success: false, error: "Failed to set default avatar." };
-    }
-}
-
-export async function getDefaultAvatar() {
-    try {
-        const ref = doc(db, 'game_settings', 'default_avatar');
-        const snap = await getDoc(ref);
-        if (snap.exists()) return { success: true, avatarId: snap.data().avatarId as string };
-        return { success: true, avatarId: 'Avatar00.png' };
-    } catch (e) {
-        console.error("Error getting default avatar:", e);
-        return { success: false, error: 'Failed to fetch default avatar.' };
     }
 }
 

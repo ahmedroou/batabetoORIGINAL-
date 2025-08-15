@@ -4,7 +4,7 @@
 
 import { db } from '@/lib/firebase';
 import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch, increment, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
-import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge, Game, MatchHistoryItem } from '@/types';
+import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge, Game, MatchHistoryItem, AvatarPrice } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/data/social-ranks';
 import { getTopUsers as adminGetTopUsers } from '../admin/users';
 
@@ -315,5 +315,45 @@ export async function recordMatchHistory(game: Game): Promise<void> {
         await batch.commit();
     } catch (error) {
         console.error("Failed to record match history:", error);
+    }
+}
+
+export async function getAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+    try {
+        const ref = doc(db, 'game_settings', 'avatar_prices');
+        const snap = await getDoc(ref);
+        if (snap.exists()) return { success: true, prices: (snap.data().prices || []) as AvatarPrice[] };
+        return { success: true, prices: [] };
+    } catch (e) {
+        console.error("Error getting avatar prices:", e);
+        return { success: false, error: 'Failed to fetch avatar prices.' };
+    }
+}
+
+
+export async function getPunishmentAvatarPrices(): Promise<{success: boolean, prices?: AvatarPrice[], error?: string}> {
+    try {
+        const ref = doc(db, 'game_settings', 'punishment_avatar_prices');
+        const snap = await getDoc(ref);
+        if (snap.exists()) return { success: true, prices: (snap.data().prices || []) as AvatarPrice[] };
+        return { success: true, prices: [] };
+    } catch (e) {
+        console.error("Error getting punishment avatar prices:", e);
+        return { success: false, error: 'Failed to fetch punishment avatar prices.' };
+    }
+}
+
+export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?: string; error?: string }> {
+    try {
+        const docRef = doc(db, 'game_settings', 'default_avatar');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { success: true, avatarId: docSnap.data().avatarId };
+        }
+        // Return a hardcoded default if no default avatar is explicitly set
+        return { success: true, avatarId: 'Avatar00.png' }; 
+    } catch (error) {
+        console.error("Error getting default avatar:", error);
+        return { success: false, error: 'Failed to fetch default avatar.' };
     }
 }
