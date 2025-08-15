@@ -19,6 +19,7 @@ import { updateLeagueScoresForGameEnd } from './user';
 
 // --- Constants ---
 const INTRO_DURATION_S = 5;
+const PREPARATION_TIME_S = 5; // New state for pre-challenge setup
 const RESULTS_DISPLAY_DURATION_S = 10;
 const FORFEIT_TIME = 999;
 const DEFAULT_POINTS_MAP = [10, 5, 3, 1];
@@ -69,6 +70,22 @@ export async function randomizeTeams(gameId: string, hostId: string) {
 
 
 // --- Game Flow ---
+
+// This function is new, to move from Lobby to Team Selection
+export async function moveToTeamSelection(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (tx) => {
+        const snap = await tx.get(gameRef);
+        if (!snap.exists()) throw new Error('Game not found.');
+        const game = snap.data() as Game;
+        if (game.hostId !== hostId) throw new Error('Only host can start team selection.');
+        if (game.gameState !== 'lobby') return;
+        
+        tx.update(gameRef, { gameState: 'team_selection' });
+    });
+}
+
+
 export async function startKingOfGeniusGame(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (tx) => {
@@ -78,6 +95,7 @@ export async function startKingOfGeniusGame(gameId: string, hostId: string) {
 
     if (game.hostId !== hostId) throw new Error('Only the host can start the game.');
     if (game.players.some((p) => !p.team)) throw new Error('All players must be on a team.');
+    // Can now start from team_selection phase
     if (game.gameState !== 'team_selection') return;
 
     const challengeOrder = shuffle(GENIUS_CHALLENGES.map((c) => c.id));
