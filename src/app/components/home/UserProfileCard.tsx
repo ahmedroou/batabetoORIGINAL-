@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useId } from "react";
@@ -110,13 +111,13 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
 
               {/* وسط: الاسم + الشارة + معلومات مختصرة */}
               <div className="flex flex-col items-center sm:items-start justify-center text-center sm:text-right">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center sm:justify-start flex-wrap gap-2">
                   <h2 className="text-base sm:text-lg md:text-xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
                     {userProfile.name}
                   </h2>
                   {effectiveCurrentRank && (
-                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-sm dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100">
-                      <RankIcon className="w-3.5 h-3.5 text-violet-700 dark:text-violet-200" />
+                    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border border-violet-300/60 bg-white/70 text-violet-900 shadow-sm dark:border-violet-700/40 dark:bg-white/10 dark:text-violet-100">
+                      <RankIcon className="w-4 h-4 text-violet-700 dark:text-violet-200" />
                       {activeDecree?.title ?? effectiveCurrentRank?.name}
                     </span>
                   )}
