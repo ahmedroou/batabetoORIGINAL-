@@ -13,6 +13,7 @@ import type { Game } from '@/types';
 import { Star, Loader2, Heart, TrendingUp, Trophy, Coins, HelpCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 type LoadingState =
   | 'create-king-of-genius'
@@ -131,7 +132,6 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
   
   const handleCardClick = (e: React.MouseEvent, gameType: Game['gameType']) => {
     const el = e.target as HTMLElement;
-    // Prevent card click from triggering if a button inside it was clicked
     if (el.closest('button, a, [role="button"], [data-interactive="true"]')) return;
     if (!isLoading) handleCreate(gameType);
   };
