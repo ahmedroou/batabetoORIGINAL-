@@ -588,7 +588,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
       .sort((a, b) => b.score - a.score);
   
     let rank = 0;
-    let lastScore = Number.POSITIVE_INFINITY;
+    let lastScore = Infinity;
   
     const rankedPlayers = sortedPlayers.map((p, index) => {
       if (p.score !== lastScore) {
@@ -750,12 +750,19 @@ function TrapAnswerLobby({ game, self }: { game: Game; self: Player }) {
     () => ({ categories: [] as string[], rounds: 10, answerTime: 60 }),
     []
   );
+  
   const [settings, setSettings] = useState(
     game.trapAnswerState?.settings ?? defaultSettings
   );
 
   const handleSettingsChange = (newSettings: Partial<typeof settings>) => {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
+    // For text/number inputs, directly set the value as string
+    if (typeof newSettings.rounds === 'string' || typeof newSettings.answerTime === 'string') {
+        setSettings(prev => ({ ...prev, ...newSettings }));
+    } else {
+        // For checkboxes (arrays)
+        setSettings(prev => ({ ...prev, ...newSettings }));
+    }
   };
 
   const handleCopyId = () => {
@@ -817,9 +824,9 @@ function TrapAnswerLobby({ game, self }: { game: Game; self: Player }) {
   const handleSaveSettings = async () => {
     if (!isHost) return;
 
-    // تحقّقات سريعة
     const rounds = Number(settings.rounds) || 1;
     const answerTime = Number(settings.answerTime) || 30;
+
     if (rounds < 1) {
       toast({ title: 'عدد الجولات يجب أن يكون 1 على الأقل', variant: 'destructive' });
       return;
@@ -934,7 +941,7 @@ function TrapAnswerLobby({ game, self }: { game: Game; self: Player }) {
                     id="rounds"
                     type="number"
                     value={settings.rounds}
-                    onChange={(e) => handleSettingsChange({ rounds: Math.max(1, parseInt(e.target.value || '1', 10)) })}
+                    onChange={(e) => handleSettingsChange({ rounds: e.target.value as any })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -943,7 +950,7 @@ function TrapAnswerLobby({ game, self }: { game: Game; self: Player }) {
                     id="answer-time"
                     type="number"
                     value={settings.answerTime}
-                    onChange={(e) => handleSettingsChange({ answerTime: Math.max(10, parseInt(e.target.value || '60', 10)) })}
+                    onChange={(e) => handleSettingsChange({ answerTime: e.target.value as any })}
                   />
                 </div>
                 <Button onClick={handleSaveSettings} disabled={isSubmitting} className="w-full">
