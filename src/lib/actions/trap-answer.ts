@@ -39,7 +39,7 @@ import type { Game, Player, TrapQuestion, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { calculateTrapAnswerScores } from './helpers/trap-answer-helpers';
 import { getTrapAnswerCategories } from './admin/settings';
-import { distributeEndOfGameAwards } from './admin/users';
+import { updateLeagueScoresForGameEnd } from './user/leagues';
 
 
 // -----------------------------------------------------------------------------
@@ -418,28 +418,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 }
 
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
-  const gameRef = doc(db, 'games', gameId);
-  let shouldFinalize = false;
-
-  await runTransaction(db, async (tx) => {
-      const snap = await tx.get(gameRef);
-      ensure(snap.exists(), 'اللعبة غير موجودة.');
-      const game = snap.data() as Game;
-      const isTimerUp = (game as any).trapAnswerState?.roundEndTime ? (game as any).trapAnswerState.roundEndTime.toMillis() <= nowMs() : false;
-      if (!isTimerUp) {
-          ensure(game.hostId === hostId, 'فقط المضيف يمكنه بدء الجولة التالية قبل انتهاء الوقت.');
-      }
-      if (game.gameState !== 'round-results') return;
-      const nextRoundResult = await _startNextRound(tx as any, gameRef, game);
-      if (nextRoundResult.isGameOver) {
-          shouldFinalize = true;
-      }
-  });
-  
-  if (shouldFinalize) {
-      // Call the admin action to finalize and distribute awards
-      await distributeEndOfGameAwards(gameId);
-  }
+  await handleTimeout(gameId, hostId);
 }
 
 /**
@@ -458,16 +437,15 @@ export async function tickGame(gameId: string) {
     return;
   }
   
-  await handleTimeout(gameId);
+  await handleTimeout(gameId, game.hostId);
 }
 
 // -----------------------------------------------------------------------------
 // Timeout & Reactions
 // -----------------------------------------------------------------------------
-export async function handleTimeout(gameId: string) {
+export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
-  let shouldFinalize = false;
-
+  
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
@@ -475,7 +453,12 @@ export async function handleTimeout(gameId: string) {
     const game = snap.data() as Game;
     const state = (game as any)[FIELD_TRAP_STATE] || {};
     const timerEndsAt = state?.roundEndTime as Timestamp | undefined;
-    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
+    
+    // Only allow host to force advance if timer is NOT up yet.
+    // Anyone can trigger if timer IS up.
+    if(timerEndsAt && timerEndsAt.toMillis() > nowMs()) {
+      ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء قبل انتهاء الوقت.');
+    }
 
     tx.update(gameRef, {
       [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
@@ -511,16 +494,9 @@ export async function handleTimeout(gameId: string) {
     } else if (game.gameState === 'guessing') {
       await _advanceToResults(tx as any, gameRef, game, true);
     } else if (game.gameState === 'round-results') {
-        const nextRoundResult = await _startNextRound(tx as any, gameRef, game);
-        if (nextRoundResult.isGameOver) {
-            shouldFinalize = true;
-        }
+        await _startNextRound(tx as any, gameRef, game);
     }
   });
-  
-  if (shouldFinalize) {
-      await distributeEndOfGameAwards(gameId);
-  }
 }
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
@@ -669,7 +645,7 @@ async function _advanceToResults(
   });
 }
 
-async function _startNextRound(tx: Tx, gameRef: any, game: Game): Promise<{ isGameOver: boolean; finalGame: Game | null }> {
+async function _startNextRound(tx: Tx, gameRef: any, game: Game): Promise<{ isGameOver: boolean }> {
     const state = (game as any)[FIELD_TRAP_STATE] || {};
     const currentRound = game.round || 0;
     const totalRounds = state?.settings?.rounds || 10;
@@ -681,8 +657,7 @@ async function _startNextRound(tx: Tx, gameRef: any, game: Game): Promise<{ isGa
             [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
             [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
         });
-        const finalGame: Game = { ...game, gameState: 'final_results' };
-        return { isGameOver: true, finalGame: finalGame };
+        return { isGameOver: true };
     }
 
     const nextTurnIndex = ((state?.currentTurnIndex || 0) + 1) % (game.players?.length || 1);
@@ -712,5 +687,5 @@ async function _startNextRound(tx: Tx, gameRef: any, game: Game): Promise<{ isGa
       [`${FIELD_TRAP_STATE}.reactions`]: {},
     });
 
-    return { isGameOver: false, finalGame: null };
+    return { isGameOver: false };
 }

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -20,6 +21,7 @@ import {
   addDoc,
   serverTimestamp,
   deleteField,
+  startAfter,
 } from 'firebase/firestore';
 import type {
   UserProfile,
@@ -43,7 +45,7 @@ const IN_QUERY_LIMIT = 30; // Firestore 'in' operator max items
 function chunk<T>(arr: T[], size: number): T[][] {
   if (size <= 0) return [arr];
   const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + 30));
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
 }
 
@@ -361,7 +363,6 @@ export async function recordMatchHistory(game: Game): Promise<void> {
   const playersToRecord = game.players.filter((p) => p.status !== 'left');
   if (playersToRecord.length === 0) return;
 
-  // Use the explicit game ID from the object if available.
   const gameId = game.id;
   if (!gameId) {
       console.error("Cannot record match history: game.id is missing.");

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -223,16 +224,16 @@ export async function distributeEndOfGameAwards(gameId: string) {
     try {
         const freshSnap = await getDoc(gameRef);
         if (!freshSnap.exists()) return;
-        const game = freshSnap.data() as Game;
+        const game = { ...freshSnap.data(), id: freshSnap.id } as Game; // Ensure ID is present
 
         // Prevent re-processing
         if(!!game.gameResult?.error || (game.gameType === 'trap-answer' && !!game.trapAnswerState?.finalAwards)) return;
 
         try {
-            await recordMatchHistory({ ...game, id: gameId });
+            await recordMatchHistory(game);
         } catch(histError) {
             console.error(`Failed to record match history for game ${gameId}, but proceeding to awards.`, histError);
-            await updateDoc(gameRef, { 'gameResult.error': `Failed to record match history: ${histError}` });
+            await updateDoc(gameRef, { 'gameResult.error': `Failed to record match history: ${(histError as Error).message}` });
         }
 
         const allRanks = await getRanks();

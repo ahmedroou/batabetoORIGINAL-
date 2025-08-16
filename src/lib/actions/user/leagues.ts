@@ -1,11 +1,11 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, getDoc, where, increment, runTransaction, arrayUnion, arrayRemove, deleteField, Timestamp, writeBatch, type Transaction } from 'firebase/firestore';
 import { generateLeagueId } from '../helpers';
 import type { UserProfile, League, Game, Challenge, SocialRank } from '@/types';
-import { recordMatchHistory } from './queries';
 import { distributeEndOfGameAwards } from '../admin/users';
 
 
@@ -313,9 +313,8 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
 /**
  * Updates player scores in all associated leagues after a game has ended.
  * This is now the primary entry point for all end-of-game score processing.
- * @param game The final game state object containing player scores.
+ * @param gameId The ID of the finalized game object.
  */
-export async function updateLeagueScoresForGameEnd(game: Game): Promise<void> {
-    // This is the single entry point for all post-game processing.
-    await distributeEndOfGameAwards(game.id);
+export async function updateLeagueScoresForGameEnd(gameId: string): Promise<void> {
+    await distributeEndOfGameAwards(gameId);
 }
