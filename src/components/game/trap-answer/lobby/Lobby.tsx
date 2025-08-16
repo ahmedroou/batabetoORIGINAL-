@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -11,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 'lucide-react';
+import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight, Shield, Clock3, Users2, RefreshCcw, Wand2, Filter } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
@@ -25,25 +24,91 @@ interface LobbyPhaseProps {
   self: Player;
 }
 
+// Small helpers
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+const toInt = (v: any, d: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : d;
+};
+const fmtMin = (sec: number) => {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
 export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
   const { toast } = useToast();
   const router = useRouter();
   const { getSocialRankForUser } = useAuth();
   const isHost = game.hostId === self.id;
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [busyLeavingOrKicking, setBusyLeavingOrKicking] = useState(false);
+  const [busyStarting, setBusyStarting] = useState(false);
+  const [busySaving, setBusySaving] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
   const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  
+  const [filterText, setFilterText] = useState('');
+
   const initialSettings = game.trapAnswerState?.settings || { rounds: 10, answerTime: 60, categories: [] };
   const [lobbySettings, setLobbySettings] = useState(initialSettings);
   const [allCategories, setAllCategories] = useState<string[]>([]);
 
+  // Keep local settings synced when host updates from elsewhere
+  useEffect(() => {
+    const next = game.trapAnswerState?.settings;
+    if (next) setLobbySettings(next);
+  }, [game.trapAnswerState?.settings]);
+
+  // Load categories for the host (others don't need management UI)
+  useEffect(() => {
+    let cancelled = false;
+    if (isHost) {
+      getTrapAnswerCategories().then(res => {
+        if (!cancelled && res?.success && Array.isArray(res.categories)) {
+          setAllCategories(res.categories);
+        }
+      });
+    }
+    return () => { cancelled = true; };
+  }, [isHost]);
+
   const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
 
+  // Derived stats / UX helpers
+  const selectedCount = lobbySettings.categories?.length || 0;
+  const estimatedSeconds = useMemo(() => {
+    // Rough estimate per round: answerTime + guessing (≈ answerTime) + results (≈ 8)
+    const perRound = clamp(lobbySettings.answerTime, 10, 600) + clamp(lobbySettings.answerTime, 10, 600) + 8;
+    return (lobbySettings.rounds || 10) * perRound;
+  }, [lobbySettings.answerTime, lobbySettings.rounds]);
+
+  const filteredCategories = useMemo(() => {
+    const q = filterText.trim().toLowerCase();
+    if (!q) return allCategories;
+    return allCategories.filter(c => c.toLowerCase().includes(q));
+  }, [allCategories, filterText]);
+
+  const copyGameIdOrLink = useCallback(async () => {
+    try {
+      setIsCopying(true);
+      const share = (typeof window !== 'undefined' && window?.location?.origin)
+        ? `${window.location.origin}/join/${game.id}`
+        : game.id;
+      await navigator.clipboard.writeText(share);
+      toast({ title: 'تم النسخ!', description: 'تم نسخ رابط الدعوة إلى الحافظة.' });
+    } catch {
+      try {
+        await navigator.clipboard.writeText(game.id);
+        toast({ title: 'تم النسخ!', description: 'تم نسخ رقم الغرفة.' });
+      } catch {}
+    } finally {
+      setTimeout(() => setIsCopying(false), 1400);
+    }
+  }, [game.id, toast]);
+
   const handleLeaveGame = async () => {
-    setIsSubmitting(true);
+    setBusyLeavingOrKicking(true);
     const result = await leaveGame(game.id, self.id);
     if (result.success) {
       try { sessionStorage.removeItem(`player-id-${game.id}`); } catch {}
@@ -52,196 +117,331 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
     } else {
       toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
     }
-    setIsSubmitting(false);
+    setBusyLeavingOrKicking(false);
   };
-  
-   const handleKickPlayer = async () => {
+
+  const handleKickPlayer = async () => {
     if (!playerToKick || !isHost) return;
-    setIsSubmitting(true);
+    setBusyLeavingOrKicking(true);
     const result = await kickPlayerFromLobby(game.id, self.id, playerToKick.id);
     if (result.error) {
-        toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
+      toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
     } else {
-        toast({ title: "نجاح", description: `تم طرد اللاعب ${playerToKick.name}.` });
+      toast({ title: "نجاح", description: `تم طرد اللاعب ${playerToKick.name}.` });
     }
     setPlayerToKick(null);
-    setIsSubmitting(false);
+    setBusyLeavingOrKicking(false);
   };
 
   const handleStartGame = async () => {
     if (!isHost) return;
-    setIsSubmitting(true);
+    setBusyStarting(true);
     try {
       await startTrapAnswerGame(game.id, self.id);
     } catch (e: any) {
-      toast({ title: 'خطأ', description: e.message, variant: 'destructive' });
+      toast({ title: 'خطأ', description: e?.message || 'تعذر بدء اللعبة', variant: 'destructive' });
     } finally {
-      setIsSubmitting(false);
+      setBusyStarting(false);
     }
   };
 
-   const handleSaveSettings = async () => {
-        if (!isHost) return;
-        setIsSubmitting(true);
-        try {
-            await updateGameSettings(game.id, self.id, lobbySettings);
-            toast({ title: "تم حفظ الإعدادات" });
-        } catch(e: any) {
-             toast({ title: "خطأ", description: e.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-            setIsSettingsOpen(false);
-        }
-    };
-    
-    useEffect(() => {
-        if(isHost) {
-            getTrapAnswerCategories().then(res => {
-                if(res.success && res.categories) {
-                    setAllCategories(res.categories);
-                }
-            })
-        }
-    }, [isHost]);
+  const handleSaveSettings = async () => {
+    if (!isHost) return;
+    setBusySaving(true);
+    try {
+      const safeRounds = clamp(toInt(lobbySettings.rounds, 10), 1, 50);
+      const safeAnswer = clamp(toInt(lobbySettings.answerTime, 60), 10, 600);
+      const safeCats = Array.isArray(lobbySettings.categories) ? lobbySettings.categories.filter(Boolean) : [];
+      await updateGameSettings(game.id, self.id, { rounds: safeRounds, answerTime: safeAnswer, categories: safeCats });
+      toast({ title: "تم حفظ الإعدادات" });
+    } catch (e: any) {
+      toast({ title: "خطأ", description: e?.message || 'تعذر حفظ الإعدادات', variant: "destructive" });
+    } finally {
+      setBusySaving(false);
+      setIsSettingsOpen(false);
+    }
+  };
 
+  // Keyboard shortcuts (host): Ctrl+S save, Enter start
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!isHost) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveSettings();
+      }
+      if (e.key === 'Enter' && !busyStarting) {
+        const canStart = activePlayers.length >= 2;
+        if (canStart) handleStartGame();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isHost, activePlayers.length, busyStarting]);
+
+  // Presets for quick setup
+  const applyPreset = (rounds: number, answerTime: number) => {
+    if (!isHost) return;
+    setLobbySettings(prev => ({ ...prev, rounds, answerTime }));
+  };
+
+  const toggleAllCategories = (on: boolean) => {
+    if (!isHost) return;
+    setLobbySettings(prev => ({ ...prev, categories: on ? [...allCategories] : [] }));
+  };
+
+  const toggleRandomCategories = (count: number) => {
+    if (!isHost) return;
+    const shuffled = [...allCategories].sort(() => Math.random() - 0.5).slice(0, Math.max(0, Math.min(count, allCategories.length)));
+    setLobbySettings(prev => ({ ...prev, categories: shuffled }));
+  };
+
+  // Ready checks
+  const canStart = isHost && activePlayers.length >= 2;
+  const startLabel = !isHost
+    ? 'في انتظار صاحب الغرفة لبدء اللعبة...'
+    : activePlayers.length < 2
+      ? `تحتاج ${2 - activePlayers.length} لاعبين على الأقل`
+      : 'ابدأ اللعبة';
 
   return (
     <>
-      <Card className="w-full max-w-lg animate-pop-in">
-        <CardHeader className="text-center">
+      <Card className="w-full max-w-2xl animate-pop-in shadow-lg border-2">
+        <CardHeader className="text-center space-y-2">
           <CardTitle className="text-2xl">لوبي الجواب المفخخ</CardTitle>
-          <CardDescription>ادعُ أصدقاءك. اللعبة تحتاج لاعبين اثنين على الأقل.</CardDescription>
+          <CardDescription className="flex flex-col items-center gap-1">
+            <span className="text-sm">ادعُ أصدقاءك. اللعبة تحتاج لاعبين اثنين على الأقل.</span>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><Users2 className="w-4 h-4"/> لاعبين: {activePlayers.length}</span>
+              <span className="inline-flex items-center gap-1"><Clock3 className="w-4 h-4"/> مدة تقديرية: ~{fmtMin(estimatedSeconds)}</span>
+              <span className="inline-flex items-center gap-1"><Shield className="w-4 h-4"/> المضيف: {isHost ? 'أنت' : 'شخص آخر'}</span>
+            </div>
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+
+        <CardContent className="space-y-6">
+          {/* Share / copy */}
           <div className="flex gap-2">
             <Input value={game.id} readOnly className="text-center tracking-widest font-mono text-lg h-12 flex-grow" />
             <TooltipProvider>
               <Tooltip open={isCopying}>
                 <TooltipTrigger asChild>
-                  <Button onClick={() => { setIsCopying(true); navigator.clipboard.writeText(game.id); setTimeout(() => setIsCopying(false), 2000); }} size="lg" variant="secondary" className="px-4">
+                  <Button onClick={copyGameIdOrLink} size="lg" variant="secondary" className="px-4" aria-label="نسخ رابط الدعوة">
                     {isCopying ? <Check /> : <Copy />}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent><p>تم النسخ!</p></TooltipContent>
+                <TooltipContent><p>انسخ رابط الدعوة</p></TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
+
+          {/* Settings */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-                <Label className='font-bold text-base'>إعدادات اللعبة</Label>
+              <Label className='font-bold text-base'>إعدادات اللعبة</Label>
+              <div className="flex items-center gap-2">
+                <div className="text-xs text-muted-foreground hidden sm:block">
+                  جولات: <b>{lobbySettings.rounds}</b> • وقت الإجابة: <b>{lobbySettings.answerTime}s</b> • أقسام: <b>{selectedCount}</b>
+                </div>
                 {isHost && (
-                    <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(!isSettingsOpen)}>
-                        <Settings className={cn("w-5 h-5", isSettingsOpen && "animate-spin")} />
-                    </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(v => !v)} aria-expanded={isSettingsOpen} aria-controls="settings-panel">
+                    <Settings className={cn("w-5 h-5", isSettingsOpen && "animate-spin")} />
+                  </Button>
                 )}
+              </div>
             </div>
-             <motion.div
-                initial={false}
-                animate={{ height: isSettingsOpen ? 'auto' : 0, opacity: isSettingsOpen ? 1 : 0 }}
-                className="overflow-hidden"
-              >
+
+            <AnimatePresence initial={false}>
+              {isSettingsOpen && (
+                <motion.div
+                  key="settings"
+                  id="settings-panel"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ type: 'tween', duration: 0.25 }}
+                  className="overflow-hidden"
+                >
                   <div className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <Label htmlFor="rounds-setting">عدد الجولات</Label>
-                                <Input id="rounds-setting" type="number" value={lobbySettings.rounds} disabled={!isHost} onChange={e => setLobbySettings({ ...lobbySettings, rounds: parseInt(e.target.value, 10) || 1 })} />
-                            </div>
-                            <div className="space-y-1">
-                                <Label htmlFor="answering-time">وقت الإجابة (ث)</Label>
-                                <Input id="answering-time" type="number" value={lobbySettings.answerTime} disabled={!isHost} onChange={e => setLobbySettings({ ...lobbySettings, answerTime: parseInt(e.target.value, 10) || 60 })} />
-                            </div>
-                        </div>
-                        <div className="space-y-1">
-                             <Label>الأقسام المختارة</Label>
-                             <div className="flex flex-wrap gap-2 p-2 border rounded-md bg-background">
-                                {allCategories.map(cat => (
-                                    <div key={cat} className="flex items-center gap-2">
-                                        <Input
-                                            type="checkbox"
-                                            id={`cat-${cat}`}
-                                            checked={lobbySettings.categories.includes(cat)}
-                                            disabled={!isHost}
-                                            onChange={e => {
-                                                const newCats = e.target.checked
-                                                    ? [...lobbySettings.categories, cat]
-                                                    : lobbySettings.categories.filter(c => c !== cat);
-                                                setLobbySettings({ ...lobbySettings, categories: newCats });
-                                            }}
-                                            className="w-4 h-4"
-                                        />
-                                        <Label htmlFor={`cat-${cat}`} className="text-sm font-normal">{cat}</Label>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <Button onClick={handleSaveSettings} disabled={isSubmitting} className="w-full">
-                            {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
-                        </Button>
+                    {/* Quick presets */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(6, 45)}>
+                        <Wand2 className="w-4 h-4 ml-1"/> سريع
+                      </Button>
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(10, 60)}>
+                        افتراضي
+                      </Button>
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(15, 45)}>
+                        حفلة
+                      </Button>
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(20, 60)}>
+                        ماراثون
+                      </Button>
                     </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label htmlFor="rounds-setting">عدد الجولات</Label>
+                        <Input
+                          id="rounds-setting"
+                          type="number"
+                          value={lobbySettings.rounds}
+                          disabled={!isHost}
+                          min={1}
+                          max={50}
+                          onChange={e => setLobbySettings({ ...lobbySettings, rounds: clamp(toInt(e.target.value, 10), 1, 50) })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="answering-time">وقت الإجابة (ث)</Label>
+                        <Input
+                          id="answering-time"
+                          type="number"
+                          value={lobbySettings.answerTime}
+                          disabled={!isHost}
+                          min={10}
+                          max={600}
+                          onChange={e => setLobbySettings({ ...lobbySettings, answerTime: clamp(toInt(e.target.value, 60), 10, 600) })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label className="inline-flex items-center gap-1"><Filter className="w-4 h-4"/> الأقسام المختارة</Label>
+                        <div className="flex items-center gap-2 text-xs">
+                          <Button type="button" variant="ghost" size="sm" disabled={!isHost || allCategories.length===0} onClick={() => toggleAllCategories(true)}>تحديد الكل</Button>
+                          <Button type="button" variant="ghost" size="sm" disabled={!isHost || selectedCount===0} onClick={() => toggleAllCategories(false)}>إلغاء الكل</Button>
+                          <Button type="button" variant="ghost" size="sm" disabled={!isHost || allCategories.length===0} onClick={() => toggleRandomCategories(5)}>عشوائي 5</Button>
+                          <Button type="button" variant="ghost" size="sm" disabled={!isHost || allCategories.length===0} onClick={() => toggleRandomCategories(10)}>عشوائي 10</Button>
+                        </div>
+                      </div>
+
+                      <Input
+                        placeholder="ابحث عن قسم..."
+                        value={filterText}
+                        onChange={e => setFilterText(e.target.value)}
+                        disabled={!isHost || allCategories.length===0}
+                      />
+
+                      <div className="flex flex-wrap gap-3 p-3 border rounded-md bg-background max-h-60 overflow-auto">
+                        {filteredCategories.length === 0 && (
+                          <p className="text-sm text-muted-foreground">لا توجد أقسام مطابقة.</p>
+                        )}
+                        {filteredCategories.map(cat => {
+                          const checked = lobbySettings.categories.includes(cat);
+                          return (
+                            <label key={cat} htmlFor={`cat-${cat}`} className={cn("flex items-center gap-2 cursor-pointer select-none border rounded-full px-3 py-1 text-sm",
+                              checked ? 'bg-primary/10 border-primary' : 'bg-muted/50')}
+                            >
+                              <input
+                                id={`cat-${cat}`}
+                                type="checkbox"
+                                className="w-4 h-4"
+                                disabled={!isHost}
+                                checked={checked}
+                                onChange={e => {
+                                  const newCats = e.target.checked
+                                    ? [...lobbySettings.categories, cat]
+                                    : lobbySettings.categories.filter(c => c !== cat);
+                                  setLobbySettings({ ...lobbySettings, categories: newCats });
+                                }}
+                              />
+                              <span>{cat}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      <div className="text-xs text-muted-foreground">المحدد: {selectedCount} من {allCategories.length}</div>
+
+                      <Button onClick={handleSaveSettings} disabled={busySaving} className="w-full">
+                        {busySaving ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
+                      </Button>
+                    </div>
+                  </div>
                 </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+
+          {/* Players list */}
           <div className="space-y-2">
             <Label>اللاعبون ({activePlayers.length})</Label>
             <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
+              {activePlayers.length === 0 && (
+                <p className="text-sm text-muted-foreground">لا يوجد لاعبون حتى الآن.</p>
+              )}
               {activePlayers.map(p => {
-                  const rank = getSocialRankForUser(p.leaderboardPoints);
-                  const RankIcon = rank?.icon;
-                  return (
-                    <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
-                      <div className="flex items-center gap-3">
-                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
-                        <div>
+                const rank = getSocialRankForUser(p.leaderboardPoints);
+                const RankIcon: any = (rank as any)?.icon;
+                const isHostRow = p.id === game.hostId;
+                return (
+                  <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
+                    <div className="flex items-center gap-3">
+                      <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
+                      <div>
+                        <div className="flex items-center gap-2">
                           <p className="font-bold text-lg">{p.name}</p>
-                          {rank && RankIcon && (
-                              <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
-                                  <RankIcon className="w-3 h-3 text-amber-500" />
-                                  {rank.name}
-                              </p>
-                          )}
+                          {isHostRow && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 border border-primary text-primary">المضيف</span>}
+                        </div>
+                        <div className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                          {rank && RankIcon ? <RankIcon className="w-3 h-3" /> : null}
+                          {rank?.name || 'بدون رتبة'}
                         </div>
                       </div>
-                      {isHost && p.id !== self.id && (
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
-                          <UserX className="w-4 h-4" />
-                        </Button>
-                      )}
                     </div>
-                  );
+                    {isHost && p.id !== self.id && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)} aria-label={`طرد ${p.name}`}>
+                              <UserX className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>طرد اللاعب</p></TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
+                );
               })}
             </div>
           </div>
         </CardContent>
+
         <CardFooter className="flex-col gap-2">
           {isHost ? (
-            <Button onClick={handleStartGame} disabled={isSubmitting || activePlayers.length < 2} className="w-full" size="lg">
-              <ArrowRight className="mr-2 h-4 w-4" />
-              {isSubmitting ? "..." : activePlayers.length < 2
-                  ? `تحتاج ${2 - activePlayers.length} لاعبين على الأقل`
-                  : "ابدأ اللعبة"}
+            <Button onClick={handleStartGame} disabled={!canStart || busyStarting} className="w-full" size="lg">
+              {busyStarting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
+              {busyStarting ? "..." : startLabel}
             </Button>
           ) : (
-            <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md animate-pulse">في انتظار صاحب الغرفة لبدء اللعبة...</p>
+            <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md">{startLabel}</p>
           )}
-          <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={isSubmitting}>
-            <LogOut className="mr-2 h-4 w-4" /> {isSubmitting ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
+
+          <Button onClick={handleLeaveGame} variant="outline" className="w-full" disabled={busyLeavingOrKicking || busyStarting}>
+            {busyLeavingOrKicking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+            {busyLeavingOrKicking ? 'جاري المغادرة...' : 'مغادرة الغرفة'}
           </Button>
         </CardFooter>
       </Card>
 
+      {/* Kick confirm */}
       <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
         <AlertDialogContent>
-        <AlertDialogHeader>
+          <AlertDialogHeader>
             <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
             <AlertDialogDescription>
-            هل تريد حقًا طرد اللاعب "{playerToKick?.name}" من الغرفة؟ لن يتمكن من الانضمام مرة أخرى.
+              هل تريد حقًا طرد اللاعب "{playerToKick?.name}" من الغرفة؟ لن يتمكن من الانضمام مرة أخرى.
             </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={buttonVariants({ variant: "destructive" })}>
-            {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
+            <AlertDialogAction onClick={handleKickPlayer} disabled={busyLeavingOrKicking} className={buttonVariants({ variant: "destructive" })}>
+              {busyLeavingOrKicking ? "جاري الطرد..." : "نعم، قم بالطرد"}
             </AlertDialogAction>
-        </AlertDialogFooter>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </>

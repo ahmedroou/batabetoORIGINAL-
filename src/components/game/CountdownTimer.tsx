@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -36,13 +34,19 @@ export const CountdownTimer = ({ gameId, gameType, expiryTimestamp, selfId, isHo
         const timer = setInterval(() => {
             const remaining = calculateTimeLeft();
             setTimeLeft(remaining);
+
+            // Tick on approach to zero to sync client/server timers
+            if(gameType === 'trap-answer' && remaining <= 2) {
+                tickTrapAnswerGame(gameId);
+            }
+            
             if (remaining <= 0 && !timeoutProcessed.current) {
                  timeoutProcessed.current = true;
                  clearInterval(timer);
                  // Any active player can nudge the game state forward.
                  switch (gameType) {
                     case 'trap-answer':
-                        tickTrapAnswerGame(gameId);
+                        tickTrapAnswerGame(gameId); // Final tick
                         break;
                     case 'educated-merchant':
                         // This game's timeout logic is still host-driven in its current form

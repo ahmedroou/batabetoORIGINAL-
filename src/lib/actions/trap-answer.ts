@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -542,7 +541,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
 
     const game = snap.data() as Game;
     const state = (game as any)[FIELD_TRAP_STATE] || {};
-    const timerEndsAt = state?.timerEndsAt as Timestamp | undefined;
+    const timerEndsAt = state?.roundEndTime as Timestamp | undefined;
     if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
 
     // ✅ أي لاعب مشارك يقدر ينفذ النخزة (بدلاً من المضيف فقط)
