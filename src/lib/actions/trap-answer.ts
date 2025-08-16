@@ -422,16 +422,19 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (tx) => {
-    const snap = await tx.get(gameRef);
-    ensure(snap.exists(), 'اللعبة غير موجودة.');
-    const game = snap.data() as Game;
-    // Allow any player to proceed if time is up, but only host can skip early
-    const isTimerUp = (game as any).trapAnswerState?.roundEndTime ? (game as any).trapAnswerState.roundEndTime.toMillis() <= nowMs() : false;
-    if (!isTimerUp) {
-      ensure(game.hostId === hostId, 'فقط المضيف يمكنه بدء الجولة التالية قبل انتهاء الوقت.');
-    }
-    if (game.gameState !== 'round-results') return;
-    await _startNextRound(tx as any, gameRef, game);
+      const snap = await tx.get(gameRef);
+      ensure(snap.exists(), 'اللعبة غير موجودة.');
+      const game = snap.data() as Game;
+      const isTimerUp = (game as any).trapAnswerState?.roundEndTime ? (game as any).trapAnswerState.roundEndTime.toMillis() <= nowMs() : false;
+      if (!isTimerUp) {
+          ensure(game.hostId === hostId, 'فقط المضيف يمكنه بدء الجولة التالية قبل انتهاء الوقت.');
+      }
+      if (game.gameState !== 'round-results') return;
+      const { isGameOver } = await _startNextRound(tx as any, gameRef, game);
+      if (isGameOver) {
+        // Now finalizeGameAndDistributeAwards will be called from _startNextRound
+        return;
+      }
   });
 }
 
@@ -452,7 +455,7 @@ async function finalizeGameAndDistributeAwards(game: Game) {
         const allRanks = await getRanks();
         const { data: awards } = calculateEndOfGameAwards(current, allRanks);
         
-        if (!awards) return;
+        if(!awards) return;
         
         const { updates, winUpdate, specialAwards } = awards;
 
