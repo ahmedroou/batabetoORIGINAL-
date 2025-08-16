@@ -19,13 +19,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  startTrapAnswerGame,
   selectCategoryAndGetQuestion,
   submitTrapAnswer,
   submitGuess,
   nextTrapAnswerRound,
   sendReaction,
-  handleTimeout,
 } from '@/lib/actions/trap-answer';
 import {
   Award,
