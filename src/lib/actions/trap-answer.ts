@@ -1,6 +1,5 @@
 
-
-'use server';
+      'use server';
 
 /**
  * @file Trap Answer — Server Actions (v4.3 — auto-advance)
@@ -44,6 +43,8 @@ import { getTrapAnswerCategories } from './admin/settings';
 import { getRanks } from './user/queries';
 import { calculateEndOfGameAwards } from './user/awards';
 import { updateUserWinCount, recordMatchHistory } from './user/queries';
+import { distributeEndOfGameAwards } from './admin/users';
+
 
 // -----------------------------------------------------------------------------
 // Constants & small helpers
@@ -440,31 +441,38 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
   });
   
   if (shouldFinalize) {
-      const finalSnap = await getDoc(gameRef);
-      if (finalSnap.exists()) {
-          await finalizeGameAndDistributeAwards(finalSnap.data() as Game);
-      }
+      await finalizeGameAndDistributeAwards(gameId);
   }
 }
 
 /**
  * NEW: Centralized function to handle all end-of-game logic including awards.
  */
-async function finalizeGameAndDistributeAwards(game: Game) {
+async function finalizeGameAndDistributeAwards(gameId: string) {
     try {
-        const gameRef = doc(db, 'games', game.id);
+        const gameRef = doc(db, 'games', gameId);
         const freshSnap = await getDoc(gameRef);
-        const current = freshSnap.exists() ? freshSnap.data() as Game : game;
+        if (!freshSnap.exists()) return;
+        const current = freshSnap.data() as Game;
 
-        const alreadyFinalized = !!(current.trapAnswerState?.finalAwards);
+        const alreadyFinalized = !!current.trapAnswerState?.finalAwards;
         if (alreadyFinalized) return;
         
-        await recordMatchHistory(current);
+        try {
+            await recordMatchHistory({ ...current, id: gameId });
+        } catch (e) {
+            console.error(`Failed to record match history for game ${gameId}, but proceeding.`, e);
+            // Log this error but do not stop award distribution
+            await updateDoc(gameRef, { 'gameResult.error': 'Failed to record match history' });
+        }
 
         const allRanks = await getRanks();
         const { data: awards } = calculateEndOfGameAwards(current, allRanks);
         
-        if(!awards) return;
+        if(!awards) {
+            await updateDoc(gameRef, { 'gameResult.error': 'Failed to calculate awards.' });
+            return;
+        }
         
         const { updates, winUpdate, specialAwards } = awards;
 
@@ -475,9 +483,18 @@ async function finalizeGameAndDistributeAwards(game: Game) {
         Object.entries(updates).forEach(([playerId, playerUpdates]) => {
             const userRef = doc(db, 'users', playerId);
             const firestoreUpdates: { [key: string]: any } = {};
-            if (playerUpdates.leaderboardPoints > 0) firestoreUpdates.leaderboardPoints = increment(playerUpdates.leaderboardPoints);
-            if (playerUpdates.coins > 0) firestoreUpdates.coins = increment(playerUpdates.coins);
-            if (playerUpdates.gamesPlayed) firestoreUpdates[`gamesPlayed.${game.gameType}`] = increment(playerUpdates.gamesPlayed[game.gameType] || 0);
+            
+            // Handle both `...Delta` and direct names for points/coins
+            const pointsDelta = playerUpdates.leaderboardPoints ?? (playerUpdates as any).leaderboardPointsDelta ?? 0;
+            const coinsDelta = playerUpdates.coins ?? (playerUpdates as any).coinsDelta ?? 0;
+
+            if (pointsDelta > 0) firestoreUpdates.leaderboardPoints = increment(pointsDelta);
+            if (coinsDelta > 0) firestoreUpdates.coins = increment(coinsDelta);
+            if (playerUpdates.gamesPlayed) {
+              // Ensure increment is always at least 1
+              firestoreUpdates[`gamesPlayed.${game.gameType}`] = increment(1);
+            }
+            
             if (playerUpdates.permissions) firestoreUpdates.permissions = playerUpdates.permissions;
 
             if (Object.keys(firestoreUpdates).length > 0) {
@@ -503,10 +520,24 @@ async function finalizeGameAndDistributeAwards(game: Game) {
         await batch.commit();
 
         // 4. Update league scores (this can be a separate call as it's less critical for the primary game doc)
-        await updateLeagueScoresForGameEnd({ ...current, gameState: 'final_results' } as Game);
+        await updateLeagueScoresForGameEnd({ ...current, id: gameId, gameState: 'final_results' } as Game);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error in finalizeGameAndDistributeAwards:', error);
+        // Log the final error to the game doc for diagnosis
+        try {
+            await updateDoc(doc(db, 'games', gameId), {
+              'gameResult.error': `Finalization failed: ${error.message}`,
+              'trapAnswerState.finalizationError': {
+                  message: error.message,
+                  code: (error as any).code,
+                  stack: error.stack,
+                  timestamp: Timestamp.now(),
+              }
+            });
+        } catch(logErr) {
+            // ignore
+        }
     }
 }
 
@@ -588,10 +619,7 @@ export async function handleTimeout(gameId: string) {
   });
 
   if (shouldFinalize) {
-    const finalSnap = await getDoc(gameRef);
-    if (finalSnap.exists()) {
-        await finalizeGameAndDistributeAwards(finalSnap.data() as Game);
-    }
+    await finalizeGameAndDistributeAwards(gameId);
   }
 }
 
@@ -786,3 +814,4 @@ async function _startNextRound(tx: Tx, gameRef: any, game: Game): Promise<{ isGa
 
     return { isGameOver: false, finalGame: null };
 }
+    
