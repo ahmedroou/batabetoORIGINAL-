@@ -1,5 +1,4 @@
 
-
 import type { Game, SocialRank, PermissionId } from '@/types';
 
 
@@ -30,7 +29,9 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
     
     const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
-    const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (game.trapAnswerState?.settings?.rounds || 10) <= 7;
+    // A "short" game (not eligible for awards) is now any game with less than 2 rounds.
+    const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (game.trapAnswerState?.settings?.rounds || 10) < 2;
+
     const isEducatedMerchantGame = game.gameType === 'educated-merchant';
 
     // Define awards based on rank
@@ -58,7 +59,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             updates[player.id].coins = isWinner ? 2 : 0;
             updates[player.id].challengePoints = points;
         });
-    } else {
+    } else if (!isShortTrapAnswerGame) { // Awards for non-short individual games
         // Individual awards
         const sortedPlayerIds = Object.keys(finalScores).sort((a, b) => (finalScores[b] || 0) - (finalScores[a] || 0));
         const playerRanks: { id: string, rank: number }[] = [];
