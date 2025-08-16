@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -21,8 +22,11 @@ import {
     increment,
     runTransaction,
 } from 'firebase/firestore';
-import type { UserProfile, Mail } from '@/types';
+import type { UserProfile, Mail, Game } from '@/types';
 import { sendSystemMail } from '../user/mail';
+import { calculateEndOfGameAwards } from '../user/awards';
+import { getRanks } from '../user/queries';
+import { recordMatchHistory } from '../user/queries';
 
 const normalize = (s: any) => (typeof s === 'string' ? s : String(s ?? '')).trim().replace(/\s+/g, ' ');
 const stringNonEmpty = (s: any) => typeof s === 'string' && normalize(s).length > 0;
@@ -203,3 +207,73 @@ export async function applyPunishment(actorId: string, targetId: string, penalty
         return { success: false, error: error.message || "فشل تطبيق العقوبة." };
     });
 };
+
+/**
+ * Distributes end-of-game awards. This is an admin-privileged action.
+ * @param game The final game state object.
+ */
+export async function distributeEndOfGameAwards(game: Game) {
+    if (!game || !game.id) {
+        console.error("distributeEndOfGameAwards called with invalid game object.");
+        return;
+    }
+
+    try {
+        const gameRef = doc(db, 'games', game.id);
+        const allRanks = await getRanks();
+        const { data: awards } = calculateEndOfGameAwards(game, allRanks);
+
+        if (!awards) {
+             await updateDoc(gameRef, { 'gameResult.error': 'Failed to calculate awards.' });
+             return;
+        }
+        
+        const { updates, winUpdate, specialAwards } = awards;
+
+        const batch = writeBatch(db);
+
+        // Update player stats (points, coins, games played)
+        Object.entries(updates).forEach(([playerId, playerUpdates]) => {
+            const userRef = doc(db, 'users', playerId);
+            const firestoreUpdates: { [key: string]: any } = {};
+
+            const pointsDelta = playerUpdates.leaderboardPoints;
+            const coinsDelta = playerUpdates.coins;
+
+            if (pointsDelta > 0) firestoreUpdates.leaderboardPoints = increment(pointsDelta);
+            if (coinsDelta > 0) firestoreUpdates.coins = increment(coinsDelta);
+            
+            // Always increment games played for the specific game type
+            firestoreUpdates[`gamesPlayed.${game.gameType}`] = increment(1);
+            
+            if (Object.keys(firestoreUpdates).length > 0) {
+                batch.update(userRef, firestoreUpdates);
+            }
+        });
+        
+        // Update individual win count if applicable
+        if (winUpdate) {
+            const winnerRef = doc(db, 'users', winUpdate.userId);
+            batch.update(winnerRef, { [`winCounts.${game.gameType}`]: increment(1) });
+        }
+
+        // Write special awards and final game result to the game document
+        batch.update(gameRef, {
+            'gameResult.winner': winUpdate?.userId || game.gameResult?.winner || 'none',
+            'trapAnswerState.finalAwards': specialAwards || {},
+        });
+        
+        await batch.commit();
+
+    } catch (error: any) {
+        console.error(`Error in distributeEndOfGameAwards for game ${game.id}:`, error);
+        // Log error to the game document for easier debugging
+        try {
+            await updateDoc(doc(db, 'games', game.id), {
+                'gameResult.error': `Award distribution failed: ${error.message}`
+            });
+        } catch (logError) {
+            console.error(`Failed to log error to game document ${game.id}:`, logError);
+        }
+    }
+}
