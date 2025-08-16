@@ -29,7 +29,8 @@ export function FinalResultsPhase({ game }: { game: Game; self: Player }) {
     });
 
     const winner = rankedPlayers[0];
-    const { cunningDeceiver, deceivedFool, afkStats } = (game.gameResult as any)?.finalAwards ?? game.trapAnswerState?.finalAwards ?? {};
+    const finalAwards = (game.gameResult as any)?.finalAwards ?? game.trapAnswerState?.finalAwards ?? {};
+    const { cunningDeceiver, deceivedFool, afkStats } = finalAwards;
 
 
     const afkPlayers = Object.entries(afkStats ?? {})

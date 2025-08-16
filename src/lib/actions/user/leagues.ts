@@ -316,5 +316,9 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
  * @param gameId The ID of the finalized game object.
  */
 export async function updateLeagueScoresForGameEnd(gameId: string): Promise<void> {
+    const gameDoc = await getDoc(doc(db, 'games', gameId));
+    if(!gameDoc.exists()) return;
+
+    // We pass the full game object to distribute awards
     await distributeEndOfGameAwards(gameId);
 }

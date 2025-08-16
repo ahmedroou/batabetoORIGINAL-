@@ -1,5 +1,5 @@
 
-      'use server';
+'use server';
 
 /**
  * @file Trap Answer — Server Actions (v4.3 — auto-advance)
@@ -32,14 +32,14 @@ import {
   updateDoc,
   limit,
   writeBatch,
-  increment
+  increment,
 } from 'firebase/firestore';
 
 import type { Game, Player, TrapQuestion, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { calculateTrapAnswerScores } from './helpers/trap-answer-helpers';
 import { getTrapAnswerCategories } from './admin/settings';
-import { updateLeagueScoresForGameEnd } from './user/leagues';
+import { distributeEndOfGameAwards } from './admin/users';
 
 
 // -----------------------------------------------------------------------------
@@ -418,7 +418,20 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 }
 
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
-  await handleTimeout(gameId, hostId);
+  const gameRef = doc(db, 'games', gameId);
+
+  const { isGameOver } = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(gameRef);
+      ensure(snap.exists(), 'اللعبة غير موجودة.');
+      const game = snap.data() as Game;
+      ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
+      if(game.gameState !== 'round-results') return { isGameOver: false };
+      return await _startNextRound(tx, gameRef, game);
+  });
+
+  if (isGameOver) {
+      await distributeEndOfGameAwards(gameId);
+  }
 }
 
 /**
@@ -446,9 +459,9 @@ export async function tickGame(gameId: string) {
 export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   
-  await runTransaction(db, async (tx) => {
+  const { isGameOver } = await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
-    if (!snap.exists()) return;
+    if (!snap.exists()) return { isGameOver: false };
 
     const game = snap.data() as Game;
     const state = (game as any)[FIELD_TRAP_STATE] || {};
@@ -467,7 +480,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
     if (game.gameState === 'category-selection') {
       const categories: string[] = state?.fiveRandomCategories || [];
-      if (!Array.isArray(categories) || categories.length === 0) return;
+      if (!Array.isArray(categories) || categories.length === 0) return { isGameOver: false };
 
       const randomCategory = categories[Math.floor(Math.random() * categories.length)];
       const answerTime = state?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
@@ -489,14 +502,22 @@ export async function handleTimeout(gameId: string, hostId: string) {
         [`${FIELD_TRAP_STATE}.timerEndsAt`]: newTimer,
         [`${FIELD_TRAP_STATE}.roundEndTime`]: newTimer,
       });
+      return { isGameOver: false };
     } else if (game.gameState === 'answer-submission') {
       await _advanceToGuessing(tx as any, gameRef, game, true);
+      return { isGameOver: false };
     } else if (game.gameState === 'guessing') {
       await _advanceToResults(tx as any, gameRef, game, true);
+      return { isGameOver: false };
     } else if (game.gameState === 'round-results') {
-        await _startNextRound(tx as any, gameRef, game);
+        return await _startNextRound(tx as any, gameRef, game);
     }
+    return { isGameOver: false };
   });
+
+   if (isGameOver) {
+      await distributeEndOfGameAwards(gameId);
+  }
 }
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {

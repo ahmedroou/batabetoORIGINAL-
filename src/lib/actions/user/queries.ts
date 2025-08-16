@@ -43,10 +43,10 @@ import { getTopUsers as adminGetTopUsers } from '../admin/users';
 const IN_QUERY_LIMIT = 30; // Firestore 'in' operator max items
 
 function chunk<T>(arr: T[], size: number): T[][] {
-  if (size <= 0) return [arr];
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
+    if (size <= 0) return [arr];
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
 }
 
 const tsToDate = (v: any) => (v?.toDate ? v.toDate() : v ?? null);
@@ -206,11 +206,11 @@ export async function getKingsPageData(): Promise<{ kings: Record<string, GameKi
 // -------------------------------------------------------------
 export async function getAllUsers(filter?: 'punished', queryLimit?: number): Promise<UserProfile[]> {
   try {
-    const usersCol = collection(db, 'users');
+    const usersRef = collection(db, 'users');
 
     if (filter !== 'punished') return [];
 
-    const baseQuery = query(usersCol, where('isPunished', '==', true));
+    const baseQuery = query(usersRef, where('isPunished', '==', true));
     const usersQuery = queryLimit ? query(baseQuery, limit(queryLimit)) : baseQuery;
 
     const snapshot = await getDocs(usersQuery);
@@ -359,18 +359,18 @@ export async function getUsersByRank(
 // -------------------------------------------------------------
 // Match history
 // -------------------------------------------------------------
-export async function recordMatchHistory(game: Game): Promise<void> {
+export async function recordMatchHistory(game: Game, gameId?: string): Promise<void> {
   const playersToRecord = game.players.filter((p) => p.status !== 'left');
   if (playersToRecord.length === 0) return;
 
-  const gameId = game.id;
-  if (!gameId) {
-      console.error("Cannot record match history: game.id is missing.");
+  const gid = gameId ?? (game as any).id ?? null;
+  if (!gid) {
+      console.error("Cannot record match history: gameId is missing.");
       return;
   }
 
   const matchData: Omit<MatchHistoryItem, 'id'> = {
-    gameId: gameId,
+    gameId: gid,
     gameType: game.gameType,
     createdAt: serverTimestamp() as unknown as Timestamp, // server time
     finalScores: game.playerScores || {},

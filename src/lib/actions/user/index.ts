@@ -21,7 +21,6 @@ import {
     kickPlayerFromLeague, 
     leaveLeague, 
     resetAllLeagueStats, 
-    updateLeagueScoresForGameEnd,
 } from './leagues';
 import { giveReward, applyPunishment, humiliatePlayer, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax, liftPunishment } from './social';
 import { requestAllegiance, respondToAllegianceRequest } from './allegiance';
@@ -58,7 +57,6 @@ export {
     kickPlayerFromLeague,
     leaveLeague,
     resetAllLeagueStats,
-    updateLeagueScoresForGameEnd,
     giveReward,
     applyPunishment,
     humiliatePlayer,
@@ -80,7 +78,7 @@ export {
     liftPunishment,
     getKingsPageData,
     recordMatchHistory,
-    distributeEndOfGameAwards
+    distributeEndOfGameAwards,
 };
 
 
@@ -91,6 +89,7 @@ export {
     
 
     
+
 
 
 
