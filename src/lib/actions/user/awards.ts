@@ -31,7 +31,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
     
     // Check for short game condition safely
-    const trapState = game.trapAnswerState as any;
+    const trapState = game.trapAnswerState;
     const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (trapState?.settings?.rounds ?? 10) < 2;
 
 
@@ -89,9 +89,11 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
                 if(tier) playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
             }
             
-            updates[id].leaderboardPoints = playerAwards.leaderboardPoints;
-            updates[id].coins = playerAwards.coins;
-            updates[id].challengePoints = playerAwards.challengePoints;
+            if (updates[id]) {
+              updates[id].leaderboardPoints = playerAwards.leaderboardPoints;
+              updates[id].coins = playerAwards.coins;
+              updates[id].challengePoints = playerAwards.challengePoints;
+            }
         });
 
         if (playerRanks.length > 0 && playerRanks[0].rank === 1) {
@@ -103,11 +105,11 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         }
     }
 
-    if (game.gameType === 'trap-answer') {
+    if (game.gameType === 'trap-answer' && trapState) {
         let deceivedFool: Game['trapAnswerState']['finalAwards']['deceivedFool'] = null;
         let cunningDeceiver: Game['trapAnswerState']['finalAwards']['cunningDeceiver'] = null;
 
-        const trickStats = game.trapAnswerState?.trickStats || { trickedBy: {}, trickedOthers: {} };
+        const trickStats = trapState.trickStats || { trickedBy: {}, trickedOthers: {} };
 
         if (Object.keys(trickStats.trickedOthers).length > 0) {
             const deceiverCandidates = Object.entries(trickStats.trickedOthers).sort((a, b) => b[1].length - a[1].length);
