@@ -11,7 +11,6 @@ import { ChallengeIntro } from './ChallengeIntro';
 import { FinalResults } from './FinalResults';
 import { RoundResults } from './RoundResults';
 import { TeamSelection } from './TeamSelection';
-import { KingOfGeniusLobby } from './Lobby'; // استيراد اللوبي الجديد
 
 interface KingOfGeniusGameProps {
   game: Game;
@@ -44,10 +43,7 @@ export function KingOfGeniusGame({
       : null;
 
     switch (game.gameState) {
-      // ✅ الحالة الجديدة المضافة
-      case 'lobby':
-        return <KingOfGeniusLobby game={game} self={self} isHost={isHost} />;
-
+      case 'lobby': // The lobby is now merged into team selection
       case 'team_selection':
         return <TeamSelection game={game} self={self} isHost={isHost} />;
 
@@ -99,8 +95,8 @@ export function KingOfGeniusGame({
         );
 
       default:
-        // العودة للوبي كحالة افتراضية آمنة
-        return <KingOfGeniusLobby game={game} self={self} isHost={isHost} />;
+        // Fallback to a safe state
+        return <LoadingState text={`حالة غير معروفة: ${game.gameState}`} />;
     }
   };
 

@@ -144,12 +144,15 @@ export async function createGameRoom(
 
     const expiresAt = expiresAtFromNow(LOBBY_TTL_MS);
 
+    // Determine initial game state
+    const initialGameState: GameState = gameType === 'king-of-genius' ? 'team_selection' : 'lobby';
+
     const baseGame: Game = {
       id: gameId,
       hostId: userId,
       players: [player],
       playerUids: [userId],
-      gameState: 'lobby' as GameState,
+      gameState: initialGameState,
       createdAt: nowTs(),
       expiresAt,
       gameType,
@@ -273,7 +276,11 @@ export async function joinGameRoom(
         : DEFAULT_MAX_PLAYERS;
 
       if (activePlayersCount >= maxPlayers) throw new Error('الغرفة ممتلئة.');
-      if (game.gameState !== 'lobby') throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
+      
+      const allowedJoinStates: GameState[] = ['lobby', 'team_selection'];
+      if (!allowedJoinStates.includes(game.gameState)) {
+        throw new Error('لا يمكن الانضمام، اللعبة بدأت بالفعل.');
+      }
 
       const newPlayer: Player = {
         id: playerDetails.uid,
@@ -331,7 +338,9 @@ export async function leaveGame(gameId: string, playerId: string): Promise<Leave
       let updatedPlayers = [...(game.players || [])];
       const leavingPlayer = updatedPlayers[playerIndex];
 
-      if (game.gameState !== 'lobby') {
+      const joinableStates: GameState[] = ['lobby', 'team_selection'];
+
+      if (!joinableStates.includes(game.gameState)) {
         if (leavingPlayer.status !== 'left') {
           updatedPlayers[playerIndex] = { ...leavingPlayer, status: 'left' };
         }
@@ -340,7 +349,7 @@ export async function leaveGame(gameId: string, playerId: string): Promise<Leave
       }
 
       const updatedPlayerUids = (game.playerUids || []).filter((uid) => uid !== playerId);
-      const remainingLivePlayers = updatedPlayers.filter((p) => p.status === 'alive');
+      const remainingLivePlayers = updatedPlayers.filter((p) => p.status !== 'left');
 
       if (remainingLivePlayers.length === 0 && game.gameState !== 'final_results') {
         tx.delete(gameRef);
@@ -351,7 +360,7 @@ export async function leaveGame(gameId: string, playerId: string): Promise<Leave
         players: updatedPlayers,
       };
 
-      if (game.gameState === 'lobby') {
+      if (joinableStates.includes(game.gameState)) {
         updateData.playerUids = updatedPlayerUids;
       }
 
@@ -361,8 +370,7 @@ export async function leaveGame(gameId: string, playerId: string): Promise<Leave
 
       // Auto-forfeit for specific in-progress states (preserves original behavior)
       if (
-        game.gameState !== 'lobby' &&
-        game.gameState !== 'instructions' &&
+        !joinableStates.includes(game.gameState) &&
         game.gameState !== 'final_results'
       ) {
         if (
@@ -454,7 +462,6 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
 
     if (allReady) {
       if (game.gameType === 'king-of-genius') {
-        // Placeholder: in your codebase, call initialize function for this game type
         tx.update(gameRef, { gameState: 'team_selection', players: updatedPlayers });
       } else if (game.gameType === 'trap-answer') {
         // TODO: startTrapAnswerGame logic
@@ -468,5 +475,3 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
     }
   });
 }
-
-    
