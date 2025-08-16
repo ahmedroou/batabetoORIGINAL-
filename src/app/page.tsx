@@ -98,7 +98,11 @@ export default function Home() {
   }, [userProfile, getSocialRankForUser]);
 
   if (loading) return <MainLoadingSkeleton />;
-  if (!user || !userProfile) return <WelcomeGuest />;
+  
+  if (!user || !userProfile) {
+    // After the loading is complete, if user is still not available, show guest page.
+    return <WelcomeGuest />;
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background" dir="rtl" lang="ar">
