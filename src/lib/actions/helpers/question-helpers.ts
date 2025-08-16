@@ -1,66 +1,122 @@
 'use server';
 
 /**
- * @fileoverview This file contains helper functions related to fetching questions.
+ * @fileoverview Helper functions related to fetching questions (improved gpt5 version).
  */
 
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
 import type { EducatedMerchantQuestion, TrapQuestion } from '@/types';
 import { shuffle } from '../helpers';
 
+// Keep the same union alias locally (no API change)
 type GameQuestionType = EducatedMerchantQuestion | TrapQuestion;
 
+// ------------------------------------
+// Internal utils (no external API change)
+// ------------------------------------
+const COLLECTIONS = {
+  'educated-merchant': 'educated_merchant_questions',
+  'trap-answer': 'trap_answer_questions',
+} as const;
+
+type GameType = keyof typeof COLLECTIONS;
+
+const normalizeCategory = (category: string): string => (category ?? '').trim();
+
+const isEducatedMerchant = (q: any): q is EducatedMerchantQuestion =>
+  q && typeof q === 'object' && typeof (q as any).answer === 'string';
+
+const buildOptions = (q: EducatedMerchantQuestion): string[] => {
+  // Ensure the correct answer is included exactly once; dedupe dummy answers
+  const set = new Set<string>([...(q.dummyAnswers ?? []), q.answer]);
+  const arr = Array.from(set);
+  return shuffle(arr);
+};
+
+// ------------------------------------
+// Public API (kept same name and signature)
+// ------------------------------------
 /**
  * Fetches a single random question for a given game type and category from Firestore.
- * This function uses a common pattern with a `randomKey` field to efficiently
- * fetch a random document without reading the entire collection.
- * 
- * Note: Your question collections ('educated_merchant_questions', 'trap_answer_questions')
- * must have a 'randomKey' field (a random number between 0 and 1) and a composite index
- * on `(category, randomKey)`.
- * 
+ * Uses a common "randomKey" pattern with ordered range queries for efficiency.
+ *
+ * Index requirements (Firestore composite indexes):
+ *  - For each collection: composite index on (category ASC, randomKey ASC)
+ *
  * @param gameType The type of game ('educated-merchant' or 'trap-answer').
  * @param category The category to fetch the question from.
  * @returns A promise that resolves to the question object or null if not found.
  */
 export async function fetchRandomQuestionForCategory(
-    gameType: 'educated-merchant' | 'trap-answer',
-    category: string
+  gameType: 'educated-merchant' | 'trap-answer',
+  category: string
 ): Promise<GameQuestionType | null> {
-    const collectionName = gameType === 'educated-merchant' 
-        ? 'educated_merchant_questions' 
-        : 'trap_answer_questions';
+  const collectionName = COLLECTIONS[gameType as GameType];
+  if (!collectionName) {
+    console.error(`Unsupported gameType: ${gameType}`);
+    return null;
+  }
 
-    try {
-        const questionsCol = collection(db, collectionName);
-        const randomKey = Math.random();
-        
-        let q = query(questionsCol, where('category', '==', category), where('randomKey', '>=', randomKey), limit(1));
-        let querySnapshot = await getDocs(q);
+  const normalizedCategory = normalizeCategory(category);
+  if (!normalizedCategory) {
+    console.warn('fetchRandomQuestionForCategory: empty category string.');
+    return null;
+  }
 
-        if (querySnapshot.empty) {
-            q = query(questionsCol, where('category', '==', category), where('randomKey', '<', randomKey), limit(1));
-            querySnapshot = await getDocs(q);
-        }
+  try {
+    const questionsCol = collection(db, collectionName);
+    const randomKey = Math.random();
 
-        if (querySnapshot.empty) {
-            console.warn(`No questions found for category: "${category}" in collection "${collectionName}".`);
-            return null;
-        }
+    // Primary query: >= randomKey ordered ascending to get the first at/after randomKey
+    let q1 = query(
+      questionsCol,
+      where('category', '==', normalizedCategory),
+      where('randomKey', '>=', randomKey),
+      orderBy('randomKey', 'asc'),
+      limit(1)
+    );
 
-        const questionDoc = querySnapshot.docs[0];
-        const questionData = { id: questionDoc.id, ...questionDoc.data() } as GameQuestionType;
+    let snap = await getDocs(q1);
 
-        // Shuffle options if it's an Educated Merchant question
-        if (gameType === 'educated-merchant' && 'answer' in questionData) {
-            const options = shuffle([...(questionData.dummyAnswers || []), questionData.answer]);
-            questionData.options = options;
-        }
-
-        return questionData;
-    } catch (e) {
-        console.error(`Error fetching random question for category "${category}" from "${collectionName}":`, e);
-        return null;
+    // Fallback query: < randomKey ordered descending to get the closest below it
+    if (snap.empty) {
+      const q2 = query(
+        questionsCol,
+        where('category', '==', normalizedCategory),
+        where('randomKey', '<', randomKey),
+        orderBy('randomKey', 'desc'),
+        limit(1)
+      );
+      snap = await getDocs(q2);
     }
+
+    if (snap.empty) {
+      console.warn(
+        `No questions found for category: "${normalizedCategory}" in collection "${collectionName}".`
+      );
+      return null;
+    }
+
+    const docSnap = snap.docs[0];
+    const raw = { id: docSnap.id, ...docSnap.data() } as any;
+
+    if (isEducatedMerchant(raw)) {
+      const options = buildOptions(raw);
+      const question: EducatedMerchantQuestion = {
+        ...raw,
+        options, // ensure UI consumers have shuffled options ready
+      };
+      return question as GameQuestionType;
+    }
+
+    // For TrapQuestion (or any other), just return as-is
+    return raw as GameQuestionType;
+  } catch (e) {
+    console.error(
+      `Error fetching random question for category "${category}" from "${collectionName}":`,
+      e
+    );
+    return null;
+  }
 }

@@ -395,12 +395,11 @@ export async function distributeEndOfGameAwards(game: Game) {
  * This is now the primary entry point for all end-of-game score processing.
  * @param game The final game state object containing player scores.
  */
-export async function updateLeagueScoresForGameEnd(game: Game) {
+export async function updateLeagueScoresForGameEnd(game: Game): Promise<void> {
     if (!game.gameResult) return;
     
     await recordMatchHistory(game);
     
-    // This is the only place we call distributeEndOfGameAwards, ensuring it's outside any transaction.
     await distributeEndOfGameAwards(game);
 
     const playersWithLeagues = game.players.filter(p => p.status !== 'left' && p.leagues && p.leagues.length > 0);
