@@ -191,16 +191,46 @@ describe('Word War - End of Game Awards', () => {
         // Red team (winners)
         expect(updates['p1'].leaderboardPoints).toBe(3);
         expect(updates['p1'].coins).toBe(2);
+        expect(updates['p1'].gamesPlayed['word_war']).toBe(1);
+
         expect(updates['p2'].leaderboardPoints).toBe(3);
         expect(updates['p2'].coins).toBe(2);
+        expect(updates['p2'].gamesPlayed['word_war']).toBe(1);
         
         // Blue team (losers)
         expect(updates['p3'].leaderboardPoints).toBe(0);
         expect(updates['p3'].coins).toBe(0);
+        expect(updates['p3'].gamesPlayed['word_war']).toBe(1);
+
         expect(updates['p4'].leaderboardPoints).toBe(0);
         expect(updates['p4'].coins).toBe(0);
+        expect(updates['p4'].gamesPlayed['word_war']).toBe(1);
 
         // No individual winner in team games
+        expect(winUpdate).toBeNull();
+    });
+
+     test('should handle individual game stats correctly', () => {
+        const game = createMockGame(mockPlayers, {red: 'p1', blue: 'p3'}, mockCards);
+        game.gameResult = { winner: 'blue', message: 'الفريق الأزرق فاز!' };
+
+        const { data: { updates, winUpdate } } = calculateEndOfGameAwards(game, []);
+
+        // All players should have their gamesPlayed count incremented
+        expect(updates['p1'].gamesPlayed['word_war']).toBe(1);
+        expect(updates['p2'].gamesPlayed['word_war']).toBe(1);
+        expect(updates['p3'].gamesPlayed['word_war']).toBe(1);
+        expect(updates['p4'].gamesPlayed['word_war']).toBe(1);
+
+        // Check winner awards
+        expect(updates['p3'].leaderboardPoints).toBe(3);
+        expect(updates['p3'].coins).toBe(2);
+
+        // Check loser awards
+        expect(updates['p1'].leaderboardPoints).toBe(0);
+        expect(updates['p1'].coins).toBe(0);
+        
+        // No single winner
         expect(winUpdate).toBeNull();
     });
 });

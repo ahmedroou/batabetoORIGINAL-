@@ -235,15 +235,19 @@ describe('Trap Answer Game - End of Game Awards', () => {
         expect(updates['p1']?.leaderboardPoints).toBe(3);
         expect(updates['p1']?.coins).toBe(2);
         expect(winUpdate?.userId).toBe('p1');
+        expect(updates['p1']?.gamesPlayed['trap-answer']).toBe(1);
 
         expect(updates['p2']?.leaderboardPoints).toBe(2);
         expect(updates['p2']?.coins).toBe(1);
+        expect(updates['p2']?.gamesPlayed['trap-answer']).toBe(1);
         
         expect(updates['p3']?.leaderboardPoints).toBe(1);
         expect(updates['p3']?.coins).toBe(0);
+        expect(updates['p3']?.gamesPlayed['trap-answer']).toBe(1);
         
         expect(updates['p4']?.leaderboardPoints).toBe(0);
         expect(updates['p4']?.coins).toBe(0);
+        expect(updates['p4']?.gamesPlayed['trap-answer']).toBe(1);
     });
 
     test('should handle ties correctly', () => {
