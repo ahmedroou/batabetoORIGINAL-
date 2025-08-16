@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -172,12 +173,12 @@ const HintHistoryPanel = ({
   hints: { word: string; count: number; team: 'red' | 'blue' }[];
   team: 'red' | 'blue';
 }) => {
-  const teamHints = hints.filter((h) => h.team === team).slice(-3);
+  const teamHints = hints.filter((h) => h.team === team).slice(-1);
   const color = team === 'red' ? 'text-rose-400' : 'text-indigo-400';
 
   return (
     <div className="w-full space-y-1">
-      <h4 className={cn("text-xs font-bold text-center", color)}>آخر التلميحات</h4>
+      <h4 className={cn("text-xs font-bold text-center", color)}>آخر تلميح</h4>
       {teamHints.length === 0 ? (
         <p className="text-center text-xs text-zinc-500">لا يوجد</p>
       ) : (
