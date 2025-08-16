@@ -359,15 +359,14 @@ export async function getUsersByRank(
 // -------------------------------------------------------------
 // Match history
 // -------------------------------------------------------------
-export async function recordMatchHistory(game: Game, gameId?: string): Promise<void> {
-  const playersToRecord = game.players.filter((p) => p.status !== 'left');
-  if (playersToRecord.length === 0) return;
-
-  const gid = gameId ?? (game as any).id ?? null;
-  if (!gid) {
+export async function recordMatchHistory(game: Game): Promise<void> {
+    const gid = game.id;
+    if (!gid) {
       console.error("Cannot record match history: gameId is missing.");
       return;
   }
+  const playersToRecord = game.players.filter((p) => p.status !== 'left');
+  if (playersToRecord.length === 0) return;
 
   const matchData: Omit<MatchHistoryItem, 'id'> = {
     gameId: gid,
@@ -435,3 +434,5 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
     return { success: false, error: 'Failed to fetch default avatar.' };
   }
 }
+
+    

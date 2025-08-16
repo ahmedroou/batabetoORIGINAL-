@@ -224,7 +224,9 @@ export async function distributeEndOfGameAwards(gameId: string) {
     try {
         const freshSnap = await getDoc(gameRef);
         if (!freshSnap.exists()) return;
-        const game = { ...freshSnap.data(), id: freshSnap.id } as Game; // Ensure ID is present
+        
+        // Add the ID to the game object before passing it to helpers
+        const game = { ...freshSnap.data(), id: freshSnap.id } as Game;
 
         // Prevent re-processing
         if(!!game.gameResult?.error || (game.gameType === 'trap-answer' && !!game.trapAnswerState?.finalAwards)) return;
@@ -295,3 +297,5 @@ export async function distributeEndOfGameAwards(gameId: string) {
         }
     }
 }
+
+    

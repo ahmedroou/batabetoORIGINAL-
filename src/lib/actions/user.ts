@@ -3,8 +3,9 @@
 'use server';
 
 /**
- * @fileoverview This file re-exports all user-related actions from their new, modular locations.
- * This structure improves maintainability by separating concerns.
+ * @fileoverview This file has been refactored. Its contents are now split into multiple files
+ * inside the /src/lib/actions/user/ directory for better organization and maintainability.
+ * This file now re-exports all user-related actions.
  */
 
 // Explicitly import and export to avoid namespace collisions and help bundlers.
@@ -20,11 +21,8 @@ import {
     deleteLeague, 
     kickPlayerFromLeague, 
     leaveLeague, 
-    resetAllLeagueStats, 
-    updateLeagueScoresForGameEnd,
+    resetAllLeagueStats
 } from './user/leagues';
-// calculateEndOfGameAwards is now an internal helper, not a server action.
-// import { calculateEndOfGameAwards } from './user/awards';
 import { giveReward, applyPunishment, humiliatePlayer, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax, liftPunishment } from './user/social';
 import { requestAllegiance, respondToAllegianceRequest } from './user/allegiance';
 import { joinChallenge } from './challenges';
@@ -60,7 +58,6 @@ export {
     kickPlayerFromLeague,
     leaveLeague,
     resetAllLeagueStats,
-    updateLeagueScoresForGameEnd,
     giveReward,
     applyPunishment,
     humiliatePlayer,
@@ -85,21 +82,4 @@ export {
     distributeEndOfGameAwards
 };
 
-
     
-
-
-
-    
-
-    
-
-
-
-
-
-
-
-
-
-
