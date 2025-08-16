@@ -318,7 +318,7 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
  * This function commits the updates to Firestore.
  * @param game The final game state object.
  */
-export async function distributeEndOfGameAwards(game: Game) {
+async function distributeEndOfGameAwards(game: Game) {
     const playersToUpdate = game.players.filter(p => p.status !== 'left');
     if (playersToUpdate.length === 0) return;
     
@@ -387,6 +387,12 @@ export async function distributeEndOfGameAwards(game: Game) {
         });
     }
 
+    if (game.gameType === 'trap-answer' && specialAwards) {
+      batch.update(doc(db, 'games', game.id), {
+        'trapAnswerState.finalAwards': specialAwards
+      });
+    }
+
     await batch.commit();
 }
 
@@ -430,3 +436,4 @@ export async function updateLeagueScoresForGameEnd(game: Game): Promise<void> {
         console.error("Error updating league scores after game end:", error);
     }
 }
+
