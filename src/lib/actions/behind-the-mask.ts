@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -95,7 +96,7 @@ const safeGetPlayer = (game: Game, id: string | null | undefined) =>
 
 const abilitiesOf = (role?: string | null): Array<NightAction['action']> => {
   if (!role) return [];
-  const roleInfo = ROLES[role];
+  const roleInfo = ROLES[role as keyof typeof ROLES];
   const fromRoles: Array<NightAction['action']> =
     (roleInfo && (roleInfo as any).abilities) || FALLBACK_ABILITIES[role] || [];
   return fromRoles as Array<NightAction['action']>;
@@ -214,7 +215,7 @@ export async function processNightInternal(game: Game) {
     if (!target) return;
 
     if (action.action === 'investigate') {
-      const roleInfo = ROLES[target.role!];
+      const roleInfo = ROLES[target.role! as PlayerRole];
       newPrivateEvents[action.actorId].push({
         type: 'investigation_result',
         message: `تقرير التحقيق: ${target.name} ينتمي إلى ${roleInfo?.team === 'mafia' ? 'فريق الشر' : 'فريق الخير'}.`,
@@ -222,12 +223,12 @@ export async function processNightInternal(game: Game) {
       });
     } else if (action.action === 'spy') {
       const apparent = (target as any).apparentRole || target.role!;
-      const roleInfo = ROLES[apparent];
+      const roleInfo = ROLES[apparent as PlayerRole];
       if (target.role === 'soldier') {
         newPrivateEvents[action.actorId].push({
           type: 'spy_result_soldier_block',
           message: `لقد حاولت التجسس على ${target.name}، لكنه جندي متأهب وكشفك!`,
-          targetPlayer: { id: target.id, name: target.name, avatarId: target.avatarId, role: target.role },
+          targetPlayer: { id: target.id, name: target.name, avatarId: target.avatarId, role: target.role as PlayerRole },
         });
       } else {
         newPrivateEvents[action.actorId].push({
@@ -314,7 +315,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
     const updatedPlayers = game.players.map((player, i) => ({
       ...player,
       role: roles[i],
-      team: ROLES[roles[i]!]?.team,
+      team: ROLES[roles[i]! as PlayerRole]?.team,
       status: 'alive' as Player['status'],
     }));
 
@@ -428,45 +429,49 @@ export async function submitNightAction(
 
 /** معالجة الليل والانتقال تلقائيًا إلى النهار أو النتائج. */
 export async function processNight(gameId: string, hostId: string): Promise<void> {
-  const gameRef = doc(db, 'games', gameId);
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(gameRef);
-    const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
+    const gameRef = doc(db, 'games', gameId);
+    let gameDataForLeagueUpdate: Game | null = null;
+    await runTransaction(db, async (tx) => {
+        const snap = await tx.get(gameRef);
+        const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
 
-    requireHost(game, hostId);
-    requirePhase(game, ['night']);
+        requireHost(game, hostId);
+        requirePhase(game, ['night']);
 
-    const { updatedPlayers, newEvents, newPrivateEvents, newPrivateChats, newLastHealedPlayerId } =
-      await processNightInternal(game);
+        const { updatedPlayers, newEvents, newPrivateEvents, newPrivateChats, newLastHealedPlayerId } =
+            await processNightInternal(game);
 
-    // إزالة apparentRole المؤقت قبل الحفظ
-    const cleaned = updatedPlayers.map(({ apparentRole, ...rest }: any) => rest);
+        const cleaned = updatedPlayers.map(({ apparentRole, ...rest }: any) => rest);
 
-    const winner = checkForWinner(cleaned);
+        const winner = checkForWinner(cleaned);
 
-    const update: FSUpdate = {
-      players: cleaned,
-      'mafiaState.events': newEvents,
-      'mafiaState.privateEvents': newPrivateEvents,
-      'mafiaState.privateChats': newPrivateChats,
-      'mafiaState.lastHealedPlayerId': newLastHealedPlayerId ? newLastHealedPlayerId : deleteField(),
-    };
+        const update: FSUpdate = {
+            players: cleaned,
+            'mafiaState.events': newEvents,
+            'mafiaState.privateEvents': newPrivateEvents,
+            'mafiaState.privateChats': newPrivateChats,
+            'mafiaState.lastHealedPlayerId': newLastHealedPlayerId ? newLastHealedPlayerId : deleteField(),
+        };
 
-    if (winner) {
-      (update as any).gameState = 'final_results';
-      (update as any)['mafiaState.phase'] = 'final_results';
-      (update as any).gameResult = winner;
-      (update as any)['mafiaState.timerEndsAt'] = deleteField();
-      await updateLeagueScoresForGameEnd({ ...(game as any), players: cleaned, gameResult: winner });
-    } else {
-      const { day } = getSettings(game);
-      (update as any)['mafiaState.phase'] = 'day';
-      (update as any)['mafiaState.timerEndsAt'] = deadline(day);
+        if (winner) {
+            update.gameState = 'final_results';
+            update['mafiaState.phase'] = 'final_results';
+            update.gameResult = winner;
+            update['mafiaState.timerEndsAt'] = deleteField();
+            gameDataForLeagueUpdate = { ...game, players: cleaned, gameResult: winner };
+        } else {
+            const { day } = getSettings(game);
+            update['mafiaState.phase'] = 'day';
+            update['mafiaState.timerEndsAt'] = deadline(day);
+        }
+        
+        tx.update(gameRef, update);
+    });
+    if (gameDataForLeagueUpdate) {
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
     }
-
-    tx.update(gameRef, update);
-  });
 }
+
 
 /** الانتقال من النقاش إلى التصويت. */
 export async function transitionToVoting(gameId: string, hostId: string): Promise<void> {
