@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -418,72 +419,16 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
   });
 }
 
-/**
- * NEW: This function is now the primary entry point for finishing a round and starting a new one.
- * It is called by the host from the results screen.
- */
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    let gameSnapshotAtEnd: Game | null = null;
-    let shouldFinalize = false;
-
-    await runTransaction(db, async (tx) => {
-        const snap = await tx.get(gameRef);
-        ensure(snap.exists(), 'اللعبة غير موجودة.');
-        const game = snap.data() as Game;
-        ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
-        if (game.gameState !== 'round-results') return;
-
-        const currentRound = game.round || 0;
-        const totalRounds = (game as any)[FIELD_TRAP_STATE]?.settings?.rounds || 10;
-        
-        // This is where we finalize the game if conditions are met
-        if (currentRound >= totalRounds) {
-            shouldFinalize = true;
-            gameSnapshotAtEnd = game; // Capture state before update
-            tx.update(gameRef, {
-                gameState: 'final_results',
-                [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
-                [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
-                [`${FIELD_TRAP_STATE}.phase`]: 'reveal',
-            });
-            return;
-        }
-
-        // Proceed to the next round if game isn't over
-        const nextTurnIndex = (((game as any)[FIELD_TRAP_STATE]?.currentTurnIndex || 0) + 1) % game.players.length;
-        const availableCategories = (game as any)[FIELD_TRAP_STATE]?.settings?.categories || [];
-        const sourceCats: string[] = Array.isArray(availableCategories) && availableCategories.length > 0
-            ? availableCategories
-            : (((game as any)[FIELD_TRAP_STATE]?.fiveRandomCategories as string[]) || []);
-
-        const fiveRandomCategories = shuffle([...sourceCats]).slice(0, 5);
-        const endsAt = tsFromNowS(CATEGORY_SELECTION_TIME_S);
-
-        tx.update(gameRef, {
-            gameState: 'category-selection',
-            round: currentRound + 1,
-            [`${FIELD_TRAP_STATE}.currentTurnIndex`]: nextTurnIndex,
-            [`${FIELD_TRAP_STATE}.fiveRandomCategories`]: fiveRandomCategories,
-            [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
-            [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
-            [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
-            [`${FIELD_TRAP_STATE}.selectedCategory`]: deleteField(),
-            [`${FIELD_TRAP_STATE}.currentQuestion`]: deleteField(),
-            [`${FIELD_TRAP_STATE}.timerEndsAt`]: endsAt,
-            [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt,
-            [`${FIELD_TRAP_STATE}.phase`]: 'category',
-            [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
-            [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
-            [`${FIELD_TRAP_STATE}.reactions`]: {},
-        });
-    });
-
-    if (shouldFinalize && gameSnapshotAtEnd) {
-        await finalizeGameAndDistributeAwards(gameSnapshotAtEnd);
-    }
+  const gameRef = doc(db, 'games', gameId);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(gameRef);
+    ensure(snap.exists(), 'اللعبة غير موجودة.');
+    const game = snap.data() as Game;
+    if (game.gameState !== 'round-results') return;
+    await _startNextRound(tx as any, gameRef, game);
+  });
 }
-
 
 /**
  * NEW: Centralized function to handle all end-of-game logic including awards.
@@ -556,7 +501,6 @@ async function finalizeGameAndDistributeAwards(game: Game) {
  */
 export async function tickGame(gameId: string) {
   const gameRef = doc(db, 'games', gameId);
-
   const gameSnap = await getDoc(gameRef);
   if (!gameSnap.exists()) return;
   const game = gameSnap.data() as Game;
@@ -575,9 +519,6 @@ export async function tickGame(gameId: string) {
 // -----------------------------------------------------------------------------
 export async function handleTimeout(gameId: string, callerId: string) {
   const gameRef = doc(db, 'games', gameId);
-
-  let shouldFinalize = false; 
-  let gameSnapshotAtEnd: Game | null = null; 
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -625,52 +566,9 @@ export async function handleTimeout(gameId: string, callerId: string) {
     } else if (game.gameState === 'guessing') {
       await _advanceToResults(tx as any, gameRef, game, true);
     } else if (game.gameState === 'round-results') {
-      const currentRound = game.round || 0;
-      const totalRounds = state?.settings?.rounds || 10;
-
-      if (currentRound >= totalRounds) {
-        shouldFinalize = true;
-        gameSnapshotAtEnd = game;
-        tx.update(gameRef, {
-          gameState: 'final_results',
-          [`${FIELD_TRAP_STATE}.phase`]: 'reveal',
-          [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
-          [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
-        });
-      } else {
-         const nextTurnIndex = ((state?.currentTurnIndex || 0) + 1) % (game.players?.length || 1);
-        const availableCategories = state?.settings?.categories || [];
-        const sourceCats: string[] = Array.isArray(availableCategories) && availableCategories.length > 0
-          ? availableCategories
-          : ((state?.fiveRandomCategories as string[]) || []);
-
-        const fiveRandomCategories = shuffle([...sourceCats]).slice(0, 5);
-        const endsAt = tsFromNowS(CATEGORY_SELECTION_TIME_S);
-
-        tx.update(gameRef, {
-          gameState: 'category-selection',
-          round: currentRound + 1,
-          [`${FIELD_TRAP_STATE}.currentTurnIndex`]: nextTurnIndex,
-          [`${FIELD_TRAP_STATE}.fiveRandomCategories`]: fiveRandomCategories,
-          [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
-          [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
-          [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
-          [`${FIELD_TRAP_STATE}.selectedCategory`]: deleteField(),
-          [`${FIELD_TRAP_STATE}.currentQuestion`]: deleteField(),
-          [`${FIELD_TRAP_STATE}.timerEndsAt`]: endsAt,
-          [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt, // UI mirror
-          [`${FIELD_TRAP_STATE}.phase`]: 'category',
-          [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
-          [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
-          [`${FIELD_TRAP_STATE}.reactions`]: {},
-        });
-      }
+        await _startNextRound(tx as any, gameRef, game);
     }
   });
-
-  if (shouldFinalize && gameSnapshotAtEnd) {
-    await finalizeGameAndDistributeAwards(gameSnapshotAtEnd);
-  }
 }
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
@@ -817,6 +715,49 @@ async function _advanceToResults(
     [`${FIELD_TRAP_STATE}.afkStats`]: afkStats,
     [`${FIELD_TRAP_STATE}.reactions`]: {},
   });
+}
+
+async function _startNextRound(tx: Tx, gameRef: any, game: Game) {
+    const state = (game as any)[FIELD_TRAP_STATE] || {};
+    const currentRound = game.round || 0;
+    const totalRounds = state?.settings?.rounds || 10;
+    
+    if (currentRound >= totalRounds) {
+        tx.update(gameRef, {
+            gameState: 'final_results',
+            [`${FIELD_TRAP_STATE}.phase`]: 'reveal',
+            [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
+            [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
+        });
+        return;
+    }
+
+    const nextTurnIndex = ((state?.currentTurnIndex || 0) + 1) % (game.players?.length || 1);
+    const availableCategories = state?.settings?.categories || [];
+    const sourceCats: string[] = Array.isArray(availableCategories) && availableCategories.length > 0
+      ? availableCategories
+      : ((state?.fiveRandomCategories as string[]) || []);
+
+    const fiveRandomCategories = shuffle([...sourceCats]).slice(0, 5);
+    const endsAt = tsFromNowS(CATEGORY_SELECTION_TIME_S);
+
+    tx.update(gameRef, {
+      gameState: 'category-selection',
+      round: currentRound + 1,
+      [`${FIELD_TRAP_STATE}.currentTurnIndex`]: nextTurnIndex,
+      [`${FIELD_TRAP_STATE}.fiveRandomCategories`]: fiveRandomCategories,
+      [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
+      [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
+      [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
+      [`${FIELD_TRAP_STATE}.selectedCategory`]: deleteField(),
+      [`${FIELD_TRAP_STATE}.currentQuestion`]: deleteField(),
+      [`${FIELD_TRAP_STATE}.timerEndsAt`]: endsAt,
+      [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt,
+      [`${FIELD_TRAP_STATE}.phase`]: 'category',
+      [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
+      [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
+      [`${FIELD_TRAP_STATE}.reactions`]: {},
+    });
 }
 
     
