@@ -78,7 +78,7 @@ export {
     respondToAllegianceRequest,
     liftPunishment,
     getKingsPageData,
-    getGamePopularityStats,
+    getGamePopularityStats
 };
 
 
@@ -89,6 +89,7 @@ export {
     
 
     
+
 
 
 
