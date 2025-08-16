@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -31,7 +30,7 @@ export default function Home() {
     loading,
     socialRanks,
     getSocialRankForUser,
-    activeChallenges,
+    activeChallenges = [], // harden against undefined
     newChallengeAvailable,
     markChallengeAsSeen,
   } = useAuth();
@@ -41,15 +40,25 @@ export default function Home() {
   const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
   const [popularityStats, setPopularityStats] = useState<Record<string, number>>({});
 
-
+  // --- Popularity fetch: guard for client safety & unmount
   useEffect(() => {
+    let mounted = true;
     const fetchPopularity = async () => {
+      try {
         const stats = await getGamePopularityStats();
-        setPopularityStats(stats);
+        if (mounted && stats && typeof stats === 'object') {
+          setPopularityStats(stats as Record<string, number>);
+        }
+      } catch (err) {
+        // لا نمنع الصفحة إذا فشل الاستعلام (خصوصًا إن كانت دالة خادمية)
+        // يمكن لاحقًا نقلها إلى API route أو Firestore doc مخصص.
+      }
     };
     fetchPopularity();
+    return () => {
+      mounted = false;
+    };
   }, []);
-
 
   const handleLobbiesUpdate = useCallback((lobbies: Game[]) => {
     setActiveLobbies(lobbies);
@@ -57,12 +66,12 @@ export default function Home() {
 
   const { favoriteGame, popularGame } = useMemo(() => {
     // Determine favorite game based on user's win counts
-    const winCounts = userProfile?.winCounts || {};
+    const winCounts = userProfile?.winCounts || {} as Record<string, number>;
     let favGame: string | null = null;
     let maxWins = 0;
     Object.entries(winCounts).forEach(([gameType, wins]) => {
-      if (wins > maxWins) {
-        maxWins = wins;
+      if ((wins ?? 0) > maxWins) {
+        maxWins = Number(wins ?? 0);
         favGame = gameType;
       }
     });
@@ -71,16 +80,16 @@ export default function Home() {
     let popGame: string | null = null;
     let maxLobbies = -1;
     Object.entries(popularityStats).forEach(([gameType, count]) => {
-        if (count > maxLobbies) {
-            maxLobbies = count;
-            popGame = gameType;
-        }
+      if ((count ?? 0) > maxLobbies) {
+        maxLobbies = Number(count ?? 0);
+        popGame = gameType;
+      }
     });
 
     return { favoriteGame: favGame, popularGame: popGame };
   }, [userProfile?.winCounts, popularityStats]);
 
-
+  // --- Announcement live snapshot
   useEffect(() => {
     const unsubAnnouncement = onSnapshot(doc(db, 'game_settings', 'announcement'), (docSnap) => {
       if (docSnap.exists()) {
@@ -88,6 +97,8 @@ export default function Home() {
         setAnnouncement(text);
         if (text) setShowAnnouncement(true);
       }
+    }, () => {
+      // فشل القراءة لا يجب أن يكسر الصفحة
     });
     return () => unsubAnnouncement();
   }, []);
@@ -97,10 +108,19 @@ export default function Home() {
     return getSocialRankForUser(userProfile.leaderboardPoints);
   }, [userProfile, getSocialRankForUser]);
 
-  if (loading) return <MainLoadingSkeleton />;
-  
-  if (!user || !userProfile) {
-    // After the loading is complete, if user is still not available, show guest page.
+  // =============================
+  // Auth rendering guard (fix)
+  // =============================
+  // المشكلة الشائعة: بعد تسجيل الدخول يصبح user موجودًا لكن userProfile لم يُحمّل بعد،
+  // والـ loading يتحول إلى false مبكرًا → الفرع الضيف يظهر ويعيدك لصفحة الدخول.
+  // الحل: لا نعرض صفحة الضيف إلا إن كان user غير موجود. وإذا كان user موجودًا ولم يصل
+  // userProfile بعد، نعرض الـ Skeleton بدلًا من ذلك لمنع إعادة التوجيه.
+  if (loading || (user && !userProfile)) {
+    return <MainLoadingSkeleton />;
+  }
+
+  if (!user) {
+    // بعد اكتمال التحميل، إذا لم يوجد مستخدم، نظهر صفحة الضيف فقط.
     return <WelcomeGuest />;
   }
 
@@ -108,7 +128,7 @@ export default function Home() {
     <div className="relative min-h-screen overflow-hidden bg-background" dir="rtl" lang="ar">
       <AmbientBackground />
 
-      <HomeHeader userProfile={userProfile} />
+      <HomeHeader userProfile={userProfile!} />
 
       <main className="flex flex-col items-center justify-center p-4 md:p-8 pt-2 w-full">
         <motion.div
@@ -147,7 +167,7 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="space-y-6">
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-                <UserProfileCard userProfile={userProfile} currentRank={currentRank} socialRanks={socialRanks} />
+                <UserProfileCard userProfile={userProfile!} currentRank={currentRank} socialRanks={socialRanks} />
               </motion.div>
 
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
@@ -177,7 +197,7 @@ export default function Home() {
 
             <div className="lg:col-span-2 space-y-6">
               <AnimatePresence>
-                {activeChallenges.length > 0 && (
+                {(activeChallenges?.length ?? 0) > 0 && (
                   <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                     <Card className="relative overflow-hidden border-0 shadow-md shadow-primary/10 ring-1 ring-primary/20">
                       <GradientBorder />
@@ -209,7 +229,7 @@ export default function Home() {
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
                 <SectionHeader title="اللوبي" icon={<Gamepad2 className="h-5 w-5" />} subtitle="تواصل بسرعة مع اللاعبين والغرف المفتوحة" />
                 <div className="mt-3 rounded-2xl border border-border/60 bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/40">
-                   <LobbySection onLobbiesUpdate={handleLobbiesUpdate} />
+                  <LobbySection onLobbiesUpdate={handleLobbiesUpdate} />
                 </div>
               </motion.div>
             </div>
@@ -219,12 +239,12 @@ export default function Home() {
 
       <HomeDialogs
         user={user}
-        userProfile={userProfile}
+        userProfile={userProfile!}
         activeChallenges={activeChallenges}
         newChallengeAvailable={newChallengeAvailable}
         markChallengeAsSeen={markChallengeAsSeen}
       />
-      <ComplaintBubble userProfile={userProfile} />
+      <ComplaintBubble userProfile={userProfile!} />
     </div>
   );
 }

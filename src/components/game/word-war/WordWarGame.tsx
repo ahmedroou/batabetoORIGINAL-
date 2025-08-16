@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -399,7 +398,7 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
               <Lightbulb /> دورك كمرشد
             </CardTitle>
             <CardDescription className="text-zinc-600">
-              كلمة واحدة (حتى {k.maxHintLen} أحرف، بدون مسافات) + عدد البطاقات المرتبطة.
+              كلمة واحدة (حتى ${k.maxHintLen} أحرف، بدون مسافات) + عدد البطاقات المرتبطة.
             </CardDescription>
           </CardHeader>
           <CardContent>

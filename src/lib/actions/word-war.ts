@@ -1,3 +1,6 @@
+
+'use server';
+
 /**
  * @fileoverview Word War actions — v2 (GPT-5 Thinking)
  * Enhancements merged as requested:
