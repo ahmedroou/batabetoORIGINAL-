@@ -41,7 +41,7 @@ import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { getTrapAnswerCategories } from './admin/settings';
 import { getRanks } from './user/queries';
 import { calculateEndOfGameAwards } from './user/awards';
-import { updateUserWinCount } from './user/queries';
+import { updateUserWinCount, recordMatchHistory } from './user/queries';
 
 // -----------------------------------------------------------------------------
 // Constants & small helpers
@@ -497,6 +497,8 @@ async function finalizeGameAndDistributeAwards(game: Game) {
         const alreadyFinalized = !!(current.trapAnswerState?.finalAwards);
         if (alreadyFinalized) return;
         
+        await recordMatchHistory(current);
+
         const allRanks = await getRanks();
         const { data: awards } = calculateEndOfGameAwards(current, allRanks);
         
@@ -555,21 +557,15 @@ async function finalizeGameAndDistributeAwards(game: Game) {
 export async function tickGame(gameId: string) {
   const gameRef = doc(db, 'games', gameId);
 
-  // Read the current state once
   const gameSnap = await getDoc(gameRef);
   if (!gameSnap.exists()) return;
   const game = gameSnap.data() as Game;
-
-  // Check if a timer is active and expired
+  
   const timerEndsAt = (game as any)[FIELD_TRAP_STATE]?.roundEndTime as Timestamp | undefined;
   if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) {
-    // No expired timer, do nothing.
     return;
   }
-
-  // If timer is expired, call the full handleTimeout logic.
-  // We pass the current player's ID, though the new handleTimeout doesn't
-  // strictly need it to be the host anymore.
+  
   const selfId = (typeof window !== 'undefined' && sessionStorage.getItem(`player-id-${gameId}`)) || game.hostId;
   await handleTimeout(gameId, selfId);
 }
@@ -580,8 +576,8 @@ export async function tickGame(gameId: string) {
 export async function handleTimeout(gameId: string, callerId: string) {
   const gameRef = doc(db, 'games', gameId);
 
-  let shouldFinalize = false; // NEW: if results -> final
-  let gameSnapshotAtEnd: Game | null = null; // Capture state for finalization
+  let shouldFinalize = false; 
+  let gameSnapshotAtEnd: Game | null = null; 
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -592,11 +588,9 @@ export async function handleTimeout(gameId: string, callerId: string) {
     const timerEndsAt = state?.roundEndTime as Timestamp | undefined;
     if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
 
-    // ✅ أي لاعب مشارك يقدر ينفذ النخزة (بدلاً من المضيف فقط)
     const isPlayer = Array.isArray(game.players) && game.players.some(p => p.id === callerId);
     if (!isPlayer) return;
 
-    // Clear timer first to avoid double-processing
     tx.update(gameRef, {
       [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
       [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
@@ -609,12 +603,14 @@ export async function handleTimeout(gameId: string, callerId: string) {
       const randomCategory = categories[Math.floor(Math.random() * categories.length)];
       const answerTime = state?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
       const newTimer = tsFromNowS(answerTime);
+      
+      const question = await fetchRandomQuestionByCategory(randomCategory);
 
-      // Move to answer-submission immediately, set timer; inject question post-tx.
       tx.update(gameRef, {
         gameState: 'answer-submission',
         [`${FIELD_TRAP_STATE}.phase`]: 'answer',
         [`${FIELD_TRAP_STATE}.selectedCategory`]: randomCategory,
+        [`${FIELD_TRAP_STATE}.currentQuestion`]: question,
         [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
         [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
         [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
@@ -629,7 +625,6 @@ export async function handleTimeout(gameId: string, callerId: string) {
     } else if (game.gameState === 'guessing') {
       await _advanceToResults(tx as any, gameRef, game, true);
     } else if (game.gameState === 'round-results') {
-      // NEW: Auto-advance to next round or finalize
       const currentRound = game.round || 0;
       const totalRounds = state?.settings?.rounds || 10;
 
@@ -643,7 +638,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
           [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
         });
       } else {
-        const nextTurnIndex = ((state?.currentTurnIndex || 0) + 1) % (game.players?.length || 1);
+         const nextTurnIndex = ((state?.currentTurnIndex || 0) + 1) % (game.players?.length || 1);
         const availableCategories = state?.settings?.categories || [];
         const sourceCats: string[] = Array.isArray(availableCategories) && availableCategories.length > 0
           ? availableCategories
@@ -673,27 +668,6 @@ export async function handleTimeout(gameId: string, callerId: string) {
     }
   });
 
-  // If we auto-picked a category, fetch & attach the question now
-  try {
-    const fresh = await getDoc(gameRef);
-    if (!fresh.exists()) return;
-    const g = fresh.data() as Game;
-
-    if (g.gameState === 'answer-submission' && !(g as any)[FIELD_TRAP_STATE]?.currentQuestion) {
-      const chosen = (g as any)[FIELD_TRAP_STATE]?.selectedCategory as string | undefined;
-      if (chosen) {
-        const q = await fetchRandomQuestionByCategory(chosen);
-        await updateDoc(gameRef, {
-          [`${FIELD_TRAP_STATE}.currentQuestion`]: q,
-          [`${FIELD_TRAP_STATE}.reactions`]: {},
-        });
-      }
-    }
-  } catch (e) {
-    console.error('Timeout post-step (attach question) failed:', e);
-  }
-
-  // NEW: If we just flipped to final_results via timeout, finalize awards
   if (shouldFinalize && gameSnapshotAtEnd) {
     await finalizeGameAndDistributeAwards(gameSnapshotAtEnd);
   }
@@ -844,3 +818,5 @@ async function _advanceToResults(
     [`${FIELD_TRAP_STATE}.reactions`]: {},
   });
 }
+
+    
