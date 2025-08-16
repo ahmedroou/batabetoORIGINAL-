@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { CompactChallengeList } from './components/home/CompactChallengeList';
 import ComplaintBubble from './components/home/ComplaintBubble';
 import type { Game } from '@/types';
-import { getGamePopularityStats } from '@/lib/actions/user/queries';
+// ⛔️ أزلنا: import { getGamePopularityStats } from '@/lib/actions/user/queries';
 
 export default function Home() {
   const router = useRouter();
@@ -30,7 +30,7 @@ export default function Home() {
     loading,
     socialRanks,
     getSocialRankForUser,
-    activeChallenges = [], // harden against undefined
+    activeChallenges = [], // منع undefined
     newChallengeAvailable,
     markChallengeAsSeen,
   } = useAuth();
@@ -40,24 +40,30 @@ export default function Home() {
   const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
   const [popularityStats, setPopularityStats] = useState<Record<string, number>>({});
 
-  // --- Popularity fetch: guard for client safety & unmount
+  // --- Popularity: استبدال الاستدعاء الخادمي باشتراك Firestore مباشر
   useEffect(() => {
-    let mounted = true;
-    const fetchPopularity = async () => {
-      try {
-        const stats = await getGamePopularityStats();
-        if (mounted && stats && typeof stats === 'object') {
-          setPopularityStats(stats as Record<string, number>);
+    const popularityRef = doc(db, 'game_settings', 'popularity'); // وثيقة مقترحة: game_settings/popularity
+    const unsub = onSnapshot(
+      popularityRef,
+      (snap) => {
+        if (!snap.exists()) {
+          setPopularityStats({});
+          return;
         }
-      } catch (err) {
-        // لا نمنع الصفحة إذا فشل الاستعلام (خصوصًا إن كانت دالة خادمية)
-        // يمكن لاحقًا نقلها إلى API route أو Firestore doc مخصص.
+        const data = snap.data() as Record<string, unknown>;
+        // ندعم شكلين: إما doc = { stats: {...} } أو doc = {...} مباشرة
+        const stats =
+          (data?.stats && typeof data.stats === 'object'
+            ? (data.stats as Record<string, number>)
+            : (data as Record<string, number>)) ?? {};
+        setPopularityStats(stats);
+      },
+      () => {
+        // لا نكسر الصفحة في حال الفشل
+        setPopularityStats({});
       }
-    };
-    fetchPopularity();
-    return () => {
-      mounted = false;
-    };
+    );
+    return () => unsub();
   }, []);
 
   const handleLobbiesUpdate = useCallback((lobbies: Game[]) => {
@@ -65,41 +71,47 @@ export default function Home() {
   }, []);
 
   const { favoriteGame, popularGame } = useMemo(() => {
-    // Determine favorite game based on user's win counts
-    const winCounts = userProfile?.winCounts || {} as Record<string, number>;
+    // لعبة المستخدم المفضلة (حسب عدد مرات الفوز)
+    const winCounts = (userProfile?.winCounts ?? {}) as Record<string, number>;
     let favGame: string | null = null;
     let maxWins = 0;
-    Object.entries(winCounts).forEach(([gameType, wins]) => {
-      if ((wins ?? 0) > maxWins) {
-        maxWins = Number(wins ?? 0);
+    for (const [gameType, wins] of Object.entries(winCounts)) {
+      const numWins = Number(wins ?? 0);
+      if (numWins > maxWins) {
+        maxWins = numWins;
         favGame = gameType;
       }
-    });
+    }
 
-    // Determine popular game based on historical stats
+    // اللعبة الشعبية (حسب إحصائيات الجميع من Firestore)
     let popGame: string | null = null;
-    let maxLobbies = -1;
-    Object.entries(popularityStats).forEach(([gameType, count]) => {
-      if ((count ?? 0) > maxLobbies) {
-        maxLobbies = Number(count ?? 0);
+    let maxCount = -1;
+    for (const [gameType, count] of Object.entries(popularityStats)) {
+      const num = Number(count ?? 0);
+      if (num > maxCount) {
+        maxCount = num;
         popGame = gameType;
       }
-    });
+    }
 
     return { favoriteGame: favGame, popularGame: popGame };
   }, [userProfile?.winCounts, popularityStats]);
 
-  // --- Announcement live snapshot
+  // --- إعلان مباشر من Firestore
   useEffect(() => {
-    const unsubAnnouncement = onSnapshot(doc(db, 'game_settings', 'announcement'), (docSnap) => {
-      if (docSnap.exists()) {
-        const text = (docSnap.data() as { text?: string }).text ?? null;
-        setAnnouncement(text);
-        if (text) setShowAnnouncement(true);
+    const unsubAnnouncement = onSnapshot(
+      doc(db, 'game_settings', 'announcement'),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const text = (docSnap.data() as { text?: string }).text ?? null;
+          setAnnouncement(text);
+          if (text) setShowAnnouncement(true);
+        }
+      },
+      () => {
+        // تجاهل الأخطاء الصامتة
       }
-    }, () => {
-      // فشل القراءة لا يجب أن يكسر الصفحة
-    });
+    );
     return () => unsubAnnouncement();
   }, []);
 
@@ -109,18 +121,13 @@ export default function Home() {
   }, [userProfile, getSocialRankForUser]);
 
   // =============================
-  // Auth rendering guard (fix)
+  // حراسة التوثيق (Auth Guard)
   // =============================
-  // المشكلة الشائعة: بعد تسجيل الدخول يصبح user موجودًا لكن userProfile لم يُحمّل بعد،
-  // والـ loading يتحول إلى false مبكرًا → الفرع الضيف يظهر ويعيدك لصفحة الدخول.
-  // الحل: لا نعرض صفحة الضيف إلا إن كان user غير موجود. وإذا كان user موجودًا ولم يصل
-  // userProfile بعد، نعرض الـ Skeleton بدلًا من ذلك لمنع إعادة التوجيه.
   if (loading || (user && !userProfile)) {
     return <MainLoadingSkeleton />;
   }
 
   if (!user) {
-    // بعد اكتمال التحميل، إذا لم يوجد مستخدم، نظهر صفحة الضيف فقط.
     return <WelcomeGuest />;
   }
 
@@ -270,10 +277,9 @@ function GradientBorder() {
         padding: 1,
         background:
           'linear-gradient(135deg, hsl(var(--primary)/.6), hsl(var(--secondary)/.4), hsl(var(--muted-foreground)/.3))',
-        WebkitMask:
-          'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
-        WebkitMaskComposite: 'xor' as any,
-        maskComposite: 'exclude' as any,
+        WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+        WebkitMaskComposite: 'xor' as const,
+        maskComposite: 'exclude' as const,
       }}
     />
   );

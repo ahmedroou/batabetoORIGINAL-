@@ -1,36 +1,51 @@
-
-
 "use client";
 
-import { useState, useEffect, createContext, useContext, type ReactNode, useRef, useMemo, useCallback } from 'react';
-import { onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, onSnapshot, getDoc, collection, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
-import type { League, SocialRank, UserProfile, Article, TaxDemand, Decree, DuelChallenge, PermissionId, Challenge, AllegianceRequest } from '@/types';
-import { DEFAULT_SOCIAL_RANKS } from '@/data/social-ranks';
-import { getRanks } from '@/lib/actions/user/queries';
-import { getPublishedArticles } from '@/lib/actions/news';
-import { getChallenges } from '@/lib/actions/challenges';
+import {
+  useState,
+  useEffect,
+  createContext,
+  useContext,
+  type ReactNode,
+  useRef,
+  useCallback,
+} from "react";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import {
+  doc,
+  onSnapshot,
+  getDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  Timestamp,
+  type DocumentData,
+} from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+import type {
+  SocialRank,
+  UserProfile,
+  TaxDemand,
+  Decree,
+  DuelChallenge,
+  Challenge,
+  AllegianceRequest,
+} from "@/types";
+import { DEFAULT_SOCIAL_RANKS } from "@/data/social-ranks";
 
-
-// This function now lives entirely on the client-side within the Auth provider context.
-// It takes the ranks fetched by the provider and performs the calculation.
-function getSocialRankForUser(points: number, allRanks: SocialRank[]): SocialRank | null {
-    if (!allRanks || allRanks.length === 0) {
-        allRanks = DEFAULT_SOCIAL_RANKS;
-    }
-    
-    // Ranks are assumed to be pre-sorted by the provider.
-    const sortedRanks = [...allRanks].sort((a,b) => b.threshold - a.threshold);
-
-    for (const rank of sortedRanks) {
-        if (points >= rank.threshold) {
-            return rank;
-        }
-    }
-    return sortedRanks[sortedRanks.length - 1] || null;
+/** حساب الرتبة الاجتماعية محليًا (بدون نداءات خادمية) */
+function getSocialRankForUser(
+  points: number,
+  allRanks: SocialRank[] | undefined
+): SocialRank | null {
+  const ranks = (allRanks?.length ? allRanks : DEFAULT_SOCIAL_RANKS).slice();
+  ranks.sort((a, b) => b.threshold - a.threshold);
+  for (const rank of ranks) {
+    if (points >= rank.threshold) return rank;
+  }
+  return ranks[ranks.length - 1] ?? null;
 }
-
 
 interface AuthContextType {
   user: User | null;
@@ -60,254 +75,295 @@ const AuthContext = createContext<AuthContextType>({
   markChallengeAsSeen: () => {},
 });
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [socialRanks, setSocialRanks] = useState<SocialRank[]>([]);
-  
   const [latestArticleDate, setLatestArticleDate] = useState<Date | null>(null);
   const [newArticlesAvailable, setNewArticlesAvailable] = useState(false);
-  
   const [activeChallenges, setActiveChallenges] = useState<Challenge[]>([]);
   const [newChallengeAvailable, setNewChallengeAvailable] = useState(false);
-  
-  const prevRankName = useRef<string | null>(null);
-  const prevPoints = useRef<number | null>(null);
 
-  const memoizedGetSocialRankForUser = useCallback((points: number, allRanks?: SocialRank[]): SocialRank | null => {
-    const ranksToUse = allRanks && allRanks.length > 0 ? allRanks : socialRanks;
-    return getSocialRankForUser(points, ranksToUse);
-  }, [socialRanks]);
+  // مراجع داخليّة (قد تنفع لاحقًا للتنبيهات)
+  const mountedRef = useRef<boolean>(false);
 
+  /** دالة مرتجعة تحافظ على نفس المرجع وتستخدم socialRanks الحالية */
+  const memoizedGetSocialRankForUser = useCallback(
+    (points: number, allRanks?: SocialRank[]) =>
+      getSocialRankForUser(points, allRanks && allRanks.length ? allRanks : socialRanks),
+    [socialRanks]
+  );
 
-  const fetchUserProfile = useCallback(async (firebaseUser: User) => {
-      const userDocRef = doc(db, 'users', firebaseUser.uid);
-      const docSnap = await getDoc(userDocRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        
-        const currentRank = memoizedGetSocialRankForUser(data.leaderboardPoints || 0, socialRanks);
-        
-        setUserProfile({
-          uid: firebaseUser.uid,
-          name: data.name || firebaseUser.displayName || 'Unknown User',
-          email: firebaseUser.email,
-          gender: data.gender,
-          isAdmin: data.isAdmin === true,
-          isEditor: data.isEditor || false,
-          coins: data.coins ?? 0,
-          diamonds: data.diamonds ?? 0,
-          avatarId: data.avatarId || 'Avatar00.png',
-          unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
-          leaderboardPoints: data.leaderboardPoints || 0,
-          honorPoints: data.honorPoints || 0,
-          loyaltyPoints: data.loyaltyPoints || 0,
-          rebellionPoints: data.rebellionPoints || 0,
-          trophies: data.trophies || 0,
-          gamesPlayed: data.gamesPlayed || 0,
-          hasChangedName: data.hasChangedName || false,
-          leagues: data.leagues || [],
-          winCounts: data.winCounts || {},
-          clan: data.clan || null,
-          clanRole: data.clanRole,
-          audienceGroups: data.audienceGroups || [],
-          humiliation: data.humiliation || null,
-          allegiance: data.allegiance || null,
-          allegianceRequests: (data.allegianceRequests || []).filter((r: AllegianceRequest) => r.status === 'pending'),
-          taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
-          alliances: data.alliances || [],
-          decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date()),
-          duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
-          lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
-          originalAvatarToRevert: data.originalAvatarToRevert || null,
-          permissions: currentRank?.permissions || [],
-          unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
-        });
-      } else {
-        setUserProfile(null);
-      }
-      setLoading(false);
-  }, [socialRanks, memoizedGetSocialRankForUser]);
-  
+  /** تحويل وثيقة المستخدم إلى UserProfile بأمان الأنواع */
+  const buildUserProfile = useCallback(
+    (firebaseUser: User, data: DocumentData): UserProfile => {
+      const now = new Date();
+      const ensureDate = (v: unknown): Date | null => {
+        if (!v) return null;
+        if (v instanceof Timestamp) return v.toDate();
+        if (typeof v === "string" || v instanceof Date) return new Date(v);
+        return null;
+        // نعيد null إذا كان النوع غير معروف بدل كسر الواجهة
+      };
+
+      const currentRank = memoizedGetSocialRankForUser(
+        Number(data.leaderboardPoints ?? 0),
+        socialRanks
+      );
+
+      return {
+        uid: firebaseUser.uid,
+        name: data.name || firebaseUser.displayName || "Unknown User",
+        email: firebaseUser.email,
+        gender: data.gender ?? null,
+        isAdmin: data.isAdmin === true,
+        isEditor: Boolean(data.isEditor),
+        coins: Number(data.coins ?? 0),
+        diamonds: Number(data.diamonds ?? 0),
+        avatarId: data.avatarId || "Avatar00.png",
+        unlockedAvatars: Array.isArray(data.unlockedAvatars)
+          ? data.unlockedAvatars
+          : ["Avatar00.png"],
+        leaderboardPoints: Number(data.leaderboardPoints ?? 0),
+        honorPoints: Number(data.honorPoints ?? 0),
+        loyaltyPoints: Number(data.loyaltyPoints ?? 0),
+        rebellionPoints: Number(data.rebellionPoints ?? 0),
+        trophies: Number(data.trophies ?? 0),
+        gamesPlayed: Number(data.gamesPlayed ?? 0),
+        hasChangedName: Boolean(data.hasChangedName),
+        leagues: Array.isArray(data.leagues) ? data.leagues : [],
+        winCounts: (data.winCounts as Record<string, number>) ?? {},
+        clan: data.clan ?? null,
+        clanRole: data.clanRole ?? null,
+        audienceGroups: Array.isArray(data.audienceGroups) ? data.audienceGroups : [],
+        humiliation: data.humiliation ?? null,
+        allegiance: data.allegiance ?? null,
+        allegianceRequests: (Array.isArray(data.allegianceRequests)
+          ? data.allegianceRequests
+          : []
+        ).filter((r: AllegianceRequest) => r?.status === "pending"),
+        taxDemands: (Array.isArray(data.taxDemands) ? data.taxDemands : []).filter(
+          (d: TaxDemand) => d?.status === "pending"
+        ),
+        alliances: Array.isArray(data.alliances) ? data.alliances : [],
+        decrees: (Array.isArray(data.decrees) ? data.decrees : []).filter(
+          (d: Decree) => {
+            const untilDate = ensureDate(d?.until);
+            return !!(untilDate && untilDate > now);
+          }
+        ),
+        duelChallenges: (Array.isArray(data.duelChallenges) ? data.duelChallenges : []).filter(
+          (d: DuelChallenge) => d?.status === "pending"
+        ),
+        lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
+        originalAvatarToRevert: data.originalAvatarToRevert ?? null,
+        permissions: currentRank?.permissions || [],
+        unlockedPunishmentAvatars: Array.isArray(data.unlockedPunishmentAvatars)
+          ? data.unlockedPunishmentAvatars
+          : [],
+      };
+    },
+    [memoizedGetSocialRankForUser, socialRanks]
+  );
+
+  /** تحميل رتب المجتمع من Firestore مع fallback افتراضي */
   useEffect(() => {
-    const fetchRanks = async () => {
-        const ranks = await getRanks();
-        setSocialRanks(ranks.sort((a, b) => a.threshold - b.threshold));
+    mountedRef.current = true;
+
+    // الرتب من إعدادات اللعبة (يفضّلها على الثابتة)
+    const settingsRef = doc(db, "game_settings", "social_ranks");
+    const unsubRanks = onSnapshot(
+      settingsRef,
+      (snap) => {
+        if (!mountedRef.current) return;
+        const list = (snap.data()?.list ?? DEFAULT_SOCIAL_RANKS) as SocialRank[];
+        const sorted = list.slice().sort((a, b) => a.threshold - b.threshold);
+        setSocialRanks(sorted);
+      },
+      () => {
+        // عند الفشل استخدم الافتراضي ولا تكسر الواجهة
+        setSocialRanks(DEFAULT_SOCIAL_RANKS.slice().sort((a, b) => a.threshold - b.threshold));
+      }
+    );
+
+    return () => {
+      mountedRef.current = false;
+      unsubRanks();
     };
-    fetchRanks();
-
-    const settingsRef = doc(db, 'game_settings', 'social_ranks');
-    const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const ranksData = docSnap.data().list || DEFAULT_SOCIAL_RANKS;
-            setSocialRanks(ranksData.sort((a: SocialRank, b: SocialRank) => a.threshold - b.threshold));
-        }
-    });
-
-    return () => unsubscribe();
   }, []);
 
+  /** مراقبة حالة الدخول */
   useEffect(() => {
     setLoading(true);
-    const unsubscribeAuth = onAuthStateChanged(auth, (authUser) => {
+    const unsubAuth = onAuthStateChanged(auth!, (authUser) => {
       setUser(authUser);
       if (!authUser) {
         setUserProfile(null);
         setLoading(false);
       }
     });
-    return () => unsubscribeAuth();
+    return () => unsubAuth();
   }, []);
 
+  /** الاشتراك في تغييرات بروفايل المستخدم */
   useEffect(() => {
-    if (user) {
-      const userDocRef = doc(db, 'users', user.uid);
-      
-      const unsubscribeProfile = onSnapshot(userDocRef, async (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+    if (!user) return;
 
-          const currentRank = memoizedGetSocialRankForUser(data.leaderboardPoints || 0, socialRanks);
-
-          const profile: UserProfile = {
-            uid: user.uid,
-            name: data.name || user.displayName || 'Unknown User',
-            email: user.email,
-            gender: data.gender,
-            isAdmin: data.isAdmin === true,
-            isEditor: data.isEditor || false,
-            coins: data.coins ?? 0,
-            diamonds: data.diamonds ?? 0,
-            avatarId: data.avatarId || 'Avatar00.png',
-            unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
-            leaderboardPoints: data.leaderboardPoints || 0,
-            honorPoints: data.honorPoints || 0,
-            loyaltyPoints: data.loyaltyPoints || 0,
-            rebellionPoints: data.rebellionPoints || 0,
-            trophies: data.trophies || 0,
-            gamesPlayed: data.gamesPlayed || 0,
-            hasChangedName: data.hasChangedName || false,
-            leagues: data.leagues || [],
-            winCounts: data.winCounts || {},
-            clan: data.clan || null,
-            clanRole: data.clanRole,
-            audienceGroups: data.audienceGroups || [],
-            humiliation: data.humiliation || null,
-            allegiance: data.allegiance || null,
-            allegianceRequests: (data.allegianceRequests || []).filter((r: AllegianceRequest) => r.status === 'pending'),
-            taxDemands: (data.taxDemands || []).filter((d: TaxDemand) => d.status === 'pending'),
-            alliances: data.alliances || [],
-            decrees: (data.decrees || []).filter((d: Decree) => d.until && new Date(d.until) > new Date()),
-            duelChallenges: (data.duelChallenges || []).filter((d: DuelChallenge) => d.status === 'pending'),
-            lastPunishmentTimestamp: data.lastPunishmentTimestamp || {},
-            originalAvatarToRevert: data.originalAvatarToRevert || null,
-            permissions: currentRank?.permissions || [],
-            unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
-          };
-          setUserProfile(profile);
-
-        } else {
+    setLoading(true);
+    const userDocRef = doc(db, "users", user.uid);
+    const unsubProfile = onSnapshot(
+      userDocRef,
+      (snap) => {
+        if (!snap.exists()) {
           setUserProfile(null);
-          prevRankName.current = null;
-          prevPoints.current = null;
+          setLoading(false);
+          return;
         }
+        const data = snap.data();
+        const profile = buildUserProfile(user, data);
+        setUserProfile(profile);
         setLoading(false);
-      });
-      return () => unsubscribeProfile();
-    }
-  }, [user, socialRanks, memoizedGetSocialRankForUser]);
-  
-  
-   useEffect(() => {
-    if (user) {
-        const q = query(collection(db, 'articles'), where('isPublished', '==', true), orderBy('createdAt', 'desc'), limit(1));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            if (!snapshot.empty) {
-                const latestArticle = snapshot.docs[0].data() as Article;
-                const latestDate = (latestArticle.createdAt as any)?.toDate();
-                if (latestDate) {
-                     setLatestArticleDate(latestDate);
-                }
-            }
-        }, (error) => {
-            console.warn("Firestore snapshot error on latest article query (this may be an index issue):", error.message);
-        });
-        return () => unsubscribe();
-    }
+      },
+      () => {
+        setUserProfile(null);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubProfile();
+  }, [user, buildUserProfile]);
+
+  /** أحدث مقال منشور لمعرفة إن كان هناك جديد بعد آخر زيارة */
+  useEffect(() => {
+    if (!user) return;
+
+    const qLatest = query(
+      collection(db, "articles"),
+      where("isPublished", "==", true),
+      orderBy("createdAt", "desc"),
+      limit(1)
+    );
+
+    const unsubArticles = onSnapshot(
+      qLatest,
+      (snapshot) => {
+        if (snapshot.empty) return;
+        const docData = snapshot.docs[0].data();
+        const createdAt = docData?.createdAt;
+        const date =
+          createdAt instanceof Timestamp
+            ? createdAt.toDate()
+            : createdAt
+            ? new Date(createdAt)
+            : null;
+        if (date) setLatestArticleDate(date);
+      },
+      (error) => {
+        // قد يحتاج اندِكس مركب — لا تكسر الواجهة
+        console.warn(
+          "Firestore snapshot error on latest article query (index required?):",
+          error?.message
+        );
+      }
+    );
+
+    return () => unsubArticles();
   }, [user]);
 
+  /** مقارنة أحدث خبر بتاريخ آخر زيارة (يتطلب window) */
   useEffect(() => {
-      if (latestArticleDate) {
-          const lastVisitString = localStorage.getItem('lastNewsVisit');
-          if (lastVisitString) {
-              const lastVisitDate = new Date(lastVisitString);
-              setNewArticlesAvailable(latestArticleDate > lastVisitDate);
-          } else {
-              setNewArticlesAvailable(true);
-          }
-      }
+    if (!latestArticleDate) return;
+    if (typeof window === "undefined") return;
+
+    const lastVisitString = window.localStorage.getItem("lastNewsVisit");
+    if (!lastVisitString) {
+      setNewArticlesAvailable(true);
+      return;
+    }
+    const lastVisit = new Date(lastVisitString);
+    setNewArticlesAvailable(latestArticleDate > lastVisit);
   }, [latestArticleDate]);
-  
-   useEffect(() => {
-    if (!user) return; // Don't fetch challenges if there's no user
-    const challengesQuery = query(collection(db, 'challenges'), where('endsAt', '>', Timestamp.now()), orderBy('endsAt', 'asc'), limit(5));
-    
-    const unsubscribeChallenges = onSnapshot(challengesQuery, (snapshot) => {
-        const fetchedChallenges = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Challenge));
-        setActiveChallenges(fetchedChallenges);
-        
-        if (fetchedChallenges.length > 0) {
-            const latestChallenge = fetchedChallenges[0];
-            const lastSeenTimestamp = localStorage.getItem('lastChallengeView');
-            const latestChallengeTimestamp = (latestChallenge.createdAt as Timestamp)?.toMillis();
-            
-            if (latestChallengeTimestamp) {
-                if (!lastSeenTimestamp || latestChallengeTimestamp > parseInt(lastSeenTimestamp, 10)) {
-                    setNewChallengeAvailable(true);
-                } else {
-                    setNewChallengeAvailable(false);
-                }
-            }
-        } else {
-            setNewChallengeAvailable(false);
-        }
+
+  /** الاشتراك في التحديات النشطة */
+  useEffect(() => {
+    if (!user) return;
+
+    const challengesQuery = query(
+      collection(db, "challenges"),
+      where("endsAt", ">", Timestamp.now()),
+      orderBy("endsAt", "asc"),
+      limit(5)
+    );
+
+    const unsubChallenges = onSnapshot(challengesQuery, (snapshot) => {
+      const fetched = snapshot.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as unknown as Challenge)
+      );
+      setActiveChallenges(fetched);
+
+      if (typeof window === "undefined") return;
+
+      if (fetched.length === 0) {
+        setNewChallengeAvailable(false);
+        return;
+      }
+
+      const latest = fetched[0];
+      // نستخدم createdAt إن وجد، وإلا endsAt كمرجع حديث
+      const tsRaw = (latest as any).createdAt ?? (latest as any).endsAt;
+      const latestMs =
+        tsRaw instanceof Timestamp ? tsRaw.toMillis() : tsRaw ? new Date(tsRaw).getTime() : 0;
+
+      const lastSeen = window.localStorage.getItem("lastChallengeView");
+      const lastSeenMs = lastSeen ? parseInt(lastSeen, 10) : 0;
+
+      setNewChallengeAvailable(latestMs > lastSeenMs);
     });
 
-    return () => unsubscribeChallenges();
-}, [user]);
+    return () => unsubChallenges();
+  }, [user]);
 
-    const markChallengeAsSeen = (challengeDate: Date | Timestamp) => {
-        if(challengeDate) {
-            const dateToStore = challengeDate instanceof Timestamp ? challengeDate.toMillis() : challengeDate.getTime();
-            localStorage.setItem('lastChallengeView', dateToStore.toString());
-            setNewChallengeAvailable(false);
-        }
-    };
+  /** تعليم أحدث تحدٍ كمقروء */
+  const markChallengeAsSeen = (challengeDate: Date | Timestamp) => {
+    if (typeof window === "undefined" || !challengeDate) return;
+    const ms =
+      challengeDate instanceof Timestamp ? challengeDate.toMillis() : challengeDate.getTime();
+    window.localStorage.setItem("lastChallengeView", String(ms));
+    setNewChallengeAvailable(false);
+  };
 
+  /** تحديث يدوي للبروفايل (قراءة لحظية من Firestore) */
   const refreshUserProfile = useCallback(async () => {
-    if(user) {
-      setLoading(true);
-      await fetchUserProfile(user);
+    if (!user) return;
+    setLoading(true);
+    try {
+      const snap = await getDoc(doc(db, "users", user.uid));
+      if (snap.exists()) {
+        setUserProfile(buildUserProfile(user, snap.data()));
+      }
+    } finally {
       setLoading(false);
     }
-  }, [user, fetchUserProfile]);
+  }, [user, buildUserProfile]);
 
   return (
-    <AuthContext.Provider value={{ 
-        user, 
-        userProfile, 
-        loading, 
-        socialRanks, 
-        refreshUserProfile, 
-        getSocialRankForUser: memoizedGetSocialRankForUser, 
-        latestArticleDate, 
-        setLatestArticleDate, 
+    <AuthContext.Provider
+      value={{
+        user,
+        userProfile,
+        loading,
+        socialRanks,
+        refreshUserProfile,
+        getSocialRankForUser: memoizedGetSocialRankForUser,
+        latestArticleDate,
+        setLatestArticleDate,
         newArticlesAvailable,
         activeChallenges,
         newChallengeAvailable,
-        markChallengeAsSeen
-    }}>
+        markChallengeAsSeen,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
