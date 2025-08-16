@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, {
@@ -8,6 +9,7 @@ import React, {
   useRef,
   memo,
 } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Game, Player, EmojiReaction, EmojiReactionType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -200,6 +202,7 @@ interface TrapAnswerGameProps {
 
 export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
   const { toast } = useToast();
+  const router = useRouter();
 
   const [loading, setLoading] = useState<{
     select?: boolean;
@@ -934,3 +937,5 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
       );
   }
 }
+
+    
