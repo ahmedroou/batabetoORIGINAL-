@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, {
@@ -902,7 +903,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
           {afkPlayers.length > 0 && (
             <div className="p-3 rounded-lg bg-yellow-100 border border-yellow-300 mt-4">
               <h3 className="font-bold text-yellow-800 flex items-center justify-center gap-2">
-                <AlertTriangle /> أعلى انقطاعات/AFK
+                <AlertTriangle /> غشاشين محتملين
               </h3>
               <div className="space-y-1 mt-2">
                 {afkPlayers.map(({ player, afkCount }) => (
