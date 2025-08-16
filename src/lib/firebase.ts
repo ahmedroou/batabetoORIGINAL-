@@ -1,3 +1,4 @@
+
 // lib/firebase.ts
 // Client-side Firebase bootstrap for Next.js (App Router safe)
 
@@ -14,16 +15,22 @@ import {
   connectAuthEmulator,
 } from 'firebase/auth';
 
-// Prefer ENV; fall back to current inline config (so nothing breaks).
+// Configuration is now loaded exclusively from environment variables
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? 'AIzaSyAFUCN6QzQ3BiLS8KCkFvwkWo9gY0kvTt4',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? 'deep-dive-the-friendship-game.firebaseapp.com',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'deep-dive-the-friendship-game',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? 'deep-dive-the-friendship-game.appspot.com',
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '359342640267',
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? '1:359342640267:web:24bcfbb409bc8bbb83d88e',
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID ?? 'G-86EHFM7J3L', // optional
-} as const;
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // optional
+};
+
+// Simple check to ensure all required config values are present.
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+    throw new Error("Firebase config is missing. Please set up your .env file with NEXT_PUBLIC_FIREBASE_ variables.");
+}
+
 
 // Initialize once
 const app: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
