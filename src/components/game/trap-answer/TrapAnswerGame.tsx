@@ -28,6 +28,7 @@ import {
   nextTrapAnswerRound,
   sendReaction,
   updateGameSettings as updateTrapAnswerSettings,
+  handleTimeout,
 } from '@/lib/actions/trap-answer';
 import { kickPlayerFromLobby, leaveGame } from '@/lib/actions/room';
 import {
@@ -782,7 +783,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
                       <div className="text-right">
                         <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] ?? 0}</span>
                         {roundScore?.points > 0 && (
-                          <span className="text-xs font-bold text-green-500">+{roundScore.points}</span>
+                          <span className="text-xs font-bold text-green-600">+{roundScore.points}</span>
                         )}
                       </div>
                     </div>
