@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -119,7 +118,7 @@ export const checkForWinner = (players: Player[]): MafiaGameResult | null => {
   const good = alive.filter((p) => p.team === 'good').length;
   const mafia = alive.filter((p) => p.team === 'mafia').length;
   if (mafia === 0) return { winner: 'good', message: 'لقد قضى فريق الخير على كل الأشرار!' };
-  if (mafia > good) return { winner: 'mafia', message: 'لقد سيطر فريق الشر على المدينة!' };
+  if (mafia >= good) return { winner: 'mafia', message: 'لقد سيطر فريق الشر على المدينة!' };
   return null;
 };
 
@@ -676,5 +675,3 @@ export async function updateMafiaSettings(
     tx.update(gameRef, { 'mafiaState.settings': { nightTime, dayTime } });
   });
 }
-
-    
