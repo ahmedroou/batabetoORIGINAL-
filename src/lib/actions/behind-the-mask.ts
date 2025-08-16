@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -117,10 +118,13 @@ export const checkForWinner = (players: Player[]): MafiaGameResult | null => {
   const alive = players.filter((p) => p.status === 'alive');
   const good = alive.filter((p) => p.team === 'good').length;
   const mafia = alive.filter((p) => p.team === 'mafia').length;
+
   if (mafia === 0) return { winner: 'good', message: 'لقد قضى فريق الخير على كل الأشرار!' };
   if (mafia >= good) return { winner: 'mafia', message: 'لقد سيطر فريق الشر على المدينة!' };
+  
   return null;
 };
+
 
 const requirePhase = (game: Game, phases: string[]) => {
   const phase = game.mafiaState?.phase || '';
@@ -273,12 +277,14 @@ export async function processDayInternal(game: Game): Promise<{
   const counts: Record<string, number> = {};
   const events: DayEvent[] = [];
   let executed: Player | null = null;
+  
+  const alivePlayerIds = new Set(game.players.filter(isAlive).map(p => p.id));
 
-  // Count only votes that target living players
-  Object.entries(votes).forEach(([_, targetId]) => {
-    if (!targetId) return;
-    const target = players.find((p) => p.id === targetId);
-    if (isAlive(target)) counts[targetId] = (counts[targetId] || 0) + 1;
+  // Count only votes that target living players, and only from living players
+  Object.entries(votes).forEach(([voterId, targetId]) => {
+      if (!targetId || !alivePlayerIds.has(voterId)) return;
+      const target = players.find((p) => p.id === targetId);
+      if (isAlive(target)) counts[targetId] = (counts[targetId] || 0) + 1;
   });
 
   const maxVotes = Math.max(0, ...Object.values(counts));
@@ -443,7 +449,6 @@ export async function submitNightAction(
 /** معالجة الليل والانتقال تلقائيًا إلى النهار أو النتائج. */
 export async function processNight(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
-  let finalGameData: Game | null = null;
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
@@ -471,20 +476,18 @@ export async function processNight(gameId: string, hostId: string): Promise<void
       update['mafiaState.phase'] = 'final_results';
       update.gameResult = winner;
       update['mafiaState.timerEndsAt'] = deleteField();
-      finalGameData = { ...game, players: cleaned, gameResult: winner };
+      tx.update(gameRef, update);
+      // We pass the updated game state to the league update function
+      await updateLeagueScoresForGameEnd({ ...game, players: cleaned, gameResult: winner });
     } else {
       const { day } = getSettings(game);
       update['mafiaState.phase'] = 'day';
       update['mafiaState.timerEndsAt'] = deadline(day);
+      tx.update(gameRef, update);
     }
-
-    tx.update(gameRef, update);
   });
-
-  if (finalGameData) {
-    await updateLeagueScoresForGameEnd(finalGameData);
-  }
 }
+
 
 /** الانتقال من النقاش إلى التصويت. */
 export async function transitionToVoting(gameId: string, hostId: string): Promise<void> {
@@ -546,7 +549,6 @@ export async function submitVote(
 
 /** معالجة التصويت في نهاية النهار/التصويت والانتقال لمرحلة التنفيذ أو إنهاء اللعبة. */
 export async function processDay(gameId: string, hostId: string): Promise<void> {
-  let gameForLeague: Game | null = null;
   const gameRef = doc(db, 'games', gameId);
 
   await runTransaction(db, async (tx) => {
@@ -567,19 +569,18 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
       (update as any)['mafiaState.phase'] = 'final_results';
       (update as any).gameResult = winner;
       (update as any)['mafiaState.timerEndsAt'] = deleteField();
-      gameForLeague = { ...game, players: updatedGame.players, gameResult: winner };
+      tx.update(gameRef, update);
+      await updateLeagueScoresForGameEnd({ ...game, players: updatedGame.players, gameResult: winner });
     } else {
       (update as any)['mafiaState.phase'] = 'execution';
       (update as any)['mafiaState.events'] = updatedGame.events;
       (update as any)['mafiaState.lastExecutedPlayer'] = updatedGame.lastExecutedPlayer;
       (update as any)['mafiaState.timerEndsAt'] = deleteField();
+      tx.update(gameRef, update);
     }
-
-    tx.update(gameRef, update);
   });
-
-  if (gameForLeague) await updateLeagueScoresForGameEnd(gameForLeague);
 }
+
 
 /** إرسال رسالة عامة أثناء النهار. */
 export async function sendPublicMessage(
@@ -675,3 +676,4 @@ export async function updateMafiaSettings(
     tx.update(gameRef, { 'mafiaState.settings': { nightTime, dayTime } });
   });
 }
+
