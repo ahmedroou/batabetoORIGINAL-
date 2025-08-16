@@ -3,7 +3,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch, increment, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, query, getDocs, orderBy, limit, getDoc, where, setDoc, updateDoc, WriteBatch, writeBatch, increment, Timestamp, addDoc, serverTimestamp, deleteField } from 'firebase/firestore';
 import type { UserProfile, GameKing, SocialRank, TaxDemand, Decree, DuelChallenge, Game, MatchHistoryItem, AvatarPrice } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/data/social-ranks';
 import { getTopUsers as adminGetTopUsers } from '../admin/users';
@@ -291,7 +291,7 @@ export async function recordMatchHistory(game: Game): Promise<void> {
     const playersToRecord = game.players.filter(p => p.status !== 'left');
     if (playersToRecord.length === 0) return;
 
-    const matchData: Omit<MatchHistoryItem, 'id'> = {
+    const matchData: Omit<MatchHistoryItem, 'id' | 'winner'> & { winner?: string } = {
         gameId: game.id,
         gameType: game.gameType,
         createdAt: Timestamp.now(),
@@ -301,8 +301,12 @@ export async function recordMatchHistory(game: Game): Promise<void> {
             name: p.name,
             avatarId: p.avatarId,
         })),
-        winner: typeof game.gameResult?.winner === 'string' ? game.gameResult.winner : undefined,
     };
+
+    if (typeof game.gameResult?.winner === 'string') {
+        matchData.winner = game.gameResult.winner;
+    }
+
 
     const batch = writeBatch(db);
 
