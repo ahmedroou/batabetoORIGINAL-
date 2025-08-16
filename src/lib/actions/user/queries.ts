@@ -38,7 +38,7 @@ import { getTopUsers as adminGetTopUsers } from '../admin/users';
 // -------------------------------------------------------------
 // Utilities
 // -------------------------------------------------------------
-const IN_QUERY_LIMIT = 10; // Firestore 'in' operator max items
+const IN_QUERY_LIMIT = 30; // Firestore 'in' operator max items
 
 function chunk<T>(arr: T[], size: number): T[][] {
   if (size <= 0) return [arr];
@@ -360,17 +360,14 @@ export async function recordMatchHistory(game: Game): Promise<void> {
   const playersToRecord = game.players.filter((p) => p.status !== 'left');
   if (playersToRecord.length === 0) return;
 
-  const matchData: Omit<MatchHistoryItem, 'id' | 'winner'> & { winner?: string } = {
+  const matchData: Omit<MatchHistoryItem, 'id'> = {
     gameId: game.id,
     gameType: game.gameType,
     createdAt: serverTimestamp() as unknown as Timestamp, // server time
     finalScores: game.playerScores || {},
     players: playersToRecord.map((p) => ({ id: p.id, name: p.name, avatarId: p.avatarId })),
+    winner: typeof game.gameResult?.winner === 'string' ? game.gameResult.winner : undefined,
   } as any;
-
-  if (typeof game.gameResult?.winner === 'string') {
-    matchData.winner = game.gameResult.winner;
-  }
 
   const batch = writeBatch(db);
   for (const player of playersToRecord) {
