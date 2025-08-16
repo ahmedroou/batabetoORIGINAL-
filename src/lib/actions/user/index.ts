@@ -1,5 +1,7 @@
 
 
+'use server';
+
 /**
  * @fileoverview This file re-exports all user-related actions from their new, modular locations.
  * This structure improves maintainability by separating concerns.
@@ -57,7 +59,7 @@ export {
     leaveLeague,
     resetAllLeagueStats,
     updateLeagueScoresForGameEnd,
-    calculateEndOfGameAwards,
+    // calculateEndOfGameAwards, // Removed this non-async export
     giveReward,
     applyPunishment,
     humiliatePlayer,
@@ -89,6 +91,7 @@ export {
     
 
     
+
 
 
 
