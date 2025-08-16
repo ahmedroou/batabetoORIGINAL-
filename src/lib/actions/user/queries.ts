@@ -380,16 +380,14 @@ export async function getUsersByRank(
 // -------------------------------------------------------------
 // Match history
 // -------------------------------------------------------------
-export async function recordMatchHistory(game: Game): Promise<void> {
-    const gid = game.id;
+export async function recordMatchHistory(game: Game, gameId: string): Promise<void> {
+    const gid = gameId ?? game.id;
     if (!gid) {
       console.error("Cannot record match history: gameId is missing.");
       return;
     }
   
     // Use playerScores keys as the definitive list of participants for this match.
-    // This is more robust than relying on game.players, which might not be fully populated
-    // in all contexts where this function is called.
     const playersToRecord = Object.keys(game.playerScores || {});
     if (playersToRecord.length === 0) {
       console.warn(`No players with scores found for game ${gid}. Skipping match history.`);

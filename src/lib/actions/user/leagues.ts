@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, collection, query, getDocs, getDoc, where, increment, runTransaction, arrayUnion, arrayRemove, deleteField, Timestamp, writeBatch, type Transaction } from 'firebase/firestore';
 import { generateLeagueId } from '../helpers';
 import type { UserProfile, League, Game, Challenge, SocialRank } from '@/types';
+import { distributeEndOfGameAwards } from '../admin/users';
 
 
 export async function getLeagueData(leagueId: string): Promise<{ league: League | null, members: UserProfile[] }> {
@@ -307,9 +308,42 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
     }
 };
 
-export async function updateLeagueScoresForGameEnd(gameId: string): Promise<void> {
-    const res = await distributeEndOfGameAwards(gameId);
-    if (!res.success) {
-      console.error(`[LeagueUpdate] Failed to distribute awards for game ${gameId}:`, res.error);
+export async function updateLeagueScoresForGameEnd(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        const gameDoc = await getDoc(gameRef);
+        if (!gameDoc.exists()) return;
+        const game = gameDoc.data() as Game;
+        
+        // This function is now responsible for getting ranks and calculating awards.
+        const allRanks = await getRanks();
+        const { success, data } = calculateEndOfGameAwards(game, allRanks);
+        
+        if (!success || !data) return;
+
+        const { updates, winUpdate, specialAwards } = data;
+        
+        const leaguesQuery = query(collection(db, 'leagues'), where('members', 'array-contains-any', Object.keys(updates)));
+        const leaguesSnapshot = await getDocs(leaguesQuery);
+        
+        const batch = writeBatch(db);
+
+        leaguesSnapshot.forEach(leagueDoc => {
+            const leagueUpdates: { [key: string]: any } = {};
+            Object.entries(updates).forEach(([playerId, playerUpdates]) => {
+                if(leagueDoc.data().members.includes(playerId)) {
+                    leagueUpdates[`scores.${playerId}`] = increment(playerUpdates.challengePoints || playerUpdates.leaderboardPoints || 0);
+                    leagueUpdates[`gamesPlayed.${playerId}`] = increment(1);
+                }
+            });
+             if (Object.keys(leagueUpdates).length > 0) {
+                batch.update(leagueDoc.ref, leagueUpdates);
+            }
+        });
+
+        await batch.commit();
+        
+    } catch (error) {
+        console.error(`Error updating league scores for game ${gameId}:`, error);
     }
 }

@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -212,6 +213,8 @@ export async function applyPunishment(actorId: string, targetId: string, penalty
     });
 };
 
+type ServiceResult<T = undefined> = { success: true; data?: T } | { success: false; error: string };
+
 /**
  * Distributes end-of-game awards. This is an admin-privileged action.
  * @param gameId The ID of the finalized game object.
@@ -225,16 +228,16 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
         
         const game = { ...freshSnap.data(), id: gameId } as Game;
 
-        if (game.gameResult?.error || (game.gameType === 'trap-answer' && !!(game as any).trapAnswerState?.finalAwards)) {
+        if (game.gameResult?.error || !!game.gameResult?.finalAwards) {
             return { success: true }; // Already finalized or errored
         }
 
         try {
-            await recordMatchHistory(game);
+            await recordMatchHistory(game, gameId);
         } catch(histError) {
-            console.error(`Failed to record match history for game ${gameId}, but proceeding to awards.`, histError);
-            // Non-fatal, but log it to the game doc
-            await updateDoc(gameRef, { 'gameResult.error': `Failed to record match history: ${(histError as Error).message}` });
+            const errorMsg = histError instanceof Error ? histError.message : String(histError);
+            console.error(`Failed to record match history for game ${gameId}, but proceeding to awards.`, errorMsg);
+            await updateDoc(gameRef, { 'gameResult.error': `Failed to record match history: ${errorMsg}` });
         }
 
         const allRanks = await getRanks();
@@ -277,7 +280,6 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
         const finalUpdate: any = {
             'gameResult.winner': winUpdate?.userId || game.gameResult?.winner || 'none',
         };
-        // Ensure finalAwards are stored in gameResult for consistency
         finalUpdate['gameResult.finalAwards'] = specialAwards || {};
         
         batch.update(gameRef, finalUpdate);
@@ -298,5 +300,3 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
         return { success: false, error: `فشل توزيع الجوائز: ${error.message}` };
     }
 }
-
-type ServiceResult<T = undefined> = { success: true; data?: T } | { success: false; error: string };
