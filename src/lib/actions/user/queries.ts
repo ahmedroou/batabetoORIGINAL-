@@ -122,13 +122,36 @@ export async function getPlayerFromUserId(userId: string): Promise<UserProfile> 
   return {
     uid: userId,
     name: data.name || 'لاعب غير معروف',
+    email: data.email || null,
+    gender: data.gender,
+    isAdmin: !!data.isAdmin,
+    isEditor: !!data.isEditor,
+    coins: data.coins ?? 0,
+    diamonds: data.diamonds ?? 0,
     avatarId: data.avatarId || 'Avatar00.png',
+    unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
     leaderboardPoints: data.leaderboardPoints || 0,
-    ...data,
-    decrees,
+    honorPoints: data.honorPoints || 0,
+    loyaltyPoints: data.loyaltyPoints || 0,
+    rebellionPoints: data.rebellionPoints || 0,
+    trophies: data.trophies || 0,
+    gamesPlayed: data.gamesPlayed || {}, // fix type (was 0)
+    hasChangedName: !!data.hasChangedName,
+    leagues: data.leagues || [],
+    winCounts: data.winCounts || {},
+    clan: data.clan || null,
+    clanRole: data.clanRole,
+    audienceGroups: data.audienceGroups || [],
     humiliation,
-    originalAvatarToRevert,
+    allegiance: data.allegiance || null,
+    taxDemands: data.taxDemands || [],
+    alliances: data.alliances || [],
+    decrees,
+    duelChallenges: data.duelChallenges || [],
     lastPunishmentTimestamp,
+    originalAvatarToRevert,
+    unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
+    isPunished: !!data.isPunished,
   } as UserProfile;
 }
 
@@ -364,30 +387,47 @@ export async function recordMatchHistory(game: Game): Promise<void> {
     if (!gid) {
       console.error("Cannot record match history: gameId is missing.");
       return;
-  }
-  const playersToRecord = game.players.filter((p) => p.status !== 'left');
-  if (playersToRecord.length === 0) return;
+    }
+  
+    // Use playerScores keys as the definitive list of participants for this match.
+    // This is more robust than relying on game.players, which might not be fully populated
+    // in all contexts where this function is called.
+    const playersToRecord = Object.keys(game.playerScores || {});
+    if (playersToRecord.length === 0) {
+      console.warn(`No players with scores found for game ${gid}. Skipping match history.`);
+      return;
+    }
 
-  const matchData: Omit<MatchHistoryItem, 'id'> = {
-    gameId: gid,
-    gameType: game.gameType,
-    createdAt: serverTimestamp() as unknown as Timestamp, // server time
-    finalScores: game.playerScores || {},
-    players: playersToRecord.map((p) => ({ id: p.id, name: p.name, avatarId: p.avatarId })),
-    winner: typeof game.gameResult?.winner === 'string' ? game.gameResult.winner : undefined,
-  } as any;
-
-  const batch = writeBatch(db);
-  for (const player of playersToRecord) {
-    const historyRef = doc(collection(db, `users/${player.id}/matchHistory`));
-    batch.set(historyRef, matchData);
-  }
-
-  try {
-    await batch.commit();
-  } catch (error) {
-    console.error('Failed to record match history:', error);
-  }
+    const allPlayersInGame = new Map(game.players.map(p => [p.id, p]));
+  
+    const matchData: Omit<MatchHistoryItem, 'id'> = {
+      gameId: gid,
+      gameType: game.gameType,
+      createdAt: serverTimestamp() as unknown as Timestamp,
+      finalScores: game.playerScores || {},
+      // Construct a minimal player list for the history record.
+      players: playersToRecord.map(playerId => {
+          const pData = allPlayersInGame.get(playerId);
+          return { 
+              id: playerId, 
+              name: pData?.name || 'Unknown Player',
+              avatarId: pData?.avatarId || 'Avatar00.png'
+          };
+      }),
+      winner: typeof game.gameResult?.winner === 'string' ? game.gameResult.winner : undefined,
+    };
+  
+    const batch = writeBatch(db);
+    for (const playerId of playersToRecord) {
+      const historyRef = doc(collection(db, `users/${playerId}/matchHistory`));
+      batch.set(historyRef, matchData);
+    }
+  
+    try {
+      await batch.commit();
+    } catch (error) {
+      console.error(`Failed to record match history for game ${gid}:`, error);
+    }
 }
 
 
@@ -434,5 +474,3 @@ export async function getDefaultAvatar(): Promise<{ success: boolean; avatarId?:
     return { success: false, error: 'Failed to fetch default avatar.' };
   }
 }
-
-    

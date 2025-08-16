@@ -225,11 +225,11 @@ export async function distributeEndOfGameAwards(gameId: string) {
         const freshSnap = await getDoc(gameRef);
         if (!freshSnap.exists()) return;
         
-        // Add the ID to the game object before passing it to helpers
-        const game = { ...freshSnap.data(), id: freshSnap.id } as Game;
+        const game = { ...freshSnap.data(), id: gameId } as Game;
 
-        // Prevent re-processing
-        if(!!game.gameResult?.error || (game.gameType === 'trap-answer' && !!game.trapAnswerState?.finalAwards)) return;
+        if (game.gameResult?.error || (game.gameType === 'trap-answer' && !!game.trapAnswerState?.finalAwards)) {
+            return;
+        }
 
         try {
             await recordMatchHistory(game);
@@ -272,7 +272,6 @@ export async function distributeEndOfGameAwards(gameId: string) {
         
         if (winUpdate) {
             const winnerRef = doc(db, 'users', winUpdate.userId);
-            // Use set with merge to be safe
             batch.set(winnerRef, { winCounts: { [winUpdate.gameType]: increment(1) } }, { merge: true });
         }
 
@@ -297,5 +296,3 @@ export async function distributeEndOfGameAwards(gameId: string) {
         }
     }
 }
-
-    
