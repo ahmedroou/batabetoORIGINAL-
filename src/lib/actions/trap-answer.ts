@@ -32,6 +32,7 @@ import {
   updateDoc,
   limit,
   writeBatch,
+  increment
 } from 'firebase/firestore';
 
 import type { Game, Player, TrapQuestion, EmojiReactionType } from '@/types';
@@ -50,7 +51,7 @@ const SIMILARITY_THRESHOLD = 0.75 as const;
 const SIMILARITY_BLOCK = 0.95 as const; // block traps/dummies too similar to the real answer
 const CATEGORY_SELECTION_TIME_S = 30 as const;
 const DEFAULT_ANSWER_TIME_S = 60 as const;
-const RESULTS_TIME_S = 60 as const; // NEW: stay on results screen for N seconds then auto-advance
+const DEFAULT_RESULTS_TIME_S = 60 as const;
 const FIELD_TRAP_STATE = 'trapAnswerState' as const;
 const TIMEOUT_TOKEN = '__TIMEOUT__' as const;
 
@@ -69,14 +70,16 @@ const getActivePlayers = (game: Game): Player[] =>
 function sanitizeSettings(input: any, fallbackCats: string[]) {
   const roundsRaw = Number(input?.rounds);
   const answerTimeRaw = Number(input?.answerTime);
+  const resultsTimeRaw = Number(input?.resultsTime);
   const categories = Array.isArray(input?.categories) ? input.categories.filter(Boolean) : [];
 
   const rounds = Number.isFinite(roundsRaw) && roundsRaw >= 1 ? roundsRaw : 10;
   const answerTime = Number.isFinite(answerTimeRaw) && answerTimeRaw >= 10 ? answerTimeRaw : DEFAULT_ANSWER_TIME_S;
+  const resultsTime = Number.isFinite(resultsTimeRaw) && resultsTimeRaw >= 10 ? resultsTimeRaw : DEFAULT_RESULTS_TIME_S;
   const cats = categories.length > 0 ? categories : fallbackCats;
 
   ensure(cats.length > 0, 'لا توجد أقسام صالحة.');
-  return { rounds, answerTime, categories: cats } as Game[typeof FIELD_TRAP_STATE]['settings'];
+  return { rounds, answerTime, resultsTime, categories } as Game[typeof FIELD_TRAP_STATE]['settings'];
 }
 
 // -----------------------------------------------------------------------------
@@ -825,7 +828,8 @@ async function _advanceToResults(
     afkStats[pid] = (afkStats[pid] || 0) + 1;
   });
 
-  const resultsEndsAt = tsFromNowS(RESULTS_TIME_S); // NEW: results timeout to auto-advance
+  const resultsTime = state?.settings?.resultsTime ?? DEFAULT_RESULTS_TIME_S;
+  const resultsEndsAt = tsFromNowS(resultsTime); // NEW: results timeout to auto-advance
 
   tx.update(gameRef, {
     gameState: 'round-results',
@@ -841,5 +845,3 @@ async function _advanceToResults(
     [`${FIELD_TRAP_STATE}.reactions`]: {},
   });
 }
-
-    

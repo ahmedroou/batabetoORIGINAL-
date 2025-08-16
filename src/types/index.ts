@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -661,6 +662,7 @@ export interface Game {
           categories: string[];
           rounds: number;
           answerTime: number;
+          resultsTime: number;
       };
       turnOrder?: string[];
       currentTurnIndex?: number;
@@ -669,6 +671,7 @@ export interface Game {
       currentQuestion?: TrapQuestion;
       playerAnswers?: Record<string, string | null>;
       playerGuesses?: Record<string, string>;
+      roundEndTime?: Timestamp;
       timerEndsAt?: Timestamp | null;
       dummyAnswerForRound?: string;
       shuffledAnswers?: string[];
