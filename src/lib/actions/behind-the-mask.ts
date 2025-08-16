@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -443,7 +444,7 @@ export async function submitNightAction(
 /** معالجة الليل والانتقال تلقائيًا إلى النهار أو النتائج. */
 export async function processNight(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
-  let gameDataForLeagueUpdate: Game | null = null;
+  let finalGameData: Game | null = null;
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
@@ -469,9 +470,9 @@ export async function processNight(gameId: string, hostId: string): Promise<void
     if (winner) {
       update.gameState = 'final_results';
       update['mafiaState.phase'] = 'final_results';
-      update.gameResult = winner; // كائن عادي، ليس Promise
+      update.gameResult = winner;
       update['mafiaState.timerEndsAt'] = deleteField();
-      gameDataForLeagueUpdate = { ...game, players: cleaned, gameResult: winner };
+      finalGameData = { ...game, players: cleaned, gameResult: winner };
     } else {
       const { day } = getSettings(game);
       update['mafiaState.phase'] = 'day';
@@ -481,9 +482,8 @@ export async function processNight(gameId: string, hostId: string): Promise<void
     tx.update(gameRef, update);
   });
 
-  // The call to update league scores must be outside the transaction
-  if (gameDataForLeagueUpdate) {
-    await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+  if (finalGameData) {
+    await updateLeagueScoresForGameEnd(finalGameData);
   }
 }
 
@@ -566,7 +566,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
     if (winner) {
       (update as any).gameState = 'final_results';
       (update as any)['mafiaState.phase'] = 'final_results';
-      (update as any).gameResult = winner; // كائن عادي، ليس Promise
+      (update as any).gameResult = winner;
       (update as any)['mafiaState.timerEndsAt'] = deleteField();
       gameForLeague = { ...game, players: updatedGame.players, gameResult: winner };
     } else {
@@ -676,3 +676,5 @@ export async function updateMafiaSettings(
     tx.update(gameRef, { 'mafiaState.settings': { nightTime, dayTime } });
   });
 }
+
+    
