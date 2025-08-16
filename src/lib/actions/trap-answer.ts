@@ -1,3 +1,5 @@
+
+
 'use server';
 
 /**
@@ -30,6 +32,7 @@ import {
   arrayRemove,
   updateDoc,
   limit,
+  writeBatch,
 } from 'firebase/firestore';
 
 import type { Game, Player, TrapQuestion, EmojiReactionType } from '@/types';
@@ -39,6 +42,7 @@ import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { getTrapAnswerCategories } from './admin/settings';
 import { getRanks } from './user/queries';
 import { calculateEndOfGameAwards } from './user/awards';
+import { updateUserWinCount } from './user/queries';
 
 // -----------------------------------------------------------------------------
 // Constants & small helpers
@@ -413,92 +417,134 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
   });
 }
 
+/**
+ * NEW: This function is now the primary entry point for finishing a round and starting a new one.
+ * It is called by the host from the results screen.
+ */
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
-  const gameRef = doc(db, 'games', gameId);
+    const gameRef = doc(db, 'games', gameId);
+    let gameSnapshotAtEnd: Game | null = null;
+    let shouldFinalize = false;
 
-  let finishGame = false;
-  let gameSnapshotAtEnd: Game | null = null;
+    await runTransaction(db, async (tx) => {
+        const snap = await tx.get(gameRef);
+        ensure(snap.exists(), 'اللعبة غير موجودة.');
+        const game = snap.data() as Game;
+        requireHost(game, hostId);
+        if (game.gameState !== 'round-results') return;
 
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(gameRef);
-    ensure(snap.exists(), 'اللعبة غير موجودة.');
+        const currentRound = game.round || 0;
+        const totalRounds = (game as any)[FIELD_TRAP_STATE]?.settings?.rounds || 10;
+        
+        // This is where we finalize the game if conditions are met
+        if (currentRound >= totalRounds) {
+            shouldFinalize = true;
+            gameSnapshotAtEnd = game; // Capture state before update
+            tx.update(gameRef, {
+                gameState: 'final_results',
+                [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
+                [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
+                [`${FIELD_TRAP_STATE}.phase`]: 'reveal',
+            });
+            return;
+        }
 
-    const game = snap.data() as Game;
-    ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
-    if (game.gameState !== 'round-results') return;
+        // Proceed to the next round if game isn't over
+        const nextTurnIndex = (((game as any)[FIELD_TRAP_STATE]?.currentTurnIndex || 0) + 1) % game.players.length;
+        const availableCategories = (game as any)[FIELD_TRAP_STATE]?.settings?.categories || [];
+        const sourceCats: string[] = Array.isArray(availableCategories) && availableCategories.length > 0
+            ? availableCategories
+            : (((game as any)[FIELD_TRAP_STATE]?.fiveRandomCategories as string[]) || []);
 
-    const currentRound = game.round || 0;
-    const totalRounds = (game as any)[FIELD_TRAP_STATE]?.settings?.rounds || 10;
+        const fiveRandomCategories = shuffle([...sourceCats]).slice(0, 5);
+        const endsAt = tsFromNowS(CATEGORY_SELECTION_TIME_S);
 
-    if (currentRound >= totalRounds) {
-      finishGame = true;
-      gameSnapshotAtEnd = game;
+        tx.update(gameRef, {
+            gameState: 'category-selection',
+            round: currentRound + 1,
+            [`${FIELD_TRAP_STATE}.currentTurnIndex`]: nextTurnIndex,
+            [`${FIELD_TRAP_STATE}.fiveRandomCategories`]: fiveRandomCategories,
+            [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
+            [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
+            [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
+            [`${FIELD_TRAP_STATE}.selectedCategory`]: deleteField(),
+            [`${FIELD_TRAP_STATE}.currentQuestion`]: deleteField(),
+            [`${FIELD_TRAP_STATE}.timerEndsAt`]: endsAt,
+            [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt,
+            [`${FIELD_TRAP_STATE}.phase`]: 'category',
+            [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
+            [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
+            [`${FIELD_TRAP_STATE}.reactions`]: {},
+        });
+    });
 
-      tx.update(gameRef, {
-        gameState: 'final_results',
-        [`${FIELD_TRAP_STATE}.timerEndsAt`] : deleteField(),
-        [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
-        [`${FIELD_TRAP_STATE}.phase`]       : 'reveal',
-      });
-    } else {
-      const nextTurnIndex = (((game as any)[FIELD_TRAP_STATE]?.currentTurnIndex || 0) + 1) % game.players.length;
-      const availableCategories = (game as any)[FIELD_TRAP_STATE]?.settings?.categories || [];
-      const sourceCats: string[] = Array.isArray(availableCategories) && availableCategories.length > 0
-        ? availableCategories
-        : (((game as any)[FIELD_TRAP_STATE]?.fiveRandomCategories as string[]) || []);
-
-      const fiveRandomCategories = shuffle([...sourceCats]).slice(0, 5);
-      const endsAt = tsFromNowS(CATEGORY_SELECTION_TIME_S);
-
-      tx.update(gameRef, {
-        gameState: 'category-selection',
-        round: currentRound + 1,
-        [`${FIELD_TRAP_STATE}.currentTurnIndex`]: nextTurnIndex,
-        [`${FIELD_TRAP_STATE}.fiveRandomCategories`]: fiveRandomCategories,
-        [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
-        [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
-        [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
-        [`${FIELD_TRAP_STATE}.selectedCategory`]: deleteField(),
-        [`${FIELD_TRAP_STATE}.currentQuestion`]: deleteField(),
-        [`${FIELD_TRAP_STATE}.timerEndsAt`]: endsAt,
-        [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt, // UI mirror
-        [`${FIELD_TRAP_STATE}.phase`]: 'category',
-        [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
-        [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
-        [`${FIELD_TRAP_STATE}.reactions`]: {},
-      });
+    if (shouldFinalize && gameSnapshotAtEnd) {
+        await finalizeGameAndDistributeAwards(gameSnapshotAtEnd);
     }
-  });
+}
 
-  // Heavy work & cross-doc updates OUTSIDE the transaction
-  if (finishGame && gameSnapshotAtEnd) {
+
+/**
+ * NEW: Centralized function to handle all end-of-game logic including awards.
+ */
+async function finalizeGameAndDistributeAwards(game: Game) {
     try {
-      const fresh = await getDoc(gameRef);
-      if (!fresh.exists()) return;
-      const current = fresh.data() as Game;
-      const alreadyFinalized = Boolean((current as any)[FIELD_TRAP_STATE]?.finalAwards);
+        const gameRef = doc(db, 'games', game.id);
+        const freshSnap = await getDoc(gameRef);
+        const current = freshSnap.exists() ? freshSnap.data() as Game : game;
 
-      if (!alreadyFinalized) {
+        const alreadyFinalized = !!(current.trapAnswerState?.finalAwards);
+        if (alreadyFinalized) return;
+        
         const allRanks = await getRanks();
         const { data: awards } = calculateEndOfGameAwards(current, allRanks);
-        const finalAwards = awards.specialAwards;
-        const winUpdate = awards.winUpdate;
+        
+        if (!awards) return;
+        
+        const { updates, winUpdate, specialAwards } = awards;
 
-        await updateDoc(gameRef, {
-          gameResult: { winner: winUpdate?.userId || 'none', message: 'انتهت اللعبة' },
-          [`${FIELD_TRAP_STATE}.finalAwards`]: {
-            ...finalAwards,
-            afkStats: (current as any)[FIELD_TRAP_STATE]?.afkStats || {},
-          },
+        // Perform all updates in a single batch
+        const batch = writeBatch(db);
+
+        // 1. Update player stats (points, coins, games played, permissions)
+        Object.entries(updates).forEach(([playerId, playerUpdates]) => {
+            const userRef = doc(db, 'users', playerId);
+            const firestoreUpdates: { [key: string]: any } = {};
+            if (playerUpdates.leaderboardPoints > 0) firestoreUpdates.leaderboardPoints = increment(playerUpdates.leaderboardPoints);
+            if (playerUpdates.coins > 0) firestoreUpdates.coins = increment(playerUpdates.coins);
+            if (playerUpdates.gamesPlayed) firestoreUpdates[`gamesPlayed.${game.gameType}`] = increment(playerUpdates.gamesPlayed[game.gameType] || 0);
+            if (playerUpdates.permissions) firestoreUpdates.permissions = playerUpdates.permissions;
+
+            if (Object.keys(firestoreUpdates).length > 0) {
+                batch.update(userRef, firestoreUpdates);
+            }
         });
+        
+        // 2. Update individual win count
+        if (winUpdate) {
+            const winnerRef = doc(db, 'users', winUpdate.userId);
+            batch.update(winnerRef, { [`winCounts.${winUpdate.gameType}`]: increment(1) });
+        }
 
+        // 3. Update the game document with final awards and result
+        batch.update(gameRef, {
+            gameResult: { winner: winUpdate?.userId || 'none', message: 'انتهت اللعبة' },
+            'trapAnswerState.finalAwards': {
+                ...specialAwards,
+                afkStats: current.trapAnswerState?.afkStats || {},
+            },
+        });
+        
+        await batch.commit();
+
+        // 4. Update league scores (this can be a separate call as it's less critical for the primary game doc)
         await updateLeagueScoresForGameEnd({ ...current, gameState: 'final_results' } as Game);
-      }
+
     } catch (error) {
-      console.error('Error finalizing game:', error);
+        console.error('Error in finalizeGameAndDistributeAwards:', error);
     }
-  }
 }
+
 
 /**
  * A "tick" function that can be safely called by any client when a timer appears
@@ -534,6 +580,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
   const gameRef = doc(db, 'games', gameId);
 
   let shouldFinalize = false; // NEW: if results -> final
+  let gameSnapshotAtEnd: Game | null = null; // Capture state for finalization
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -587,6 +634,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
 
       if (currentRound >= totalRounds) {
         shouldFinalize = true;
+        gameSnapshotAtEnd = game;
         tx.update(gameRef, {
           gameState: 'final_results',
           [`${FIELD_TRAP_STATE}.phase`]: 'reveal',
@@ -644,32 +692,9 @@ export async function handleTimeout(gameId: string, callerId: string) {
     console.error('Timeout post-step (attach question) failed:', e);
   }
 
-  // NEW: If we just flipped to final_results via timeout, finalize awards & league updates
-  try {
-    const fresh = await getDoc(gameRef);
-    if (!fresh.exists()) return;
-    const current = fresh.data() as Game;
-    if (current.gameState === 'final_results') {
-      const alreadyFinalized = Boolean((current as any)[FIELD_TRAP_STATE]?.finalAwards);
-      if (!alreadyFinalized) {
-        const allRanks = await getRanks();
-        const { data: awards } = calculateEndOfGameAwards(current, allRanks);
-        const finalAwards = awards.specialAwards;
-        const winUpdate = awards.winUpdate;
-
-        await updateDoc(gameRef, {
-          gameResult: { winner: winUpdate?.userId || 'none', message: 'انتهت اللعبة' },
-          [`${FIELD_TRAP_STATE}.finalAwards`]: {
-            ...finalAwards,
-            afkStats: (current as any)[FIELD_TRAP_STATE]?.afkStats || {},
-          },
-        });
-
-        await updateLeagueScoresForGameEnd({ ...current, gameState: 'final_results' } as Game);
-      }
-    }
-  } catch (e) {
-    console.error('Timeout post-step (finalize game) failed:', e);
+  // NEW: If we just flipped to final_results via timeout, finalize awards
+  if (shouldFinalize && gameSnapshotAtEnd) {
+    await finalizeGameAndDistributeAwards(gameSnapshotAtEnd);
   }
 }
 
