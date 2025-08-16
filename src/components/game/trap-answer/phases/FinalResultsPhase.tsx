@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { Game, Player } from '@/types';
@@ -28,7 +29,8 @@ export function FinalResultsPhase({ game }: { game: Game; self: Player }) {
     });
 
     const winner = rankedPlayers[0];
-    const { cunningDeceiver, deceivedFool, afkStats } = game.trapAnswerState?.finalAwards ?? {};
+    const { cunningDeceiver, deceivedFool, afkStats } = (game.gameResult as any)?.finalAwards ?? game.trapAnswerState?.finalAwards ?? {};
+
 
     const afkPlayers = Object.entries(afkStats ?? {})
         .map(([playerId, count]) => {
@@ -126,5 +128,3 @@ export function FinalResultsPhase({ game }: { game: Game; self: Player }) {
         </Card>
     );
 }
-
-    
