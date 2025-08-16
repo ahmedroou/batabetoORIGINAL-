@@ -1,17 +1,39 @@
-
+      
 'use client';
 
-import type { Game, Player } from '@/types';
+import React, { useMemo, useEffect } from 'react';
+import type { Game, Player, EmojiReaction, EmojiReactionType } from '@/types';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { Trophy, Award, EyeOff, AlertTriangle } from 'lucide-react';
+import { Trophy, Award, EyeOff, AlertTriangle, Loader2 } from 'lucide-react';
+import { distributeEndOfGameAwards } from '@/lib/actions/admin/users';
+import { motion } from 'framer-motion';
 
 const isDefined = <T,>(v: T | undefined | null): v is T => v !== undefined && v !== null;
 
-export function FinalResultsPhase({ game }: { game: Game; self: Player }) {
+export function FinalResultsPhase({ game, self }: { game: Game; self: Player }) {
     const router = useRouter();
+    const [finalizing, setFinalizing] = React.useState(true);
+
+    const isHost = game.hostId === self.id;
+
+    useEffect(() => {
+        const finalize = async () => {
+            if (isHost && !game.gameResult?.finalAwards) {
+                try {
+                    await distributeEndOfGameAwards(game.id);
+                    // The onSnapshot listener in the client will automatically update the game state.
+                } catch (e) {
+                    console.error("Failed to finalize game awards:", e);
+                }
+            }
+            setFinalizing(false);
+        };
+        finalize();
+    }, [game.id, isHost, game.gameResult?.finalAwards]);
+
 
     const sortedPlayers = [...(game.players ?? [])]
         .map((p) => ({ ...p, score: game.playerScores?.[p.id] ?? 0 }))
@@ -29,9 +51,8 @@ export function FinalResultsPhase({ game }: { game: Game; self: Player }) {
     });
 
     const winner = rankedPlayers[0];
-    const finalAwards = (game.gameResult as any)?.finalAwards ?? game.trapAnswerState?.finalAwards ?? {};
+    const finalAwards = game.gameResult?.finalAwards ?? {};
     const { cunningDeceiver, deceivedFool, afkStats } = finalAwards;
-
 
     const afkPlayers = Object.entries(afkStats ?? {})
         .map(([playerId, count]) => {
@@ -43,17 +64,29 @@ export function FinalResultsPhase({ game }: { game: Game; self: Player }) {
         .slice(0, 3);
 
     return (
-        <Card className="w-full max-w-2xl">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4 }}
+          className="w-full max-w-2xl"
+        >
+        <Card>
             <CardHeader className="text-center">
                 <Trophy className="w-24 h-24 mx-auto text-yellow-400" />
                 <CardTitle className="text-4xl">انتهت اللعبة!</CardTitle>
                 {winner && <CardDescription className="text-2xl font-bold">الفائز هو {winner.name}!</CardDescription>}
+                 {finalizing && (
+                    <div className="flex justify-center items-center gap-2 text-muted-foreground animate-pulse">
+                        <Loader2 className="w-4 h-4 animate-spin"/>
+                        <span>جاري توزيع الجوائز النهائية...</span>
+                    </div>
+                )}
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
                     <div className="p-3 rounded-lg bg-red-100 border border-red-300">
                         <h3 className="font-bold text-red-800 flex items-center justify-center gap-2">
-                            <Award /> المخادع الماكر
+                            <Award /> المخادع المكار
                         </h3>
                         {cunningDeceiver ? (
                             <>
@@ -69,7 +102,7 @@ export function FinalResultsPhase({ game }: { game: Game; self: Player }) {
                     </div>
                     <div className="p-3 rounded-lg bg-blue-100 border border-blue-300">
                         <h3 className="font-bold text-blue-800 flex items-center justify-center gap-2">
-                            <EyeOff /> الأكثر انخداعًا
+                            <EyeOff /> الأبله المخدوع
                         </h3>
                         {deceivedFool ? (
                             <>
@@ -127,5 +160,6 @@ export function FinalResultsPhase({ game }: { game: Game; self: Player }) {
                 </Button>
             </CardFooter>
         </Card>
+        </motion.div>
     );
 }
