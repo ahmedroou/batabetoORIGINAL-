@@ -1,5 +1,3 @@
-
-
 'use server';
 
 /**
@@ -218,23 +216,24 @@ export async function applyPunishment(actorId: string, targetId: string, penalty
  * Distributes end-of-game awards. This is an admin-privileged action.
  * @param gameId The ID of the finalized game object.
  */
-export async function distributeEndOfGameAwards(gameId: string) {
+export async function distributeEndOfGameAwards(gameId: string): Promise<ServiceResult<{ finalAwards?: any }>> {
     const gameRef = doc(db, 'games', gameId);
 
     try {
         const freshSnap = await getDoc(gameRef);
-        if (!freshSnap.exists()) return;
+        if (!freshSnap.exists()) return { success: false, error: "اللعبة غير موجودة."};
         
         const game = { ...freshSnap.data(), id: gameId } as Game;
 
-        if (game.gameResult?.error || (game.gameType === 'trap-answer' && !!game.trapAnswerState?.finalAwards)) {
-            return;
+        if (game.gameResult?.error || (game.gameType === 'trap-answer' && !!(game as any).trapAnswerState?.finalAwards)) {
+            return { success: true }; // Already finalized or errored
         }
 
         try {
             await recordMatchHistory(game);
         } catch(histError) {
             console.error(`Failed to record match history for game ${gameId}, but proceeding to awards.`, histError);
+            // Non-fatal, but log it to the game doc
             await updateDoc(gameRef, { 'gameResult.error': `Failed to record match history: ${(histError as Error).message}` });
         }
 
@@ -242,8 +241,8 @@ export async function distributeEndOfGameAwards(gameId: string) {
         const { data: awardsData } = calculateEndOfGameAwards(game, allRanks);
         
         if (!awardsData) {
-             await updateDoc(gameRef, { 'gameResult.error': 'Failed to calculate awards.' });
-             return;
+            await updateDoc(gameRef, { 'gameResult.error': 'Failed to calculate awards.' });
+            return { success: false, error: 'فشل حساب الجوائز.' };
         }
         
         const { updates, winUpdate, specialAwards } = awardsData;
@@ -278,12 +277,14 @@ export async function distributeEndOfGameAwards(gameId: string) {
         const finalUpdate: any = {
             'gameResult.winner': winUpdate?.userId || game.gameResult?.winner || 'none',
         };
-        if (game.gameType === 'trap-answer') {
-           finalUpdate['trapAnswerState.finalAwards'] = specialAwards || {};
-        }
+        // Ensure finalAwards are stored in gameResult for consistency
+        finalUpdate['gameResult.finalAwards'] = specialAwards || {};
+        
         batch.update(gameRef, finalUpdate);
         
         await batch.commit();
+
+        return { success: true, data: { finalAwards: specialAwards } };
 
     } catch (error: any) {
         console.error(`Error in distributeEndOfGameAwards for game ${gameId}:`, error);
@@ -294,5 +295,8 @@ export async function distributeEndOfGameAwards(gameId: string) {
         } catch(logError) {
             console.error(`Failed to log error to game document ${gameId}:`, logError);
         }
+        return { success: false, error: `فشل توزيع الجوائز: ${error.message}` };
     }
 }
+
+type ServiceResult<T = undefined> = { success: true; data?: T } | { success: false; error: string };

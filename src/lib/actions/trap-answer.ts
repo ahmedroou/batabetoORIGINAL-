@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -418,20 +417,24 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 }
 
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
-  const gameRef = doc(db, 'games', gameId);
+    const gameRef = doc(db, 'games', gameId);
 
-  const { isGameOver } = await runTransaction(db, async (tx) => {
-      const snap = await tx.get(gameRef);
-      ensure(snap.exists(), 'اللعبة غير موجودة.');
-      const game = snap.data() as Game;
-      ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
-      if(game.gameState !== 'round-results') return { isGameOver: false };
-      return await _startNextRound(tx, gameRef, game);
-  });
+    const { isGameOver } = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(gameRef);
+        ensure(snap.exists(), 'اللعبة غير موجودة.');
+        const game = snap.data() as Game;
+        ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
+        if (game.gameState !== 'round-results') return { isGameOver: false };
+        return await _startNextRound(tx, gameRef, game);
+    });
 
-  if (isGameOver) {
-      await distributeEndOfGameAwards(gameId);
-  }
+    if (isGameOver) {
+        const res = await distributeEndOfGameAwards(gameId);
+        if(!res.success) {
+            // The user requested error reporting. Here it is.
+            throw new Error(res.error || 'فشل توزيع الجوائز النهائية.');
+        }
+    }
 }
 
 /**
@@ -516,7 +519,10 @@ export async function handleTimeout(gameId: string, hostId: string) {
   });
 
    if (isGameOver) {
-      await distributeEndOfGameAwards(gameId);
+      const res = await distributeEndOfGameAwards(gameId);
+      if(!res.success) {
+          throw new Error(res.error || 'فشل توزيع الجوائز النهائية.');
+      }
   }
 }
 
