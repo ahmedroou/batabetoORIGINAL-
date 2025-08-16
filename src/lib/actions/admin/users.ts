@@ -1,5 +1,4 @@
 
-
 'use server';
 
 /**
@@ -8,25 +7,25 @@
 
 import { db } from '@/lib/firebase';
 import {
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    writeBatch,
-    query,
-    where,
-    updateDoc,
-    serverTimestamp,
-    orderBy,
-    limit,
-    increment,
-    runTransaction,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  writeBatch,
+  query,
+  where,
+  updateDoc,
+  serverTimestamp,
+  orderBy,
+  limit,
+  increment,
+  runTransaction,
+  Timestamp,
 } from 'firebase/firestore';
-import type { UserProfile, Mail, Game } from '@/types';
+import type { UserProfile, Mail, Game, MatchHistoryItem } from '@/types';
 import { sendSystemMail } from '../user/mail';
 import { calculateEndOfGameAwards } from '../user/awards';
-import { getRanks } from '../user/queries';
-import { recordMatchHistory } from '../user/queries';
+import { getRanks, recordMatchHistory } from '../user/queries';
 
 const normalize = (s: any) => (typeof s === 'string' ? s : String(s ?? '')).trim().replace(/\s+/g, ' ');
 const stringNonEmpty = (s: any) => typeof s === 'string' && normalize(s).length > 0;
@@ -210,40 +209,53 @@ export async function applyPunishment(actorId: string, targetId: string, penalty
 
 /**
  * Distributes end-of-game awards. This is an admin-privileged action.
- * @param game The final game state object.
+ * @param gameId The ID of the finalized game object.
  */
-export async function distributeEndOfGameAwards(game: Game) {
-    if (!game || !game.id) {
-        console.error("distributeEndOfGameAwards called with invalid game object.");
-        return;
-    }
-    
-    const gameRef = doc(db, 'games', game.id);
+export async function distributeEndOfGameAwards(gameId: string) {
+    const gameRef = doc(db, 'games', gameId);
 
     try {
-        const allRanks = await getRanks();
-        const { data: awards } = calculateEndOfGameAwards(game, allRanks);
+        const freshSnap = await getDoc(gameRef);
+        if (!freshSnap.exists()) return;
+        const game = { ...freshSnap.data(), id: gameId } as Game;
 
-        if (!awards) {
+        // Prevent re-processing
+        const isAlreadyFinalized = !!game.gameResult?.error || (!!game.trapAnswerState?.finalAwards && Object.keys(game.trapAnswerState.finalAwards).length > 0);
+        if(isAlreadyFinalized) return;
+
+        try {
+            await recordMatchHistory(game);
+        } catch(histError) {
+            console.error(`Failed to record match history for game ${gameId}, but proceeding to awards.`, histError);
+            await updateDoc(gameRef, { 'gameResult.error': 'Failed to record match history' });
+        }
+
+        const allRanks = await getRanks();
+        const { data: awardsData } = calculateEndOfGameAwards(game, allRanks);
+        
+        if (!awardsData) {
              await updateDoc(gameRef, { 'gameResult.error': 'Failed to calculate awards.' });
              return;
         }
         
-        const { updates, winUpdate, specialAwards } = awards;
+        const { updates, winUpdate, specialAwards } = awardsData;
         const batch = writeBatch(db);
 
-        // Update player stats (points, coins, games played)
+        // Update player stats (points, coins, games played, permissions)
         Object.entries(updates).forEach(([playerId, playerUpdates]) => {
             const userRef = doc(db, 'users', playerId);
             const firestoreUpdates: { [key: string]: any } = {};
 
-            const pointsDelta = playerUpdates.leaderboardPoints;
-            const coinsDelta = playerUpdates.coins;
+            const pointsDelta = playerUpdates.leaderboardPoints ?? 0;
+            const coinsDelta = playerUpdates.coins ?? 0;
 
-            if (pointsDelta > 0) firestoreUpdates.leaderboardPoints = increment(pointsDelta);
-            if (coinsDelta > 0) firestoreUpdates.coins = increment(coinsDelta);
+            if (pointsDelta !== 0) firestoreUpdates.leaderboardPoints = increment(pointsDelta);
+            if (coinsDelta !== 0) firestoreUpdates.coins = increment(coinsDelta);
             if (playerUpdates.gamesPlayed && game.gameType) {
-              firestoreUpdates[`gamesPlayed.${game.gameType}`] = increment(playerUpdates.gamesPlayed[game.gameType] || 1);
+              firestoreUpdates[`gamesPlayed.${game.gameType}`] = increment(1);
+            }
+            if (playerUpdates.permissions) {
+                firestoreUpdates.permissions = playerUpdates.permissions;
             }
             
             if (Object.keys(firestoreUpdates).length > 0) {
@@ -256,6 +268,7 @@ export async function distributeEndOfGameAwards(game: Game) {
             batch.update(winnerRef, { [`winCounts.${game.gameType}`]: increment(1) });
         }
 
+        // Update the game document with final awards and result
         batch.update(gameRef, {
             'gameResult.winner': winUpdate?.userId || game.gameResult?.winner || 'none',
             'trapAnswerState.finalAwards': specialAwards || {},
@@ -264,14 +277,19 @@ export async function distributeEndOfGameAwards(game: Game) {
         await batch.commit();
 
     } catch (error: any) {
-        console.error(`Error in distributeEndOfGameAwards for game ${game.id}:`, error);
-        // Log error to the game document for easier debugging
+        console.error(`Error in distributeEndOfGameAwards for game ${gameId}:`, error);
         try {
-            await updateDoc(doc(db, 'games', game.id), {
-                'gameResult.error': `Award distribution failed: ${error.message}`
+            await updateDoc(doc(db, 'games', gameId), {
+                'gameResult.error': `Award distribution failed: ${error.message}`,
+                'trapAnswerState.finalizationError': {
+                    message: error.message,
+                    code: (error as any).code,
+                    stack: error.stack,
+                    timestamp: Timestamp.now(),
+                }
             });
-        } catch (logError) {
-            console.error(`Failed to log error to game document ${game.id}:`, logError);
+        } catch(logError) {
+            console.error(`Failed to log error to game document ${gameId}:`, logError);
         }
     }
 }
