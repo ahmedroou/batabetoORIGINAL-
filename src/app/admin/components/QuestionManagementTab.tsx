@@ -68,7 +68,8 @@ import {
     uploadPrisonQuestionsFromJson,
     uploadEducatedMerchantQuestionsFromJson,
     deleteDuplicateWords,
-    deleteSimilarQuestions
+    deleteSimilarQuestions,
+    uploadTrapAnswerQuestionsFromJson
 } from "@/lib/actions/admin/content";
 
 
@@ -436,14 +437,7 @@ const QuestionManagementTab: React.FC = () => {
     [selectedGame]
   );
 
-  // تحميل الأقسام + العدّ الأولى
-  useEffect(() => {
-    const fetchInitial = async () => {
-      const [trapRes, merchantRes] = await Promise.all([getTrapAnswerCategories(), getEducatedMerchantCategories()]);
-      if (trapRes?.success && trapRes.categories) setTrapAnswerCategories(trapRes.categories);
-      if (merchantRes?.success && merchantRes.categories) setMerchantCategories(merchantRes.categories);
-
-      // عدّ شامل لكل لعبة
+  const fetchGlobalCounts = useCallback(async () => {
       const [ta, em, ww, pr] = await Promise.all([
         countQuestions({ game: "trap-answer", all: true }),
         countQuestions({ game: "educated-merchant", all: true }),
@@ -456,9 +450,18 @@ const QuestionManagementTab: React.FC = () => {
         word_war: ww?.count ?? 0,
         prison: pr?.count ?? 0,
       });
+  }, []);
+  
+  // تحميل الأقسام + العدّ الأولى
+  useEffect(() => {
+    const fetchInitial = async () => {
+      const [trapRes, merchantRes] = await Promise.all([getTrapAnswerCategories(), getEducatedMerchantCategories()]);
+      if (trapRes?.success && trapRes.categories) setTrapAnswerCategories(trapRes.categories);
+      if (merchantRes?.success && merchantRes.categories) setMerchantCategories(merchantRes.categories);
+      await fetchGlobalCounts();
     };
     fetchInitial();
-  }, []);
+  }, [fetchGlobalCounts]);
 
   /* ----------------------------- رفع المحتوى ----------------------------- */
   const handleGameSelection = (game: GameKey) => {
@@ -617,9 +620,7 @@ const QuestionManagementTab: React.FC = () => {
         toast({ title: "تم الرفع", description: `تم رفع ${result.count ?? 0} عنصر بنجاح.` });
         setFile(null);
         setUploadPreview(null);
-        // تحديث العدّ الإجمالي
-        const updated = await countQuestions({ game: selectedGame as Exclude<GameKey, "">, all: true });
-        setGlobalCounts((g) => ({ ...g, [selectedGame as Exclude<GameKey, "">]: updated?.count ?? g[selectedGame as Exclude<GameKey, "">] }));
+        await fetchGlobalCounts();
       } else {
         throw new Error(result?.error || "فشل الرفع.");
       }
@@ -636,7 +637,6 @@ const QuestionManagementTab: React.FC = () => {
     if (!isValid) return;
     setDeletionParams(params);
 
-    // حاول حساب العدد قبل التأكيد (حيثما أمكن)
     setDeletionCount(null);
     setIsLoadingCount(true);
     try {
@@ -653,7 +653,6 @@ const QuestionManagementTab: React.FC = () => {
         const c = await countQuestions({ game: params.game, answerSearchTerm: params.answerSearchTerm });
         setDeletionCount(c?.count ?? null);
       } else {
-        // المكررات: لا عدّ مُسبق متاح من الباك-إند – نعرض رسالة عامة
         setDeletionCount(null);
       }
     } catch {
@@ -685,9 +684,7 @@ const QuestionManagementTab: React.FC = () => {
       } else if (result && result.success) {
         const msg = `تم حذف ${result.count ?? 0} عنصر. ${result.message || ""}`;
         toast({ title: "نجاح", description: msg });
-        // تحديث العدّ الإجمالي
-        const updated = await countQuestions({ game: deletionParams.game, all: true });
-        setGlobalCounts((g) => ({ ...g, [deletionParams.game]: updated?.count ?? g[deletionParams.game] }));
+        await fetchGlobalCounts();
       } else {
         toast({ title: "خطأ", description: "حدث خطأ غير متوقع أثناء الحذف.", variant: "destructive" });
       }
@@ -763,14 +760,27 @@ const QuestionManagementTab: React.FC = () => {
           </Button>
         </div>
       </div>
+      <div className="p-3 border rounded-2xl space-y-2 bg-destructive/10">
+        <h4 className="font-bold text-destructive">حذف كل أسئلة اللعبة</h4>
+        <p className="text-sm text-destructive/80">تحذير! هذا الإجراء سيحذف جميع أسئلة هذه اللعبة.</p>
+        <Button
+          variant="destructive"
+          className="w-full"
+          onClick={() => handleDeleteClick({ game: selectedGame as Exclude<GameKey, "">, all: true })}
+          disabled={isDeleting}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          {isDeleting ? "جاري حذف الكل..." : `تأكيد حذف كل أسئلة (${selectedGame === 'trap-answer' ? "الجواب المفخخ" : "التاجر المتعلم"})`}
+        </Button>
+      </div>
     </div>
   );
 
   const renderWordWarDelete = () => (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <h4 className="font-bold">حذف كل الكلمات</h4>
-        <p className="text-sm text-destructive text-center p-2 bg-destructive/10 rounded-md">تحذير! هذا الإجراء سيحذف جميع كلمات لعبة حرب الكلمات.</p>
+      <div className="p-3 border rounded-2xl space-y-2 bg-destructive/10">
+        <h4 className="font-bold text-destructive">حذف كل الكلمات</h4>
+        <p className="text-sm text-destructive/80">تحذير! هذا الإجراء سيحذف جميع كلمات لعبة حرب الكلمات.</p>
         <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: "word_war", all: true })} disabled={isDeleting}>
           <Trash2 className="mr-2 h-4 w-4" />
           {isDeleting ? "جاري حذف الكل..." : "تأكيد حذف جميع الكلمات"}
@@ -787,8 +797,7 @@ const QuestionManagementTab: React.FC = () => {
             const result = await deleteDuplicateWords();
             if (result?.success) {
               toast({ title: "تم", description: `تم حذف ${result.count ?? 0} كلمة مكررة.` });
-              const updated = await countQuestions({ game: "word_war", all: true });
-              setGlobalCounts((g) => ({ ...g, word_war: updated?.count ?? g.word_war }));
+              await fetchGlobalCounts();
             } else {
               toast({ title: "خطأ", description: result?.error ?? "تعذر الحذف.", variant: "destructive" });
             }
@@ -805,9 +814,9 @@ const QuestionManagementTab: React.FC = () => {
 
   const renderPrisonDelete = () => (
     <div className="space-y-4">
-      <div className="p-3 border rounded-2xl space-y-2">
-        <h4 className="font-bold">حذف كل أسئلة السجن</h4>
-        <p className="text-sm text-destructive text-center p-2 bg-destructive/10 rounded-md">تحذير! هذا الإجراء سيحذف جميع أسئلة لعبة السجن.</p>
+      <div className="p-3 border rounded-2xl space-y-2 bg-destructive/10">
+        <h4 className="font-bold text-destructive">حذف كل أسئلة السجن</h4>
+        <p className="text-sm text-destructive/80">تحذير! هذا الإجراء سيحذف جميع أسئلة لعبة السجن.</p>
         <Button variant="destructive" className="w-full" onClick={() => handleDeleteClick({ game: "prison", all: true })} disabled={isDeleting}>
           <Trash2 className="mr-2 h-4 w-4" />
           {isDeleting ? "جاري حذف الكل..." : "تأكيد حذف جميع الأسئلة"}
@@ -857,7 +866,7 @@ const QuestionManagementTab: React.FC = () => {
       const gameName = deletionParams.game === "trap-answer" ? "الجواب المفخخ" : "التاجر المتعلم";
       return `سيتم فحص جميع الأسئلة في قسم "${deletionParams.category}" للعبة "${gameName}" وحذف المتشابه منها. متأكد؟`;
     }
-    if (deletionParams.all) return "تحذير شديد! هذا الإجراء سيحذف جميع العناصر لهذه اللعبة بشكل دائم.";
+    if (deletionParams.all) return `تحذير شديد! هذا الإجراء سيحذف جميع (${deletionCount ?? 0}) العناصر لهذه اللعبة بشكل دائم.`;
     if (deletionParams.category) return `سيتم حذف ${deletionCount ?? "جميع"} الأسئلة من قسم "${deletionParams.category}" بشكل دائم.`;
     if (deletionParams.searchTerm) return `سيتم حذف كل الأسئلة التي تحتوي على "${deletionParams.searchTerm}". هل أنت متأكد؟`;
     if (deletionParams.answerSearchTerm) return `سيتم حذف كل الأسئلة التي جوابها يحتوي على "${deletionParams.answerSearchTerm}". هل أنت متأكد؟`;
@@ -956,7 +965,6 @@ const QuestionManagementTab: React.FC = () => {
 
   return (
     <div dir="rtl" className="space-y-6">
-      {/* بطاقة إحصاءات سريعة */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <Card className="rounded-2xl">
           <CardHeader className="pb-2">
@@ -1015,8 +1023,6 @@ const QuestionManagementTab: React.FC = () => {
               onDelete={activeCategoryManager === "trap-answer" ? deleteTrapAnswerCategory : deleteEducatedMerchantCategory}
             />
           )}
-
-          {/* تلميحات سريعة */}
           <Card className="rounded-2xl">
             <CardHeader>
               <CardTitle className="text-base">نصائح سريعة</CardTitle>
@@ -1031,7 +1037,6 @@ const QuestionManagementTab: React.FC = () => {
         </div>
       </div>
 
-      {/* حوار التأكيد للحذف */}
       <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

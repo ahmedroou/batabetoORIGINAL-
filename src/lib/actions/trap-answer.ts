@@ -1,13 +1,14 @@
-
 'use server';
 
 /**
- * @file Trap Answer — Server Actions (fixed v4.2)
+ * @file Trap Answer — Server Actions (v4.3 — auto-advance)
  * @overview
- * - Timers independent of host (any player can nudge)
- * - Round timers set inside transactions + mirrored to roundEndTime
- * - Stable phases for UI: category | answer | guess | reveal
- * - submitGuess ignores duplicate value to cut extra writes (reduces flicker)
+ * - Any player can "nudge" timeouts (no host lock-in)
+ * - Timers are written inside transactions and mirrored to `roundEndTime`
+ * - NEW: Auto-advance from round-results to next round after a short results timer
+ * - NEW: `handleTimeout` now handles all phases including round-results (next round/finalize)
+ * - UI phases stable: category | answer | guess | reveal
+ * - `submitGuess` ignores duplicate value to cut extra writes (reduces flicker)
  * - Safer transitions & scoring unchanged
  */
 
@@ -46,6 +47,7 @@ const SIMILARITY_THRESHOLD = 0.75 as const;
 const SIMILARITY_BLOCK = 0.95 as const; // block traps/dummies too similar to the real answer
 const CATEGORY_SELECTION_TIME_S = 30 as const;
 const DEFAULT_ANSWER_TIME_S = 60 as const;
+const RESULTS_TIME_S = 8 as const; // NEW: stay on results screen for N seconds then auto-advance
 const FIELD_TRAP_STATE = 'trapAnswerState' as const;
 const TIMEOUT_TOKEN = '__TIMEOUT__' as const;
 
@@ -264,6 +266,7 @@ export async function selectCategoryAndGetQuestion(
 ) {
   const gameRef = doc(db, 'games', gameId);
 
+  // Minimal reads in the transaction; fetch question OUTSIDE once guards pass.
   let shouldProceed = false;
   let answerTime = DEFAULT_ANSWER_TIME_S;
 
@@ -272,7 +275,7 @@ export async function selectCategoryAndGetQuestion(
     ensure(snap.exists(), 'اللعبة غير موجودة.');
 
     const game = snap.data() as Game;
-    if (game.gameState !== 'category-selection') return;
+    if (game.gameState !== 'category-selection') return; // benign exit if state changed
 
     const turnOrder = (game as any)[FIELD_TRAP_STATE]?.turnOrder || [];
     const currentTurnIndex = (game as any)[FIELD_TRAP_STATE]?.currentTurnIndex || 0;
@@ -331,7 +334,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
       if (game.gameState !== 'answer-submission') return;
 
       const state = (game as any)[FIELD_TRAP_STATE] || {};
-      if (hasOwn(state.playerAnswers || {}, playerId)) return;
+      if (hasOwn(state.playerAnswers || {}, playerId)) return; // already answered
 
       const finalAnswer = typeof answer === 'string' && answer.trim() !== '' ? answer.trim() : null;
       const correctAnswer = state?.currentQuestion?.answer;
@@ -380,11 +383,13 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
     const state = (game as any)[FIELD_TRAP_STATE] || {};
     const finalGuess = guess === null ? TIMEOUT_TOKEN : String(guess);
 
+    // Guard: if guess is a concrete option, it must be part of shuffledAnswers
     if (finalGuess !== TIMEOUT_TOKEN) {
       const options: string[] = Array.isArray(state.shuffledAnswers) ? state.shuffledAnswers : [];
       ensure(options.includes(finalGuess), 'الاختيار غير صالح.');
     }
 
+    // ⛔️ Skip update if same (reduces unnecessary re-renders/flicker)
     const prev = (state.playerGuesses || {})[playerId];
     if (prev === finalGuess) return;
 
@@ -465,6 +470,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
     }
   });
 
+  // Heavy work & cross-doc updates OUTSIDE the transaction
   if (finishGame && gameSnapshotAtEnd) {
     try {
       const fresh = await getDoc(gameRef);
@@ -497,8 +503,10 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
 // -----------------------------------------------------------------------------
 // Timeout & Reactions
 // -----------------------------------------------------------------------------
-export async function tickGame(gameId: string) {
+export async function handleTimeout(gameId: string, callerId: string) {
   const gameRef = doc(db, 'games', gameId);
+
+  let shouldFinalize = false; // NEW: if results -> final
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -506,54 +514,137 @@ export async function tickGame(gameId: string) {
 
     const game = snap.data() as Game;
     const state = (game as any)[FIELD_TRAP_STATE] || {};
-    const roundEndTime = state.roundEndTime as Timestamp | undefined;
+    const timerEndsAt = state?.timerEndsAt as Timestamp | undefined;
+    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
 
-    if (!roundEndTime || roundEndTime.toMillis() > nowMs()) return;
-    
-    // Clear timer to prevent multiple runs
-    tx.update(gameRef, { [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField() });
+    // ✅ أي لاعب مشارك يقدر ينفذ النخزة (بدلاً من المضيف فقط)
+    const isPlayer = Array.isArray(game.players) && game.players.some(p => p.id === callerId);
+    if (!isPlayer) return;
 
-    switch (game.gameState) {
-      case 'category-selection': {
-        const categories: string[] = state.fiveRandomCategories || [];
-        if (categories.length === 0) return;
-        
-        const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-        const question = await fetchRandomQuestionByCategory(randomCategory);
-        const answerTime = state.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
-        const newTimer = tsFromNowS(answerTime);
-        
+    // Clear timer first to avoid double-processing
+    tx.update(gameRef, {
+      [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
+      [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
+    });
+
+    if (game.gameState === 'category-selection') {
+      const categories: string[] = state?.fiveRandomCategories || [];
+      if (!Array.isArray(categories) || categories.length === 0) return;
+
+      const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+      const answerTime = state?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
+      const newTimer = tsFromNowS(answerTime);
+
+      // Move to answer-submission immediately, set timer; inject question post-tx.
+      tx.update(gameRef, {
+        gameState: 'answer-submission',
+        [`${FIELD_TRAP_STATE}.phase`]: 'answer',
+        [`${FIELD_TRAP_STATE}.selectedCategory`]: randomCategory,
+        [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
+        [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
+        [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
+        [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
+        [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
+        [`${FIELD_TRAP_STATE}.reactions`]: {},
+        [`${FIELD_TRAP_STATE}.timerEndsAt`]: newTimer,
+        [`${FIELD_TRAP_STATE}.roundEndTime`]: newTimer,
+      });
+    } else if (game.gameState === 'answer-submission') {
+      await _advanceToGuessing(tx as any, gameRef, game, true);
+    } else if (game.gameState === 'guessing') {
+      await _advanceToResults(tx as any, gameRef, game, true);
+    } else if (game.gameState === 'round-results') {
+      // NEW: Auto-advance to next round or finalize
+      const currentRound = game.round || 0;
+      const totalRounds = state?.settings?.rounds || 10;
+
+      if (currentRound >= totalRounds) {
+        shouldFinalize = true;
         tx.update(gameRef, {
-          gameState: 'answer-submission',
-          [`${FIELD_TRAP_STATE}.phase`]: 'answer',
-          [`${FIELD_TRAP_STATE}.selectedCategory`]: randomCategory,
-          [`${FIELD_TRAP_STATE}.currentQuestion`]: question,
-          [`${FIELD_TRAP_STATE}.timerEndsAt`]: newTimer,
-          [`${FIELD_TRAP_STATE}.roundEndTime`]: newTimer,
+          gameState: 'final_results',
+          [`${FIELD_TRAP_STATE}.phase`]: 'reveal',
+          [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
+          [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
+        });
+      } else {
+        const nextTurnIndex = ((state?.currentTurnIndex || 0) + 1) % (game.players?.length || 1);
+        const availableCategories = state?.settings?.categories || [];
+        const sourceCats: string[] = Array.isArray(availableCategories) && availableCategories.length > 0
+          ? availableCategories
+          : ((state?.fiveRandomCategories as string[]) || []);
+
+        const fiveRandomCategories = shuffle([...sourceCats]).slice(0, 5);
+        const endsAt = tsFromNowS(CATEGORY_SELECTION_TIME_S);
+
+        tx.update(gameRef, {
+          gameState: 'category-selection',
+          round: currentRound + 1,
+          [`${FIELD_TRAP_STATE}.currentTurnIndex`]: nextTurnIndex,
+          [`${FIELD_TRAP_STATE}.fiveRandomCategories`]: fiveRandomCategories,
           [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
           [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
+          [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
+          [`${FIELD_TRAP_STATE}.selectedCategory`]: deleteField(),
+          [`${FIELD_TRAP_STATE}.currentQuestion`]: deleteField(),
+          [`${FIELD_TRAP_STATE}.timerEndsAt`]: endsAt,
+          [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt, // UI mirror
+          [`${FIELD_TRAP_STATE}.phase`]: 'category',
+          [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
+          [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
+          [`${FIELD_TRAP_STATE}.reactions`]: {},
         });
-        break;
-      }
-      
-      case 'answer-submission': {
-        await _advanceToGuessing(tx as any, gameRef, game, true);
-        break;
-      }
-      
-      case 'guessing': {
-        await _advanceToResults(tx as any, gameRef, game, true);
-        break;
       }
     }
   });
-}
 
-// Backward compatibility (can be removed later)
-export async function handleTimeout(gameId: string, _callerId: string) {
-  await tickGame(gameId);
-}
+  // If we auto-picked a category, fetch & attach the question now
+  try {
+    const fresh = await getDoc(gameRef);
+    if (!fresh.exists()) return;
+    const g = fresh.data() as Game;
 
+    if (g.gameState === 'answer-submission' && !(g as any)[FIELD_TRAP_STATE]?.currentQuestion) {
+      const chosen = (g as any)[FIELD_TRAP_STATE]?.selectedCategory as string | undefined;
+      if (chosen) {
+        const q = await fetchRandomQuestionByCategory(chosen);
+        await updateDoc(gameRef, {
+          [`${FIELD_TRAP_STATE}.currentQuestion`]: q,
+          [`${FIELD_TRAP_STATE}.reactions`]: {},
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Timeout post-step (attach question) failed:', e);
+  }
+
+  // NEW: If we just flipped to final_results via timeout, finalize awards & league updates
+  try {
+    const fresh = await getDoc(gameRef);
+    if (!fresh.exists()) return;
+    const current = fresh.data() as Game;
+    if (current.gameState === 'final_results') {
+      const alreadyFinalized = Boolean((current as any)[FIELD_TRAP_STATE]?.finalAwards);
+      if (!alreadyFinalized) {
+        const allRanks = await getRanks();
+        const { data: awards } = calculateEndOfGameAwards(current, allRanks);
+        const finalAwards = awards.specialAwards;
+        const winUpdate = awards.winUpdate;
+
+        await updateDoc(gameRef, {
+          gameResult: { winner: winUpdate?.userId || 'none', message: 'انتهت اللعبة' },
+          [`${FIELD_TRAP_STATE}.finalAwards`]: {
+            ...finalAwards,
+            afkStats: (current as any)[FIELD_TRAP_STATE]?.afkStats || {},
+          },
+        });
+
+        await updateLeagueScoresForGameEnd({ ...current, gameState: 'final_results' } as Game);
+      }
+    }
+  } catch (e) {
+    console.error('Timeout post-step (finalize game) failed:', e);
+  }
+}
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
   const gameRef = doc(db, 'games', gameId);
@@ -683,14 +774,16 @@ async function _advanceToResults(
     afkStats[pid] = (afkStats[pid] || 0) + 1;
   });
 
+  const resultsEndsAt = tsFromNowS(RESULTS_TIME_S); // NEW: results timeout to auto-advance
+
   tx.update(gameRef, {
     gameState: 'round-results',
     [`${FIELD_TRAP_STATE}.phase`]: 'reveal',
     playerScores: finalScores,
     [`${FIELD_TRAP_STATE}.playerGuesses`]: playerGuesses,
     [`${FIELD_TRAP_STATE}.lastRoundResults`]: roundResults,
-    [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
-    [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(), // UI mirror
+    [`${FIELD_TRAP_STATE}.timerEndsAt`]: resultsEndsAt, // NEW
+    [`${FIELD_TRAP_STATE}.roundEndTime`]: resultsEndsAt, // UI mirror
     [`${FIELD_TRAP_STATE}.trickStats`]: mergedTrick,
     [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
     [`${FIELD_TRAP_STATE}.afkStats`]: afkStats,
