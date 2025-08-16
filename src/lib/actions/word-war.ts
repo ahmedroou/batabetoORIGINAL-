@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import type { Game, Player, WordWarCard } from '@/types';
 import { shuffle } from '@/lib/actions/helpers';
-import { updateLeagueScoresForGameEnd } from './user';
+import { updateLeagueScoresForGameEnd, distributeEndOfGameAwards } from './user';
 import { WORD_WAR_WORDS } from '@/data/word-war-words';
 
 const DEFAULT_TURN_TIME = 60;
@@ -382,6 +382,7 @@ export async function revealCard(
   });
 
   if (gameDataForLeagueUpdate) {
+    await distributeEndOfGameAwards(gameDataForLeagueUpdate);
     await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
   }
 }
