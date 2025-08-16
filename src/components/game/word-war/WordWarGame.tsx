@@ -565,7 +565,6 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
     const sb = startBtnState();
     
     return (
-        // Same lobby JSX as before
         <>
             <Card className="w-full max-w-4xl mx-auto bg-white/70 backdrop-blur">
               <CardHeader className="text-center">
@@ -779,38 +778,40 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
             const susp = (optimisticSuspicions[card.text] || []) as string[];
             const isSuspectedAny = susp.length > 0;
             const isSuspectedByMe = susp.some((pid) => game.players.find((p) => p.id === pid)?.team === self.team);
+            const isBeingRevealed = busyCards.has(card.text);
+            const showAsRevealed = card.revealed || isBeingRevealed;
             const canClick = isGuesserTurn && !card.revealed && !isSpectator;
 
             return (
               <motion.div key={card.text + index} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: index * 0.015 }} className="relative group/card">
                 <button
                   type="button"
-                  disabled={!canClick || busyCards.has(card.text)}
+                  disabled={!canClick || isBeingRevealed}
                   className={cn(
                     "relative w-full h-16 md:h-20 rounded-md flex items-center justify-center p-1 text-center font-bold text-xs sm:text-sm md:text-base border shadow-sm transition-all duration-200",
-                    getCardColorStyles(card, revealRealColorForMe, game.gameState, isSuspectedAny),
+                    getCardColorStyles(card, revealRealColorForMe || showAsRevealed, game.gameState, isSuspectedAny),
                     canClick && "cursor-pointer active:scale-[0.98]",
-                    busyCards.has(card.text) && "opacity-70"
+                    isBeingRevealed && "opacity-70"
                   )}
                   onClick={() => revealCard(card.text)}
                   aria-label={`بطاقة: ${card.text}`}
                 >
-                  <span className={cn("text-base md:text-lg", card.revealed && "opacity-20")}>{card.text}</span>
+                  <span className={cn("text-base md:text-lg", showAsRevealed && "opacity-20")}>{card.text}</span>
 
-                  {isSuspectedAny && !card.revealed && (
+                  {isSuspectedAny && !showAsRevealed && (
                     <span className="absolute -top-2 -left-2 rounded-full bg-amber-400 text-white text-[10px] px-1.5 py-0.5 font-bold shadow">
                       {susp.length}
                     </span>
                   )}
 
-                  {card.revealed && (
+                  {showAsRevealed && (
                     <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                       <CheckCircle2 className="w-8 h-8 md:w-10 md:h-10 text-white" />
                     </div>
                   )}
                 </button>
 
-                {isGuesserTurn && !card.revealed && (
+                {isGuesserTurn && !showAsRevealed && (
                   <div className="absolute top-1 right-1 opacity-0 group-hover/card:opacity-100 transition-opacity">
                     <Button
                       variant="ghost"
