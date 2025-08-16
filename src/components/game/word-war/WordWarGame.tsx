@@ -196,7 +196,7 @@ const HintHistoryPanel = ({
 };
 
 
-export default function WordWarGame({ game, self }: WordWarGameProps) {
+export default function WordWarGame({ game, self }: { game: Game; self: Player }) {
   const { toast } = useToast();
   const router = useRouter();
 
@@ -208,7 +208,7 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
   const [hintNumber, setHintNumber] = useState(1);
   const [isCopying, setIsCopying] = useState(false);
   const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
-  const [turnTime, setTurnTime] = useState(ww?.settings?.turnTime || 60);
+  const [turnTime, setTurnTime] = useState<string>(String(ww?.settings?.turnTime || 60));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [busyCards, setBusyCards] = useState<Set<string>>(new Set());
 
@@ -539,7 +539,12 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
       if (!isHost) return;
       try {
         setIsSubmitting(true);
-        await wordWarActions.updateGameSettings(game.id, self.id, { turnTime });
+        const time = parseInt(turnTime, 10);
+        if (isNaN(time) || time < 10 || time > 300) {
+            toast({ title: "قيمة غير صالحة", description: "وقت الدور يجب أن يكون بين 10 و 300 ثانية.", variant: "destructive"});
+            return;
+        }
+        await wordWarActions.updateGameSettings(game.id, self.id, { turnTime: time });
         toast({ title: "تم حفظ الإعدادات" });
       } catch (e: any) {
         toast({ title: "خطأ", description: e?.message || String(e), variant: "destructive" });
@@ -628,7 +633,7 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
                     <div className="flex items-end gap-2">
                       <div className="flex-grow space-y-1">
                         <Label htmlFor="turn-time">وقت الدور (ث)</Label>
-                        <Input id="turn-time" type="number" value={turnTime} onChange={(e) => setTurnTime(parseInt(e.target.value, 10) || 60)} />
+                        <Input id="turn-time" type="text" pattern="[0-9]*" value={turnTime} onChange={(e) => setTurnTime(e.target.value.replace(/[^0-9]/g, ''))} />
                       </div>
                       <Button onClick={saveSettings} disabled={isSubmitting}>
                         {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ
@@ -769,7 +774,7 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
           </div>
         </header>
 
-        <main className={cn("w-full flex-grow grid gap-1 sm:gap-1.5 p-1 md:p-2 max-w-7xl mx-auto", "grid-cols-5 md:grid-cols-8")}>
+        <main className={cn("w-full flex-grow grid gap-1 sm:gap-1.5 p-1 md:p-2 max-w-7xl mx-auto", "grid-cols-5 sm:grid-cols-6 md:grid-cols-8")}>
           {cards.map((card, index) => {
             const susp = (optimisticSuspicions[card.text] || []) as string[];
             const isSuspectedAny = susp.length > 0;
