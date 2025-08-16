@@ -1,22 +1,6 @@
 
 'use server';
 
-/**
- * @fileoverview Word War actions — v2 (GPT-5 Thinking)
- * Enhancements merged as requested:
- * 1) Server-grade timers (authoritative start markers; callable+scheduled enforcement provided separately).
- * 2) Card state Map (keyed by a safe key) with backward compatibility for existing array docs.
- * 3) Lightweight metrics (reject counters + last action timestamps + optional client latency hints).
- *
- * Notes:
- * - UI can keep using the legacy array for now, لكن للاستفادة الكاملة من الكتابة الجزئية
- *   انتقل للحقول الجديدة:
- *     - wordWarState.cardsMap: Record<CardKey, { text, color, revealed }>
- *     - wordWarState.cardsOrder: string[] (ثبات الترتيب لعرض اللوحة)
- *   حيث CardKey = safeKeyFromText(text).
- * - كل الدوال تحافظ على منطق اللعبة السابق.
- */
-
 import { db } from '@/lib/firebase';
 import {
   doc,
@@ -39,11 +23,8 @@ import { shuffle } from '@/lib/actions/helpers';
 import { updateLeagueScoresForGameEnd } from './user';
 import { WORD_WAR_WORDS } from '@/data/word-war-words';
 
-// =====================
-// Constants & Utilities
-// =====================
-const DEFAULT_TURN_TIME = 60; // seconds
-const PREPARATION_TIME = 15;  // seconds
+const DEFAULT_TURN_TIME = 60;
+const PREPARATION_TIME = 15;
 const WORD_COUNT = 40;
 
 const nowMs = () => Date.now();
@@ -55,10 +36,6 @@ function getTurnTime(game: Game): number {
   return game.wordWarState?.settings?.turnTime || DEFAULT_TURN_TIME;
 }
 
-/**
- * Safe key for use as object field path.
- * - Base64url of UTF-8 text to avoid '.', '/', '[', ']' ...etc.
- */
 function keyFromText(text: string): string {
   const enc = new TextEncoder().encode(text);
   const b64 = typeof window === 'undefined'
@@ -67,11 +44,6 @@ function keyFromText(text: string): string {
   return b64.replace(/=+$/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
-/**
- * Server-consistent timer model: we store a serverTimestamp start marker and a duration.
- * UI can derive remaining time from { startedAt + durationSec }.
- * We also keep a client-computed endsAtApprox for snappy UI (non-authoritative).
- */
 function setTimer(
   t: FirebaseFirestore.Transaction,
   gameRef: DocumentReference,
@@ -128,37 +100,28 @@ function ensurePlayerInGame(game: Game, playerId: string) {
   return p;
 }
 
-// To guard against duplicate/stale actions without breaking API, we maintain an internal turnId.
 function bumpTurnId(t: FirebaseFirestore.Transaction, gameRef: DocumentReference, current: number | undefined) {
   t.update(gameRef, { 'wordWarState.turnId': (current || 0) + 1 });
 }
 
-// Metrics helpers
 function metricInc(t: FirebaseFirestore.Transaction, gameRef: DocumentReference, path: string) {
   t.update(gameRef, { [path]: increment(1), 'metrics.lastUpdatedAt': serverTimestamp() });
 }
 
-// =====================
-// Cards Generation (Map + Order) with backward compat array
-// =====================
 const generateCards = async () => {
   if (WORD_WAR_WORDS.length < WORD_COUNT) {
     throw new Error(`لا توجد كلمات كافية في قائمة الكلمات. تحتاج إلى ${WORD_COUNT} كلمة على الأقل.`);
   }
 
   const shuffledWords = shuffle([...WORD_WAR_WORDS]).slice(0, WORD_COUNT);
-
-  // 15 Red, 14 Blue, 10 Neutral, 1 Assassin
   const colors: WordWarCard['color'][] = [
     ...Array(15).fill('red'),
     ...Array(14).fill('blue'),
     ...Array(10).fill('neutral'),
     'assassin',
   ];
-
   const shuffledColors = shuffle(colors);
 
-  // Build map + order + legacy array for compatibility
   const cardsOrder: string[] = [];
   const cardsMap: Record<string, WordWarCard> = {};
   const legacyArray: WordWarCard[] = [];
@@ -174,9 +137,6 @@ const generateCards = async () => {
   return { cardsOrder, cardsMap, legacyArray };
 };
 
-// =====================
-// Actions
-// =====================
 export async function updateGameSettings(
   gameId: string,
   hostId: string,
@@ -261,10 +221,8 @@ export async function startGame(gameId: string, hostId: string) {
 
     t.update(gameRef, {
       gameState: 'preparation',
-      // New authoritative shape
       'wordWarState.cardsOrder': cardsOrder,
       'wordWarState.cardsMap': cardsMap,
-      // Legacy array (read-only compat)
       'wordWarState.cards': legacyArray,
       'wordWarState.turn': 'red',
       'wordWarState.guides': { red: redGuideId, blue: blueGuideId },
@@ -272,6 +230,7 @@ export async function startGame(gameId: string, hostId: string) {
       'wordWarState.guessesLeft': 0,
       'wordWarState.suspicions': {},
       'wordWarState.turnId': 1,
+      'wordWarState.hintHistory': [],
       'metrics.startedAt': serverTimestamp(),
     });
 
@@ -309,15 +268,19 @@ export async function submitHint(
     if (!gameDoc.exists()) throw new Error('Game not found.');
     const game = gameDoc.data() as Game;
 
-    if (game.gameState !== 'guide_turn') return; // ignore stale click silently
+    if (game.gameState !== 'guide_turn') return;
     if (game.wordWarState.guides[game.wordWarState.turn] !== playerId) throw new Error('ليس دورك كمرشد.');
 
     const turnTime = getTurnTime(game);
+    
+    const newHint = { word, count, team: game.wordWarState.turn };
+    const hintHistory = [...(game.wordWarState.hintHistory || []), newHint];
 
     t.update(gameRef, {
       gameState: 'guesser_turn',
-      'wordWarState.currentHint': { word, count },
+      'wordWarState.currentHint': newHint,
       'wordWarState.guessesLeft': count,
+      'wordWarState.hintHistory': hintHistory.slice(-5), // Keep last 5 hints
       'metrics.lastHintAt': serverTimestamp(),
       ...(opts?.clientSentAtMs ? { 'metrics.latency.lastHintMsApprox': Math.max(0, nowMs() - opts.clientSentAtMs) } : {}),
     });
@@ -341,22 +304,17 @@ export async function revealCard(
 
     if (!ww) return;
 
-    // Authoritative timer guard (client-side transaction, serverTimestamp validated via Cloud Function/schedule too)
     const timer = ww.timer;
     if (timer?.startedAt && typeof timer.durationSec === 'number') {
       const started = timer.startedAt.toMillis();
-      if (nowMs() < started + millis(timer.durationSec)) {
-        // ok
-      } else {
-        // timeout reached, count metric and ignore
+      if (nowMs() >= started + millis(timer.durationSec)) {
         metricInc(t, gameRef, 'metrics.rejected.timeout');
         return;
       }
     }
 
-    if (game.gameState !== 'guesser_turn') return; // ignore stale
+    if (game.gameState !== 'guesser_turn') return;
 
-    // Optional guard to drop late clicks from a previous turn
     if (opts?.expectedTurnId != null && ww.turnId != null && opts.expectedTurnId !== ww.turnId) {
       metricInc(t, gameRef, 'metrics.rejected.staleTurn');
       return;
@@ -365,7 +323,6 @@ export async function revealCard(
     const player = ensurePlayerInGame(game, playerId);
     if (player.team !== ww.turn) throw new Error('It is not your team\'s turn to act.');
 
-    // Prefer Map if exists
     const hasMap = !!ww.cardsMap && !!ww.cardsOrder;
     const updates: Record<string, unknown> = {};
 
@@ -375,11 +332,10 @@ export async function revealCard(
       const key = keyFromText(cardText);
       const current = ww.cardsMap[key];
       if (!current) throw new Error('Card not found.');
-      if (current.revealed) return; // idempotent
+      if (current.revealed) return;
       revealedCard = current;
       updates[`wordWarState.cardsMap.${key}.revealed`] = true;
     } else {
-      // Legacy array path (full rewrite)
       const cards = [...(ww.cards as WordWarCard[])];
       const idx = cards.findIndex((c) => c.text === cardText);
       if (idx === -1) throw new Error('Card not found.');
@@ -389,10 +345,8 @@ export async function revealCard(
       updates['wordWarState.cards'] = cards;
     }
 
-    // Determine flow based on revealed
     const color = revealedCard!.color;
-
-    // Win check uses whichever shape we have
+    
     const win = hasMap
       ? (() => {
           const cloned = { ...(ww.cardsMap as Record<string, WordWarCard>) };
@@ -442,7 +396,7 @@ export async function endTurn(gameId: string, playerId: string, opts?: { expecte
     const ww = game.wordWarState;
 
     if (!ww) return;
-    if (game.gameState !== 'guesser_turn') return; // ignore stale
+    if (game.gameState !== 'guesser_turn') return;
 
     const player = ensurePlayerInGame(game, playerId);
     if (player.team !== ww.turn) throw new Error('It is not your team\'s turn to act.');
@@ -476,25 +430,20 @@ export async function handleTimeout(gameId: string, actorId: string, opts?: { ex
     if (!gameDoc.exists()) return;
     const game = gameDoc.data() as Game;
 
-    // Any player can trigger a timeout check
     ensurePlayerInGame(game, actorId);
 
     const timer = game.wordWarState?.timer;
     if (!timer?.startedAt || typeof timer.durationSec !== 'number') {
-        // No active server-authoritative timer, so no timeout action to take.
         return; 
     }
 
     const started = timer.startedAt.toMillis();
     const expiresAt = started + millis(timer.durationSec);
     
-    // Check if the timer has actually expired on the server.
-    // A small buffer might be good here in a real-world scenario.
     if (nowMs() < expiresAt) {
-      return; // Not yet expired.
+      return;
     }
     
-    // The timer has expired, proceed with the state transition.
     if (game.gameState === 'preparation') {
       t.update(gameRef, { gameState: 'guide_turn' });
       setTimer(t, gameRef, 'guide', getTurnTime(game));
@@ -528,10 +477,10 @@ export async function toggleSuspicion(gameId: string, playerId: string, cardText
     const ww = game.wordWarState;
 
     if (!ww) return;
-    if (game.gameState !== 'guesser_turn') return; // ignore when not guessing
+    if (game.gameState !== 'guesser_turn') return;
 
     if (opts?.expectedTurnId != null && ww.turnId != null && opts.expectedTurnId !== ww.turnId) {
-      return; // stale
+      return;
     }
     
     const player = ensurePlayerInGame(game, playerId);
