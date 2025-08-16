@@ -115,91 +115,6 @@ export async function _getInitialGameState(players: Player[]) {
 }
 
 
-export function _endTurnInternal(game: Game, playerId: string, extraMessage: string | null = null, extraUpdates?: { players?: Player[], board?: Property[] }): { updates: any, isGameOver: boolean, finalGame: Game | null } {
-  const players = extraUpdates?.players ? clonePlayers(extraUpdates.players) : clonePlayers(game.players);
-  const board = extraUpdates?.board ? cloneBoard(extraUpdates.board) : cloneBoard(ensure(game.educatedMerchantState?.board));
-  
-  const logEvents: { message: string, timestamp: Timestamp }[] = extraMessage ? [{ message: extraMessage, timestamp: nowTimestamp() }] : [];
-
-  for (let i = 0; i < board.length; i++) {
-    const prop = board[i];
-    if (!prop) continue;
-    const owner = players.find((p) => p.id === prop.ownerId);
-    if (owner && owner.status === 'bankrupt') {
-      logEvents.push({ message: `تم تحرير "${prop.name}" بعد إفلاس ${owner.name}.`, timestamp: nowTimestamp() });
-      board[i] = { ...prop, ownerId: null, color: undefined };
-    }
-  }
-
-  players.forEach(p => { if (p.status === 'bankrupt' && (p.money || 0) > 0) p.money = 0; });
-
-  const activePlayers = players.filter(p => p.status === 'alive');
-  let isGameOver = activePlayers.length <= 1;
-
-  const turnOrder = ensure(game.educatedMerchantState?.turnOrder);
-  const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex);
-  let nextTurnIndex = findNextAliveIndex(turnOrder, players, currentTurnIndex);
-  
-  const movesThisRound = game.educatedMerchantState?.movesThisRound ?? 0;
-  const activeAtRoundStart = game.educatedMerchantState?.activeCountAtRoundStart ?? activePlayers.length;
-  let newMoves = movesThisRound + 1;
-  let currentRound = game.round || 1;
-  let newActiveAtRoundStart = activeAtRoundStart;
-
-  if (newMoves >= newActiveAtRoundStart) {
-    currentRound += 1;
-    newMoves = 0;
-    newActiveAtRoundStart = players.filter(p => p.status === 'alive').length;
-  }
-  
-  const maxRounds = game.educatedMerchantState?.settings?.maxRounds || DEFAULT_MAX_ROUNDS;
-  
-  if (currentRound > maxRounds) {
-      isGameOver = true;
-  }
-
-  if (isGameOver) {
-    const winner = activePlayers.reduce((a, b) => ((a.money || 0) > (b.money || 0) ? a : b), activePlayers[0] || null);
-    const message = activePlayers.length <= 1 
-        ? `اللاعب ${winner?.name || ''} هو الناجي الأخير!`
-        : `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.`;
-        
-    const finalGameData = { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board }, gameState: 'final_results' as const, gameResult: { winner: winner?.id || 'none', message } };
-    const updates: any = {
-        gameState: 'final_results',
-        gameResult: finalGameData.gameResult,
-        players,
-        'educatedMerchantState.board': board,
-        'educatedMerchantState.timerEndsAt': deleteField(),
-    };
-    if (logEvents.length > 0) {
-        updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
-    }
-    return { isGameOver: true, updates, finalGame: finalGameData as Game };
-  }
-
-  if(nextTurnIndex === -1) { // Should not happen if game over check is correct
-    return { isGameOver: true, updates: {}, finalGame: null };
-  }
-
-  const finalUpdates: any = {
-    gameState: 'rolling',
-    'educatedMerchantState.board': board,
-    'educatedMerchantState.currentTurnIndex': nextTurnIndex,
-    'educatedMerchantState.timerEndsAt': addActionTimer(ACTION_TIME_SECONDS),
-    round: currentRound,
-    players,
-    'educatedMerchantState.movesThisRound': newMoves,
-    'educatedMerchantState.activeCountAtRoundStart': newActiveAtRoundStart,
-    'educatedMerchantState.lastRentPayment': deleteField(),
-    'educatedMerchantState.newlyBoughtPropertyId': deleteField(),
-  };
-
-  if (logEvents.length > 0) finalUpdates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
-  
-  return { isGameOver: false, updates: finalUpdates, finalGame: null };
-}
-
 export function _rollDice(game: Game, playerId: string) {
     if (game.gameState !== 'rolling') throw new Error('Not in rolling state.');
     const turnOrder = ensure(game.educatedMerchantState?.turnOrder);
@@ -413,3 +328,89 @@ export function _handleTimeout(game: Game) {
   // Fallback for safety
   return _endTurnInternal(game, currentPlayerId, `انتهى وقت اللاعب ${game.players.find(p => p.id === currentPlayerId)?.name} وتخطى دوره.`);
 }
+
+function _endTurnInternal(game: Game, playerId: string, extraMessage: string | null = null, extraUpdates?: { players?: Player[], board?: Property[] }): { updates: any, isGameOver: boolean, finalGame: Game | null } {
+  const players = extraUpdates?.players ? clonePlayers(extraUpdates.players) : clonePlayers(game.players);
+  const board = extraUpdates?.board ? cloneBoard(extraUpdates.board) : cloneBoard(ensure(game.educatedMerchantState?.board));
+  
+  const logEvents: { message: string, timestamp: Timestamp }[] = extraMessage ? [{ message: extraMessage, timestamp: nowTimestamp() }] : [];
+
+  for (let i = 0; i < board.length; i++) {
+    const prop = board[i];
+    if (!prop) continue;
+    const owner = players.find((p) => p.id === prop.ownerId);
+    if (owner && owner.status === 'bankrupt') {
+      logEvents.push({ message: `تم تحرير "${prop.name}" بعد إفلاس ${owner.name}.`, timestamp: nowTimestamp() });
+      board[i] = { ...prop, ownerId: null, color: undefined };
+    }
+  }
+
+  players.forEach(p => { if (p.status === 'bankrupt' && (p.money || 0) > 0) p.money = 0; });
+
+  const activePlayers = players.filter(p => p.status === 'alive');
+  let isGameOver = activePlayers.length <= 1;
+
+  const turnOrder = ensure(game.educatedMerchantState?.turnOrder);
+  const currentTurnIndex = ensure(game.educatedMerchantState?.currentTurnIndex);
+  let nextTurnIndex = findNextAliveIndex(turnOrder, players, currentTurnIndex);
+  
+  const movesThisRound = game.educatedMerchantState?.movesThisRound ?? 0;
+  const activeAtRoundStart = game.educatedMerchantState?.activeCountAtRoundStart ?? activePlayers.length;
+  let newMoves = movesThisRound + 1;
+  let currentRound = game.round || 1;
+  let newActiveAtRoundStart = activeAtRoundStart;
+
+  if (newMoves >= newActiveAtRoundStart) {
+    currentRound += 1;
+    newMoves = 0;
+    newActiveAtRoundStart = players.filter(p => p.status === 'alive').length;
+  }
+  
+  const maxRounds = game.educatedMerchantState?.settings?.maxRounds || DEFAULT_MAX_ROUNDS;
+  
+  if (currentRound > maxRounds) {
+      isGameOver = true;
+  }
+
+  if (isGameOver) {
+    const winner = activePlayers.reduce((a, b) => ((a.money || 0) > (b.money || 0) ? a : b), activePlayers[0] || null);
+    const message = activePlayers.length <= 1 
+        ? `اللاعب ${winner?.name || ''} هو الناجي الأخير!`
+        : `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.`;
+        
+    const finalGameData = { ...game, players, educatedMerchantState: { ...game.educatedMerchantState, board }, gameState: 'final_results' as const, gameResult: { winner: winner?.id || 'none', message } };
+    const updates: any = {
+        gameState: 'final_results',
+        gameResult: finalGameData.gameResult,
+        players,
+        'educatedMerchantState.board': board,
+        'educatedMerchantState.timerEndsAt': deleteField(),
+    };
+    if (logEvents.length > 0) {
+        updates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+    }
+    return { isGameOver: true, updates, finalGame: finalGameData as Game };
+  }
+
+  if(nextTurnIndex === -1) { // Should not happen if game over check is correct
+    return { isGameOver: true, updates: {}, finalGame: null };
+  }
+
+  const finalUpdates: any = {
+    gameState: 'rolling',
+    'educatedMerchantState.board': board,
+    'educatedMerchantState.currentTurnIndex': nextTurnIndex,
+    'educatedMerchantState.timerEndsAt': addActionTimer(ACTION_TIME_SECONDS),
+    round: currentRound,
+    players,
+    'educatedMerchantState.movesThisRound': newMoves,
+    'educatedMerchantState.activeCountAtRoundStart': newActiveAtRoundStart,
+    'educatedMerchantState.lastRentPayment': deleteField(),
+    'educatedMerchantState.newlyBoughtPropertyId': deleteField(),
+  };
+
+  if (logEvents.length > 0) finalUpdates['educatedMerchantState.activityLog'] = arrayUnion(...logEvents);
+  
+  return { isGameOver: false, updates: finalUpdates, finalGame: null };
+}
+
