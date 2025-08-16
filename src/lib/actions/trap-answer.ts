@@ -504,72 +504,59 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
 export async function handleTimeout(gameId: string, callerId: string) {
   const gameRef = doc(db, 'games', gameId);
 
+  // Use a transaction to safely read and conditionally write
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
 
     const game = snap.data() as Game;
-    const timerEndsAt = (game as any)[FIELD_TRAP_STATE]?.timerEndsAt as Timestamp | undefined;
-    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
+    const state = (game as any)[FIELD_TRAP_STATE] || {};
+    const timerEndsAt = state.timerEndsAt as Timestamp | undefined;
 
-    // ✅ أي لاعب مشارك يقدر ينفذ النخزة (بدلاً من المضيف فقط)
-    const isPlayer = Array.isArray(game.players) && game.players.some(p => p.id === callerId);
+    // Exit if the timer hasn't actually expired yet.
+    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
+    
+    // Any active player can nudge the game forward
+    const isPlayer = getActivePlayers(game).some(p => p.id === callerId);
     if (!isPlayer) return;
 
-    // Clear timer first
-    tx.update(gameRef, {
-      [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
-      [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
-    });
+    // Clear the timer to prevent this logic from running again for this phase
+    tx.update(gameRef, { [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField() });
 
-    if (game.gameState === 'category-selection') {
-      const categories: string[] = (game as any)[FIELD_TRAP_STATE]?.fiveRandomCategories || [];
-      if (!Array.isArray(categories) || categories.length === 0) return;
-
-      const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-      const answerTime = (game as any)[FIELD_TRAP_STATE]?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
-      const newTimer = tsFromNowS(answerTime);
-
-      // Move to answer-submission immediately, set timer; inject question post-tx.
-      tx.update(gameRef, {
-        gameState: 'answer-submission',
-        [`${FIELD_TRAP_STATE}.phase`]: 'answer',
-        [`${FIELD_TRAP_STATE}.selectedCategory`]: randomCategory,
-        [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
-        [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
-        [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
-        [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
-        [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
-        [`${FIELD_TRAP_STATE}.reactions`]: {},
-        [`${FIELD_TRAP_STATE}.timerEndsAt`]: newTimer,
-        [`${FIELD_TRAP_STATE}.roundEndTime`]: newTimer,
-      });
-    } else if (game.gameState === 'answer-submission') {
-      await _advanceToGuessing(tx as any, gameRef, game, true);
-    } else if (game.gameState === 'guessing') {
-      await _advanceToResults(tx as any, gameRef, game, true);
-    }
-  });
-
-  // If we auto-picked a category, fetch & attach the question now
-  try {
-    const fresh = await getDoc(gameRef);
-    if (!fresh.exists()) return;
-    const g = fresh.data() as Game;
-
-    if (g.gameState === 'answer-submission' && !(g as any)[FIELD_TRAP_STATE]?.currentQuestion) {
-      const chosen = (g as any)[FIELD_TRAP_STATE]?.selectedCategory as string | undefined;
-      if (chosen) {
-        const q = await fetchRandomQuestionByCategory(chosen);
-        await updateDoc(gameRef, {
-          [`${FIELD_TRAP_STATE}.currentQuestion`]: q,
-          [`${FIELD_TRAP_STATE}.reactions`]: {},
+    switch (game.gameState) {
+      case 'category-selection': {
+        const categories: string[] = state.fiveRandomCategories || [];
+        if (categories.length === 0) return; // Should not happen, but safe to guard.
+        
+        const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+        const question = await fetchRandomQuestionByCategory(randomCategory);
+        const answerTime = state.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
+        const newTimer = tsFromNowS(answerTime);
+        
+        tx.update(gameRef, {
+          gameState: 'answer-submission',
+          [`${FIELD_TRAP_STATE}.phase`]: 'answer',
+          [`${FIELD_TRAP_STATE}.selectedCategory`]: randomCategory,
+          [`${FIELD_TRAP_STATE}.currentQuestion`]: question,
+          [`${FIELD_TRAP_STATE}.timerEndsAt`]: newTimer,
+          [`${FIELD_TRAP_STATE}.roundEndTime`]: newTimer,
+          [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
+          [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
         });
+        break;
+      }
+      
+      case 'answer-submission': {
+        await _advanceToGuessing(tx as any, gameRef, game, true);
+        break;
+      }
+      
+      case 'guessing': {
+        await _advanceToResults(tx as any, gameRef, game, true);
+        break;
       }
     }
-  } catch (e) {
-    console.error('Timeout post-step failed:', e);
-  }
+  });
 }
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
