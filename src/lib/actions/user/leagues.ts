@@ -356,7 +356,9 @@ async function distributeEndOfGameAwards(game: Game) {
             firestoreUpdates.permissions = playerUpdates.permissions;
         }
 
-        batch.update(userRef, firestoreUpdates);
+        if (Object.keys(firestoreUpdates).length > 0) {
+            batch.update(userRef, firestoreUpdates);
+        }
         
         if (playerUpdates.challengePoints && playerUpdates.challengePoints > 0 && activeChallenges.length > 0) {
             const player = game.players.find(p => p.id === playerId);
@@ -405,11 +407,14 @@ async function distributeEndOfGameAwards(game: Game) {
 export async function updateLeagueScoresForGameEnd(game: Game): Promise<void> {
     if (!game.gameResult) return;
     
+    // 1. Record match history first. This is critical.
     await recordMatchHistory(game);
     
+    // 2. Distribute global awards (leaderboard points, coins, etc.)
     await distributeEndOfGameAwards(game);
 
-    const playersWithLeagues = game.players.filter(p => p.status !== 'left' && p.leagues && p.leagues.length > 0);
+    // 3. Update league-specific scores
+    const playersWithLeagues = game.players.filter(p => p.status !== 'left' && Array.isArray(p.leagues) && p.leagues.length > 0);
     if(playersWithLeagues.length === 0) return;
     
     const allRanks = await getRanks();
@@ -436,4 +441,3 @@ export async function updateLeagueScoresForGameEnd(game: Game): Promise<void> {
         console.error("Error updating league scores after game end:", error);
     }
 }
-
