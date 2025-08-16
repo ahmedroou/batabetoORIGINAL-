@@ -62,8 +62,8 @@ function useStableArray<T>(arr: T[]) {
   const ref = useRef(arr);
   const sigRef = useRef(sig);
   if (sigRef.current !== sig) {
-    sigRef.current = arr;
     ref.current = arr;
+    sigRef.current = sig;
   }
   return ref.current;
 }
@@ -193,6 +193,7 @@ const StableAnswerInput = memo(function StableAnswerInput({
     </div>
   );
 });
+StableAnswerInput.displayName = 'StableAnswerInput';
 
 /** ---------- Main ---------- */
 interface TrapAnswerGameProps {
@@ -336,7 +337,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     } finally {
       setLoading((l) => ({ ...l, guess: false }));
     }
-  }, [game.id, self.id, chosenGuess, toast]);
+  }, [game.id, self.id, chosenGuess, toast, game.trapAnswerState?.playerGuesses]);
 
   const handleNextRound = useCallback(async () => {
     setLoading((l) => ({ ...l, next: true }));
@@ -408,6 +409,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
       </WithTimer>
     );
   });
+  CategorySelection.displayName = 'CategorySelection';
 
   const AnswerSubmission = memo(function AnswerSubmission({
     question,
@@ -456,6 +458,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
       </WithTimer>
     );
   });
+  AnswerSubmission.displayName = 'AnswerSubmission';
 
   const Guessing = memo(function Guessing({
     question,
@@ -534,6 +537,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
       </WithTimer>
     );
   });
+  Guessing.displayName = 'Guessing';
 
   const renderCategorySelection = () => {
     const turnOrder = game.trapAnswerState?.turnOrder ?? [];
@@ -609,7 +613,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
         <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
             <Card>
-              <CardHeader className="text-center">
+              <CardHeader className="text-center pt-16">
                 <Award className="w-16 h-16 mx-auto text-yellow-500" />
                 <CardTitle>نتائج الجولة {game.round ?? 1}</CardTitle>
                 <CardDescription className="text-base pt-2">
@@ -937,5 +941,4 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
       );
   }
 }
-
-    
+TrapAnswerGame.displayName = 'TrapAnswerGame';

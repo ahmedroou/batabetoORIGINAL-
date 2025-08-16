@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -432,7 +431,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
         const snap = await tx.get(gameRef);
         ensure(snap.exists(), 'اللعبة غير موجودة.');
         const game = snap.data() as Game;
-        requireHost(game, hostId);
+        ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
         if (game.gameState !== 'round-results') return;
 
         const currentRound = game.round || 0;
