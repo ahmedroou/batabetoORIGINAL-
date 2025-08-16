@@ -51,7 +51,7 @@ const SIMILARITY_THRESHOLD = 0.75 as const;
 const SIMILARITY_BLOCK = 0.95 as const; // block traps/dummies too similar to the real answer
 const CATEGORY_SELECTION_TIME_S = 30 as const;
 const DEFAULT_ANSWER_TIME_S = 60 as const;
-const DEFAULT_RESULTS_TIME_S = 60 as const;
+const DEFAULT_RESULTS_TIME_S = 90 as const;
 const FIELD_TRAP_STATE = 'trapAnswerState' as const;
 const TIMEOUT_TOKEN = '__TIMEOUT__' as const;
 
@@ -425,6 +425,11 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
     const snap = await tx.get(gameRef);
     ensure(snap.exists(), 'اللعبة غير موجودة.');
     const game = snap.data() as Game;
+    // Allow any player to proceed if time is up, but only host can skip early
+    const isTimerUp = (game as any).trapAnswerState?.roundEndTime ? (game as any).trapAnswerState.roundEndTime.toMillis() <= nowMs() : false;
+    if (!isTimerUp) {
+      ensure(game.hostId === hostId, 'فقط المضيف يمكنه بدء الجولة التالية قبل انتهاء الوقت.');
+    }
     if (game.gameState !== 'round-results') return;
     await _startNextRound(tx as any, gameRef, game);
   });
@@ -510,14 +515,13 @@ export async function tickGame(gameId: string) {
     return;
   }
   
-  const selfId = (typeof window !== 'undefined' && sessionStorage.getItem(`player-id-${gameId}`)) || game.hostId;
-  await handleTimeout(gameId, selfId);
+  await handleTimeout(gameId);
 }
 
 // -----------------------------------------------------------------------------
 // Timeout & Reactions
 // -----------------------------------------------------------------------------
-export async function handleTimeout(gameId: string, callerId: string) {
+export async function handleTimeout(gameId: string) {
   const gameRef = doc(db, 'games', gameId);
 
   await runTransaction(db, async (tx) => {
@@ -528,9 +532,6 @@ export async function handleTimeout(gameId: string, callerId: string) {
     const state = (game as any)[FIELD_TRAP_STATE] || {};
     const timerEndsAt = state?.roundEndTime as Timestamp | undefined;
     if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
-
-    const isPlayer = Array.isArray(game.players) && game.players.some(p => p.id === callerId);
-    if (!isPlayer) return;
 
     tx.update(gameRef, {
       [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
@@ -759,5 +760,3 @@ async function _startNextRound(tx: Tx, gameRef: any, game: Game) {
       [`${FIELD_TRAP_STATE}.reactions`]: {},
     });
 }
-
-    

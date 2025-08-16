@@ -47,12 +47,12 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
 
-  const initialSettings = game.trapAnswerState?.settings || { rounds: 10, answerTime: 60, resultsTime: 60, categories: [] };
+  const initialSettings = game.trapAnswerState?.settings || { rounds: 10, answerTime: 60, resultsTime: 90, categories: [] };
   const [lobbySettings, setLobbySettings] = useState(initialSettings);
 
   const [roundsInput, setRoundsInput] = useState<string>(String(initialSettings.rounds ?? 10));
   const [answerInput, setAnswerInput] = useState<string>(String(initialSettings.answerTime ?? 60));
-  const [resultsInput, setResultsInput] = useState<string>(String(initialSettings.resultsTime ?? 60));
+  const [resultsInput, setResultsInput] = useState<string>(String(initialSettings.resultsTime ?? 90));
 
   const [allCategories, setAllCategories] = useState<string[]>([]);
 
@@ -90,7 +90,7 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
   
   const currentResultsTime = useMemo(() => {
     const n = parseInt(resultsInput, 10);
-    return Number.isFinite(n) ? n : lobbySettings.resultsTime || 60;
+    return Number.isFinite(n) ? n : lobbySettings.resultsTime || 90;
   }, [resultsInput, lobbySettings.resultsTime]);
 
   const estimatedSeconds = useMemo(() => {
@@ -285,13 +285,13 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                       <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(6, 45, 30)}>
                         <Wand2 className="w-4 h-4 ml-1"/> سريع
                       </Button>
-                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(10, 60, 60)}>
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(10, 60, 90)}>
                         افتراضي
                       </Button>
                       <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(10, 25, 20)}>
                         القالب المميز
                       </Button>
-                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(20, 60, 60)}>
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(20, 60, 90)}>
                         ماراثون
                       </Button>
                     </div>
