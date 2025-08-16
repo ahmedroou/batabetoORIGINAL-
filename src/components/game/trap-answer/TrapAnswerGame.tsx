@@ -539,59 +539,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
   });
   Guessing.displayName = 'Guessing';
 
-  const renderCategorySelection = () => {
-    const turnOrder = game.trapAnswerState?.turnOrder ?? [];
-    const currentTurnIndex = game.trapAnswerState?.currentTurnIndex ?? 0;
-    const currentId = turnOrder[currentTurnIndex];
-    const playerTurn = game.players.find((p) => p.id === currentId);
-    const isMyTurn = self.id === playerTurn?.id;
-
-    return (
-      <CategorySelection
-        isMyTurn={isMyTurn}
-        currentPlayerName={playerTurn?.name}
-        categories={fiveCategories}
-        onPick={handleCategorySelect}
-        picking={loading.select}
-      />
-    );
-  };
-
-  const renderAnswerSubmission = () => {
-    const hasSubmitted = has(game.trapAnswerState?.playerAnswers, self.id);
-    const answeredPlayers = Object.keys(game.trapAnswerState?.playerAnswers ?? {});
-    const awayPlayerIds = game.trapAnswerState?.awayPlayerIds ?? [];
-    const pendingPlayers = activePlayers.filter((p) => !answeredPlayers.includes(p.id));
-
-    return (
-      <AnswerSubmission
-        question={game.trapAnswerState?.currentQuestion?.question}
-        hasSubmitted={!!hasSubmitted}
-        pendingPlayers={pendingPlayers}
-        awayPlayerIds={awayPlayerIds}
-      />
-    );
-  };
-
-  const renderGuessing = () => {
-    const hasGuessed = !!game.trapAnswerState?.playerGuesses?.[self.id];
-    const answeredPlayers = Object.keys(game.trapAnswerState?.playerGuesses ?? {});
-    const awayPlayerIds = game.trapAnswerState?.awayPlayerIds ?? [];
-    const pendingPlayers = activePlayers.filter((p) => !answeredPlayers.includes(p.id));
-
-    return (
-      <Guessing
-        question={game.trapAnswerState?.currentQuestion?.question}
-        hasGuessed={hasGuessed}
-        answers={shuffledAnswers}
-        chosen={chosenGuess}
-        setChosen={setChosenGuess}
-        pendingPlayers={pendingPlayers}
-        awayPlayerIds={awayPlayerIds}
-      />
-    );
-  };
-
   const renderRoundResults = () => {
     const results = game.trapAnswerState?.lastRoundResults;
     if (!results)
@@ -603,198 +550,204 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
           </CardContent>
         </Card>
       );
-
+  
     const getPlayer = (playerId: string) => game.players.find((p) => p.id === playerId);
     const timedOutPlayers = (results.timedOutGuesserIds ?? []).map(getPlayer).filter(isDefined);
     const awayPlayerIds = results.awayPlayerIdsDuringRound ?? [];
-
+  
     return (
-      <WithTimer>
-        <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
-            <Card>
-              <CardHeader className="text-center pt-16">
-                <Award className="w-16 h-16 mx-auto text-yellow-500" />
-                <CardTitle>نتائج الجولة {game.round ?? 1}</CardTitle>
-                <CardDescription className="text-base pt-2">
-                  السؤال كان:{' '}
-                  <strong className="text-foreground">{game.trapAnswerState?.currentQuestion?.question ?? '—'}</strong>
-                </CardDescription>
+      <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main content: question and answers */}
+        <div className="lg:col-span-2 space-y-4">
+          <Card>
+            <CardHeader className="text-center pt-6">
+              <Award className="w-16 h-16 mx-auto text-yellow-500" />
+              <CardTitle>نتائج الجولة {game.round ?? 1}</CardTitle>
+              <CardDescription className="text-base pt-2">
+                السؤال كان:{' '}
+                <strong className="text-foreground">{game.trapAnswerState?.currentQuestion?.question ?? '—'}</strong>
+              </CardDescription>
+            </CardHeader>
+          </Card>
+  
+          {timedOutPlayers.length > 0 && (
+            <Card className="border-yellow-500 bg-yellow-100/80 dark:bg-yellow-900/30 dark:text-yellow-200">
+              <CardHeader>
+                <CardTitle className="text-yellow-800 dark:text-yellow-200 text-base flex items-center gap-2">
+                  <TimerIcon /> لاعبون لم يجيبوا في الوقت
+                </CardTitle>
               </CardHeader>
+              <CardContent className="flex flex-wrap gap-4">
+                {timedOutPlayers.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2">
+                    <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" />
+                    <span className="font-semibold text-sm">{p.name}</span>
+                  </div>
+                ))}
+              </CardContent>
             </Card>
-
-            {timedOutPlayers.length > 0 && (
-              <Card className="border-yellow-500 bg-yellow-100/80 dark:bg-yellow-900/30 dark:text-yellow-200">
-                <CardHeader>
-                  <CardTitle className="text-yellow-800 dark:text-yellow-200 text-base flex items-center gap-2">
-                    <TimerIcon /> لاعبون لم يجيبوا في الوقت
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-4">
-                  {timedOutPlayers.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2">
-                      <PlayerAvatar avatarId={p.avatarId} className="w-6 h-6" />
-                      <span className="font-semibold text-sm">{p.name}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-            <ScrollArea className="h-[50vh] pr-4">
-              <div className="space-y-3">
-                {results.answers.map((ans, idx) => (
-                  <div
-                    key={`${ans.text}-${idx}`}
-                    className={cn(
-                      'p-4 border-2 rounded-lg',
-                      ans.isCorrect ? 'bg-green-100 border-green-500' : 'bg-card border-border'
-                    )}
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <p className="text-lg font-bold">{ans.text}</p>
-                      {ans.isCorrect ? (
-                        <div className="px-2 py-1 text-xs font-bold text-green-800 bg-green-200 rounded-full">
-                          الجواب الصحيح
-                        </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
-                          <span>جواب:</span>
-                          {ans.authorIds && ans.authorIds.length > 0 ? (
-                            ans.authorIds.map((authorId) => {
-                              const author = getPlayer(authorId);
-                              return author ? (
-                                <div key={authorId} className="flex items-center gap-1.5">
-                                  <PlayerAvatar
-                                    avatarId={author.avatarId}
-                                    className="w-5 h-5"
-                                    temporaryTitle={author.temporaryTitle}
-                                  />
-                                  <span className="font-bold">{author.name}</span>
-                                </div>
-                              ) : null;
-                            })
-                          ) : (
-                            <span className="font-bold">(تلقائي)</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    {ans.guesserIds?.length > 0 && (
-                      <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
-                        <span className="text-xs font-bold self-center">صوّت لها:</span>
-                        {ans.guesserIds.map((id) => {
-                          const guesser = getPlayer(id);
-                          return guesser ? (
-                            <div key={id} className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded-full">
-                              <PlayerAvatar
-                                avatarId={guesser.avatarId}
-                                className="w-4 h-4"
-                                temporaryTitle={guesser.temporaryTitle}
-                              />
-                              <span>{guesser.name}</span>
-                            </div>
-                          ) : null;
-                        })}
+          )}
+  
+          <ScrollArea className="h-[calc(100vh-28rem)] pr-4">
+            <div className="space-y-3">
+              {results.answers.map((ans, idx) => (
+                <div
+                  key={`${ans.text}-${idx}`}
+                  className={cn(
+                    'p-4 border-2 rounded-lg',
+                    ans.isCorrect ? 'bg-green-100 border-green-500' : 'bg-card border-border'
+                  )}
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="text-lg font-bold">{ans.text}</p>
+                    {ans.isCorrect ? (
+                      <div className="px-2 py-1 text-xs font-bold text-green-800 bg-green-200 rounded-full">
+                        الجواب الصحيح
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+                        <span>جواب:</span>
+                        {ans.authorIds && ans.authorIds.length > 0 ? (
+                          ans.authorIds.map((authorId) => {
+                            const author = getPlayer(authorId);
+                            return author ? (
+                              <div key={authorId} className="flex items-center gap-1.5">
+                                <PlayerAvatar
+                                  avatarId={author.avatarId}
+                                  className="w-5 h-5"
+                                  temporaryTitle={author.temporaryTitle}
+                                />
+                                <span className="font-bold">{author.name}</span>
+                              </div>
+                            ) : null;
+                          })
+                        ) : (
+                          <span className="font-bold">(تلقائي)</span>
+                        )}
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
-
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>نقاط الجولة</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {playersSortedByTotalScore.map((p) => {
-                  const roundScore = (game.trapAnswerState?.lastRoundResults?.scores as any)?.[p.id];
-                  const wasAway = awayPlayerIds.includes(p.id);
-                  return (
-                    <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
-                      <div className="flex justify-between items-center">
-                        <div className="relative flex items-center gap-2">
-                          <AnimatePresence>
-                            <EmojiDisplay reaction={visibleReactions[p.id] ?? null} />
-                          </AnimatePresence>
-                          <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
-                          <div className="flex-grow">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold block">{p.name}</span>
-                              {wasAway && <EyeOff className="w-4 h-4 text-red-500" />}
-                            </div>
-                            {roundScore && roundScore.points !== 0 && (
-                              <div className="flex flex-wrap gap-x-2">
-                                {roundScore.breakdown.map(
-                                  (item: { reason: string; points: number }, i: number) => (
-                                    <span
-                                      key={i}
-                                      className={cn(
-                                        'text-xs',
-                                        item.points > 0 ? 'text-green-600' : 'text-red-600'
-                                      )}
-                                    >
-                                      ({item.points > 0 ? `+${item.points}` : item.points} {item.reason})
-                                    </span>
-                                  )
-                                )}
-                              </div>
-                            )}
+                  {ans.guesserIds?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2 border-t mt-2">
+                      <span className="text-xs font-bold self-center">صوّت لها:</span>
+                      {ans.guesserIds.map((id) => {
+                        const guesser = getPlayer(id);
+                        return guesser ? (
+                          <div key={id} className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded-full">
+                            <PlayerAvatar
+                              avatarId={guesser.avatarId}
+                              className="w-4 h-4"
+                              temporaryTitle={guesser.temporaryTitle}
+                            />
+                            <span>{guesser.name}</span>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] ?? 0}</span>
-                          {roundScore?.points > 0 && (
-                            <span className="text-xs font-bold text-green-600">+{roundScore.points}</span>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+  
+        {/* Side panel for scores and actions */}
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>نقاط الجولة</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {playersSortedByTotalScore.map((p) => {
+                const roundScore = (game.trapAnswerState?.lastRoundResults?.scores as any)?.[p.id];
+                const wasAway = awayPlayerIds.includes(p.id);
+                return (
+                  <div key={p.id} className="flex flex-col p-2 rounded-md bg-muted">
+                    <div className="flex justify-between items-center">
+                      <div className="relative flex items-center gap-2">
+                        <AnimatePresence>
+                          <EmojiDisplay reaction={visibleReactions[p.id] ?? null} />
+                        </AnimatePresence>
+                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" temporaryTitle={p.temporaryTitle} />
+                        <div className="flex-grow">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold block">{p.name}</span>
+                            {wasAway && <EyeOff className="w-4 h-4 text-red-500" />}
+                          </div>
+                          {roundScore && roundScore.points !== 0 && (
+                            <div className="flex flex-wrap gap-x-2">
+                              {roundScore.breakdown.map(
+                                (item: { reason: string; points: number }, i: number) => (
+                                  <span
+                                    key={i}
+                                    className={cn(
+                                      'text-xs',
+                                      item.points > 0 ? 'text-green-600' : 'text-red-600'
+                                    )}
+                                  >
+                                    ({item.points > 0 ? `+${item.points}` : item.points} {item.reason})
+                                  </span>
+                                )
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
-                      <div className="flex justify-center gap-2 mt-2 pt-2 border-t border-background w-full">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() => handleSendReaction('laugh')}
-                        >
-                          <Laugh className="h-4 w-4 text-yellow-500" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('mock')}>
-                          <MessageCircleOff className="h-4 w-4 text-red-500" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() => handleSendReaction('apologize')}
-                        >
-                          <Handshake className="h-4 w-4 text-blue-500" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('shame')}>
-                          <Drama className="h-4 w-4 text-purple-500" />
-                        </Button>
+                      <div className="text-right">
+                        <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] ?? 0}</span>
+                        {roundScore?.points > 0 && (
+                          <span className="text-xs font-bold text-green-600">+{roundScore.points}</span>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-            {isHost && (
-              <Button onClick={handleNextRound} disabled={!!loading.next} className="w-full">
-                {loading.next
-                  ? 'جاري التحميل...'
-                  : (game.round ?? 0) >= (game.trapAnswerState?.settings?.rounds ?? 10)
-                  ? 'عرض النتائج النهائية'
-                  : 'الجولة التالية'}
-              </Button>
-            )}
-          </div>
+                    <div className="flex justify-center gap-2 mt-2 pt-2 border-t border-background w-full">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => handleSendReaction('laugh')}
+                      >
+                        <Laugh className="h-4 w-4 text-yellow-500" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('mock')}>
+                        <MessageCircleOff className="h-4 w-4 text-red-500" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => handleSendReaction('apologize')}
+                      >
+                        <Handshake className="h-4 w-4 text-blue-500" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSendReaction('shame')}>
+                        <Drama className="h-4 w-4 text-purple-500" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+          {isHost && (
+            <Button onClick={handleNextRound} disabled={!!loading.next} className="w-full">
+              {loading.next
+                ? 'جاري التحميل...'
+                : (game.round ?? 0) >= (game.trapAnswerState?.settings?.rounds ?? 10)
+                ? 'عرض النتائج النهائية'
+                : 'الجولة التالية'}
+            </Button>
+          )}
+          {!isHost && (
+            <div className="text-center p-2 bg-muted rounded-md text-sm text-muted-foreground animate-pulse">
+                في انتظار المضيف...
+            </div>
+          )}
         </div>
-      </WithTimer>
+      </div>
     );
   };
+  
 
   const renderFinalResults = () => {
     const sortedPlayers = [...(game.players ?? [])]
