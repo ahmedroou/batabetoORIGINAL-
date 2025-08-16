@@ -345,7 +345,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
       const finalAnswer = typeof answer === 'string' && answer.trim() !== '' ? answer.trim() : null;
       const correctAnswer = state?.currentQuestion?.answer;
 
-      if (correctAnswer && finalAnswer && safeCompareStrings(finalAnswer, correctAnswer) > SIMILARITY_THRESHOLD) {
+      if (correctAnswer && finalAnswer && safeCompareStrings(finalAnswer, correctAnswer) > SIMILARITY_BLOCK) {
         throw new Error('لا يمكنك إدخال إجابة مطابقة أو شبيهة بالإجابة الصحيحة. قدم جوابًا مفخخًا!');
       }
 
@@ -523,6 +523,8 @@ export async function tickGame(gameId: string) {
 // -----------------------------------------------------------------------------
 export async function handleTimeout(gameId: string) {
   const gameRef = doc(db, 'games', gameId);
+  let finalGameData: Game | null = null;
+  let shouldFinalize = false;
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -567,9 +569,17 @@ export async function handleTimeout(gameId: string) {
     } else if (game.gameState === 'guessing') {
       await _advanceToResults(tx as any, gameRef, game, true);
     } else if (game.gameState === 'round-results') {
-        await _startNextRound(tx as any, gameRef, game);
+        const nextRoundResult = await _startNextRound(tx as any, gameRef, game);
+        if (nextRoundResult.isGameOver) {
+            shouldFinalize = true;
+            finalGameData = nextRoundResult.finalGame;
+        }
     }
   });
+
+  if (shouldFinalize && finalGameData) {
+      await finalizeGameAndDistributeAwards(finalGameData);
+  }
 }
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
@@ -718,7 +728,7 @@ async function _advanceToResults(
   });
 }
 
-async function _startNextRound(tx: Tx, gameRef: any, game: Game) {
+async function _startNextRound(tx: Tx, gameRef: any, game: Game): Promise<{ isGameOver: boolean; finalGame: Game | null }> {
     const state = (game as any)[FIELD_TRAP_STATE] || {};
     const currentRound = game.round || 0;
     const totalRounds = state?.settings?.rounds || 10;
@@ -730,7 +740,8 @@ async function _startNextRound(tx: Tx, gameRef: any, game: Game) {
             [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
             [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
         });
-        return;
+        const finalGame: Game = { ...game, gameState: 'final_results' };
+        return { isGameOver: true, finalGame: finalGame };
     }
 
     const nextTurnIndex = ((state?.currentTurnIndex || 0) + 1) % (game.players?.length || 1);
@@ -759,4 +770,6 @@ async function _startNextRound(tx: Tx, gameRef: any, game: Game) {
       [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
       [`${FIELD_TRAP_STATE}.reactions`]: {},
     });
+
+    return { isGameOver: false, finalGame: null };
 }

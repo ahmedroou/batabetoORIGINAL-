@@ -80,7 +80,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             if (isEducatedMerchantGame) {
                 const tier = (rank - 1) < educatedMerchantAwardTiers.length ? educatedMerchantAwardTiers[rank - 1] : null;
                 if(tier) playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
-            } else if (game.gameType !== 'trap-answer' || !isShortTrapAnswerGame) {
+            } else {
                 const tier = (rank - 1) < awardTiers.length ? awardTiers[rank - 1] : null;
                 if(tier) playerAwards = { ...tier, challengePoints: tier.leaderboardPoints };
             }
