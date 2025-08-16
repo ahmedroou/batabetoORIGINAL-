@@ -48,7 +48,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             duelChallenges: [],
             lastPunishmentTimestamp: {},
             originalAvatarToRevert: null,
-            isPunished: false, // Initialize punishment flag
+            isPunished: false,
         });
         return { success: true };
     } catch (error) {
