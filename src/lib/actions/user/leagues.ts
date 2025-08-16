@@ -398,7 +398,6 @@ export async function distributeEndOfGameAwards(game: Game) {
 export async function updateLeagueScoresForGameEnd(game: Game) {
     if (!game.gameResult) return;
     
-    // Save match to history
     await recordMatchHistory(game);
     
     // This is the only place we call distributeEndOfGameAwards, ensuring it's outside any transaction.

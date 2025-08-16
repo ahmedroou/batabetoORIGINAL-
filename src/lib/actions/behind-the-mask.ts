@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -467,6 +468,8 @@ export async function processNight(gameId: string, hostId: string): Promise<void
         
         tx.update(gameRef, update);
     });
+    
+    // The call to update league scores must be outside the transaction
     if (gameDataForLeagueUpdate) {
         await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
     }
