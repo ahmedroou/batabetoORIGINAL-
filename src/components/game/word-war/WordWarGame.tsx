@@ -1,39 +1,68 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import type { Game, Player, WordWarCard } from '@/types';
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import * as wordWarActions from "@/lib/actions/word-war";
-import * as roomActions from '@/lib/actions/room';
 import { cn } from "@/lib/utils";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  Swords, Users, Crown, Loader2, Send, Lightbulb, SkipForward, Eye, Shuffle,
-  LogOut, Copy, Check, UserX, HelpCircle, Settings, Save, CheckCircle2,
-  Timer, ShieldQuestion,
+  Swords,
+  Users,
+  Crown,
+  Loader2,
+  Send,
+  Lightbulb,
+  SkipForward,
+  Eye,
+  Shuffle,
+  LogOut,
+  Copy,
+  Check,
+  UserX,
+  HelpCircle,
+  Settings,
+  Save,
+  CheckCircle2,
+  Timer,
 } from "lucide-react";
 import { PlayerAvatar } from "../PlayerAvatar";
+import * as roomActions from '@/lib/actions/room';
 import { useRouter } from "next/navigation";
 import { Label } from '@/components/ui/label';
 import {
-  Tooltip, TooltipProvider, TooltipContent, TooltipTrigger,
+  Tooltip,
+  TooltipProvider,
+  TooltipContent,
+  TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
 /**
- * Word War — React UI (Optimistic & Race-safe)
- * - Base + Overlay state for suspicions (no local state wiping server snapshots).
- * - Pending reveals with mutationId (first-writer-wins; still shows peers' updates immediately).
- * - All async calls awaited; precise error handling and rollback per-mutation.
- * - Small cleanups, helpers, and comments.
+ * Word War — React UI (Server-authoritative Reveal)
+ * - كشف البطاقات غير متفائل: لا لون/علامة كشف قبل رد الخادم.
+ * - الشكوك (Suspicion) تبقى متفائلة.
+ * - طبقة تحميل على البطاقة أثناء الإرسال مع قفل نقرات الكشف.
+ * - تنظيفات طفيفة وحفاظ على السلوك السابق.
  */
 
 // -------- Helpers --------
@@ -43,7 +72,6 @@ const k = {
   maxHintLen: 8,
 };
 
-// Safer expiry detection across different shapes
 const getTimerExpiryMs = (game: Game): number | null => {
   const ww: any = game.wordWarState || {};
   if (ww.timer) {
@@ -58,13 +86,13 @@ const getTimerExpiryMs = (game: Game): number | null => {
   return null;
 };
 
-// UI color selection
 const getCardColorStyles = (
   card: WordWarCard,
   revealRealColor: boolean,
   gameState: Game["gameState"],
   isSuspected: boolean
 ) => {
+  // لا نستخدم حالات محلية مؤقتة لكشف اللون أبداً.
   const showTrueColor = revealRealColor || card.revealed || gameState === "board_reveal";
   const color = showTrueColor ? card.color : "default";
 
@@ -90,10 +118,17 @@ const getCardColorStyles = (
   return base;
 };
 
-// Small components
 const ScoreCounter = ({
-  label, count, colorClass, icon: Icon,
-}: { label: string; count: number; colorClass: string; icon: React.ElementType }) => (
+  label,
+  count,
+  colorClass,
+  icon: Icon,
+}: {
+  label: string;
+  count: number;
+  colorClass: string;
+  icon: React.ElementType;
+}) => (
   <div
     className={cn(
       "flex flex-col items-center justify-center p-2 rounded-xl text-white text-center w-24 shadow-sm",
@@ -122,17 +157,24 @@ function CountdownTimer({ expiryTimestamp, onExpire }: { expiryTimestamp: number
     };
     update();
     id = setInterval(update, 1000);
-    return () => { if (id) clearInterval(id); };
+    return () => {
+      if(id) clearInterval(id);
+    };
   }, [expiryTimestamp, onExpire]);
 
   return <span>{timeLeft}</span>;
 }
 
 const HintHistoryPanel = ({
-  hints, team,
-}: { hints: { word: string; count: number; team: 'red' | 'blue' }[]; team: 'red' | 'blue'; }) => {
+  hints,
+  team,
+}: {
+  hints: { word: string; count: number; team: 'red' | 'blue' }[];
+  team: 'red' | 'blue';
+}) => {
   const teamHints = hints.filter((h) => h.team === team).slice(-3);
   const color = team === 'red' ? 'text-rose-400' : 'text-indigo-400';
+
   return (
     <div className="w-full space-y-1">
       <h4 className={cn("text-xs font-bold text-center", color)}>آخر التلميحات</h4>
@@ -150,59 +192,29 @@ const HintHistoryPanel = ({
   );
 };
 
-// -------- Mutation helpers (optimistic infra) --------
-type SuspMap = Record<string, string[]>; // card -> playerIds
-
-type SuspOp = { by: string; op: 'add' | 'remove'; id: string };
-type PendingSusp = Record<string, SuspOp[]>; // card -> pending ops
-
-type PendingReveal = { id: string; at: number };
-type PendingReveals = Record<string, PendingReveal>; // card -> reveal info
-
-const genMutationId = (playerId: string) =>
-  `${playerId}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-
-const applySuspOverlay = (base: SuspMap, pending: PendingSusp): SuspMap => {
-  const clone: Record<string, Set<string>> = {};
-  for (const [card, ids] of Object.entries(base || {})) clone[card] = new Set(ids);
-  for (const [card, ops] of Object.entries(pending || {})) {
-    if (!clone[card]) clone[card] = new Set();
-    for (const m of ops) {
-      if (m.op === 'add') clone[card].add(m.by);
-      else clone[card].delete(m.by);
-    }
-  }
-  return Object.fromEntries(Object.entries(clone).map(([c, s]) => [c, [...s]]));
-};
-
-// -------- Main component --------
 export default function WordWarGame({ game, self }: { game: Game; self: Player }) {
   const { toast } = useToast();
   const router = useRouter();
 
-  const ww = game.wordWarState as any;
+  const ww = game.wordWarState;
   const isHost = game.hostId === self.id;
   const expectedTurnId = ww?.turnId as number | undefined;
 
-  // UI state
   const [hintWord, setHintWord] = useState("");
   const [hintNumber, setHintNumber] = useState(1);
   const [isCopying, setIsCopying] = useState(false);
   const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
   const [turnTime, setTurnTime] = useState<string>(String(ww?.settings?.turnTime || 60));
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- Optimistic layers ---
-  // Base suspicions from server (never mutated directly by UI)
-  const [baseSuspicions, setBaseSuspicions] = useState<SuspMap>(ww?.suspicions || {});
-  // Pending local ops keyed by card
-  const [pendingSusp, setPendingSusp] = useState<PendingSusp>({});
-  // Pending reveals (busy per-card), keep mutationId for precise rollback
-  const [pendingReveals, setPendingReveals] = useState<PendingReveals>({});
+  // منع كشف متفائل: قفل محلي لنقرة الكشف
+  const [isRevealingAny, setIsRevealingAny] = useState(false);
+  // بطاقات تحت الإرسال (طبقة تحميل فقط)
+  const [busyCards, setBusyCards] = useState<Set<string>>(new Set());
 
   const timerExpiryMs = getTimerExpiryMs(game);
+  const [optimisticSuspicions, setOptimisticSuspicions] = useState(ww?.suspicions || {});
+  useEffect(() => setOptimisticSuspicions(ww?.suspicions || {}), [ww?.suspicions]);
 
-  // Derived booleans
   const teamRedPlayers = useMemo(
     () => game.players.filter((p) => p.team === "red" && p.status !== "left"),
     [game.players]
@@ -217,8 +229,11 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
   );
 
   const cards: WordWarCard[] = useMemo(() => {
-    if (ww?.cardsMap && Array.isArray(ww.cardsOrder)) {
-      return (ww.cardsOrder as string[]).map((key: string) => ww.cardsMap[key]).filter(Boolean) as WordWarCard[];
+    const s: any = ww;
+    if (s?.cardsMap && Array.isArray(s.cardsOrder)) {
+      return (s.cardsOrder as string[])
+        .map((key) => s.cardsMap[key])
+        .filter(Boolean) as WordWarCard[];
     }
     return ww?.cards ?? [];
   }, [ww]);
@@ -242,48 +257,6 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
   const isGuideTurn = isMyTurn && isGuide && game.gameState === "guide_turn";
   const isSpectator = !self.team;
 
-  // Effective suspicions = base from server + local overlay
-  const effectiveSuspicions: SuspMap = useMemo(
-    () => applySuspOverlay(baseSuspicions, pendingSusp),
-    [baseSuspicions, pendingSusp]
-  );
-
-  // Re-sync base from server; rebase pending (remove ops already realized in base)
-  useEffect(() => {
-    const srv = ww?.suspicions || {};
-    setBaseSuspicions(srv);
-
-    setPendingSusp((old) => {
-      const next: PendingSusp = { ...old };
-      for (const [card, ops] of Object.entries(next)) {
-        const inBase = new Set<string>(srv[card] || []);
-        const remaining = ops.filter((m) => {
-          const isInBase = inBase.has(m.by);
-          // If op added and it's now in base => realized; if removed and it's now not in base => realized
-          return !((m.op === 'add' && isInBase) || (m.op === 'remove' && !isInBase));
-        });
-        if (remaining.length) next[card] = remaining;
-        else delete next[card];
-      }
-      return next;
-    });
-  }, [ww?.suspicions, ww?.turnId]);
-
-  // Whenever a card becomes revealed on the server, clear any pending reveal for it
-  useEffect(() => {
-    if (!cards?.length) return;
-    const revealedTexts = new Set(cards.filter((c) => c.revealed).map((c) => c.text));
-    setPendingReveals((prev) => {
-      const copy = { ...prev };
-      let changed = false;
-      for (const key of Object.keys(copy)) {
-        if (revealedTexts.has(key)) { delete copy[key]; changed = true; }
-      }
-      return changed ? copy : prev;
-    });
-  }, [cards]);
-
-  // Timeout
   const onTimeout = useCallback(() => {
     asAny(wordWarActions).handleTimeout(game.id, self.id, {
       expectedTurnId,
@@ -291,100 +264,80 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
     });
   }, [game.id, self.id, expectedTurnId]);
 
-  // Reset submission flag when returning to lobby or final state
+  // إذا وصلت حالة "مكشوفة" من الخادم، نظّف أي busy محلي لها
   useEffect(() => {
-    if (game.gameState === "lobby" || game.gameState === "final_results") setIsSubmitting(false);
-  }, [game.gameState]);
-
-  // -------- Actions (with mutationId / awaited / precise rollback) --------
-  const apiCtx = (extra?: Record<string, any>) => ({
-    expectedTurnId,
-    clientSentAtMs: Date.now(),
-    ...(extra || {}),
-  });
+    setBusyCards((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set(prev);
+      for (const c of cards) {
+        if (c.revealed && next.has(c.text)) next.delete(c.text);
+      }
+      return next;
+    });
+  }, [cards]);
 
   const revealCard = useCallback(
     async (cardText: string) => {
       if (!isGuesserTurn) return;
-      // If already revealed on server or locally pending, ignore
-      const card = cards.find((c) => c.text === cardText);
-      if (!card || card.revealed || pendingReveals[cardText]) return;
-
-      const mutationId = genMutationId(self.id);
-      setPendingReveals((p) => ({ ...p, [cardText]: { id: mutationId, at: Date.now() } }));
-
+      if (busyCards.has(cardText)) return;
+      if (isRevealingAny) return; // قفل كشف واحد في نفس اللحظة
+      // لا نعرض لون/كشف محلي — فقط حالة انشغال + قفل
+      setBusyCards((s) => new Set(s).add(cardText));
+      setIsRevealingAny(true);
       try {
-        await asAny(wordWarActions).revealCard(game.id, self.id, cardText, apiCtx({ mutationId }));
+        await asAny(wordWarActions).revealCard(game.id, self.id, cardText, {
+          expectedTurnId,
+          clientSentAtMs: Date.now(),
+        });
+        // سننتظر السnapshot لتحديث revealed وإزالة الانشغال عبر الـ useEffect أعلاه
       } catch (e: any) {
-        // Rollback only this card's pending flag
-        setPendingReveals((p) => {
-          const copy = { ...p };
-          if (copy[cardText]?.id === mutationId) delete copy[cardText];
-          return copy;
+        // في حال الرفض، أزل حالة الانشغال فورًا
+        setBusyCards((s) => {
+          const n = new Set(s);
+          n.delete(cardText);
+          return n;
         });
-        const msg = e?.message || String(e);
-        const known = /ALREADY_REVEALED|TURN_MISMATCH|OUT_OF_GUESSES|NOT_YOUR_TURN/i.test(msg);
-        toast({
-          title: known ? "لم يتم الكشف" : "تعذّر كشف البطاقة",
-          description: msg,
-          variant: "destructive",
-        });
+        toast({ title: "تعذّر كشف البطاقة", description: e?.message || String(e), variant: "destructive" });
+      } finally {
+        setIsRevealingAny(false);
       }
     },
-    [isGuesserTurn, cards, pendingReveals, game.id, self.id]
+    [isGuesserTurn, busyCards, isRevealingAny, game.id, self.id, expectedTurnId, toast]
   );
 
   const endTurn = useCallback(async () => {
     try {
-      setIsSubmitting(true);
-      await asAny(wordWarActions).endTurn(game.id, self.id, apiCtx());
+      await asAny(wordWarActions).endTurn(game.id, self.id, {
+        expectedTurnId,
+        clientSentAtMs: Date.now(),
+      });
     } catch (e: any) {
       toast({ title: "تعذّر إنهاء الدور", description: e?.message || String(e), variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
     }
-  }, [game.id, self.id]);
+  }, [game.id, self.id, expectedTurnId, toast]);
 
-  // Explicit setSuspicion(add/remove) with optimistic overlay + mutationId
-  const setSuspicion = useCallback(
-    async (cardText: string, desired: boolean) => {
-      const op: 'add' | 'remove' = desired ? 'add' : 'remove';
-      const mutationId = genMutationId(self.id);
+  const toggleSuspicion = useCallback(
+    (cardText: string) => {
+      // متفائل وآمن
+      const current = optimisticSuspicions[cardText] || [];
+      const isMine = current.includes(self.id);
+      const next = { ...optimisticSuspicions };
+      next[cardText] = isMine ? current.filter((id: string) => id !== self.id) : [...current, self.id];
+      setOptimisticSuspicions(next);
 
-      // Add to pending overlay
-      setPendingSusp((p) => ({
-        ...p,
-        [cardText]: [...(p[cardText] || []), { by: self.id, op, id: mutationId }],
-      }));
-
-      const api = asAny(wordWarActions);
-      try {
-        if (typeof api.setSuspicion === 'function') {
-          await api.setSuspicion(game.id, self.id, cardText, op, apiCtx({ mutationId }));
-        } else {
-          // Fallback compatibility (temporary): only toggle if desired != current effective
-          const currently = !!(effectiveSuspicions[cardText] || []).includes(self.id);
-          if (currently !== desired) {
-            await api.toggleSuspicion(game.id, self.id, cardText, apiCtx());
-          }
-        }
-      } catch (e: any) {
-        // Rollback only this pending op
-        setPendingSusp((p) => {
-          const arr = (p[cardText] || []).filter((m) => m.id !== mutationId);
-          const next = { ...p, [cardText]: arr };
-          if (!arr.length) delete next[cardText];
-          return next;
-        });
+      asAny(wordWarActions).toggleSuspicion(game.id, self.id, cardText, {
+        expectedTurnId,
+        clientSentAtMs: Date.now(),
+      }).catch((e: any) => {
         toast({ title: "تعذّر وضع علامة الشك", description: e?.message || String(e), variant: "destructive" });
-      }
+        setOptimisticSuspicions(ww?.suspicions || {});
+      });
     },
-    [game.id, self.id, effectiveSuspicions]
+    [game.id, self.id, expectedTurnId, toast, optimisticSuspicions, ww?.suspicions]
   );
 
   const hintHistory = ww?.hintHistory || [];
 
-  // -------- Render helpers --------
   const renderHeader = () => {
     if (game.gameState === "final_results" || game.gameState === "board_reveal") return null;
 
@@ -429,7 +382,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                   <p className="font-semibold text-zinc-700">
                     تخمينات متبقية: <span className="text-xl text-amber-600">{ww.guessesLeft}</span>
                   </p>
-                  <Button onClick={endTurn} disabled={isSubmitting} variant="secondary" size="sm" className="mt-2">
+                  <Button onClick={endTurn} variant="secondary" size="sm" className="mt-2">
                     <SkipForward className="ml-2" /> إنهاء الدور
                   </Button>
                 </div>
@@ -453,14 +406,14 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
           return;
         }
         try {
-          setIsSubmitting(true);
-          await asAny(wordWarActions).submitHint(game.id, self.id, trimmed, hintNumber, apiCtx());
+          await asAny(wordWarActions).submitHint(game.id, self.id, trimmed, hintNumber, {
+            expectedTurnId,
+            clientSentAtMs: Date.now(),
+          });
           setHintWord("");
           setHintNumber(1);
         } catch (e: any) {
           toast({ title: "خطأ", description: e?.message || String(e), variant: "destructive" });
-        } finally {
-          setIsSubmitting(false);
         }
       };
 
@@ -499,8 +452,8 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                 max={9}
                 className="w-24 text-lg h-12 text-center"
               />
-              <Button type="submit" size="lg" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="animate-spin" /> : <Send />}
+              <Button type="submit" size="lg">
+                <Send />
               </Button>
             </form>
           </CardContent>
@@ -525,6 +478,8 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
   };
 
   const renderLobby = () => {
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     const copyId = () => {
       setIsCopying(true);
       navigator.clipboard.writeText(game.id);
@@ -585,8 +540,8 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
         setIsSubmitting(true);
         const time = parseInt(turnTime, 10);
         if (isNaN(time) || time < 10 || time > 300) {
-          toast({ title: "قيمة غير صالحة", description: "وقت الدور يجب أن يكون بين 10 و 300 ثانية.", variant: "destructive"});
-          return;
+            toast({ title: "قيمة غير صالحة", description: "وقت الدور يجب أن يكون بين 10 و 300 ثانية.", variant: "destructive"});
+            return;
         }
         await wordWarActions.updateGameSettings(game.id, self.id, { turnTime: time });
         toast({ title: "تم حفظ الإعدادات" });
@@ -598,7 +553,6 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
     };
 
     const startBtnState = () => {
-      if (isSubmitting) return { disabled: true, text: "جاري البدء..." } as const;
       if (teamRedPlayers.length < 2 || teamBluePlayers.length < 2)
         return { disabled: true, text: "كل فريق يحتاج لاعبين على الأقل" } as const;
       if (unassigned.length > 0)
@@ -607,7 +561,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
     };
 
     const sb = startBtnState();
-
+    
     return (
       <>
         <Card className="w-full max-w-4xl mx-auto bg-white/70 backdrop-blur">
@@ -622,12 +576,13 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                       {isCopying ? <Check /> : <Copy />}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent><p>تم النسخ!</p></TooltipContent>
+                  <TooltipContent>
+                    <p>تم النسخ!</p>
+                  </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
           </CardHeader>
-
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {["red", "blue"].map((teamId) => {
@@ -659,7 +614,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                         </div>
                       ))}
                     </div>
-                    <Button onClick={() => selectTeam(teamId as "red" | "blue")} disabled={isSubmitting || list.some((p) => p.id === self.id)}>
+                    <Button onClick={() => selectTeam(teamId as "red" | "blue")} disabled={list.some((p) => p.id === self.id)}>
                       انضم
                     </Button>
                   </div>
@@ -675,16 +630,10 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                 <div className="flex items-end gap-2">
                   <div className="flex-grow space-y-1">
                     <Label htmlFor="turn-time">وقت الدور (ث)</Label>
-                    <Input
-                      id="turn-time"
-                      type="text"
-                      pattern="[0-9]*"
-                      value={turnTime}
-                      onChange={(e) => setTurnTime(e.target.value.replace(/[^0-9]/g, ''))}
-                    />
+                    <Input id="turn-time" type="text" pattern="[0-9]*" value={turnTime} onChange={(e) => setTurnTime(e.target.value.replace(/[^0-9]/g, ''))} />
                   </div>
-                  <Button onClick={saveSettings} disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />} حفظ
+                  <Button onClick={saveSettings}>
+                    <Save /> حفظ
                   </Button>
                 </div>
               </div>
@@ -717,19 +666,18 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
               </div>
             )}
           </CardContent>
-
           <CardFooter className="flex-col gap-2">
             {isHost && (
               <div className="flex gap-2 w-full">
                 <Button onClick={start} disabled={sb.disabled} className="flex-grow">
-                  {isSubmitting ? <Loader2 className="animate-spin" /> : sb.text}
+                  {sb.text}
                 </Button>
-                <Button onClick={randomize} disabled={isSubmitting} variant="outline">
+                <Button onClick={randomize} variant="outline">
                   <Shuffle /> توزيع عشوائي
                 </Button>
               </div>
             )}
-            <Button onClick={leave} variant="ghost" className="w-full text-destructive" disabled={isSubmitting}>
+            <Button onClick={leave} variant="ghost" className="w-full text-destructive">
               <LogOut /> مغادرة الغرفة
             </Button>
           </CardFooter>
@@ -745,25 +693,20 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>إلغاء</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={async () => {
-                  if (!playerToKick || !isHost) return;
-                  try {
-                    setIsSubmitting(true);
-                    const result = await roomActions.kickPlayerFromLobby(game.id, self.id, playerToKick.id);
-                    if (result.error) {
-                      toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
-                    } else {
-                      toast({ title: "تم الطرد", description: `تم طرد اللاعب ${playerToKick.name}.` });
-                    }
-                  } finally {
-                    setPlayerToKick(null);
-                    setIsSubmitting(false);
+              <AlertDialogAction onClick={async () => {
+                if (!playerToKick || !isHost) return;
+                try {
+                  const result = await roomActions.kickPlayerFromLobby(game.id, self.id, playerToKick.id);
+                  if (result.error) {
+                    toast({ title: "خطأ في الطرد", description: result.error, variant: "destructive" });
+                  } else {
+                    toast({ title: "تم الطرد", description: `تم طرد اللاعب ${playerToKick.name}.` });
                   }
-                }}
-                className="bg-destructive hover:bg-destructive/90"
-              >
-                {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
+                } finally {
+                  setPlayerToKick(null);
+                }
+              }} className="bg-destructive hover:bg-destructive/90">
+                نعم، قم بالطرد
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -828,43 +771,51 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
 
         <main className={cn("w-full flex-grow grid gap-1 sm:gap-1.5 p-1 md:p-2 max-w-7xl mx-auto", "grid-cols-5 sm:grid-cols-6 md:grid-cols-8")}>
           {cards.map((card, index) => {
-            const susp = (effectiveSuspicions[card.text] || []) as string[];
+            const susp = (optimisticSuspicions[card.text] || []) as string[];
             const isSuspectedAny = susp.length > 0;
-            const isSuspectedByMe = susp.includes(self.id);
-            const isBeingRevealed = !!pendingReveals[card.text];
-            const showAsRevealed = card.revealed || isBeingRevealed;
+            const isBeingRevealed = busyCards.has(card.text);
             const canClick = isGuesserTurn && !card.revealed && !isSpectator;
 
             return (
               <motion.div key={card.text + index} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: index * 0.015 }} className="relative group/card">
                 <button
                   type="button"
-                  disabled={!canClick || isBeingRevealed}
+                  disabled={!canClick || isBeingRevealed || isRevealingAny}
                   className={cn(
                     "relative w-full h-16 md:h-20 rounded-md flex items-center justify-center p-1 text-center font-bold text-xs sm:text-sm md:text-base border shadow-sm transition-all duration-200",
-                    getCardColorStyles(card, revealRealColorForMe || showAsRevealed, game.gameState, isSuspectedAny),
+                    getCardColorStyles(card, revealRealColorForMe, game.gameState, isSuspectedAny),
                     canClick && "cursor-pointer active:scale-[0.98]",
-                    isBeingRevealed && "opacity-70"
+                    (isBeingRevealed || isRevealingAny) && "opacity-90"
                   )}
                   onClick={() => revealCard(card.text)}
                   aria-label={`بطاقة: ${card.text}`}
                 >
-                  <span className={cn("text-base md:text-lg", showAsRevealed && "opacity-20")}>{card.text}</span>
+                  <span className={cn("text-base md:text-lg")}>{card.text}</span>
 
-                  {isSuspectedAny && !showAsRevealed && (
+                  {/* عدّاد الشكوك */}
+                  {isSuspectedAny && !card.revealed && (
                     <span className="absolute -top-2 -left-2 rounded-full bg-amber-400 text-white text-[10px] px-1.5 py-0.5 font-bold shadow">
                       {susp.length}
                     </span>
                   )}
 
-                  {showAsRevealed && (
+                  {/* طبقة تحميل أثناء طلب الكشف — لا نظهر اللون أبداً قبل رد الخادم */}
+                  {isBeingRevealed && !card.revealed && (
+                    <div className="absolute inset-0 bg-black/25 flex items-center justify-center rounded-md">
+                      <Loader2 className="w-6 h-6 animate-spin text-white" />
+                    </div>
+                  )}
+
+                  {/* علامة الكشف تُعرض فقط عندما تكون البطاقة مكشوفة فعلاً من الخادم */}
+                  {card.revealed && (
                     <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                       <CheckCircle2 className="w-8 h-8 md:w-10 md:h-10 text-white" />
                     </div>
                   )}
                 </button>
 
-                {isGuesserTurn && !showAsRevealed && (
+                {/* زر الشك */}
+                {isGuesserTurn && !card.revealed && (
                   <div className="absolute top-1 right-1 opacity-0 group-hover/card:opacity-100 transition-opacity">
                     <Button
                       variant="ghost"
@@ -872,16 +823,16 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                       className="h-7 w-7 bg-black/25 text-white hover:bg-black/40"
                       onClick={(e) => {
                         e.stopPropagation();
-                        const currently = (effectiveSuspicions[card.text] || []).includes(self.id);
-                        setSuspicion(card.text, !currently);
+                        toggleSuspicion(card.text);
                       }}
-                      aria-label={isSuspectedByMe ? "إزالة علامة الشك" : "وضع علامة شك"}
+                      aria-label="وضع/إزالة علامة شك"
                     >
-                      <HelpCircle className={cn("h-5 w-5", isSuspectedByMe && "text-amber-300")}/>
+                      <HelpCircle className={cn("h-5 w-5", /* إبراز إذا عندي شك */ (susp || []).includes(self.id) && "text-amber-300")}/>
                     </Button>
                   </div>
                 )}
 
+                {/* صور أفاتار من وضعوا شك */}
                 <div className="absolute bottom-0 left-1 flex items-center -space-x-2">
                   {susp.map((pid) => {
                     const sp = game.players.find((p) => p.id === pid);
@@ -913,26 +864,29 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
   if (game.gameState === "lobby") return renderLobby();
 
   if (game.gameState === 'board_reveal') {
+    const timerMs = timerExpiryMs;
     return (
       <div className="w-full flex flex-col items-center justify-center p-4">
         <h2 className="text-2xl font-bold mb-4">انتهت اللعبة! كشف البطاقات</h2>
         <div className="w-full flex-grow grid gap-1 sm:gap-1.5 p-1 md:p-2 max-w-7xl mx-auto grid-cols-5 md:grid-cols-8">
           {cards.map((card, index) => (
             <motion.div key={card.text + index} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: index * 0.025 }} className="relative group/card">
-              <div className={cn(
-                "relative w-full h-16 md:h-20 rounded-md flex items-center justify-center p-1 text-center font-bold text-xs sm:text-sm md:text-base border shadow-sm",
-                getCardColorStyles(card, true, game.gameState, false)
-              )}>
+              <div
+                className={cn(
+                  "relative w-full h-16 md:h-20 rounded-md flex items-center justify-center p-1 text-center font-bold text-xs sm:text-sm md:text-base border shadow-sm",
+                  getCardColorStyles(card, true, game.gameState, false)
+                )}
+              >
                 <span className="text-base md:text-lg">{card.text}</span>
               </div>
             </motion.div>
           ))}
         </div>
         <div className="mt-4 flex flex-col items-center gap-2">
-          {timerExpiryMs && <p>الانتقال للنتائج النهائية خلال: <CountdownTimer expiryTimestamp={timerExpiryMs} onExpire={onTimeout} /></p>}
+          {timerMs && <p>الانتقال للنتائج النهائية خلال: <CountdownTimer expiryTimestamp={timerMs} onExpire={onTimeout} /></p>}
           {isHost && (
-            <Button onClick={() => wordWarActions.proceedToFinalResults(game.id, self.id)} disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="animate-spin" /> : "عرض النتائج النهائية الآن"}
+            <Button onClick={() => wordWarActions.proceedToFinalResults(game.id, self.id)}>
+              عرض النتائج النهائية الآن
             </Button>
           )}
         </div>
@@ -954,7 +908,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
         <CardHeader className="text-center">
           <Crown className="w-24 h-24 mx-auto text-amber-400" />
           <CardTitle className="text-3xl md:text-4xl">انتهت اللعبة!</CardTitle>
-          <CardDescription className="text-lg text-zinc-600">{result.message}</CardDescription>
+          <CardDescription className="text-lg text-zinc-600">{game.gameResult?.message}</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="p-4 rounded-xl border-2 border-amber-400 bg-amber-50">
@@ -974,7 +928,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
             <div className="space-y-2">
               {loserTeamPlayers.map((p) => (
                 <div key={p.id} className="flex items-center gap-2 p-2 bg-white rounded-md">
-                  <ShieldQuestion className="w-5 h-5 text-zinc-500" />
+                  <HelpCircle className="w-5 h-5 text-zinc-500" />
                   <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
                   <span className="font-semibold text-zinc-800">{p.name}</span>
                 </div>
