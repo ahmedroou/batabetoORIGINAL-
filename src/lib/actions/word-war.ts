@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -516,3 +517,5 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
     clearTimer(t, gameRef);
   });
 }
+
+    
