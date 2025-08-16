@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -42,7 +43,7 @@ const IN_QUERY_LIMIT = 10; // Firestore 'in' operator max items
 function chunk<T>(arr: T[], size: number): T[][] {
   if (size <= 0) return [arr];
   const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + 30));
   return out;
 }
 

@@ -41,10 +41,11 @@ export async function getLeagueData(leagueId: string): Promise<{ league: League 
                 snapshot.forEach(doc => {
                      const userData = doc.data();
                      const leaguePoints = league.scores?.[doc.id] || 0;
+                     // This part is tricky. We are overriding the global gamesPlayed with league-specific.
+                     // A better structure would be to have league-specific stats separate.
+                     // For now, this makes the league leaderboard display correctly.
                      const gamesPlayedInLeague = league.gamesPlayed?.[doc.id] || 0;
-                     // Important: When showing league leaderboard, we must override the global points/games with the league-specific ones.
-                     // The UserProfile type has optional 'gamesPlayed' so we construct it here.
-                     members.push({ ...userData, uid: doc.id, leaderboardPoints: leaguePoints, gamesPlayed: { [game.gameType]: gamesPlayedInLeague } } as UserProfile);
+                     members.push({ ...userData, uid: doc.id, leaderboardPoints: leaguePoints, gamesPlayed: { total: gamesPlayedInLeague } } as UserProfile);
                 });
             });
         }
