@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -10,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight, Shield, Clock3, Users2, RefreshCcw, Wand2, Filter } from 'lucide-react';
+import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight, Shield, Clock3, Users2, Wand2, Filter } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
@@ -24,12 +25,8 @@ interface LobbyPhaseProps {
   self: Player;
 }
 
-// Small helpers
+// Helpers
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
-const toInt = (v: any, d: number) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.trunc(n) : d;
-};
 const fmtMin = (sec: number) => {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
@@ -52,22 +49,26 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
 
   const initialSettings = game.trapAnswerState?.settings || { rounds: 10, answerTime: 60, categories: [] };
   const [lobbySettings, setLobbySettings] = useState(initialSettings);
+
+  const [roundsInput, setRoundsInput] = useState<string>(String(initialSettings.rounds ?? 10));
+  const [answerInput, setAnswerInput] = useState<string>(String(initialSettings.answerTime ?? 60));
+
   const [allCategories, setAllCategories] = useState<string[]>([]);
 
-  // Keep local settings synced when host updates from elsewhere
   useEffect(() => {
     const next = game.trapAnswerState?.settings;
-    if (next) setLobbySettings(next);
+    if (next) {
+      setLobbySettings(next);
+      setRoundsInput(String(next.rounds ?? ''));
+      setAnswerInput(String(next.answerTime ?? ''));
+    }
   }, [game.trapAnswerState?.settings]);
 
-  // Load categories for the host (others don't need management UI)
   useEffect(() => {
     let cancelled = false;
     if (isHost) {
       getTrapAnswerCategories().then(res => {
-        if (!cancelled && res?.success && Array.isArray(res.categories)) {
-          setAllCategories(res.categories);
-        }
+        if (!cancelled && res?.success && Array.isArray(res.categories)) setAllCategories(res.categories);
       });
     }
     return () => { cancelled = true; };
@@ -75,19 +76,20 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
 
   const activePlayers = useMemo(() => game?.players.filter(p => p.status !== 'left') || [], [game?.players]);
 
-  // Derived stats / UX helpers
-  const selectedCount = lobbySettings.categories?.length || 0;
-  const estimatedSeconds = useMemo(() => {
-    // Rough estimate per round: answerTime + guessing (≈ answerTime) + results (≈ 8)
-    const perRound = clamp(lobbySettings.answerTime, 10, 600) + clamp(lobbySettings.answerTime, 10, 600) + 8;
-    return (lobbySettings.rounds || 10) * perRound;
-  }, [lobbySettings.answerTime, lobbySettings.rounds]);
+  const currentRounds = useMemo(() => {
+    const n = parseInt(roundsInput, 10);
+    return Number.isFinite(n) ? n : lobbySettings.rounds || 10;
+  }, [roundsInput, lobbySettings.rounds]);
 
-  const filteredCategories = useMemo(() => {
-    const q = filterText.trim().toLowerCase();
-    if (!q) return allCategories;
-    return allCategories.filter(c => c.toLowerCase().includes(q));
-  }, [allCategories, filterText]);
+  const currentAnswerTime = useMemo(() => {
+    const n = parseInt(answerInput, 10);
+    return Number.isFinite(n) ? n : lobbySettings.answerTime || 60;
+  }, [answerInput, lobbySettings.answerTime]);
+
+  const estimatedSeconds = useMemo(() => {
+    const perRound = clamp(currentAnswerTime, 10, 600) + clamp(currentAnswerTime, 10, 600) + 8;
+    return (currentRounds || 10) * perRound;
+  }, [currentAnswerTime, currentRounds]);
 
   const copyGameIdOrLink = useCallback(async () => {
     try {
@@ -115,7 +117,7 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
       router.push('/');
       toast({ title: 'لقد غادرت الغرفة.' });
     } else {
-      toast({ title: 'خطأ', description: result.error, variant: 'destructive' });
+      toast({ title: 'خطأ', description: result.error, variant: "destructive" });
     }
     setBusyLeavingOrKicking(false);
   };
@@ -149,40 +151,44 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
     if (!isHost) return;
     setBusySaving(true);
     try {
-      const safeRounds = clamp(toInt(lobbySettings.rounds, 10), 1, 50);
-      const safeAnswer = clamp(toInt(lobbySettings.answerTime, 60), 10, 600);
+      const rStr = (roundsInput ?? '').trim();
+      const aStr = (answerInput ?? '').trim();
+      if (rStr === '' || aStr === '') {
+        toast({ title: 'حقول ناقصة', description: 'املأ عدد الجولات ووقت الإجابة قبل الحفظ.', variant: 'destructive' });
+        setBusySaving(false);
+        return;
+      }
+      const rParsed = parseInt(rStr, 10);
+      const aParsed = parseInt(aStr, 10);
+      if (!Number.isFinite(rParsed) || !Number.isFinite(aParsed)) {
+        toast({ title: 'قيم غير صالحة', description: 'يرجى إدخال أرقام صحيحة.', variant: 'destructive' });
+        setBusySaving(false);
+        return;
+      }
+      const safeRounds = clamp(rParsed, 1, 50);
+      const safeAnswer = clamp(aParsed, 10, 600);
       const safeCats = Array.isArray(lobbySettings.categories) ? lobbySettings.categories.filter(Boolean) : [];
+
       await updateGameSettings(game.id, self.id, { rounds: safeRounds, answerTime: safeAnswer, categories: safeCats });
+
+      setLobbySettings(prev => ({ ...prev, rounds: safeRounds, answerTime: safeAnswer }));
+      setRoundsInput(String(safeRounds));
+      setAnswerInput(String(safeAnswer));
+
       toast({ title: "تم حفظ الإعدادات" });
+      setIsSettingsOpen(false);
     } catch (e: any) {
       toast({ title: "خطأ", description: e?.message || 'تعذر حفظ الإعدادات', variant: "destructive" });
     } finally {
       setBusySaving(false);
-      setIsSettingsOpen(false);
     }
   };
 
-  // Keyboard shortcuts (host): Ctrl+S save, Enter start
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!isHost) return;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        handleSaveSettings();
-      }
-      if (e.key === 'Enter' && !busyStarting) {
-        const canStart = activePlayers.length >= 2;
-        if (canStart) handleStartGame();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isHost, activePlayers.length, busyStarting]);
-
-  // Presets for quick setup
   const applyPreset = (rounds: number, answerTime: number) => {
     if (!isHost) return;
     setLobbySettings(prev => ({ ...prev, rounds, answerTime }));
+    setRoundsInput(String(rounds));
+    setAnswerInput(String(answerTime));
   };
 
   const toggleAllCategories = (on: boolean) => {
@@ -196,8 +202,8 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
     setLobbySettings(prev => ({ ...prev, categories: shuffled }));
   };
 
-  // Ready checks
   const canStart = isHost && activePlayers.length >= 2;
+  
   const startLabel = !isHost
     ? 'في انتظار صاحب الغرفة لبدء اللعبة...'
     : activePlayers.length < 2
@@ -220,7 +226,6 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
         </CardHeader>
 
         <CardContent className="space-y-6">
-          {/* Share / copy */}
           <div className="flex gap-2">
             <Input value={game.id} readOnly className="text-center tracking-widest font-mono text-lg h-12 flex-grow" />
             <TooltipProvider>
@@ -235,13 +240,12 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
             </TooltipProvider>
           </div>
 
-          {/* Settings */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <Label className='font-bold text-base'>إعدادات اللعبة</Label>
               <div className="flex items-center gap-2">
                 <div className="text-xs text-muted-foreground hidden sm:block">
-                  جولات: <b>{lobbySettings.rounds}</b> • وقت الإجابة: <b>{lobbySettings.answerTime}s</b> • أقسام: <b>{selectedCount}</b>
+                  جولات: <b>{currentRounds}</b> • وقت الإجابة: <b>{currentAnswerTime}s</b> • أقسام: <b>{lobbySettings.categories?.length || 0}</b>
                 </div>
                 {isHost && (
                   <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(v => !v)} aria-expanded={isSettingsOpen} aria-controls="settings-panel">
@@ -263,7 +267,6 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                   className="overflow-hidden"
                 >
                   <div className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50">
-                    {/* Quick presets */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(6, 45)}>
                         <Wand2 className="w-4 h-4 ml-1"/> سريع
@@ -271,8 +274,8 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                       <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(10, 60)}>
                         افتراضي
                       </Button>
-                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(15, 45)}>
-                        حفلة
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(10, 25)}>
+                        القالب المميز
                       </Button>
                       <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(20, 60)}>
                         ماراثون
@@ -285,11 +288,12 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                         <Input
                           id="rounds-setting"
                           type="number"
-                          value={lobbySettings.rounds}
+                          value={roundsInput}
                           disabled={!isHost}
                           min={1}
                           max={50}
-                          onChange={e => setLobbySettings({ ...lobbySettings, rounds: clamp(toInt(e.target.value, 10), 1, 50) })}
+                          onChange={e => setRoundsInput(e.target.value)}
+                          className={cn(roundsInput === '' && 'ring-1 ring-destructive/40 focus-visible:ring-destructive')}
                         />
                       </div>
                       <div className="space-y-1">
@@ -297,11 +301,12 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                         <Input
                           id="answering-time"
                           type="number"
-                          value={lobbySettings.answerTime}
+                          value={answerInput}
                           disabled={!isHost}
                           min={10}
                           max={600}
-                          onChange={e => setLobbySettings({ ...lobbySettings, answerTime: clamp(toInt(e.target.value, 60), 10, 600) })}
+                          onChange={e => setAnswerInput(e.target.value)}
+                          className={cn(answerInput === '' && 'ring-1 ring-destructive/40 focus-visible:ring-destructive')}
                         />
                       </div>
                     </div>
@@ -311,7 +316,7 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                         <Label className="inline-flex items-center gap-1"><Filter className="w-4 h-4"/> الأقسام المختارة</Label>
                         <div className="flex items-center gap-2 text-xs">
                           <Button type="button" variant="ghost" size="sm" disabled={!isHost || allCategories.length===0} onClick={() => toggleAllCategories(true)}>تحديد الكل</Button>
-                          <Button type="button" variant="ghost" size="sm" disabled={!isHost || selectedCount===0} onClick={() => toggleAllCategories(false)}>إلغاء الكل</Button>
+                          <Button type="button" variant="ghost" size="sm" disabled={!isHost || (lobbySettings.categories?.length||0)===0} onClick={() => toggleAllCategories(false)}>إلغاء الكل</Button>
                           <Button type="button" variant="ghost" size="sm" disabled={!isHost || allCategories.length===0} onClick={() => toggleRandomCategories(5)}>عشوائي 5</Button>
                           <Button type="button" variant="ghost" size="sm" disabled={!isHost || allCategories.length===0} onClick={() => toggleRandomCategories(10)}>عشوائي 10</Button>
                         </div>
@@ -325,10 +330,10 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                       />
 
                       <div className="flex flex-wrap gap-3 p-3 border rounded-md bg-background max-h-60 overflow-auto">
-                        {filteredCategories.length === 0 && (
+                        {allCategories.filter(c => (filterText? c.toLowerCase().includes(filterText.toLowerCase()) : true)).length === 0 && (
                           <p className="text-sm text-muted-foreground">لا توجد أقسام مطابقة.</p>
                         )}
-                        {filteredCategories.map(cat => {
+                        {allCategories.filter(c => (filterText? c.toLowerCase().includes(filterText.toLowerCase()) : true)).map(cat => {
                           const checked = lobbySettings.categories.includes(cat);
                           return (
                             <label key={cat} htmlFor={`cat-${cat}`} className={cn("flex items-center gap-2 cursor-pointer select-none border rounded-full px-3 py-1 text-sm",
@@ -353,7 +358,7 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                         })}
                       </div>
 
-                      <div className="text-xs text-muted-foreground">المحدد: {selectedCount} من {allCategories.length}</div>
+                      <div className="text-xs text-muted-foreground">المحدد: {lobbySettings.categories?.length || 0} من {allCategories.length}</div>
 
                       <Button onClick={handleSaveSettings} disabled={busySaving} className="w-full">
                         {busySaving ? <Loader2 className="animate-spin" /> : <Save />} حفظ الإعدادات
@@ -365,7 +370,6 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
             </AnimatePresence>
           </div>
 
-          {/* Players list */}
           <div className="space-y-2">
             <Label>اللاعبون ({activePlayers.length})</Label>
             <div className="rounded-md border p-4 space-y-3 bg-muted/50 min-h-[120px]">
@@ -374,7 +378,7 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
               )}
               {activePlayers.map(p => {
                 const rank = getSocialRankForUser(p.leaderboardPoints);
-                const RankIcon: any = (rank as any)?.icon;
+                const RankIcon = rank?.icon as React.ElementType | undefined;
                 const isHostRow = p.id === game.hostId;
                 return (
                   <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
@@ -427,7 +431,6 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
         </CardFooter>
       </Card>
 
-      {/* Kick confirm */}
       <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
