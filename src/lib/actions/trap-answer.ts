@@ -1,13 +1,12 @@
-
-
 'use server';
 
 /**
- * @file Trap Answer — Server Actions
- * @version 4.0
- * @overview Robust refactor with stronger typing, better transaction hygiene,
- *          stricter guards, safer fallbacks, and reliable results/finals flow.
- *          Core gameplay logic is preserved.
+ * @file Trap Answer — Server Actions (patched)
+ * @version 4.1
+ * @overview Safer transactions, consistent "active players" logic, timer fixes,
+ *           backend validation for settings, and award finalization moved
+ *           outside transactions. Core gameplay preserved (incl. similar-option
+ *           merge logic in scoring — untouched).
  */
 
 // -----------------------------------------------------------------------------
@@ -21,6 +20,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   Timestamp,
   deleteField,
   arrayUnion,
@@ -29,14 +29,13 @@ import {
   limit,
 } from 'firebase/firestore';
 
-import type { Game, Player, TrapQuestion, EmojiReactionType, SocialRank } from '@/types';
+import type { Game, Player, TrapQuestion, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { calculateTrapAnswerScores } from './helpers/trap-answer-helpers';
 import { updateLeagueScoresForGameEnd } from './user/leagues';
 import { getTrapAnswerCategories } from './admin/settings';
-import { getRanks, recordMatchHistory } from './user/queries';
+import { getRanks } from './user/queries';
 import { calculateEndOfGameAwards } from './user/awards';
-
 
 // -----------------------------------------------------------------------------
 // Constants & small helpers
@@ -53,8 +52,12 @@ const tsFromNowS = (s: number) => Timestamp.fromMillis(nowMs() + s * 1000);
 const hasOwn = (obj: object, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
 const ensure: (cond: any, msg: string) => asserts cond = (cond, msg) => { if (!cond) throw new Error(msg); };
 
+/**
+ * Align with client: treat any status other than "left" as active/present.
+ * (Client uses `status !== 'left'`).
+ */
 const getActivePlayers = (game: Game): Player[] =>
-  Array.isArray(game.players) ? game.players.filter((p) => p.status === 'alive') : [];
+  Array.isArray(game.players) ? game.players.filter((p) => p.status !== 'left') : [];
 
 const requireHost = (game: Game, hostId: string) => {
   ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
@@ -64,11 +67,27 @@ const requireState = (game: Game, expected: Game['gameState']) => {
   ensure(game.gameState === expected, `الحالة الحالية لا تسمح بهذا الإجراء (الحالة: ${game.gameState}).`);
 };
 
-// A minimal transaction typing to avoid importing internal SDK types
+// Minimal transaction typing
 export type FirebaseFirestoreLikeTransaction = {
   get: (ref: any) => Promise<any>;
   update: (ref: any, data: any) => void;
 };
+
+// -----------------------------------------------------------------------------
+// Validation & normalization
+// -----------------------------------------------------------------------------
+function sanitizeSettings(input: any, fallbackCats: string[]) {
+  const roundsRaw = Number(input?.rounds);
+  const answerTimeRaw = Number(input?.answerTime);
+  const categories = Array.isArray(input?.categories) ? input.categories.filter(Boolean) : [];
+
+  const rounds = Number.isFinite(roundsRaw) && roundsRaw >= 1 ? roundsRaw : 10;
+  const answerTime = Number.isFinite(answerTimeRaw) && answerTimeRaw >= 10 ? answerTimeRaw : DEFAULT_ANSWER_TIME_S;
+  const cats = categories.length > 0 ? categories : fallbackCats;
+
+  ensure(cats.length > 0, 'لا توجد أقسام صالحة.');
+  return { rounds, answerTime, categories: cats } as Game[typeof FIELD_TRAP_STATE]['settings'];
+}
 
 // -----------------------------------------------------------------------------
 // Data access
@@ -98,7 +117,6 @@ async function fetchRandomQuestionByCategory(category: string): Promise<TrapQues
   ensure(!snap.empty, `لا توجد أسئلة في قسم "${category}".`);
   const questionDoc = snap.docs[0];
   const data = questionDoc.data() as Omit<TrapQuestion, 'id'>;
-  // Normalize dummies to array
   const dummyAnswers = Array.isArray((data as any).dummyAnswers) ? (data as any).dummyAnswers : [];
   return { id: questionDoc.id, ...(data as any), dummyAnswers } as TrapQuestion;
 }
@@ -145,7 +163,7 @@ function buildShuffledAnswers(
 }
 
 // -----------------------------------------------------------------------------
-// Trick stats merger
+// Trick stats merger (de-duplicates entries)
 // -----------------------------------------------------------------------------
 function mergeTrickStats(
   prev: NonNullable<Game[typeof FIELD_TRAP_STATE]>['trickStats'] | undefined,
@@ -157,10 +175,12 @@ function mergeTrickStats(
   };
 
   Object.entries(next.trickedBy || {}).forEach(([trickedId, trickerIds]) => {
-    merged.trickedBy[trickedId] = [ ...(merged.trickedBy[trickedId] || []), ...trickerIds ];
+    const set = new Set([...(merged.trickedBy[trickedId] || []), ...trickerIds]);
+    merged.trickedBy[trickedId] = Array.from(set);
   });
   Object.entries(next.trickedOthers || {}).forEach(([trickerId, trickedIds]) => {
-    merged.trickedOthers[trickerId] = [ ...(merged.trickedOthers[trickerId] || []), ...trickedIds ];
+    const set = new Set([...(merged.trickedOthers[trickerId] || []), ...trickedIds]);
+    merged.trickedOthers[trickerId] = Array.from(set);
   });
 
   return merged;
@@ -176,6 +196,14 @@ export async function updateGameSettings(
 ) {
   const gameRef = doc(db, 'games', gameId);
 
+  // Preload categories OUTSIDE the transaction (transaction hygiene)
+  const catsRes = await getTrapAnswerCategories();
+  const fallbackCats = catsRes.success && Array.isArray(catsRes.categories) && catsRes.categories.length > 0
+    ? catsRes.categories
+    : [];
+
+  const nextSettings = sanitizeSettings(settings || {}, fallbackCats);
+
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     ensure(snap.exists(), 'اللعبة غير موجودة.');
@@ -183,15 +211,6 @@ export async function updateGameSettings(
     const game = snap.data() as Game;
     requireHost(game, hostId);
     requireState(game, 'lobby');
-
-    // If categories are missing/empty, hydrate from admin settings (safety)
-    let nextSettings = { ...(settings || {}) } as any;
-    if (!Array.isArray(nextSettings.categories) || nextSettings.categories.length === 0) {
-      const cats = await getTrapAnswerCategories();
-      if (cats.success && Array.isArray(cats.categories) && cats.categories.length > 0) {
-        nextSettings.categories = cats.categories;
-      }
-    }
 
     tx.update(gameRef, { [`${FIELD_TRAP_STATE}.settings`]: nextSettings });
   });
@@ -219,13 +238,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
     const fiveRandomCategories = shuffle([...allCategories]).slice(0, 5);
 
     const existingSettings = (game as any)[FIELD_TRAP_STATE]?.settings || {};
-    const hydratedSettings = {
-      rounds: typeof existingSettings.rounds === 'number' ? existingSettings.rounds : 10,
-      answerTime: typeof existingSettings.answerTime === 'number' ? existingSettings.answerTime : DEFAULT_ANSWER_TIME_S,
-      categories: Array.isArray(existingSettings.categories) && existingSettings.categories.length > 0
-        ? existingSettings.categories
-        : allCategories,
-    };
+    const hydratedSettings = sanitizeSettings(existingSettings, allCategories);
 
     const initialScores = game.players.reduce<Record<string, number>>((acc, p) => {
       acc[p.id] = 0; return acc;
@@ -413,82 +426,90 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 }
 
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    let gameDataForLeagueUpdate: Game | null = null;
+  const gameRef = doc(db, 'games', gameId);
 
+  // We'll decide the branch inside the transaction, then compute heavy stuff outside.
+  let finishGame = false;
+  let gameSnapshotAtEnd: Game | null = null;
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(gameRef);
+    ensure(snap.exists(), 'اللعبة غير موجودة.');
+
+    const game = snap.data() as Game;
+    requireHost(game, hostId);
+    if (game.gameState !== 'round-results') return;
+
+    const currentRound = game.round || 0;
+    const totalRounds = (game as any)[FIELD_TRAP_STATE]?.settings?.rounds || 10;
+
+    if (currentRound >= totalRounds) {
+      // Move to final_results (awards computed later outside the tx)
+      finishGame = true;
+      gameSnapshotAtEnd = game;
+
+      tx.update(gameRef, {
+        gameState: 'final_results',
+        [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
+      });
+    } else {
+      // Next Round
+      const nextTurnIndex = (((game as any)[FIELD_TRAP_STATE]?.currentTurnIndex || 0) + 1) % game.players.length;
+      const availableCategories = (game as any)[FIELD_TRAP_STATE]?.settings?.categories || [];
+      const sourceCats: string[] = Array.isArray(availableCategories) && availableCategories.length > 0
+        ? availableCategories
+        : (((game as any)[FIELD_TRAP_STATE]?.fiveRandomCategories as string[]) || []);
+
+      const fiveRandomCategories = shuffle([...sourceCats]).slice(0, 5);
+
+      tx.update(gameRef, {
+        gameState: 'category-selection',
+        round: currentRound + 1,
+        [`${FIELD_TRAP_STATE}.currentTurnIndex`]: nextTurnIndex,
+        [`${FIELD_TRAP_STATE}.fiveRandomCategories`]: fiveRandomCategories,
+        [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
+        [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
+        [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
+        [`${FIELD_TRAP_STATE}.selectedCategory`]: deleteField(),
+        [`${FIELD_TRAP_STATE}.currentQuestion`]: deleteField(),
+        [`${FIELD_TRAP_STATE}.timerEndsAt`]: tsFromNowS(CATEGORY_SELECTION_TIME_S),
+        [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
+        [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
+        [`${FIELD_TRAP_STATE}.reactions`]: {},
+      });
+    }
+  });
+
+  // Heavy work & cross-doc updates OUTSIDE the transaction
+  if (finishGame && gameSnapshotAtEnd) {
     try {
-        await runTransaction(db, async (tx) => {
-            const snap = await tx.get(gameRef);
-            ensure(snap.exists(), 'اللعبة غير موجودة.');
+      // Avoid double-finalization if already present
+      const fresh = await getDoc(gameRef);
+      if (!fresh.exists()) return;
+      const current = fresh.data() as Game;
+      const alreadyFinalized = Boolean((current as any)[FIELD_TRAP_STATE]?.finalAwards);
 
-            const game = snap.data() as Game;
-            requireHost(game, hostId);
-            if(game.gameState !== 'round-results') return;
+      if (!alreadyFinalized) {
+        const allRanks = await getRanks();
+        const { data: awards } = calculateEndOfGameAwards(current, allRanks);
+        const finalAwards = awards.specialAwards;
+        const winUpdate = awards.winUpdate;
 
-            const currentRound = game.round || 0;
-            const totalRounds = (game as any)[FIELD_TRAP_STATE]?.settings?.rounds || 10;
-
-            if (currentRound >= totalRounds) {
-                // Game Over
-                 const allRanks = await getRanks();
-                const { data: awards } = calculateEndOfGameAwards(game, allRanks);
-                
-                const finalAwards = awards.specialAwards;
-                const winUpdate = awards.winUpdate;
-
-                gameDataForLeagueUpdate = {
-                    ...game,
-                    gameState: 'final_results',
-                    gameResult: { winner: winUpdate?.userId || 'none', message: 'انتهت اللعبة'},
-                    trapAnswerState: {
-                        ...(game as any).trapAnswerState,
-                        finalAwards: {
-                            ...finalAwards,
-                            afkStats: (game as any).trapAnswerState?.afkStats || {}
-                        },
-                    }
-                } as Game;
-                
-                tx.update(gameRef, {
-                    gameState: 'final_results',
-                    gameResult: gameDataForLeagueUpdate.gameResult,
-                    [`${FIELD_TRAP_STATE}.finalAwards`]: gameDataForLeagueUpdate.trapAnswerState!.finalAwards,
-                    [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField(),
-                });
-            } else {
-                // Next Round
-                const nextTurnIndex = (((game as any)[FIELD_TRAP_STATE]?.currentTurnIndex || 0) + 1) % game.players.length;
-                const availableCategories = (game as any)[FIELD_TRAP_STATE]?.settings?.categories || [];
-                 const sourceCats: string[] = Array.isArray(availableCategories) && availableCategories.length > 0
-                    ? availableCategories
-                    : (((game as any)[FIELD_TRAP_STATE]?.fiveRandomCategories as string[]) || []);
-
-                const fiveRandomCategories = shuffle([...sourceCats]).slice(0, 5);
-
-                tx.update(gameRef, {
-                    gameState: 'category-selection',
-                    round: currentRound + 1,
-                    [`${FIELD_TRAP_STATE}.currentTurnIndex`]: nextTurnIndex,
-                    [`${FIELD_TRAP_STATE}.fiveRandomCategories`]: fiveRandomCategories,
-                    [`${FIELD_TRAP_STATE}.playerAnswers`]: {},
-                    [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
-                    [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
-                    [`${FIELD_TRAP_STATE}.selectedCategory`]: deleteField(),
-                    [`${FIELD_TRAP_STATE}.currentQuestion`]: deleteField(),
-                    [`${FIELD_TRAP_STATE}.timerEndsAt`]: tsFromNowS(CATEGORY_SELECTION_TIME_S),
-                    [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
-                    [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
-                });
-            }
+        await updateDoc(gameRef, {
+          gameResult: { winner: winUpdate?.userId || 'none', message: 'انتهت اللعبة' },
+          [`${FIELD_TRAP_STATE}.finalAwards`]: {
+            ...finalAwards,
+            afkStats: (current as any)[FIELD_TRAP_STATE]?.afkStats || {},
+          },
         });
 
-        if (gameDataForLeagueUpdate) {
-            await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
-        }
-
+        // League updates
+        await updateLeagueScoresForGameEnd({ ...current, gameState: 'final_results' } as Game);
+      }
     } catch (error) {
-        console.error('Error in nextTrapAnswerRound:', error);
+      console.error('Error finalizing game:', error);
     }
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -518,6 +539,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
       const answerTime = (game as any)[FIELD_TRAP_STATE]?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
       const newTimer = tsFromNowS(answerTime);
 
+      // Move to answer-submission immediately, set timer, we'll inject question right after.
       tx.update(gameRef, {
         gameState: 'answer-submission',
         [`${FIELD_TRAP_STATE}.selectedCategory`]: randomCategory,
@@ -526,6 +548,8 @@ export async function handleTimeout(gameId: string, hostId: string) {
         [`${FIELD_TRAP_STATE}.lastRoundResults`]: {},
         [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
         [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
+        [`${FIELD_TRAP_STATE}.reactions`]: {},
+        [`${FIELD_TRAP_STATE}.timerEndsAt`]: newTimer,
       });
     } else if (game.gameState === 'answer-submission') {
       await _advanceToGuessing(tx, gameRef, game, true);
@@ -534,21 +558,26 @@ export async function handleTimeout(gameId: string, hostId: string) {
     }
   });
 
-  const snap2 = await getDocs(query(collection(db, 'games'), where('__name__', '==', gameId)));
-  if (!snap2.empty) {
-    const g = snap2.docs[0].data() as Game;
+  // If we auto-picked a category, fetch & attach the question now
+  try {
+    const fresh = await getDoc(gameRef);
+    if (!fresh.exists()) return;
+    const g = fresh.data() as Game;
+
     if (g.gameState === 'answer-submission' && !(g as any)[FIELD_TRAP_STATE]?.currentQuestion) {
       const chosen = (g as any)[FIELD_TRAP_STATE]?.selectedCategory as string | undefined;
       const aTime = (g as any)[FIELD_TRAP_STATE]?.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
       if (chosen) {
         const q = await fetchRandomQuestionByCategory(chosen);
-        await updateDoc(doc(db, 'games', gameId), {
+        await updateDoc(gameRef, {
           [`${FIELD_TRAP_STATE}.currentQuestion`]: q,
-          [`${FIELD_TRAP_STATE}.timerEndsAt`]: tsFromNowS(aTime),
+          // keep timer as-is (already set in tx) but refresh reactions
           [`${FIELD_TRAP_STATE}.reactions`]: {},
         });
       }
     }
+  } catch (e) {
+    console.error('Timeout post-step failed:', e);
   }
 }
 
@@ -640,7 +669,7 @@ async function _advanceToResults(
     ? state.awayPlayerIdsInAnsweringPhase
     : [];
   const awayInGuessing: string[] = Array.isArray(state.awayPlayerIds) ? state.awayPlayerIds : [];
-  const awayPlayerIdsDuringRound = Array.from(new Set([ ...awayInAnswering, ...awayInGuessing ]));
+  const awayPlayerIdsDuringRound = Array.from(new Set([...awayInAnswering, ...awayInGuessing]));
 
   const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = calculateTrapAnswerScores(
     activePlayers,

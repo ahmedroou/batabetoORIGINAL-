@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -143,6 +142,33 @@ const ScoreCounter = ({
   </div>
 );
 
+// ✅ تُظهر آخر تلميح فقط (بدل آخر ثلاثة)
+function LastHintPanel({
+  hints,
+  team,
+}: {
+  hints: { word: string; count: number; team: 'red' | 'blue' }[];
+  team: 'red' | 'blue';
+}) {
+  const teamHints = hints.filter((h) => h.team === team);
+  const last = teamHints.length ? teamHints[teamHints.length - 1] : null;
+  const color = team === 'red' ? 'text-rose-400' : 'text-indigo-400';
+
+  return (
+    <div className="w-full space-y-1">
+      <h4 className={cn("text-xs font-bold text-center", color)}>آخر تلميح</h4>
+      {!last ? (
+        <p className="text-center text-xs text-zinc-500">لا يوجد</p>
+      ) : (
+        <div className="flex justify-between items-center text-xs bg-zinc-100 rounded p-1">
+          <span className="font-mono font-bold text-zinc-800">{last.word}</span>
+          <span className="font-mono font-bold text-zinc-500">{last.count}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CountdownTimer({ expiryTimestamp, onExpire }: { expiryTimestamp: number; onExpire: () => void }) {
   const [timeLeft, setTimeLeft] = useState(() => Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000));
 
@@ -165,33 +191,6 @@ function CountdownTimer({ expiryTimestamp, onExpire }: { expiryTimestamp: number
 
   return <span>{timeLeft}</span>;
 }
-
-const HintHistoryPanel = ({
-  hints,
-  team,
-}: {
-  hints: { word: string; count: number; team: 'red' | 'blue' }[];
-  team: 'red' | 'blue';
-}) => {
-  const teamHints = hints.filter((h) => h.team === team).slice(-1);
-  const color = team === 'red' ? 'text-rose-400' : 'text-indigo-400';
-
-  return (
-    <div className="w-full space-y-1">
-      <h4 className={cn("text-xs font-bold text-center", color)}>آخر تلميح</h4>
-      {teamHints.length === 0 ? (
-        <p className="text-center text-xs text-zinc-500">لا يوجد</p>
-      ) : (
-        teamHints.map((h, i) => (
-          <div key={i} className="flex justify-between items-center text-xs bg-zinc-100 rounded p-1">
-            <span className="font-mono font-bold text-zinc-800">{h.word}</span>
-            <span className="font-mono font-bold text-zinc-500">{h.count}</span>
-          </div>
-        ))
-      )}
-    </div>
-  );
-};
 
 export default function WordWarGame({ game, self }: { game: Game; self: Player }) {
   const { toast } = useToast();
@@ -298,7 +297,8 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
           n.delete(cardText);
           return n;
         });
-        toast({ title: "تعذّر كشف البطاقة", description: e?.message || String(e), variant: "destructive" });
+        // رسالة خطأ مختصرة
+        toast({ title: "تعذّر كشف البطاقة", description: e?.message || "حاول مجددًا.", variant: "destructive" });
       } finally {
         setIsRevealingAny(false);
       }
@@ -313,7 +313,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
         clientSentAtMs: Date.now(),
       });
     } catch (e: any) {
-      toast({ title: "تعذّر إنهاء الدور", description: e?.message || String(e), variant: "destructive" });
+      toast({ title: "تعذّر إنهاء الدور", description: e?.message || "حاول مجددًا.", variant: "destructive" });
     }
   }, [game.id, self.id, expectedTurnId, toast]);
 
@@ -329,8 +329,8 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
       asAny(wordWarActions).toggleSuspicion(game.id, self.id, cardText, {
         expectedTurnId,
         clientSentAtMs: Date.now(),
-      }).catch((e: any) => {
-        toast({ title: "تعذّر وضع علامة الشك", description: e?.message || String(e), variant: "destructive" });
+      }).catch(() => {
+        toast({ title: "تعذّر وضع علامة الشك", description: "حاول مجددًا.", variant: "destructive" });
         setOptimisticSuspicions(ww?.suspicions || {});
       });
     },
@@ -360,6 +360,8 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
       </div>
     );
   };
+
+  const isHintValid = hintWord.trim().length > 0 && hintNumber >= 1;
 
   const renderActionPanel = () => {
     if (game.gameState === "final_results" || game.gameState === "board_reveal") return null;
@@ -414,7 +416,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
           setHintWord("");
           setHintNumber(1);
         } catch (e: any) {
-          toast({ title: "خطأ", description: e?.message || String(e), variant: "destructive" });
+          toast({ title: "خطأ", description: e?.message || "حاول مجددًا.", variant: "destructive" });
         }
       };
 
@@ -453,7 +455,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                 max={9}
                 className="w-24 text-lg h-12 text-center"
               />
-              <Button type="submit" size="lg">
+              <Button type="submit" size="lg" disabled={!isHintValid} aria-disabled={!isHintValid} title={!isHintValid ? "أدخل تلميحًا صحيحًا" : undefined}>
                 <Send />
               </Button>
             </form>
@@ -508,7 +510,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
         setIsSubmitting(true);
         await wordWarActions.selectTeam(game.id, self.id, team);
       } catch (e: any) {
-        toast({ title: "خطأ", description: e?.message || String(e), variant: "destructive" });
+        toast({ title: "خطأ", description: e?.message || "حاول مجددًا.", variant: "destructive" });
       } finally {
         setIsSubmitting(false);
       }
@@ -519,7 +521,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
         setIsSubmitting(true);
         await wordWarActions.randomizeTeams(game.id, self.id);
       } catch (e: any) {
-        toast({ title: "خطأ", description: e?.message || String(e), variant: "destructive" });
+        toast({ title: "خطأ", description: e?.message || "حاول مجددًا.", variant: "destructive" });
       } finally {
         setIsSubmitting(false);
       }
@@ -530,7 +532,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
         setIsSubmitting(true);
         await wordWarActions.startGame(game.id, self.id);
       } catch (e: any) {
-        toast({ title: "خطأ", description: e?.message || String(e), variant: "destructive" });
+        toast({ title: "خطأ", description: e?.message || "حاول مجددًا.", variant: "destructive" });
         setIsSubmitting(false);
       }
     };
@@ -547,7 +549,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
         await wordWarActions.updateGameSettings(game.id, self.id, { turnTime: time });
         toast({ title: "تم حفظ الإعدادات" });
       } catch (e: any) {
-        toast({ title: "خطأ", description: e?.message || String(e), variant: "destructive" });
+        toast({ title: "خطأ", description: e?.message || "حاول مجددًا.", variant: "destructive" });
       } finally {
         setIsSubmitting(false);
       }
@@ -573,7 +575,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
               <TooltipProvider>
                 <Tooltip open={isCopying}>
                   <TooltipTrigger asChild>
-                    <Button onClick={copyId} size="lg" variant="secondary" className="px-4">
+                    <Button onClick={copyId} size="lg" variant="secondary" className="px-4" aria-live="polite">
                       {isCopying ? <Check /> : <Copy />}
                     </Button>
                   </TooltipTrigger>
@@ -750,7 +752,8 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                   </div>
                 ))}
               </div>
-              <HintHistoryPanel hints={hintHistory} team="red" />
+              {/* ✅ آخر تلميح فقط */}
+              <LastHintPanel hints={hintHistory} team="red" />
             </div>
             <div className="flex-grow flex flex-col items-center gap-2">
               {renderHeader()}
@@ -765,7 +768,8 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                   </div>
                 ))}
               </div>
-              <HintHistoryPanel hints={hintHistory} team="blue" />
+              {/* ✅ آخر تلميح فقط */}
+              <LastHintPanel hints={hintHistory} team="blue" />
             </div>
           </div>
         </header>
@@ -828,7 +832,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                       }}
                       aria-label="وضع/إزالة علامة شك"
                     >
-                      <HelpCircle className={cn("h-5 w-5", /* إبراز إذا عندي شك */ (susp || []).includes(self.id) && "text-amber-300")}/>
+                      <HelpCircle className={cn("h-5 w-5", (susp || []).includes(self.id) && "text-amber-300")}/>
                     </Button>
                   </div>
                 )}
@@ -901,6 +905,8 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
 
     const winnerColor = result.winner === "red" ? "text-rose-600" : "text-indigo-600";
     const loserColor = result.winner === "red" ? "text-indigo-600" : "text-rose-600";
+    const teamRedPlayers = game.players.filter((p) => p.team === 'red' && p.status !== 'left');
+    const teamBluePlayers = game.players.filter((p) => p.team === 'blue' && p.status !== 'left');
     const winnerTeamPlayers = result.winner === "red" ? teamRedPlayers : teamBluePlayers;
     const loserTeamPlayers = result.winner === "red" ? teamBluePlayers : teamRedPlayers;
 
