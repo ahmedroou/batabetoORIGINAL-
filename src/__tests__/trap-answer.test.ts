@@ -225,7 +225,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
                 p4: 10   // 4th
             },
             trapAnswerState: {
-                settings: { rounds: 10, categories: [], answerTime: 60 }
+                settings: { rounds: 10, categories: [], answerTime: 60, resultsTime: 60 }
             },
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
@@ -257,7 +257,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
                 p4: 10   // 4th
             },
              trapAnswerState: {
-                settings: { rounds: 10, categories: [], answerTime: 60 }
+                settings: { rounds: 10, categories: [], answerTime: 60, resultsTime: 60 }
             },
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
@@ -286,7 +286,7 @@ describe('Trap Answer Game - End of Game Awards', () => {
                     trickedOthers: { 'p1': ['p2', 'p3', 'p4'] }, // p1 tricked 3 people
                     trickedBy: {}
                 },
-                settings: { rounds: 10, categories: [], answerTime: 60 }
+                settings: { rounds: 10, categories: [], answerTime: 60, resultsTime: 60 }
             },
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
