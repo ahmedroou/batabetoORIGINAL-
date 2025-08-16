@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -14,13 +15,12 @@ import {
 } from '@/components/ui/card';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Swords, Loader2, Shuffle, ArrowRight, Copy, Check } from 'lucide-react';
+import { Users, Swords, Loader2, Shuffle, ArrowRight, Copy, Check, UserX } from 'lucide-react';
 import { selectTeam, startKingOfGeniusGame, randomizeTeams } from '@/lib/actions/king-of-genius';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
-
 
 interface TeamSelectionProps {
   game: Game;
@@ -196,7 +196,6 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   };
 
   return (
-    <>
     <Card className="w-full max-w-4xl animate-pop-in bg-white/80 backdrop-blur-sm border-gray-200">
       <CardHeader className="text-center">
         <Users className="w-16 h-16 mx-auto text-primary" />
@@ -309,6 +308,5 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
         )}
       </CardFooter>
     </Card>
-    </>
   );
 }

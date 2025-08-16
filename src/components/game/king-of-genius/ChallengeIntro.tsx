@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -17,8 +18,10 @@ interface ChallengeIntroProps {
 const INTRO_COUNTDOWN_SECONDS = 5;
 
 export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntroProps) {
-  const [countdown, setCountdown] = useState(INTRO_COUNTDOWN_SECONDS);
   const { user } = useAuth();
+  
+  const [countdown, setCountdown] = useState(INTRO_COUNTDOWN_SECONDS);
+
   const timeoutCalledRef = useRef(false);
 
   const handleStartNextPhase = useCallback(async () => {
@@ -33,12 +36,11 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
   }, [isHost, user, game.id]);
 
   useEffect(() => {
-    if (!game.challengeState?.timerEndsAt) {
-      setCountdown(0);
+    const introEndTime = game.challengeState?.timerEndsAt?.toMillis();
+    if (!introEndTime) {
+      handleStartNextPhase(); // If no end time, host should advance immediately
       return;
     };
-
-    const introEndTime = game.challengeState.timerEndsAt.toMillis();
     
     const updateCountdown = () => {
       const remaining = Math.max(0, Math.ceil((introEndTime - Date.now()) / 1000));

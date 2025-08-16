@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -229,9 +230,4 @@ export async function updateChallengeProgress(
 ) {
   const gameRef = doc(db, 'games', gameId);
   await updateDoc(gameRef, { [`challengeState.playerProgress.${playerId}`]: progress });
-}
-
-// Kept for compatibility if needed, but logic is now inside handleTimeout.
-export async function nextKingOfGenius(gameId: string, hostId: string) {
-  return handleTimeout(gameId, hostId);
 }

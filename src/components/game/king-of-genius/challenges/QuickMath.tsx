@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -47,9 +48,13 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
         setIsGameOver(true);
         setHasSubmitted(true);
         try {
-            await submitChallengeResult(game.id, self.id, { isCorrect: isVictory, time: timeTaken, score: finalScore });
+            await submitChallengeResult(game.id, self.id, { 
+                isCorrect: isVictory, 
+                time: timeTaken, 
+                score: finalScore 
+            });
             if (isVictory) {
-                toast({ title: "تحدي مكتمل!", description: `أحسنت! أكملت ${effectiveNumProblems}/${effectiveNumProblems} في ${timeTaken} ثانية.`, className: "bg-green-100 border-green-500 text-green-700" });
+                 toast({ title: "تحدي مكتمل!", description: `أحسنت! أكملت ${effectiveNumProblems}/${effectiveNumProblems} في ${timeTaken} ثانية.`, className: "bg-green-100 border-green-500 text-green-700" });
             }
         } catch (e: any) {
             toast({ title: "خطأ", description: `فشل إرسال النتيجة: ${e.message}`, variant: "destructive" });
@@ -147,7 +152,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <Check className="w-20 h-20 text-green-500 mx-auto mb-4" />
+                    <Check className="w-20 h-20 text-green-500 mx-auto mb-4 animate-bounce" />
                     <p className="text-xl">تم إرسال نتيجتك. في انتظار بقية اللاعبين...</p>
                 </CardContent>
             </Card>

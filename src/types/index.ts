@@ -1,4 +1,3 @@
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -6,7 +5,9 @@ import type { ALL_PERMISSIONS } from '@/data/permissions';
 import type { DEFAULT_SOCIAL_RANKS, DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES } from '@/data/social-ranks';
 
 
+// -------------------------------------------------------------
 // Zod Schemas for AI Flows
+// -------------------------------------------------------------
 const PlayerAnswersSchema = z.object({
   playerId: z.string(),
   name: z.string(),
@@ -47,7 +48,9 @@ export const JudgePrisonAnswersOutputSchema = z.object({
 export type JudgePrisonAnswersOutput = z.infer<typeof JudgePrisonAnswersOutputSchema>;
 
 
+// -------------------------------------------------------------
 // Schemas for News Article Flow
+// -------------------------------------------------------------
 export const EventSummarySchema = z.object({
   key_events: z.array(z.string()).describe('A list of the most interesting and dramatic events of the day, including key points from previous articles.'),
   overall_mood: z.string().describe('A one-sentence summary of the general mood of the day (e.g., "A day of surprising betrayals and unexpected victories.").'),
@@ -80,7 +83,9 @@ export const NewsArticleOutputSchema = z.object({
 export type NewsArticleOutput = z.infer<typeof NewsArticleOutputSchema>;
 
 
-// Regular Types
+// -------------------------------------------------------------
+// Regular Types (Shared)
+// -------------------------------------------------------------
 export type ComplaintType = 'missing_currency' | 'bug_report';
 
 export interface Complaint {
@@ -227,6 +232,9 @@ export type { DEFAULT_TRAP_ANSWER_CATEGORIES };
 export type { DEFAULT_EDUCATED_MERCHANT_CATEGORIES };
 
 
+// -------------------------------------------------------------
+// Players & Teams (Shared)
+// -------------------------------------------------------------
 export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
 export type PlayerTeam = 'mafia' | 'good' | 'neutral' | 'red' | 'blue';
 export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison' | 'bankrupt';
@@ -414,6 +422,9 @@ export interface GameKing {
     totalLeaderboardPoints?: number;
 }
 
+// -------------------------------------------------------------
+// Game States (per game)
+// -------------------------------------------------------------
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
 export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final_results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
@@ -421,7 +432,6 @@ export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type EducatedMerchantGameState = "lobby" | "rolling" | "movement" | "property_action" | "question" | "turn_end" | "final_results";
 export type QuizSwapGameState = 'lobby' | 'peek' | 'playing' | 'discarding' | 'answering' | 'final_results';
-
 
 export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState | QuizSwapGameState;
 
@@ -595,6 +605,9 @@ export interface QuizSwapState {
 }
 
 
+// -------------------------------------------------------------
+// Game Root Type
+// -------------------------------------------------------------
 export interface Game {
   id: string;
   hostId: string;
@@ -690,13 +703,10 @@ export interface Game {
 
   // "خلف القناع" (Mafia) specific state
   mafiaState?: {
-    settings?: {
-      nightTime: number;
-      dayTime: number;
-    };
+    settings?: MafiaSettings;
     phase: MafiaPhase;
     rolesInGame?: PlayerRole[];
-    timerEndsAt?: Timestamp;
+    timerEndsAt?: Timestamp; // نهاية المؤقّت للطور الحالي (نهار/ليل/تصويت)
     night?: number;
     events?: DayEvent[];
     publicChat?: PublicChatMessage[];
@@ -706,7 +716,7 @@ export interface Game {
     lastHealedPlayerId?: string | null;
     lastAbilityUse?: Record<string, number>; // { [playerId]: nightNumber }
     lastExecutedPlayer?: { name: string; avatarId: string; temporaryTitle?: string } | null;
-    votes?: Record<string, string | null>; // { voterId: targetId }
+    votes?: VoteMap; // { voterId: targetId }
     privateChats?: Record<string, PrivateChat>; // Keyed by a unique chat ID
   };
 
@@ -816,8 +826,12 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'quiz-swap': 'تبديل الأسئلة'
 };
 
-// Sub-states for Mafia game
+// -------------------------------------------------------------
+// Mafia-specific: phases, actions, events
+// -------------------------------------------------------------
 export type MafiaPhase = 'lobby' | 'role_reveal' | 'night' | 'day' | 'voting' | 'execution' | 'final_results';
+export const MAFIA_PHASES = ['lobby','role_reveal','night','day','voting','execution','final_results'] as const;
+export const isMafiaPhase = (p: any): p is MafiaPhase => (MAFIA_PHASES as readonly string[]).includes(p);
 
 export type DayEventType = 'death' | 'protection' | 'execution' | 'no_execution';
 export interface DayEvent {
@@ -827,7 +841,11 @@ export interface DayEvent {
     executedPlayer?: { name: string; avatarId: string; };
 };
 
+// NOTE: تُستخدم هذه في حالة التنفيذ الفعلي للأفعال.
 export type NightActionType = 'kill' | 'heal' | 'investigate' | 'spy' | 'bomb' | 'shapeshift';
+// وللتوافق مع تعريف الأدوار (الذي يسمح بلا فعل ليلي):
+export type NightActionTypeWithNull = NightActionType | null;
+
 export interface NightAction {
     actorId: string;
     action: NightActionType;
@@ -860,3 +878,14 @@ export interface PrivateChat {
     participants: string[];
     messages: PrivateChatMessage[];
 }
+
+/** إعدادات لعبة المافيا */
+export interface MafiaSettings {
+  /** مدة الليل بالثواني */
+  nightTime: number;
+  /** مدة النهار/التصويت بالثواني */
+  dayTime: number;
+}
+
+/** خريطة التصويت: voterId -> targetId|null */
+export type VoteMap = Record<string, string | null>;
