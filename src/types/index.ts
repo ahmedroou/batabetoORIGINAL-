@@ -380,9 +380,8 @@ export interface UserProfile {
   hasChangedName?: boolean;
   leagues?: {id: string, name: string}[];
   winCounts?: Record<Game['gameType'], number>;
-  clan?: { id: string; name: string, emblem: string };
-  clanRole?: ClanMemberRole;
-  clanInvitations?: ClanInvitation[];
+  clan?: { id: string; name: string, emblem: string } | null;
+  clanRole?: ClanMemberRole | null;
   audienceGroups?: string[];
   humiliation?: Humiliation | null;
   allegiance?: ActiveAllegiance | null;
@@ -391,7 +390,7 @@ export interface UserProfile {
   alliances?: Alliance[];
   decrees?: Decree[];
   duelChallenges?: DuelChallenge[];
-  lastPunishmentTimestamp?: Record<string, Date>; // { [targetId]: date }
+  lastPunishmentTimestamp?: Record<string, Date>; 
   originalAvatarToRevert?: { 
       id: string; 
       until: Date;
@@ -404,6 +403,7 @@ export interface UserProfile {
   isPunished?: boolean;
   punishmentsIssued?: number;
   matchHistory?: MatchHistoryItem[];
+  updatedAt?: Timestamp; // for profile card
 }
 
 export interface GameKing {
