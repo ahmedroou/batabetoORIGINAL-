@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -498,6 +499,33 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
       console.error('Error finalizing game:', error);
     }
   }
+}
+
+/**
+ * A "tick" function that can be safely called by any client when a timer appears
+ * to have run out. The server will validate the timestamp before proceeding.
+ * This prevents the game from getting stuck if the host is inactive.
+ */
+export async function tickGame(gameId: string) {
+  const gameRef = doc(db, 'games', gameId);
+
+  // Read the current state once
+  const gameSnap = await getDoc(gameRef);
+  if (!gameSnap.exists()) return;
+  const game = gameSnap.data() as Game;
+
+  // Check if a timer is active and expired
+  const timerEndsAt = (game as any)[FIELD_TRAP_STATE]?.roundEndTime as Timestamp | undefined;
+  if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) {
+    // No expired timer, do nothing.
+    return;
+  }
+
+  // If timer is expired, call the full handleTimeout logic.
+  // We pass the current player's ID, though the new handleTimeout doesn't
+  // strictly need it to be the host anymore.
+  const selfId = (typeof window !== 'undefined' && sessionStorage.getItem(`player-id-${gameId}`)) || game.hostId;
+  await handleTimeout(gameId, selfId);
 }
 
 // -----------------------------------------------------------------------------
