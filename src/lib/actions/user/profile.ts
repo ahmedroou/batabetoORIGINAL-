@@ -36,7 +36,7 @@ export async function createUserProfile(userId: string, name: string, email: str
             loyaltyPoints: 0, 
             rebellionPoints: 0,
             trophies: 0,
-            gamesPlayed: 0,
+            gamesPlayed: {},
             hasChangedName: false,
             leagues: [],
             winCounts: {},
