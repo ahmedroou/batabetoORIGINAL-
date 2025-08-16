@@ -21,7 +21,7 @@ describe('End of Game Awards Logic', () => {
              gameResult: { winner: 'p1', message: 'Game Over' }
         };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game, []);
+        const { data: { updates, winUpdate } } = calculateEndOfGameAwards(mockGame as Game, []);
 
         // --- Verify Player 1 (1st Place) ---
         expect(updates['p1']).toBeDefined();
@@ -60,7 +60,7 @@ describe('End of Game Awards Logic', () => {
             gameResult: { winner: 'p1', message: 'Game Over' }
         };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game, []);
+        const { data: { updates, winUpdate } } = calculateEndOfGameAwards(mockGame as Game, []);
 
         // P1 is 1st
         expect(updates['p1'].leaderboardPoints).toBe(3);
@@ -90,7 +90,7 @@ describe('End of Game Awards Logic', () => {
             gameResult: { winner: 'red', message: 'Red team wins!' }
         };
 
-        const { updates, winUpdate } = calculateEndOfGameAwards(mockGame as Game, []);
+        const { data: { updates, winUpdate } } = calculateEndOfGameAwards(mockGame as Game, []);
         
         // Red team members (winners) get awards
         expect(updates['p1'].leaderboardPoints).toBe(3);

@@ -80,8 +80,8 @@ describe('Educated Merchant - Game Logic Helpers', () => {
     const { updates } = _rollDice(gameAfterRoll, 'p1'); 
     
     const finalPlayers = updates.players;
-    const player1 = finalPlayers.find(p => p.id === 'p1');
-    const player2 = finalPlayers.find(p => p.id === 'p2');
+    const player1 = finalPlayers.find((p: Player) => p.id === 'p1');
+    const player2 = finalPlayers.find((p: Player) => p.id === 'p2');
     const rent = mockBoard[2].rent;
 
     expect(player1?.money).toBe(1000 - rent);
@@ -108,8 +108,8 @@ describe('Educated Merchant - Game Logic Helpers', () => {
 
     const { updates } = _rollDice(gameAfterRoll, 'p1');
     const finalPlayers = updates.players;
-    const player1 = finalPlayers.find(p => p.id === 'p1');
-    const player2 = finalPlayers.find(p => p.id === 'p2');
+    const player1 = finalPlayers.find((p: Player) => p.id === 'p1');
+    const player2 = finalPlayers.find((p: Player) => p.id === 'p2');
 
     expect(player1?.status).toBe('bankrupt');
     expect(player1?.money).toBe(0);
@@ -124,13 +124,13 @@ describe('Educated Merchant - Game Logic Helpers', () => {
     game.gameState = 'property_action';
     
     const gameAfterPurchaseInit = _purchaseProperty(game, 'p1');
-    const gameWithQuestion = {
+    const gameWithQuestion: Game = {
         ...game,
-        ...gameAfterPurchaseInit.updates,
+        ...(gameAfterPurchaseInit.updates as Partial<Game>),
         educatedMerchantState: {
           ...game.educatedMerchantState,
-          ...gameAfterPurchaseInit.updates.educatedMerchantState,
-          currentQuestion: { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] },
+          ...(gameAfterPurchaseInit.updates.educatedMerchantState as Partial<Game['educatedMerchantState']>),
+          currentQuestion: { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] } as EducatedMerchantQuestion,
         },
     };
 
@@ -155,11 +155,11 @@ describe('Educated Merchant - Game Logic Helpers', () => {
     const gameAfterPurchaseInit = _purchaseProperty(game, 'p1');
     const gameWithQuestion: Game = {
         ...game,
-        ...gameAfterPurchaseInit.updates,
+        ...(gameAfterPurchaseInit.updates as Partial<Game>),
         educatedMerchantState: {
           ...game.educatedMerchantState,
-          ...gameAfterPurchaseInit.updates.educatedMerchantState,
-          currentQuestion: { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] },
+          ...(gameAfterPurchaseInit.updates.educatedMerchantState as Partial<Game['educatedMerchantState']>),
+          currentQuestion: { id: 'q1', question: 'Q', answer: 'Correct', options: ['Correct', 'Wrong'] } as EducatedMerchantQuestion,
         },
     };
 
@@ -291,4 +291,3 @@ describe('Educated Merchant - End of Game Awards', () => {
         expect(updates['p3'].coins).toBe(1);
     });
 });
-    
