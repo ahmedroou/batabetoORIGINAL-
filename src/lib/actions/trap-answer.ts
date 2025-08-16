@@ -1,5 +1,4 @@
 
-
 'use server';
 
 /**
@@ -51,7 +50,7 @@ const SIMILARITY_THRESHOLD = 0.75 as const;
 const SIMILARITY_BLOCK = 0.95 as const; // block traps/dummies too similar to the real answer
 const CATEGORY_SELECTION_TIME_S = 30 as const;
 const DEFAULT_ANSWER_TIME_S = 60 as const;
-const RESULTS_TIME_S = 8 as const; // NEW: stay on results screen for N seconds then auto-advance
+const RESULTS_TIME_S = 60 as const; // NEW: stay on results screen for N seconds then auto-advance
 const FIELD_TRAP_STATE = 'trapAnswerState' as const;
 const TIMEOUT_TOKEN = '__TIMEOUT__' as const;
 
@@ -842,3 +841,5 @@ async function _advanceToResults(
     [`${FIELD_TRAP_STATE}.reactions`]: {},
   });
 }
+
+    
