@@ -853,7 +853,37 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
     
   if (game.gameState === "lobby") return renderLobby();
 
-  if (game.gameState === "board_reveal" || game.gameState === "final_results") {
+  if (game.gameState === 'board_reveal') {
+    return (
+        <div className="w-full flex flex-col items-center justify-center p-4">
+            <h2 className="text-2xl font-bold mb-4">انتهت اللعبة! كشف البطاقات</h2>
+            <div className="w-full flex-grow grid gap-1 sm:gap-1.5 p-1 md:p-2 max-w-7xl mx-auto grid-cols-5 md:grid-cols-8">
+            {cards.map((card, index) => (
+                 <motion.div key={card.text + index} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: index * 0.025 }} className="relative group/card">
+                     <div
+                        className={cn(
+                            "relative w-full h-16 md:h-20 rounded-md flex items-center justify-center p-1 text-center font-bold text-xs sm:text-sm md:text-base border shadow-sm",
+                            getCardColorStyles(card, true, game.gameState, false)
+                        )}
+                    >
+                        <span className="text-base md:text-lg">{card.text}</span>
+                     </div>
+                 </motion.div>
+            ))}
+            </div>
+            <div className="mt-4 flex flex-col items-center gap-2">
+                 {timerExpiryMs && <p>الانتقال للنتائج النهائية خلال: <CountdownTimer expiryTimestamp={timerExpiryMs} onExpire={onTimeout} /></p>}
+                 {isHost && (
+                     <Button onClick={() => wordWarActions.proceedToFinalResults(game.id, self.id)} disabled={isSubmitting}>
+                         {isSubmitting ? <Loader2 className="animate-spin" /> : "عرض النتائج النهائية الآن"}
+                     </Button>
+                 )}
+            </div>
+        </div>
+    )
+  }
+
+  if (game.gameState === "final_results") {
       const result = game.gameResult;
       if (!result) return <p className="p-4 text-center">جاري تحميل النتائج النهائية...</p>;
   

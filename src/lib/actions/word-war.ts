@@ -26,6 +26,7 @@ import { WORD_WAR_WORDS } from '@/data/word-war-words';
 const DEFAULT_TURN_TIME = 60;
 const PREPARATION_TIME = 15;
 const WORD_COUNT = 40;
+const BOARD_REVEAL_TIME = 30; // 30 seconds to show the board
 
 const nowMs = () => Date.now();
 const millis = (sec: number) => sec * 1000;
@@ -47,7 +48,7 @@ function keyFromText(text: string): string {
 function setTimer(
   t: FirebaseFirestore.Transaction,
   gameRef: DocumentReference,
-  phase: 'prep' | 'guide' | 'guess',
+  phase: 'prep' | 'guide' | 'guess' | 'board_reveal',
   durationSec: number
 ) {
   t.update(gameRef, {
@@ -295,6 +296,7 @@ export async function revealCard(
   cardText: string,
   opts?: { expectedTurnId?: number; clientSentAtMs?: number }
 ) {
+  let gameDataForLeagueUpdate: Game | null = null;
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (t) => {
     const gameDoc = await t.get(gameRef);
@@ -356,35 +358,36 @@ export async function revealCard(
         })()
       : checkWinFromArray(updates['wordWarState.cards'] as WordWarCard[]);
 
-    if (color === 'assassin') {
-      updates['gameResult'] = { winner: ww.turn === 'red' ? 'blue' : 'red', message: 'تم كشف القاتل!' };
-    } else if (!updates['gameResult']) {
-        if (color !== ww.turn || (ww.guessesLeft! - 1) <= 0) {
-            updates['gameState'] = 'guide_turn';
-            updates['wordWarState.turn'] = nextTeam(ww.turn);
-            updates['wordWarState.currentHint'] = null;
-            updates['wordWarState.guessesLeft'] = 0;
-            updates['wordWarState.suspicions'] = {};
-            bumpTurnId(t, gameRef, ww.turnId);
-            setTimer(t, gameRef, 'guide', getTurnTime(game));
-        } else {
-            updates['wordWarState.guessesLeft'] = Math.max(0, (ww.guessesLeft || 0) - 1);
-        }
+    if (color === 'assassin' || win) {
+        updates['gameResult'] = win || { winner: ww.turn === 'red' ? 'blue' : 'red', message: 'تم كشف القاتل!' };
+        updates['gameState'] = 'board_reveal';
+        setTimer(t, gameRef, 'board_reveal', BOARD_REVEAL_TIME);
+    } else if (color !== ww.turn || (ww.guessesLeft! - 1) <= 0) {
+        updates['gameState'] = 'guide_turn';
+        updates['wordWarState.turn'] = nextTeam(ww.turn);
+        updates['wordWarState.currentHint'] = null;
+        updates['wordWarState.guessesLeft'] = 0;
+        updates['wordWarState.suspicions'] = {};
+        bumpTurnId(t, gameRef, ww.turnId);
+        setTimer(t, gameRef, 'guide', getTurnTime(game));
+    } else {
+        updates['wordWarState.guessesLeft'] = Math.max(0, (ww.guessesLeft || 0) - 1);
     }
-
-    if (!updates['gameResult'] && win) updates['gameResult'] = win;
-
-    if (updates['gameResult']) {
-      updates['gameState'] = 'board_reveal';
-      clearTimer(t, gameRef);
-    } 
     
     t.update(gameRef, {
       ...updates,
       'metrics.lastRevealAt': serverTimestamp(),
       ...(opts?.clientSentAtMs ? { 'metrics.latency.lastRevealMsApprox': Math.max(0, nowMs() - opts.clientSentAtMs) } : {}),
     });
+
+    if(updates.gameState === 'board_reveal') {
+        gameDataForLeagueUpdate = {...game, ...updates};
+    }
   });
+
+  if (gameDataForLeagueUpdate) {
+      await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+  }
 }
 
 export async function endTurn(gameId: string, playerId: string, opts?: { expectedTurnId?: number; clientSentAtMs?: number }) {
@@ -464,6 +467,8 @@ export async function handleTimeout(gameId: string, actorId: string, opts?: { ex
       });
       bumpTurnId(t, gameRef, game.wordWarState.turnId);
       setTimer(t, gameRef, 'guide', getTurnTime(game));
+    } else if (game.gameState === 'board_reveal') {
+        t.update(gameRef, { gameState: 'final_results', 'wordWarState.timer': deleteField() });
     }
   });
 }
@@ -504,7 +509,6 @@ export async function toggleSuspicion(gameId: string, playerId: string, cardText
 }
 
 export async function proceedToFinalResults(gameId: string, hostId: string) {
-  let gameDataForLeagueUpdate: Game | null = null;
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (t) => {
     const gameDoc = await t.get(gameRef);
@@ -514,8 +518,6 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
     ensureHost(game, hostId);
     if (game.gameState !== 'board_reveal') return;
 
-    gameDataForLeagueUpdate = game;
-
     t.update(gameRef, {
       gameState: 'final_results',
       'metrics.finalizedAt': serverTimestamp(),
@@ -523,8 +525,4 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
 
     clearTimer(t, gameRef);
   });
-
-  if (gameDataForLeagueUpdate) {
-    await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
-  }
 }
