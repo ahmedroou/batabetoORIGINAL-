@@ -171,6 +171,8 @@ export async function giveReward(actorId: string, targetId: string, reward: { po
             body: `لقد منحك المشرف مكافأة: ${reward.points || 0} نقاط و ${reward.coins || 0} كوينز. السبب: ${reason}`
         };
         await sendSystemMail(targetId, mailContent, transaction);
+
+
         return { success: true };
 
     }).catch((error: any) => {
@@ -191,8 +193,12 @@ export async function applyPunishment(actorId: string, targetId: string, penalty
         if (!targetDoc.exists()) throw new Error("اللاعب المستهدف غير موجود.");
         
         const updates: any = {};
-        if (penalty.points && penalty.points > 0) updates.leaderboardPoints = increment(-penalty.points);
-        if (penalty.coins && penalty.coins > 0) updates.coins = increment(-penalty.coins);
+        if (penalty.points && penalty.points > 0) {
+            updates.leaderboardPoints = increment(-penalty.points);
+        }
+        if (penalty.coins && penalty.coins > 0) {
+            updates.coins = increment(-penalty.coins);
+        }
 
         if (Object.keys(updates).length > 0) transaction.update(targetRef, updates);
 
@@ -217,17 +223,16 @@ export async function distributeEndOfGameAwards(gameId: string) {
     try {
         const freshSnap = await getDoc(gameRef);
         if (!freshSnap.exists()) return;
-        const game = { ...freshSnap.data(), id: gameId } as Game;
+        const game = freshSnap.data() as Game;
 
         // Prevent re-processing
-        const isAlreadyFinalized = !!game.gameResult?.error || (!!game.trapAnswerState?.finalAwards && Object.keys(game.trapAnswerState.finalAwards).length > 0);
-        if(isAlreadyFinalized) return;
+        if(!!game.gameResult?.error || (game.gameType === 'trap-answer' && !!game.trapAnswerState?.finalAwards)) return;
 
         try {
-            await recordMatchHistory(game);
+            await recordMatchHistory({ ...game, id: gameId });
         } catch(histError) {
             console.error(`Failed to record match history for game ${gameId}, but proceeding to awards.`, histError);
-            await updateDoc(gameRef, { 'gameResult.error': 'Failed to record match history' });
+            await updateDoc(gameRef, { 'gameResult.error': `Failed to record match history: ${histError}` });
         }
 
         const allRanks = await getRanks();
@@ -241,7 +246,6 @@ export async function distributeEndOfGameAwards(gameId: string) {
         const { updates, winUpdate, specialAwards } = awardsData;
         const batch = writeBatch(db);
 
-        // Update player stats (points, coins, games played, permissions)
         Object.entries(updates).forEach(([playerId, playerUpdates]) => {
             const userRef = doc(db, 'users', playerId);
             const firestoreUpdates: { [key: string]: any } = {};
@@ -265,14 +269,17 @@ export async function distributeEndOfGameAwards(gameId: string) {
         
         if (winUpdate) {
             const winnerRef = doc(db, 'users', winUpdate.userId);
-            batch.update(winnerRef, { [`winCounts.${game.gameType}`]: increment(1) });
+            // Use set with merge to be safe
+            batch.set(winnerRef, { winCounts: { [winUpdate.gameType]: increment(1) } }, { merge: true });
         }
 
-        // Update the game document with final awards and result
-        batch.update(gameRef, {
+        const finalUpdate: any = {
             'gameResult.winner': winUpdate?.userId || game.gameResult?.winner || 'none',
-            'trapAnswerState.finalAwards': specialAwards || {},
-        });
+        };
+        if (game.gameType === 'trap-answer') {
+           finalUpdate['trapAnswerState.finalAwards'] = specialAwards || {};
+        }
+        batch.update(gameRef, finalUpdate);
         
         await batch.commit();
 
@@ -281,12 +288,6 @@ export async function distributeEndOfGameAwards(gameId: string) {
         try {
             await updateDoc(doc(db, 'games', gameId), {
                 'gameResult.error': `Award distribution failed: ${error.message}`,
-                'trapAnswerState.finalizationError': {
-                    message: error.message,
-                    code: (error as any).code,
-                    stack: error.stack,
-                    timestamp: Timestamp.now(),
-                }
             });
         } catch(logError) {
             console.error(`Failed to log error to game document ${gameId}:`, logError);

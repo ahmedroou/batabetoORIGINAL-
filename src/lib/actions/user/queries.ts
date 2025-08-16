@@ -294,8 +294,9 @@ export async function updateUserWinCount(
   batch: WriteBatch
 ) {
   const userRef = doc(db, 'users', userId);
-  batch.update(userRef, { [`winCounts.${gameType}`]: increment(1) });
+  batch.set(userRef, { winCounts: { [gameType]: increment(1) } }, { merge: true });
 }
+
 
 export async function getTopUsers(
   field: 'coins' | 'leaderboardPoints',
@@ -360,8 +361,15 @@ export async function recordMatchHistory(game: Game): Promise<void> {
   const playersToRecord = game.players.filter((p) => p.status !== 'left');
   if (playersToRecord.length === 0) return;
 
+  // Use the explicit game ID from the object if available.
+  const gameId = game.id;
+  if (!gameId) {
+      console.error("Cannot record match history: game.id is missing.");
+      return;
+  }
+
   const matchData: Omit<MatchHistoryItem, 'id'> = {
-    gameId: game.id,
+    gameId: gameId,
     gameType: game.gameType,
     createdAt: serverTimestamp() as unknown as Timestamp, // server time
     finalScores: game.playerScores || {},
@@ -381,6 +389,7 @@ export async function recordMatchHistory(game: Game): Promise<void> {
     console.error('Failed to record match history:', error);
   }
 }
+
 
 // -------------------------------------------------------------
 // Avatars
