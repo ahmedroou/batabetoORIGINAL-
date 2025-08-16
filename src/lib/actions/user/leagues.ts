@@ -319,17 +319,16 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
 export async function updateLeagueScoresForGameEnd(game: Game): Promise<void> {
     if (!game.gameResult) return;
     
-    // 1. Record match history first. This is critical.
     try {
         await recordMatchHistory(game);
     } catch (e) {
         console.error(`Failed to record match history for game ${game.id}, but proceeding to awards.`, e);
     }
     
-    // 2. Distribute global awards (leaderboard points, coins, etc.)
     await distributeEndOfGameAwards(game);
 
-    // 3. Update league-specific scores
+    // This section below is now somewhat redundant as distributeEndOfGameAwards handles global points,
+    // but we keep the league-specific logic here.
     const playersWithLeagues = game.players.filter(p => p.status !== 'left' && Array.isArray(p.leagues) && p.leagues.length > 0);
     if(playersWithLeagues.length === 0) return;
     
@@ -344,6 +343,7 @@ export async function updateLeagueScoresForGameEnd(game: Game): Promise<void> {
 
     playersWithLeagues.forEach(player => {
         const playerUpdates = updates[player.id];
+        // Note: challengePoints is a concept from the awards calculator. We use leaderboardPoints for leagues.
         const pointsDelta = playerUpdates?.leaderboardPoints;
 
         if (pointsDelta && pointsDelta > 0) {
@@ -351,6 +351,14 @@ export async function updateLeagueScoresForGameEnd(game: Game): Promise<void> {
                 const leagueRef = doc(db, 'leagues', leagueInfo.id);
                 batch.update(leagueRef, {
                     [`scores.${player.id}`]: increment(pointsDelta),
+                    [`gamesPlayed.${player.id}`]: increment(1)
+                });
+            });
+        } else if (player.leagues && player.leagues.length > 0) {
+            // Still increment games played even if no points were awarded
+             player.leagues?.forEach(leagueInfo => {
+                const leagueRef = doc(db, 'leagues', leagueInfo.id);
+                batch.update(leagueRef, {
                     [`gamesPlayed.${player.id}`]: increment(1)
                 });
             });

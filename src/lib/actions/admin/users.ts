@@ -217,9 +217,10 @@ export async function distributeEndOfGameAwards(game: Game) {
         console.error("distributeEndOfGameAwards called with invalid game object.");
         return;
     }
+    
+    const gameRef = doc(db, 'games', game.id);
 
     try {
-        const gameRef = doc(db, 'games', game.id);
         const allRanks = await getRanks();
         const { data: awards } = calculateEndOfGameAwards(game, allRanks);
 
@@ -229,7 +230,6 @@ export async function distributeEndOfGameAwards(game: Game) {
         }
         
         const { updates, winUpdate, specialAwards } = awards;
-
         const batch = writeBatch(db);
 
         // Update player stats (points, coins, games played)
@@ -242,22 +242,20 @@ export async function distributeEndOfGameAwards(game: Game) {
 
             if (pointsDelta > 0) firestoreUpdates.leaderboardPoints = increment(pointsDelta);
             if (coinsDelta > 0) firestoreUpdates.coins = increment(coinsDelta);
-            
-            // Always increment games played for the specific game type
-            firestoreUpdates[`gamesPlayed.${game.gameType}`] = increment(1);
+            if (playerUpdates.gamesPlayed && game.gameType) {
+              firestoreUpdates[`gamesPlayed.${game.gameType}`] = increment(playerUpdates.gamesPlayed[game.gameType] || 1);
+            }
             
             if (Object.keys(firestoreUpdates).length > 0) {
                 batch.update(userRef, firestoreUpdates);
             }
         });
         
-        // Update individual win count if applicable
         if (winUpdate) {
             const winnerRef = doc(db, 'users', winUpdate.userId);
             batch.update(winnerRef, { [`winCounts.${game.gameType}`]: increment(1) });
         }
 
-        // Write special awards and final game result to the game document
         batch.update(gameRef, {
             'gameResult.winner': winUpdate?.userId || game.gameResult?.winner || 'none',
             'trapAnswerState.finalAwards': specialAwards || {},
