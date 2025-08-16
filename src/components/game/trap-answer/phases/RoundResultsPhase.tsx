@@ -1,3 +1,4 @@
+      
 'use client';
 
 import React, { useMemo } from 'react';
@@ -6,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { nextTrapAnswerRound, sendReaction } from '@/lib/actions/trap-answer';
 import {
     Award,
@@ -251,6 +252,7 @@ export function RoundResultsPhase({ game, self, isHost }: { game: Game; self: Pl
                                                     </div>
                                                 )}
                                             </div>
+                                        </div>
                                         <div className="text-right">
                                             <span className="font-bold text-lg text-primary">{game.playerScores?.[p.id] ?? 0}</span>
                                             {roundScore?.points > 0 && (
@@ -305,5 +307,3 @@ export function RoundResultsPhase({ game, self, isHost }: { game: Game; self: Pl
         </div>
     );
 }
-
-    
