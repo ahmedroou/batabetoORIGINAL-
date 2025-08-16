@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -16,10 +14,12 @@ import {
 } from '@/components/ui/card';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Swords, Loader2, Shuffle, ArrowRight } from 'lucide-react';
+import { Users, Swords, Loader2, Shuffle, ArrowRight, Copy, Check } from 'lucide-react';
 import { selectTeam, startKingOfGeniusGame, randomizeTeams } from '@/lib/actions/king-of-genius';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Input } from '@/components/ui/input';
 
 
 interface TeamSelectionProps {
@@ -117,10 +117,11 @@ const TeamColumn = ({
 export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
   const { getSocialRankForUser } = useAuth();
 
   const handleSelectTeam = async (team: 'A' | 'B') => {
-    if (self.team === team) return;
+    if (self.team === team || isSubmitting) return;
     setIsSubmitting(true);
     try {
       await selectTeam(game.id, self.id, team);
@@ -132,6 +133,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   };
 
   const handleStartGame = async () => {
+    if (!isHost || isSubmitting) return;
     setIsSubmitting(true);
     try {
       await startKingOfGeniusGame(game.id, self.id);
@@ -146,6 +148,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
   };
 
   const handleRandomizeTeams = async () => {
+    if (!isHost || isSubmitting) return;
     setIsSubmitting(true);
     try {
       await randomizeTeams(game.id, self.id);
@@ -155,7 +158,6 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
       setIsSubmitting(false);
     }
   };
-
 
   const activePlayers = game.players.filter((p) => p.status === 'alive');
   const teamA = activePlayers.filter((p) => p.team === 'A');
@@ -187,6 +189,12 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
 
   const buttonState = getButtonState();
 
+  const copyId = () => {
+    setIsCopying(true);
+    navigator.clipboard.writeText(game.id);
+    setTimeout(() => setIsCopying(false), 1200);
+  };
+
   return (
     <>
     <Card className="w-full max-w-4xl animate-pop-in bg-white/80 backdrop-blur-sm border-gray-200">
@@ -194,8 +202,23 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
         <Users className="w-16 h-16 mx-auto text-primary" />
         <CardTitle className="text-3xl">توزيع الفرق</CardTitle>
         <CardDescription>
-          اختر فريقك. يمكن اللعب 1ضد1، 2ضد2، أو 3ضد3.
+          ادعُ أصدقاءك وانضموا للفرق. يمكن اللعب 1ضد1، 2ضد2، أو 3ضد3.
         </CardDescription>
+          <div className="flex gap-2 w-full max-w-sm mx-auto pt-2">
+            <Input value={game.id} readOnly className="text-center tracking-widest font-mono text-lg h-12 flex-grow" />
+            <TooltipProvider>
+                <Tooltip open={isCopying}>
+                    <TooltipTrigger asChild>
+                    <Button onClick={copyId} size="lg" variant="secondary" className="px-4" aria-live="polite">
+                        {isCopying ? <Check /> : <Copy />}
+                    </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                    <p>تم النسخ!</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -227,7 +250,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
               className="mt-6 overflow-hidden"
             >
               <h4 className="text-center font-bold text-muted-foreground">
-                لاعبون في الانتظار
+                لاعبون في الانتظار ({unassigned.length})
               </h4>
               <div className="flex justify-center flex-wrap gap-4 mt-2">
                 {unassigned.map((p) => {
@@ -263,7 +286,7 @@ export function TeamSelection({ game, self, isHost }: TeamSelectionProps) {
             <Button
               className="w-full text-lg flex-grow"
               size="lg"
-              disabled={buttonState.disabled}
+              disabled={buttonState.disabled || isSubmitting}
               onClick={handleStartGame}
             >
               <Swords className="ml-2" />

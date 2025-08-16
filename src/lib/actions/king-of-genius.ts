@@ -1,5 +1,3 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -19,7 +17,6 @@ import { updateLeagueScoresForGameEnd } from './user';
 
 // --- Constants ---
 const INTRO_DURATION_S = 5;
-const PREPARATION_TIME_S = 5; // New state for pre-challenge setup
 const RESULTS_DISPLAY_DURATION_S = 10;
 const FORFEIT_TIME = 999;
 const DEFAULT_POINTS_MAP = [10, 5, 3, 1];
@@ -29,6 +26,9 @@ const nowMs = () => Date.now();
 const inSec = (seconds: number) => Timestamp.fromMillis(nowMs() + seconds * 1000);
 const hasExpired = (ts?: Timestamp | null) => (ts ? ts.toMillis() <= nowMs() : true);
 const findPlayerIndex = (players: Game['players'], playerId: string) => players.findIndex((p) => p.id === playerId);
+const ensure = (condition: any, message: string): asserts condition => {
+    if (!condition) throw new Error(message);
+};
 
 
 // --- Team Management ---
@@ -36,11 +36,11 @@ export async function selectTeam(gameId: string, playerId: string, team: 'A' | '
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
-    if (!snap.exists()) throw new Error('Game not found.');
+    ensure(snap.exists(), 'Game not found.');
     const game = snap.data() as Game;
 
     const idx = findPlayerIndex(game.players, playerId);
-    if (idx === -1) throw new Error('Player not found in game.');
+    ensure(idx !== -1, 'Player not found in game.');
 
     const players = [...game.players];
     players[idx] = { ...players[idx], team };
@@ -52,10 +52,10 @@ export async function randomizeTeams(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
-    if (!snap.exists()) throw new Error('Game not found.');
+    ensure(snap.exists(), 'Game not found.');
     const game = snap.data() as Game;
 
-    if (game.hostId !== hostId) throw new Error('Only the host can randomize teams.');
+    ensure(game.hostId === hostId, 'Only the host can randomize teams.');
     if (game.gameState !== 'team_selection') return;
 
     const shuffled = shuffle(game.players.map((p) => p.id));
@@ -70,36 +70,19 @@ export async function randomizeTeams(gameId: string, hostId: string) {
 
 
 // --- Game Flow ---
-
-// This function is new, to move from Lobby to Team Selection
-export async function moveToTeamSelection(gameId: string, hostId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (tx) => {
-        const snap = await tx.get(gameRef);
-        if (!snap.exists()) throw new Error('Game not found.');
-        const game = snap.data() as Game;
-        if (game.hostId !== hostId) throw new Error('Only host can start team selection.');
-        if (game.gameState !== 'lobby') return;
-        
-        tx.update(gameRef, { gameState: 'team_selection' });
-    });
-}
-
-
 export async function startKingOfGeniusGame(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
-    if (!snap.exists()) throw new Error('Game not found.');
+    ensure(snap.exists(), 'Game not found.');
     const game = snap.data() as Game;
 
-    if (game.hostId !== hostId) throw new Error('Only the host can start the game.');
-    if (game.players.some((p) => !p.team)) throw new Error('All players must be on a team.');
-    // Can now start from team_selection phase
+    ensure(game.hostId === hostId, 'Only the host can start the game.');
+    ensure(!game.players.some((p) => !p.team), 'All players must be on a team.');
     if (game.gameState !== 'team_selection') return;
 
     const challengeOrder = shuffle(GENIUS_CHALLENGES.map((c) => c.id));
-    if (challengeOrder.length === 0) throw new Error('No challenges configured.');
+    ensure(challengeOrder.length > 0, 'No challenges configured.');
 
     tx.update(gameRef, {
       gameState: 'challenge_intro',
@@ -135,7 +118,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
       case 'challenge_intro': {
         const idx = game.currentChallengeIndex ?? 0;
         const challengeId = game.challengeOrder?.[idx];
-        if (!challengeId) throw new Error('Cannot find next challenge ID.');
+        ensure(challengeId, 'Cannot find next challenge ID.');
 
         const { puzzle } = await generateGeniusChallenge({ challengeId });
         const duration = GENIUS_CHALLENGE_MAP.get(challengeId)?.timeLimit ?? 60;
@@ -215,7 +198,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
 
 // --- Player Actions ---
-export async function submitKingOfGeniusResult(
+export async function submitChallengeResult(
   gameId: string,
   playerId: string,
   result: Omit<ChallengeResult, 'playerId' | 'team'>
@@ -223,13 +206,14 @@ export async function submitKingOfGeniusResult(
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
-    if (!snap.exists()) throw new Error('Game not found.');
+    ensure(snap.exists(), 'Game not found.');
     const game = snap.data() as Game;
 
     if (game.gameState !== 'challenge_active') return;
+    if (hasExpired(game.challengeState?.timerEndsAt)) return;
 
     const player = game.players.find((p) => p.id === playerId);
-    if (!player?.team) return;
+    ensure(player?.team, 'Player or team not found.');
 
     if (game.challengeState?.results?.some((r) => r.playerId === playerId)) return;
 
@@ -238,7 +222,7 @@ export async function submitKingOfGeniusResult(
   });
 }
 
-export async function updateKingOfGeniusProgress(
+export async function updateChallengeProgress(
   gameId: string,
   playerId: string,
   progress: Partial<PlayerProgress>
@@ -247,7 +231,7 @@ export async function updateKingOfGeniusProgress(
   await updateDoc(gameRef, { [`challengeState.playerProgress.${playerId}`]: progress });
 }
 
-// Kept for compatibility with existing UI components if any, but the logic is now inside handleTimeout.
+// Kept for compatibility if needed, but logic is now inside handleTimeout.
 export async function nextKingOfGenius(gameId: string, hostId: string) {
   return handleTimeout(gameId, hostId);
 }

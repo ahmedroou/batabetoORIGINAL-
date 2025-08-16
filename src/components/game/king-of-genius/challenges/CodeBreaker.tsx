@@ -1,21 +1,18 @@
-
-
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Game, Player, GeniusChallenge } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Timer } from 'lucide-react';
-import { updateKingOfGeniusProgress, submitKingOfGeniusResult } from '@/lib/actions/king-of-genius';
+import { submitChallengeResult } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const CODE_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
-const TIME_LIMIT_SECONDS = 45;
 
 type Attempt = {
   guess: string[];
@@ -32,7 +29,11 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
     const [isGameOver, setIsGameOver] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
     const [isChecking, setIsChecking] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_SECONDS);
+    
+    const [timeLeft, setTimeLeft] = useState(() => {
+        if (!game.challengeState?.challengeEndsAt) return challenge.timeLimit;
+        return Math.max(0, Math.round((game.challengeState.challengeEndsAt.toMillis() - Date.now()) / 1000));
+    });
 
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -46,48 +47,58 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         }
     }, [game.challengeState?.results, self.id, secretCode]);
 
+    const handleSubmission = useCallback(async (isVictory: boolean, timeTaken: number) => {
+        if (hasSubmitted) return;
+        setHasSubmitted(true);
+        setIsGameOver(true);
+        try {
+            await submitChallengeResult(game.id, self.id, { 
+                isCorrect: isVictory, 
+                time: timeTaken, 
+                score: isVictory ? 5 : 0 
+            });
+            if(isVictory) {
+                 toast({ title: "نجاح!", description: "لقد فككت الشيفرة بنجاح.", className: "bg-green-100 border-green-500 text-green-700" });
+            }
+        } catch(e: any) {
+            toast({ title: "خطأ", description: `فشل إرسال النتيجة: ${e.message}`, variant: "destructive" });
+            setHasSubmitted(false); // allow retry on error
+        }
+    }, [hasSubmitted, game.id, self.id, toast]);
+
     useEffect(() => {
         if (isGameOver || !game.challengeState?.challengeEndsAt) return;
-
         const endTime = game.challengeState.challengeEndsAt.toMillis();
         const updateTimer = () => {
             const remaining = Math.round((endTime - Date.now()) / 1000);
+            setTimeLeft(Math.max(0, remaining));
             if (remaining <= 0) {
-                setTimeLeft(0);
-                if (!hasSubmitted && !isGameOver) {
-                    setIsGameOver(true);
+                if (!hasSubmitted) {
                     toast({ title: "انتهى الوقت!", description: "للأسف، لم تفك الشيفرة في الوقت المحدد.", variant: "destructive" });
-                    submitKingOfGeniusResult(game.id, self.id, { isCorrect: false, time: TIME_LIMIT_SECONDS, score: 0 });
-                    setHasSubmitted(true);
+                    handleSubmission(false, challenge.timeLimit);
                 }
                 clearInterval(timer);
-            } else {
-                setTimeLeft(remaining);
             }
         };
 
         const timer = setInterval(updateTimer, 1000);
         updateTimer();
-
         return () => clearInterval(timer);
-    }, [isGameOver, hasSubmitted, game.id, self.id, game.challengeState?.challengeEndsAt, toast]);
+    }, [isGameOver, hasSubmitted, game.challengeState?.challengeEndsAt, toast, handleSubmission, challenge.timeLimit]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
-        const value = e.target.value;
-        if (/^[0-9]$/.test(value)) {
-            const newGuess = [...guess];
-            newGuess[index] = value;
-            setGuess(newGuess);
-            if (index < CODE_LENGTH - 1) {
-                inputRefs.current[index + 1]?.focus();
-            }
-        } else if (value === '') {
-            const newGuess = [...guess];
-            newGuess[index] = '';
-            setGuess(newGuess);
+        const value = e.target.value.replace(/[^0-9]/g, ''); // Ensure only numbers
+        if (value.length > 1) return; // Allow only single digit
+
+        const newGuess = [...guess];
+        newGuess[index] = value;
+        setGuess(newGuess);
+
+        if (value && index < CODE_LENGTH - 1) {
+            inputRefs.current[index + 1]?.focus();
         }
     };
-
+    
     const handleKeyDown = (index: number) => (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Backspace' && !guess[index] && index > 0) {
             inputRefs.current[index - 1]?.focus();
@@ -102,29 +113,26 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         if (guess.some(g => g === '') || isGameOver || !secretCode || isChecking) return;
         
         setIsChecking(true);
-        
-        const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
+        const timeTaken = challenge.timeLimit - timeLeft;
         
         const feedback: Attempt['feedback'] = new Array(CODE_LENGTH).fill('incorrect');
         const secretCodeCopy = [...secretCode];
         const guessCopy = [...guess];
 
-        // First pass for correct guesses
         for (let i = 0; i < CODE_LENGTH; i++) {
             if (guessCopy[i] === secretCodeCopy[i]) {
                 feedback[i] = 'correct';
-                secretCodeCopy[i] = '-'; // Mark as used
-                guessCopy[i] = '*'; // Mark as checked
+                secretCodeCopy[i] = '-';
+                guessCopy[i] = '*';
             }
         }
         
-        // Second pass for misplaced guesses
         for (let i = 0; i < CODE_LENGTH; i++) {
             if (guessCopy[i] !== '*') {
                 const indexInSecret = secretCodeCopy.indexOf(guessCopy[i]);
                 if (indexInSecret !== -1) {
                     feedback[i] = 'misplaced';
-                    secretCodeCopy[indexInSecret] = '-'; // Mark as used
+                    secretCodeCopy[indexInSecret] = '-';
                 }
             }
         }
@@ -133,28 +141,16 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         const newAttempts = [...attempts, newAttempt];
         setAttempts(newAttempts);
         setGuess(new Array(CODE_LENGTH).fill(''));
-
-        // Fire-and-forget the update to avoid UI lag.
-        updateKingOfGeniusProgress(game.id, self.id, { attempts: newAttempts }).catch(err => {
-            console.error("Failed to update progress:", err);
-            // Optionally, show a subtle error to the user
-        });
         
         const victory = feedback.every(f => f === 'correct');
         if (victory) {
-            setIsGameOver(true);
-            setHasSubmitted(true);
-            await submitKingOfGeniusResult(game.id, self.id, { isCorrect: true, time: timeTaken, score: 5 });
-            toast({ title: "نجاح!", description: "لقد فككت الشيفرة بنجاح.", className: "bg-green-100 border-green-500 text-green-700" });
+            await handleSubmission(true, timeTaken);
         } else if (newAttempts.length >= MAX_ATTEMPTS) {
-            setIsGameOver(true);
-            setHasSubmitted(true);
-            await submitKingOfGeniusResult(game.id, self.id, { isCorrect: false, time: timeTaken, score: 0 });
+            await handleSubmission(false, timeTaken);
             toast({ title: "فشلت!", description: "لقد استنفدت كل محاولاتك.", variant: "destructive" });
         }
         
         setIsChecking(false);
-        // Reset focus to the first input for the next attempt
         inputRefs.current[0]?.focus();
     };
     
@@ -165,7 +161,7 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
                     <CardTitle className="text-3xl text-primary">{challenge.name}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <Check className="w-20 h-20 text-green-500 mx-auto mb-4" />
+                    <Check className="w-20 h-20 text-green-500 mx-auto mb-4 animate-bounce" />
                     <p className="text-xl">تم إرسال نتيجتك. في انتظار بقية اللاعبين...</p>
                 </CardContent>
             </Card>
@@ -261,5 +257,3 @@ export function CodeBreaker({ game, player, self, challenge }: { game: Game, pla
         </Card>
     );
 }
-
-    

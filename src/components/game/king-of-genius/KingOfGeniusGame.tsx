@@ -1,4 +1,3 @@
-
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
@@ -43,7 +42,7 @@ export function KingOfGeniusGame({
       : null;
 
     switch (game.gameState) {
-      case 'lobby': // The lobby is now merged into team selection
+      case 'lobby':
       case 'team_selection':
         return <TeamSelection game={game} self={self} isHost={isHost} />;
 

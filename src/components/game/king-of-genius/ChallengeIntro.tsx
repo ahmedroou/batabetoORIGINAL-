@@ -1,8 +1,6 @@
-
-
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Game, GeniusChallenge, Player } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { motion } from 'framer-motion';
@@ -23,8 +21,22 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
   const { user } = useAuth();
   const timeoutCalledRef = useRef(false);
 
+  const handleStartNextPhase = useCallback(async () => {
+      if (isHost && user && !timeoutCalledRef.current) {
+        timeoutCalledRef.current = true;
+        try {
+            await handleTimeout(game.id, user.uid);
+        } catch (e) {
+            console.error("Error in timeout handler:", e);
+        }
+      }
+  }, [isHost, user, game.id]);
+
   useEffect(() => {
-    if (!game.challengeState?.timerEndsAt) return;
+    if (!game.challengeState?.timerEndsAt) {
+      setCountdown(0);
+      return;
+    };
 
     const introEndTime = game.challengeState.timerEndsAt.toMillis();
     
@@ -32,10 +44,8 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
       const remaining = Math.max(0, Math.ceil((introEndTime - Date.now()) / 1000));
       setCountdown(remaining);
       
-      if (remaining <= 0 && isHost && user && !timeoutCalledRef.current) {
-        timeoutCalledRef.current = true;
-        // The timeout will trigger puzzle generation and state transition on the backend.
-        handleTimeout(game.id, user.uid).catch(e => console.error("Error in timeout handler:", e));
+      if (remaining <= 0) {
+        handleStartNextPhase();
       }
     };
     
@@ -43,7 +53,7 @@ export function ChallengeIntro({ game, challenge, self, isHost }: ChallengeIntro
     const timer = setInterval(updateCountdown, 1000);
 
     return () => clearInterval(timer);
-  }, [game.challengeState?.timerEndsAt, isHost, game.id, user]);
+  }, [game.challengeState?.timerEndsAt, handleStartNextPhase]);
 
   return (
     <div className="w-full max-w-2xl">

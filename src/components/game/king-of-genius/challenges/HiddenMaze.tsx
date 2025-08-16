@@ -1,9 +1,8 @@
-
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import {
   Loader2,
@@ -28,10 +27,8 @@ import { cn } from '@/lib/utils';
 import type { Game, Player, GeniusChallenge } from '@/types';
 
 
-const TIME_LIMIT_SECONDS = 55; // وقت اللعبة
-const STARTING_POINTS = 10; // عدد النقاط عند البدء
-const WALL_HIT_COST = 1; // تكلفة الاصطدام بالجدار
-const WALL_HIT_FREEZE_SECONDS = 3; // مدة التوقف عند الاصطدام بالجدار
+const WALL_HIT_COST = 1;
+const WALL_HIT_FREEZE_SECONDS = 3;
 
 type Position = { x: number; y: number };
 type MazePuzzle = {
@@ -43,32 +40,24 @@ type MazePuzzle = {
   initialHints: Position[];
 };
 
-type MazePhase = 'instructions' | 'playing' | 'ended';
-
-const KeyDisplay = ({ children }: { children: React.ReactNode }) => (
-    <div className="w-12 h-12 bg-slate-700 border-b-4 border-slate-900 rounded-md flex items-center justify-center font-mono text-xl text-white">
-        {children}
-    </div>
-);
-
-const ArrowDisplay = ({ icon: Icon, direction }: { icon: React.ElementType, direction: string }) => (
-    <div className="w-12 h-12 bg-primary/20 text-primary rounded-full flex items-center justify-center">
-        <Icon className="w-8 h-8" />
-    </div>
-);
+type MazePhase = 'playing' | 'ended';
 
 export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player; challenge: GeniusChallenge }) {
   const { toast } = useToast();
   const puzzle = game.challengeState?.puzzle as MazePuzzle;
   const { gridSize = 8, start = { x: 0, y: 0 }, end = { x: 7, y: 7 }, walls = [], initialHints = [] } = puzzle || {};
   
-  const [mazePhase, setMazePhase] = useState<MazePhase>('playing'); // Start directly
+  const [mazePhase, setMazePhase] = useState<MazePhase>('playing');
   const [currentPosition, setCurrentPosition] = useState<Position>(start);
-  const [points, setPoints] = useState<number>(STARTING_POINTS);
-  const [timeLeft, setTimeLeft] = useState<number>(TIME_LIMIT_SECONDS);
+  const [points, setPoints] = useState<number>(() => game.challengeState?.playerProgress?.[self.id]?.points ?? 10);
   const [freezeMovement, setFreezeMovement] = useState<boolean>(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [revealedTiles, setRevealedTiles] = useState<Set<string>>(new Set());
+  
+  const [timeLeft, setTimeLeft] = useState(() => {
+    if (!game.challengeState?.challengeEndsAt) return challenge.timeLimit;
+    return Math.max(0, Math.round((game.challengeState.challengeEndsAt.toMillis() - Date.now()) / 1000));
+  });
 
   const isPositionEqual = (pos1: Position, pos2: Position) => pos1.x === pos2.x && pos1.y === pos2.y;
   const isWall = useCallback((pos: Position) => walls.some((wall) => isPositionEqual(wall, pos)), [walls]);
@@ -88,19 +77,18 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
       return visible;
   }, [gridSize, posKey]);
 
-
   const handleSubmit = useCallback(async (isVictory: boolean, finalPoints: number) => {
       if (hasSubmitted) return;
       setHasSubmitted(true);
       setMazePhase('ended');
-      const timeTaken = TIME_LIMIT_SECONDS - timeLeft;
+      const timeTaken = challenge.timeLimit - timeLeft;
       await submitChallengeResult(game.id, self.id, { isCorrect: isVictory, time: timeTaken, score: finalPoints });
       if (isVictory) {
           toast({ title: 'وصلت للنهاية!', description: `نقاطك المتبقية: ${finalPoints}`, className: 'bg-green-100 text-green-700' });
       } else {
            toast({ title: 'انتهى الوقت!', variant: 'destructive' });
       }
-  }, [hasSubmitted, timeLeft, game.id, self.id, toast]);
+  }, [hasSubmitted, timeLeft, game.id, self.id, toast, challenge.timeLimit]);
 
   useEffect(() => {
     const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
@@ -112,22 +100,18 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   
   useEffect(() => {
     if (mazePhase !== 'playing' || hasSubmitted || !game.challengeState?.challengeEndsAt) return;
-
     const endTime = game.challengeState.challengeEndsAt.toMillis();
     const updateTimer = () => {
         const remaining = Math.round((endTime - Date.now()) / 1000);
         if (remaining <= 0) {
             setTimeLeft(0);
-            if (!hasSubmitted) {
-                handleSubmit(false, 0);
-            }
+            if (!hasSubmitted) handleSubmit(false, 0);
         } else {
             setTimeLeft(remaining);
         }
     };
     const timer = setInterval(updateTimer, 1000);
     updateTimer(); 
-
     return () => clearInterval(timer);
   }, [mazePhase, hasSubmitted, game.challengeState?.challengeEndsAt, handleSubmit]);
 
@@ -144,16 +128,12 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
   useEffect(() => {
       if (mazePhase === 'playing' && puzzle && start) {
           const initialVisible = getVisibleArea(start, 1);
-          initialHints.forEach(hint => {
-              initialVisible.add(posKey(hint));
-          });
+          initialHints.forEach(hint => initialVisible.add(posKey(hint)));
           setRevealedTiles(initialVisible);
       }
   }, [mazePhase, puzzle, start, initialHints, getVisibleArea, posKey]);
 
-
-  const handleMove = useCallback(
-    (direction: 'up' | 'down' | 'left' | 'right') => {
+  const handleMove = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
       if (mazePhase !== 'playing' || freezeMovement || points <= 0 || hasSubmitted) return;
 
       const dx = direction === 'right' ? 1 : direction === 'left' ? -1 : 0;
@@ -171,19 +151,14 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
         setPoints(newPoints);
         toast({ title: `اصطدمت بجدار! -${WALL_HIT_COST} نقطة`, description: `توقف لمدة ${WALL_HIT_FREEZE_SECONDS} ثواني`, variant: 'destructive', duration: 1500 });
 
-        if (newPoints <= 0) {
-          handleSubmit(false, 0);
-        }
+        if (newPoints <= 0) handleSubmit(false, 0);
 
         setTimeout(() => setFreezeMovement(false), WALL_HIT_FREEZE_SECONDS * 1000);
         return;
       }
 
       setCurrentPosition(newPos);
-
-      if (isPositionEqual(newPos, end)) {
-        handleSubmit(true, points);
-      }
+      if (isPositionEqual(newPos, end)) handleSubmit(true, points);
     },
     [currentPosition, gridSize, mazePhase, freezeMovement, isWall, points, end, toast, hasSubmitted, handleSubmit]
   );
@@ -235,7 +210,6 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
             const isCurrent = isPositionEqual(pos, currentPosition);
             const isStartPos = isPositionEqual(pos, start);
             const isEndPos = isPositionEqual(pos, end);
-            const isAWall = isWall(pos);
             const isFogged = !revealedTiles.has(posKey(pos));
 
             return (
@@ -247,7 +221,7 @@ export function HiddenMaze({ game, self, challenge }: { game: Game; self: Player
                   !isFogged && (
                     isCurrent ? 'bg-blue-500' : 
                     isEndPos ? 'bg-purple-500' :
-                    isAWall ? 'bg-red-900/60' :
+                    isWall(pos) ? 'bg-red-900/60' :
                     'bg-gray-800'
                   )
                 )}
