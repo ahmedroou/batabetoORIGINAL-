@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -421,6 +422,8 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
 export async function nextTrapAnswerRound(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
+  let shouldFinalize = false;
+
   await runTransaction(db, async (tx) => {
       const snap = await tx.get(gameRef);
       ensure(snap.exists(), 'اللعبة غير موجودة.');
@@ -430,12 +433,18 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
           ensure(game.hostId === hostId, 'فقط المضيف يمكنه بدء الجولة التالية قبل انتهاء الوقت.');
       }
       if (game.gameState !== 'round-results') return;
-      const { isGameOver } = await _startNextRound(tx as any, gameRef, game);
-      if (isGameOver) {
-        // Now finalizeGameAndDistributeAwards will be called from _startNextRound
-        return;
+      const nextRoundResult = await _startNextRound(tx as any, gameRef, game);
+      if (nextRoundResult.isGameOver) {
+          shouldFinalize = true;
       }
   });
+  
+  if (shouldFinalize) {
+      const finalSnap = await getDoc(gameRef);
+      if (finalSnap.exists()) {
+          await finalizeGameAndDistributeAwards(finalSnap.data() as Game);
+      }
+  }
 }
 
 /**
@@ -526,7 +535,6 @@ export async function tickGame(gameId: string) {
 // -----------------------------------------------------------------------------
 export async function handleTimeout(gameId: string) {
   const gameRef = doc(db, 'games', gameId);
-  let finalGameData: Game | null = null;
   let shouldFinalize = false;
 
   await runTransaction(db, async (tx) => {
@@ -575,13 +583,15 @@ export async function handleTimeout(gameId: string) {
         const nextRoundResult = await _startNextRound(tx as any, gameRef, game);
         if (nextRoundResult.isGameOver) {
             shouldFinalize = true;
-            finalGameData = nextRoundResult.finalGame;
         }
     }
   });
 
-  if (shouldFinalize && finalGameData) {
-      await finalizeGameAndDistributeAwards(finalGameData);
+  if (shouldFinalize) {
+    const finalSnap = await getDoc(gameRef);
+    if (finalSnap.exists()) {
+        await finalizeGameAndDistributeAwards(finalSnap.data() as Game);
+    }
   }
 }
 
