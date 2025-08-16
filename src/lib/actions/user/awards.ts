@@ -29,8 +29,11 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
     
     const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
-    // A "short" game (not eligible for awards) is now any game with less than 2 rounds.
-    const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (game.trapAnswerState?.settings?.rounds || 10) < 2;
+    
+    // Check for short game condition safely
+    const trapState = game.trapAnswerState as any;
+    const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (trapState?.settings?.rounds ?? 10) < 2;
+
 
     const isEducatedMerchantGame = game.gameType === 'educated-merchant';
 
