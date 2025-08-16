@@ -6,7 +6,7 @@ import { db, auth } from '@/lib/firebase';
 import { doc, serverTimestamp, setDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { isFirebaseError } from '../helpers';
-import { getDefaultAvatar } from '../admin/settings';
+import { getDefaultAvatar } from './queries';
 import type { UserProfile } from '@/types';
 
 

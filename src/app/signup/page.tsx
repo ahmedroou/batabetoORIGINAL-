@@ -8,8 +8,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-import { createUserProfile } from "@/lib/actions/user";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, UserPlus } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { getDefaultAvatar } from "@/lib/actions/user/queries";
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "يجب أن يتكون الاسم من حرفين على الأقل." }),
@@ -45,19 +46,55 @@ export default function SignupPage() {
     const onSubmit = async (values: z.infer<typeof formSchema>) => {
         setIsLoading(true);
         try {
+            // 1. Create user in Firebase Auth
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const user = userCredential.user;
 
+            // 2. Update Auth profile (optional but good practice)
             await updateProfile(user, { displayName: values.name });
             
-            const profileResult = await createUserProfile(user.uid, values.name, values.email, values.gender);
-
-            if (profileResult.error) {
-                throw new Error(profileResult.error);
-            }
+            // 3. Create user profile document directly in Firestore from the client
+            const { avatarId: defaultAvatar } = await getDefaultAvatar();
+            const userDocRef = doc(db, "users", user.uid);
+            await setDoc(userDocRef, {
+                name: values.name.trim(),
+                email: values.email,
+                gender: values.gender,
+                createdAt: serverTimestamp(),
+                isAdmin: false,
+                isEditor: false,
+                coins: 5,
+                diamonds: 0,
+                avatarId: defaultAvatar || 'Avatar00.png',
+                unlockedAvatars: [defaultAvatar || 'Avatar00.png'],
+                unlockedPunishmentAvatars: [],
+                leaderboardPoints: 0,
+                honorPoints: 0,
+                loyaltyPoints: 0,
+                rebellionPoints: 0,
+                trophies: 0,
+                gamesPlayed: {},
+                hasChangedName: false,
+                leagues: [],
+                winCounts: {},
+                clan: null,
+                clanRole: null,
+                audienceGroups: [],
+                humiliation: null,
+                allegiance: null,
+                allegianceRequests: [],
+                taxDemands: [],
+                alliances: [],
+                decrees: [],
+                duelChallenges: [],
+                lastPunishmentTimestamp: {},
+                originalAvatarToRevert: null,
+                isPunished: false,
+            });
 
             toast({ title: "تم إنشاء الحساب بنجاح!" });
             router.push("/");
+
         } catch (error: any) {
             let description = "حدث خطأ غير متوقع. الرجاء المحاولة مرة أخرى.";
             if (error.code === 'auth/email-already-in-use') {
@@ -74,6 +111,7 @@ export default function SignupPage() {
                 description,
                 variant: "destructive",
             });
+        } finally {
             setIsLoading(false);
         }
     };
