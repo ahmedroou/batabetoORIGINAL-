@@ -168,6 +168,34 @@ function CountdownTimer({ expiryTimestamp, onExpire }: { expiryTimestamp: number
   return <span>{timeLeft}</span>;
 }
 
+const HintHistoryPanel = ({
+  hints,
+  team,
+}: {
+  hints: { word: string; count: number; team: 'red' | 'blue' }[];
+  team: 'red' | 'blue';
+}) => {
+  const teamHints = hints.filter((h) => h.team === team).slice(-3);
+  const color = team === 'red' ? 'text-rose-400' : 'text-indigo-400';
+
+  return (
+    <div className="w-full space-y-1">
+      <h4 className={cn("text-xs font-bold text-center", color)}>آخر التلميحات</h4>
+      {teamHints.length === 0 ? (
+        <p className="text-center text-xs text-zinc-500">لا يوجد</p>
+      ) : (
+        teamHints.map((h, i) => (
+          <div key={i} className="flex justify-between items-center text-xs bg-zinc-100 rounded p-1">
+            <span className="font-mono font-bold text-zinc-800">{h.word}</span>
+            <span className="font-mono font-bold text-zinc-500">{h.count}</span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+};
+
+
 export default function WordWarGame({ game, self }: WordWarGameProps) {
   const { toast } = useToast();
   const router = useRouter();
@@ -711,7 +739,7 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
 
         <header className="w-full p-2 mb-2">
           <div className="flex justify-between items-start max-w-7xl mx-auto gap-2">
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-2 w-28">
               <ScoreCounter label="متبق" count={cardsLeft.red} colorClass="bg-rose-600/90" icon={Users} />
               <div className="flex flex-wrap justify-center gap-1 w-24">
                 {teamRedPlayers.map((p) => (
@@ -721,22 +749,12 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
                   </div>
                 ))}
               </div>
+              <HintHistoryPanel hints={hintHistory} team="red" />
             </div>
             <div className="flex-grow flex flex-col items-center gap-2">
                 {renderHeader()}
-                {hintHistory.length > 0 && (
-                    <div className="flex items-center gap-2 text-xs text-zinc-500">
-                        <History className="w-4 h-4" />
-                        <span>آخر التلميحات:</span>
-                        {hintHistory.slice(-3).map((h, i) => (
-                            <span key={i} className="font-mono bg-zinc-200 px-1 rounded">
-                                {h.word}({h.count})
-                            </span>
-                        ))}
-                    </div>
-                )}
             </div>
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-2 w-28">
               <ScoreCounter label="متبق" count={cardsLeft.blue} colorClass="bg-indigo-600/90" icon={Users} />
               <div className="flex flex-wrap justify-center gap-1 w-24">
                 {teamBluePlayers.map((p) => (
@@ -746,6 +764,7 @@ export default function WordWarGame({ game, self }: WordWarGameProps) {
                   </div>
                 ))}
               </div>
+              <HintHistoryPanel hints={hintHistory} team="blue" />
             </div>
           </div>
         </header>
