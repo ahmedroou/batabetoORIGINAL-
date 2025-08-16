@@ -1,4 +1,3 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -63,6 +62,10 @@ function setTimer(
 
 function clearTimer(t: FirebaseFirestore.Transaction, gameRef: DocumentReference) {
   t.update(gameRef, { 'wordWarState.timer': deleteField() });
+}
+
+function resetMutationLog(t: FirebaseFirestore.Transaction, gameRef: DocumentReference) {
+  t.update(gameRef, { 'wordWarState.mutationLog': {} });
 }
 
 function checkWinFromArray(cards: WordWarCard[]) {
@@ -230,6 +233,7 @@ export async function startGame(gameId: string, hostId: string) {
       'wordWarState.currentHint': null,
       'wordWarState.guessesLeft': 0,
       'wordWarState.suspicions': {},
+      'wordWarState.mutationLog': {}, // NEW: reset mutation log at game start
       'wordWarState.turnId': 1,
       'wordWarState.hintHistory': [],
       'metrics.startedAt': serverTimestamp(),
@@ -294,7 +298,7 @@ export async function revealCard(
   gameId: string,
   playerId: string,
   cardText: string,
-  opts?: { expectedTurnId?: number; clientSentAtMs?: number }
+  opts?: { expectedTurnId?: number; clientSentAtMs?: number; mutationId?: string }
 ) {
   let gameDataForLeagueUpdate: Game | null = null;
   const gameRef = doc(db, 'games', gameId);
@@ -305,6 +309,11 @@ export async function revealCard(
     const ww = game.wordWarState;
 
     if (!ww) return;
+
+    // Idempotency: if same mutationId already applied in this turn, ignore
+    if (opts?.mutationId && ww.mutationLog?.reveal?.[opts.mutationId]) {
+      return;
+    }
 
     const timer = ww.timer;
     if (timer?.startedAt && typeof timer.durationSec === 'number') {
@@ -359,34 +368,37 @@ export async function revealCard(
       : checkWinFromArray(updates['wordWarState.cards'] as WordWarCard[]);
 
     if (color === 'assassin' || win) {
-        updates['gameResult'] = win || { winner: ww.turn === 'red' ? 'blue' : 'red', message: 'تم كشف القاتل!' };
-        updates['gameState'] = 'board_reveal';
-        setTimer(t, gameRef, 'board_reveal', BOARD_REVEAL_TIME);
+      updates['gameResult'] = win || { winner: ww.turn === 'red' ? 'blue' : 'red', message: 'تم كشف القاتل!' };
+      updates['gameState'] = 'board_reveal';
+      setTimer(t, gameRef, 'board_reveal', BOARD_REVEAL_TIME);
+      resetMutationLog(t, gameRef); // NEW: clear mutation log when round ends
     } else if (color !== ww.turn || (ww.guessesLeft! - 1) <= 0) {
-        updates['gameState'] = 'guide_turn';
-        updates['wordWarState.turn'] = nextTeam(ww.turn);
-        updates['wordWarState.currentHint'] = null;
-        updates['wordWarState.guessesLeft'] = 0;
-        updates['wordWarState.suspicions'] = {};
-        bumpTurnId(t, gameRef, ww.turnId);
-        setTimer(t, gameRef, 'guide', getTurnTime(game));
+      updates['gameState'] = 'guide_turn';
+      updates['wordWarState.turn'] = nextTeam(ww.turn);
+      updates['wordWarState.currentHint'] = null;
+      updates['wordWarState.guessesLeft'] = 0;
+      updates['wordWarState.suspicions'] = {};
+      bumpTurnId(t, gameRef, ww.turnId);
+      setTimer(t, gameRef, 'guide', getTurnTime(game));
+      resetMutationLog(t, gameRef); // NEW: new turn, new mutation window
     } else {
-        updates['wordWarState.guessesLeft'] = Math.max(0, (ww.guessesLeft || 0) - 1);
+      updates['wordWarState.guessesLeft'] = Math.max(0, (ww.guessesLeft || 0) - 1);
     }
     
     t.update(gameRef, {
       ...updates,
       'metrics.lastRevealAt': serverTimestamp(),
       ...(opts?.clientSentAtMs ? { 'metrics.latency.lastRevealMsApprox': Math.max(0, nowMs() - opts.clientSentAtMs) } : {}),
+      ...(opts?.mutationId ? { [`wordWarState.mutationLog.reveal.${opts.mutationId}`]: serverTimestamp() } : {}),
     });
 
     if(updates.gameState === 'board_reveal') {
-        gameDataForLeagueUpdate = {...game, ...updates};
+      gameDataForLeagueUpdate = {...game, ...updates};
     }
   });
 
   if (gameDataForLeagueUpdate) {
-      await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
   }
 }
 
@@ -423,6 +435,7 @@ export async function endTurn(gameId: string, playerId: string, opts?: { expecte
 
     bumpTurnId(t, gameRef, ww.turnId);
     setTimer(t, gameRef, 'guide', getTurnTime(game));
+    resetMutationLog(t, gameRef); // NEW: reset mutation log on turn end
   });
 }
 
@@ -437,7 +450,7 @@ export async function handleTimeout(gameId: string, actorId: string, opts?: { ex
 
     const timer = game.wordWarState?.timer;
     if (!timer?.startedAt || typeof timer.durationSec !== 'number') {
-        return; 
+      return; 
     }
 
     const started = timer.startedAt.toMillis();
@@ -450,6 +463,7 @@ export async function handleTimeout(gameId: string, actorId: string, opts?: { ex
     if (game.gameState === 'preparation') {
       t.update(gameRef, { gameState: 'guide_turn' });
       setTimer(t, gameRef, 'guide', getTurnTime(game));
+      resetMutationLog(t, gameRef);
       return;
     }
     
@@ -467,13 +481,96 @@ export async function handleTimeout(gameId: string, actorId: string, opts?: { ex
       });
       bumpTurnId(t, gameRef, game.wordWarState.turnId);
       setTimer(t, gameRef, 'guide', getTurnTime(game));
+      resetMutationLog(t, gameRef);
     } else if (game.gameState === 'board_reveal') {
-        t.update(gameRef, { gameState: 'final_results', 'wordWarState.timer': deleteField() });
+      t.update(gameRef, { gameState: 'final_results', 'wordWarState.timer': deleteField() });
+      resetMutationLog(t, gameRef);
     }
   });
 }
 
-export async function toggleSuspicion(gameId: string, playerId: string, cardText: string, opts?: { expectedTurnId?: number; clientSentAtMs?: number }) {
+/**
+ * NEW: setSuspicion — explicit add/remove with mutationId
+ * Used by the new UI optimistic overlay. Prefer this over toggleSuspicion.
+ */
+export async function setSuspicion(
+  gameId: string,
+  playerId: string,
+  cardText: string,
+  op: 'add' | 'remove',
+  opts?: { expectedTurnId?: number; clientSentAtMs?: number; mutationId?: string }
+) {
+  const gameRef = doc(db, 'games', gameId);
+  await runTransaction(db, async (t) => {
+    const gameDoc = await t.get(gameRef);
+    if (!gameDoc.exists()) throw new Error('Game not found.');
+    const game = gameDoc.data() as Game;
+    const ww = game.wordWarState;
+
+    if (!ww) return;
+    if (game.gameState !== 'guesser_turn') return;
+
+    // turn id check for race safety
+    if (opts?.expectedTurnId != null && ww.turnId != null && opts.expectedTurnId !== ww.turnId) {
+      return;
+    }
+
+    // Deduplicate by mutationId (idempotent)
+    if (opts?.mutationId && ww.mutationLog?.susp?.[opts.mutationId]) {
+      return;
+    }
+
+    const player = ensurePlayerInGame(game, playerId);
+    if (!player.team) throw new Error('Player not assigned to a team.');
+    if (player.team !== ww.turn) throw new Error('It is not your team\'s turn to act.');
+
+    const suspicions = ww.suspicions || ({} as Record<string, string[]>);
+    const cardSus = suspicions[cardText] || [];
+    const hasMine = cardSus.includes(playerId);
+
+    let nextArr = cardSus;
+
+    if (op === 'add' && !hasMine) {
+      nextArr = [...cardSus, playerId];
+    } else if (op === 'remove' && hasMine) {
+      nextArr = cardSus.filter((id) => id !== playerId);
+    } else {
+      // no-op; still record mutationId if present to avoid replays
+    }
+
+    if (nextArr.length === 0) {
+      t.update(gameRef, {
+        [`wordWarState.suspicions.${cardText}`]: deleteField(),
+        ...(opts?.mutationId ? { [`wordWarState.mutationLog.susp.${opts.mutationId}`]: serverTimestamp() } : {}),
+        ...(opts?.clientSentAtMs ? { 'metrics.latency.lastSuspMsApprox': Math.max(0, nowMs() - opts.clientSentAtMs) } : {}),
+        'metrics.lastSuspicionAt': serverTimestamp(),
+      });
+    } else if (nextArr !== cardSus) {
+      t.update(gameRef, {
+        [`wordWarState.suspicions.${cardText}`]: nextArr,
+        ...(opts?.mutationId ? { [`wordWarState.mutationLog.susp.${opts.mutationId}`]: serverTimestamp() } : {}),
+        ...(opts?.clientSentAtMs ? { 'metrics.latency.lastSuspMsApprox': Math.max(0, nowMs() - opts.clientSentAtMs) } : {}),
+        'metrics.lastSuspicionAt': serverTimestamp(),
+      });
+    } else {
+      // nothing changed in array, still stamp mutationId if provided
+      if (opts?.mutationId) {
+        t.update(gameRef, { [`wordWarState.mutationLog.susp.${opts.mutationId}`]: serverTimestamp() });
+      }
+    }
+  });
+}
+
+/**
+ * Legacy compatibility — still available if بعض العملاء القديمين يستخدمونه.
+ * يُنصح باستخدام setSuspicion(op) من الواجهة الجديدة.
+ */
+export async function toggleSuspicion(
+  gameId: string,
+  playerId: string,
+  cardText: string,
+  opts?: { expectedTurnId?: number; clientSentAtMs?: number }
+) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (t) => {
     const gameDoc = await t.get(gameRef);
@@ -490,6 +587,7 @@ export async function toggleSuspicion(gameId: string, playerId: string, cardText
     
     const player = ensurePlayerInGame(game, playerId);
     if (!player.team) throw new Error('Player not assigned to a team.');
+    if (player.team !== ww.turn) throw new Error('It is not your team\'s turn to act.');
 
     const suspicions = ww.suspicions || ({} as Record<string, string[]>);
     const cardSus = suspicions[cardText] || [];
@@ -505,6 +603,11 @@ export async function toggleSuspicion(gameId: string, playerId: string, cardText
     } else {
       t.update(gameRef, { [`wordWarState.suspicions.${cardText}`]: [...cardSus, playerId] });
     }
+
+    t.update(gameRef, {
+      'metrics.lastSuspicionAt': serverTimestamp(),
+      ...(opts?.clientSentAtMs ? { 'metrics.latency.lastSuspMsApprox': Math.max(0, nowMs() - opts.clientSentAtMs) } : {}),
+    });
   });
 }
 
@@ -524,5 +627,6 @@ export async function proceedToFinalResults(gameId: string, hostId: string) {
     });
 
     clearTimer(t, gameRef);
+    resetMutationLog(t, gameRef);
   });
 }
