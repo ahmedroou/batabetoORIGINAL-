@@ -145,7 +145,7 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
         <p className="mt-1 text-muted-foreground text-sm">اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {gameCardsData.map((game, i) => {
           const Icon = (GAME_ICONS as any)[game.type] || HelpCircle;
           const loadingThis = isLoading === (`create-${game.type}` as LoadingState);
