@@ -1,10 +1,8 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, deleteField } from 'firebase/firestore';
-import type { Game, EducatedMerchantQuestion, Player } from '@/types';
+import { doc, runTransaction } from 'firebase/firestore';
+import type { Game } from '@/types';
 import {
   _getInitialGameState,
   _rollDice,
@@ -16,15 +14,53 @@ import {
 import { fetchRandomQuestionForCategory } from './helpers/question-helpers';
 import { updateLeagueScoresForGameEnd } from './user';
 
+/**
+ * Small alias to make intent clear when helpers request a question fetch.
+ */
+type QuestionRequest = { category: string; token: string };
+
+/**
+ * Fetch a question and commit it only if the game is still expecting
+ * the same question token and hasn't moved on. Extracted to avoid repetition
+ * and reduce race-condition risk.
+ */
+async function fetchAndSetQuestion(
+  gameId: string,
+  req: QuestionRequest,
+): Promise<void> {
+  const gameRef = doc(db, 'games', gameId);
+  try {
+    const question = await fetchRandomQuestionForCategory('educated-merchant', req.category);
+
+    // Double-check state under a transaction before committing the question
+    await runTransaction(db, async (tx) => {
+      const gameSnap = await tx.get(gameRef);
+      if (!gameSnap.exists()) return;
+      const game = gameSnap.data() as Game;
+
+      // Ensure we're still on a question step for the same token and that
+      // no question has already been set by a competing fetch.
+      if (
+        game.gameState === 'question' &&
+        game.educatedMerchantState?.questionToken === req.token &&
+        !game.educatedMerchantState?.currentQuestion
+      ) {
+        tx.update(gameRef, { 'educatedMerchantState.currentQuestion': question });
+      }
+    });
+  } catch (err) {
+    // Fail soft: leave state as-is so caller can retry or host can timeout.
+    // eslint-disable-next-line no-console
+    console.error('[fetchAndSetQuestion] failed', err);
+  }
+}
 
 /**
  * Starts the "Educated Merchant" game. Only the host can perform this action.
- * This function prepares the initial game state, generates the board, and sets the first turn.
- * @param gameId - The ID of the game to start.
- * @param hostId - The ID of the user starting the game, who must be the host.
- * @throws Will throw an error if the game is not found, the user is not the host, or there are not enough players.
+ * Prepares the initial game state, generates the board, and sets the first turn.
  */
 export async function startGame(gameId: string, hostId: string): Promise<void> {
+  if (!gameId || !hostId) throw new Error('Invalid arguments.');
   const gameRef = doc(db, 'games', gameId);
 
   await runTransaction(db, async (tx) => {
@@ -33,26 +69,24 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
     const game = snap.data() as Game;
 
     if (game.hostId !== hostId) throw new Error('Only the host can start the game.');
-    if (game.players.length < 2) throw new Error('The game requires at least 2 players.');
-    if (game.gameState !== 'lobby') return; // Idempotency check
+    if (!Array.isArray(game.players) || game.players.length < 2) {
+      throw new Error('The game requires at least 2 players.');
+    }
+    if (game.gameState !== 'lobby') return; // Idempotency
 
-    // Pass the players array to the helper function
     const { updates } = await _getInitialGameState(game.players);
     tx.update(gameRef, updates);
   });
 }
 
 /**
- * Handles a player's dice roll. This is the primary action for a player's turn.
- * This function will automatically handle subsequent events like rent payment, landing on special tiles,
- * and determining if the turn should end or proceed to another action state.
- * @param gameId - The ID of the current game.
- * @param playerId - The ID of the player rolling the dice.
- * @throws Will throw an error if it's not the player's turn or the game is in an incorrect state.
+ * Handles a player's dice roll and any subsequent automatic events.
  */
 export async function rollDice(gameId: string, playerId: string): Promise<void> {
+  if (!gameId || !playerId) throw new Error('Invalid arguments.');
   const gameRef = doc(db, 'games', gameId);
-  let postTransactionFetch: { category: string; token: string } | null = null;
+
+  let needsQuestion: QuestionRequest | null = null;
   let finalGameData: Game | null = null;
 
   await runTransaction(db, async (tx) => {
@@ -60,155 +94,103 @@ export async function rollDice(gameId: string, playerId: string): Promise<void> 
     if (!gameDoc.exists()) throw new Error('Game not found.');
     const game = gameDoc.data() as Game;
 
-    const { updates, needsQuestion, isGameOver, finalGame } = _rollDice(game, playerId);
-    
+    const { updates, needsQuestion: qReq, isGameOver, finalGame } = _rollDice(game, playerId);
     tx.update(gameRef, updates);
 
-    if (needsQuestion) postTransactionFetch = needsQuestion;
+    if (qReq) needsQuestion = qReq;
     if (isGameOver && finalGame) finalGameData = finalGame;
   });
 
-  if (postTransactionFetch) {
-    const question = await fetchRandomQuestionForCategory('educated-merchant', postTransactionFetch.category);
-    await runTransaction(db, async (tx) => {
-        const gameDoc = await tx.get(gameRef);
-        if (!gameDoc.exists()) return;
-        const game = gameDoc.data() as Game;
-        // Verify that the game is still waiting for this specific question
-        if(game.gameState === 'question' && game.educatedMerchantState?.questionToken === postTransactionFetch?.token) {
-            tx.update(gameRef, { 'educatedMerchantState.currentQuestion': question });
-        }
-    });
-  }
-
-  if (finalGameData) {
-    await updateLeagueScoresForGameEnd(finalGameData);
-  }
+  if (needsQuestion) await fetchAndSetQuestion(gameId, needsQuestion);
+  if (finalGameData) await updateLeagueScoresForGameEnd(finalGameData);
 }
 
 /**
- * Initiates the purchase process for a property. This deducts the money from the player
- * and transitions the game to a 'question' state, waiting for the player to answer.
- * @param gameId - The ID of the current game.
- * @param playerId - The ID of the player attempting the purchase.
- * @throws Will throw an error if the purchase is not possible (e.g., not enough money, not player's turn).
+ * Initiates a property purchase and transitions to a question state if required.
  */
 export async function purchaseProperty(gameId: string, playerId: string): Promise<void> {
+  if (!gameId || !playerId) throw new Error('Invalid arguments.');
   const gameRef = doc(db, 'games', gameId);
-  let postTransactionFetch: { category: string; token: string } | null = null;
+
+  let needsQuestion: QuestionRequest | null = null;
 
   await runTransaction(db, async (tx) => {
     const gameDoc = await tx.get(gameRef);
     if (!gameDoc.exists()) throw new Error('Game not found.');
     const game = gameDoc.data() as Game;
 
-    const { updates, needsQuestion } = _purchaseProperty(game, playerId);
-    
+    const { updates, needsQuestion: qReq } = _purchaseProperty(game, playerId);
     tx.update(gameRef, updates);
-    
-    if (needsQuestion) postTransactionFetch = needsQuestion;
+    if (qReq) needsQuestion = qReq;
   });
-  
-  if (postTransactionFetch) {
-    const question = await fetchRandomQuestionForCategory('educated-merchant', postTransactionFetch.category);
-    await runTransaction(db, async (tx) => {
-        const gameDoc = await tx.get(gameRef);
-        if (!gameDoc.exists()) return;
-        const game = gameDoc.data() as Game;
-        if(game.gameState === 'question' && game.educatedMerchantState?.questionToken === postTransactionFetch?.token) {
-            tx.update(gameRef, { 'educatedMerchantState.currentQuestion': question });
-        }
-    });
-  }
+
+  if (needsQuestion) await fetchAndSetQuestion(gameId, needsQuestion);
 }
 
 /**
- * Submits a player's answer to a question. This action resolves the 'question' state,
- * finalizing a property purchase or applying a fine, and then ends the player's turn.
- * @param gameId - The ID of the current game.
- * @param playerId - The ID of the player submitting the answer.
- * @param answer - The answer chosen by the player.
- * @throws Will throw an error if it's not the player's turn to answer or the game is in an incorrect state.
+ * Submits a player's answer and resolves the question, potentially ending the game.
  */
 export async function answerQuestion(gameId: string, playerId: string, answer: string): Promise<void> {
-    const gameRef = doc(db, 'games', gameId);
-    let finalGameData: Game | null = null;
-
-    await runTransaction(db, async (tx) => {
-        const gameDoc = await tx.get(gameRef);
-        if (!gameDoc.exists()) throw new Error('Game not found.');
-        const game = gameDoc.data() as Game;
-
-        const { updates, isGameOver, finalGame } = _answerQuestion(game, playerId, answer);
-        
-        tx.update(gameRef, updates);
-
-        if (isGameOver && finalGame) finalGameData = finalGame;
-    });
-
-    if (finalGameData) {
-        await updateLeagueScoresForGameEnd(finalGameData);
-    }
-}
-
-/**
- * Ends a player's turn, typically used when a player chooses not to purchase a property.
- * @param gameId - The ID of the current game.
- * @param playerId - The ID of the player whose turn it is.
- * @throws Will throw an error if it's not the player's turn or the game is in an incorrect state.
- */
-export async function endTurn(gameId: string, playerId: string): Promise<void> {
-    const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (tx) => {
-        const gameDoc = await tx.get(gameRef);
-        if (!gameDoc.exists()) throw new Error('Game not found.');
-        const game = gameDoc.data() as Game;
-        
-        const { updates } = _endTurn(game, playerId);
-        
-        tx.update(gameRef, updates);
-    });
-}
-
-/**
- * Handles the expiration of a player's turn timer. This is typically called by the host.
- * It automatically takes a default action for the player (e.g., skipping a purchase) and ends their turn.
- * @param gameId - The ID of the current game.
- * @param hostId - The ID of the user making the call, who must be the host.
- */
-export async function handleTimeout(gameId: string, hostId: string): Promise<void> {
+  if (!gameId || !playerId) throw new Error('Invalid arguments.');
   const gameRef = doc(db, 'games', gameId);
-  let postTransactionFetch: { category: string; token: string } | null = null;
+
   let finalGameData: Game | null = null;
 
   await runTransaction(db, async (tx) => {
     const gameDoc = await tx.get(gameRef);
-    if (!gameDoc.exists()) return;
+    if (!gameDoc.exists()) throw new Error('Game not found.');
     const game = gameDoc.data() as Game;
-    
-    if(game.hostId !== hostId) return; // Only host can trigger timeout
 
-    const { updates, needsQuestion, isGameOver, finalGame } = _handleTimeout(game);
-    
+    const { updates, isGameOver, finalGame } = _answerQuestion(game, playerId, answer);
     tx.update(gameRef, updates);
 
-    if (needsQuestion) postTransactionFetch = needsQuestion;
     if (isGameOver && finalGame) finalGameData = finalGame;
   });
 
-   if (postTransactionFetch) {
-    const question = await fetchRandomQuestionForCategory('educated-merchant', postTransactionFetch.category);
-    await runTransaction(db, async (tx) => {
-        const gameDoc = await tx.get(gameRef);
-        if (!gameDoc.exists()) return;
-        const game = gameDoc.data() as Game;
-        if(game.gameState === 'question' && game.educatedMerchantState?.questionToken === postTransactionFetch?.token) {
-            tx.update(gameRef, { 'educatedMerchantState.currentQuestion': question });
-        }
-    });
-  }
+  if (finalGameData) await updateLeagueScoresForGameEnd(finalGameData);
+}
 
-  if (finalGameData) {
-    await updateLeagueScoresForGameEnd(finalGameData);
-  }
+/**
+ * Ends a player's turn (e.g., skip purchase).
+ */
+export async function endTurn(gameId: string, playerId: string): Promise<void> {
+  if (!gameId || !playerId) throw new Error('Invalid arguments.');
+  const gameRef = doc(db, 'games', gameId);
+
+  await runTransaction(db, async (tx) => {
+    const gameDoc = await tx.get(gameRef);
+    if (!gameDoc.exists()) throw new Error('Game not found.');
+    const game = gameDoc.data() as Game;
+
+    const { updates } = _endTurn(game, playerId);
+    tx.update(gameRef, updates);
+  });
+}
+
+/**
+ * Handles a turn timeout. Only the host may trigger it.
+ */
+export async function handleTimeout(gameId: string, hostId: string): Promise<void> {
+  if (!gameId || !hostId) throw new Error('Invalid arguments.');
+  const gameRef = doc(db, 'games', gameId);
+
+  let needsQuestion: QuestionRequest | null = null;
+  let finalGameData: Game | null = null;
+
+  await runTransaction(db, async (tx) => {
+    const gameDoc = await tx.get(gameRef);
+    if (!gameDoc.exists()) return; // Game deleted or missing — no-op
+    const game = gameDoc.data() as Game;
+
+    if (game.hostId !== hostId) return; // Only host can trigger timeout
+
+    const { updates, needsQuestion: qReq, isGameOver, finalGame } = _handleTimeout(game);
+    tx.update(gameRef, updates);
+
+    if (qReq) needsQuestion = qReq;
+    if (isGameOver && finalGame) finalGameData = finalGame;
+  });
+
+  if (needsQuestion) await fetchAndSetQuestion(gameId, needsQuestion);
+  if (finalGameData) await updateLeagueScoresForGameEnd(finalGameData);
 }

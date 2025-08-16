@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { PlayerAvatar } from '../PlayerAvatar';
 import { motion } from 'framer-motion';
-import { LogOut, Copy, Check, UserX, Settings, Loader2, Save, ArrowRight } from 'lucide-react';
+import { LogOut, Copy, Check, UserX, ArrowRight } from 'lucide-react';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { leaveGame, kickPlayerFromLobby } from '@/lib/actions/room';
@@ -118,11 +118,11 @@ export function KingOfGeniusLobby({ game, self, isHost }: LobbyProps) {
                                                 )}
                                             </div>
                                         </div>
-                                        {isHost && p.id !== self?.id && (
+                                         {isHost && p.id !== self?.id && (
                                             <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setPlayerToKick(p)}>
                                                 <UserX className="w-4 h-4" />
                                             </Button>
-                                        )}
+                                         )}
                                     </div>
                                 );
                             })}
@@ -133,7 +133,7 @@ export function KingOfGeniusLobby({ game, self, isHost }: LobbyProps) {
                     {isHost ? (
                         <Button onClick={handleStartSelection} disabled={isSubmitting || activePlayers.length < 2} className="w-full" size="lg">
                             <ArrowRight className="mr-2 h-4 w-4" />
-                            {isSubmitting ? "..." : "الانتقال لاختيار الفرق"}
+                            {isSubmitting ? "..." : activePlayers.length < 2 ? `تحتاج ${2 - activePlayers.length} لاعبين على الأقل` : "الانتقال لاختيار الفرق"}
                         </Button>
                     ) : (
                         <p className="text-center text-muted-foreground p-4 bg-muted/50 rounded-md animate-pulse">في انتظار المضيف لبدء اللعبة...</p>
@@ -143,20 +143,20 @@ export function KingOfGeniusLobby({ game, self, isHost }: LobbyProps) {
                     </Button>
                 </CardFooter>
             </Card>
-            <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
+             <AlertDialog open={!!playerToKick} onOpenChange={(open) => !open && setPlayerToKick(null)}>
                 <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            هل تريد حقًا طرد اللاعب "{playerToKick?.name}" من الغرفة؟ لن يتمكن من الانضمام مرة أخرى.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
-                            {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
+                    <AlertDialogDescription>
+                    هل تريد حقًا طرد اللاعب "{playerToKick?.name}" من الغرفة؟ لن يتمكن من الانضمام مرة أخرى.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleKickPlayer} disabled={isSubmitting} className={buttonVariants({ variant: "destructive" })}>
+                    {isSubmitting ? "جاري الطرد..." : "نعم، قم بالطرد"}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
         </>

@@ -215,7 +215,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
 
 // --- Player Actions ---
-export async function submitChallengeResult(
+export async function submitKingOfGeniusResult(
   gameId: string,
   playerId: string,
   result: Omit<ChallengeResult, 'playerId' | 'team'>
