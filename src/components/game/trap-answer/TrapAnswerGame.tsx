@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, {
@@ -55,7 +56,6 @@ const idFromText = (s: string) =>
     ? Buffer.from(s).toString('base64').replace(/=+$/g, '')
     : btoa(unescape(encodeURIComponent(s))).replace(/=+$/g, ''));
 
-// deep-stable for simple arrays (strings/ids) to reduce flicker when server sends equal content with new refs
 function useStableArray<T>(arr: T[]) {
   const sig = useMemo(() => JSON.stringify(arr), [arr]);
   const ref = useRef(arr);
@@ -112,7 +112,6 @@ const StableAnswerInput = memo(function StableAnswerInput({
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const caretRef = useRef<number | null>(null);
 
-  // restore last typed value within the same round if parent got remounted by server updates
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem(`trap-input-${gameId}`);
@@ -120,7 +119,6 @@ const StableAnswerInput = memo(function StableAnswerInput({
     } catch {}
   }, [gameId]);
 
-  // keep caret pos
   const rememberCaret = () => {
     const el = taRef.current;
     if (!el) return;
@@ -131,7 +129,6 @@ const StableAnswerInput = memo(function StableAnswerInput({
     }
   };
 
-  // initial focus + caret at end (prevents "blink" when parent re-mounts)
   useEffect(() => {
     const el = taRef.current;
     if (!el) return;
@@ -142,14 +139,12 @@ const StableAnswerInput = memo(function StableAnswerInput({
     } catch {}
   }, []);
 
-  // if blur happens due to a transient remount (activeElement becomes body), refocus silently
   const handleBlur = () => {
     const el = taRef.current;
     if (!el) return;
     setTimeout(() => {
       if (!document.activeElement || document.activeElement === document.body) {
         el.focus({ preventScroll: true });
-        // restore caret
         const pos = caretRef.current ?? el.value.length;
         try {
           el.setSelectionRange(pos, pos);
@@ -219,7 +214,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
 
   const isHost = game.hostId === self.id;
 
-  /** derived state (memo + stable arrays) */
   const activePlayers = useMemo(
     () => (game?.players?.filter((p) => p.status !== 'left') ?? []),
     [game?.players]
@@ -236,12 +230,10 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     [game.players, game.playerScores]
   );
 
-  /** resets on phase */
   useEffect(() => {
     if (game.gameState === 'guessing') setChosenGuess(null);
   }, [game.gameState, game.round]);
 
-  /** reactions auto-hide */
   useEffect(() => {
     const reactions = game.trapAnswerState?.reactions ?? {};
     const now = Date.now();
@@ -269,15 +261,14 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     return () => timers.forEach(clearTimeout);
   }, [game.trapAnswerState?.reactions]);
 
-  /** de-flickered timer wrapper (no entry animations) */
   const WithTimer: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <Card className="w-full max-w-lg relative">
-      {game.trapAnswerState?.timerEndsAt && (
+      {(game.trapAnswerState?.roundEndTime) && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
           <CountdownTimer
             gameId={game.id}
             gameType="trap-answer"
-            expiryTimestamp={game.trapAnswerState.timerEndsAt.toMillis()}
+            expiryTimestamp={game.trapAnswerState.roundEndTime.toMillis()}
             selfId={self.id}
             isHost={isHost}
           />
@@ -287,7 +278,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     </Card>
   );
 
-  /** handlers */
   const handleCategorySelect = useCallback(
     async (category: string) => {
       if (loading.select) return;
@@ -365,7 +355,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     [game.id, self.id]
   );
 
-  /** ---------- memo subviews (anti-flicker) ---------- */
   const CategorySelection = memo(function CategorySelection({
     isMyTurn,
     currentPlayerName,
@@ -544,7 +533,6 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
     );
   });
 
-  /** ---------- views ---------- */
   const renderCategorySelection = () => {
     const turnOrder = game.trapAnswerState?.turnOrder ?? [];
     const currentTurnIndex = game.trapAnswerState?.currentTurnIndex ?? 0;
@@ -839,7 +827,7 @@ export function TrapAnswerGame({ game, self }: TrapAnswerGameProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
             <div className="p-3 rounded-lg bg-red-100 border border-red-300">
               <h3 className="font-bold text-red-800 flex items-center justify-center gap-2">
-                <VenetianMask /> المخادع المكار
+                <Award /> المخادع المكار
               </h3>
               {cunningDeceiver ? (
                 <>

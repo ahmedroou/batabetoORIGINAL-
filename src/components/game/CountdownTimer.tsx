@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { TimerIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { handleTimeout as handleTrapAnswerTimeout } from '@/lib/actions/trap-answer';
+import { tickGame as tickTrapAnswerGame } from '@/lib/actions/trap-answer';
 import { handleTimeout as handleEducatedMerchantTimeout } from '@/lib/actions/educated-merchant';
 import { handleTimeout as handlePrisonTimeout } from '@/lib/actions/prison';
 import type { Game } from '@/types';
@@ -19,7 +19,8 @@ interface CountdownTimerProps {
 }
 
 /**
- * A shared component to display a countdown and trigger a server-side timeout action via the host.
+ * A shared component to display a countdown and trigger a server-side timeout action.
+ * It now uses a "tick" function for Trap Answer to ensure any player can advance the game.
  * @param {object} props - Component props.
  * @param {number} props.expiryTimestamp - The timestamp (in milliseconds) when the timer should expire.
  */
@@ -35,23 +36,23 @@ export const CountdownTimer = ({ gameId, gameType, expiryTimestamp, selfId, isHo
         const timer = setInterval(() => {
             const remaining = calculateTimeLeft();
             setTimeLeft(remaining);
-            if (remaining <= 0) {
+            if (remaining <= 0 && !timeoutProcessed.current) {
+                 timeoutProcessed.current = true;
                  clearInterval(timer);
-                 // Host is responsible for triggering the server-side timeout logic.
-                 if (isHost && !timeoutProcessed.current) {
-                    timeoutProcessed.current = true;
-                    switch (gameType) {
-                        case 'trap-answer':
-                            handleTrapAnswerTimeout(gameId, selfId);
-                            break;
-                        case 'educated-merchant':
-                            handleEducatedMerchantTimeout(gameId, selfId);
-                            break;
-                        case 'prison':
-                            handlePrisonTimeout(gameId, selfId);
-                            break;
-                        // Add other game types that use timeouts here
-                    }
+                 // Any active player can nudge the game state forward.
+                 switch (gameType) {
+                    case 'trap-answer':
+                        tickTrapAnswerGame(gameId);
+                        break;
+                    case 'educated-merchant':
+                        // This game's timeout logic is still host-driven in its current form
+                        if (isHost) handleEducatedMerchantTimeout(gameId, selfId);
+                        break;
+                    case 'prison':
+                         // This game's timeout logic is host-driven
+                        if (isHost) handlePrisonTimeout(gameId, selfId);
+                        break;
+                    // Add other game types that use timeouts here
                  }
             }
         }, 1000);

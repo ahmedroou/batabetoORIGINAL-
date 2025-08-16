@@ -264,7 +264,6 @@ export async function selectCategoryAndGetQuestion(
 ) {
   const gameRef = doc(db, 'games', gameId);
 
-  // Minimal reads in the transaction; fetch question OUTSIDE once guards pass.
   let shouldProceed = false;
   let answerTime = DEFAULT_ANSWER_TIME_S;
 
@@ -273,7 +272,7 @@ export async function selectCategoryAndGetQuestion(
     ensure(snap.exists(), 'اللعبة غير موجودة.');
 
     const game = snap.data() as Game;
-    if (game.gameState !== 'category-selection') return; // benign exit if state changed
+    if (game.gameState !== 'category-selection') return;
 
     const turnOrder = (game as any)[FIELD_TRAP_STATE]?.turnOrder || [];
     const currentTurnIndex = (game as any)[FIELD_TRAP_STATE]?.currentTurnIndex || 0;
@@ -332,7 +331,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
       if (game.gameState !== 'answer-submission') return;
 
       const state = (game as any)[FIELD_TRAP_STATE] || {};
-      if (hasOwn(state.playerAnswers || {}, playerId)) return; // already answered
+      if (hasOwn(state.playerAnswers || {}, playerId)) return;
 
       const finalAnswer = typeof answer === 'string' && answer.trim() !== '' ? answer.trim() : null;
       const correctAnswer = state?.currentQuestion?.answer;
@@ -381,13 +380,11 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
     const state = (game as any)[FIELD_TRAP_STATE] || {};
     const finalGuess = guess === null ? TIMEOUT_TOKEN : String(guess);
 
-    // Guard: if guess is a concrete option, it must be part of shuffledAnswers
     if (finalGuess !== TIMEOUT_TOKEN) {
       const options: string[] = Array.isArray(state.shuffledAnswers) ? state.shuffledAnswers : [];
       ensure(options.includes(finalGuess), 'الاختيار غير صالح.');
     }
 
-    // ⛔️ Skip update if same (reduces unnecessary re-renders/flicker)
     const prev = (state.playerGuesses || {})[playerId];
     if (prev === finalGuess) return;
 
@@ -468,7 +465,6 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
     }
   });
 
-  // Heavy work & cross-doc updates OUTSIDE the transaction
   if (finishGame && gameSnapshotAtEnd) {
     try {
       const fresh = await getDoc(gameRef);
@@ -501,32 +497,26 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string) {
 // -----------------------------------------------------------------------------
 // Timeout & Reactions
 // -----------------------------------------------------------------------------
-export async function handleTimeout(gameId: string, callerId: string) {
+export async function tickGame(gameId: string) {
   const gameRef = doc(db, 'games', gameId);
 
-  // Use a transaction to safely read and conditionally write
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
 
     const game = snap.data() as Game;
     const state = (game as any)[FIELD_TRAP_STATE] || {};
-    const timerEndsAt = state.timerEndsAt as Timestamp | undefined;
+    const roundEndTime = state.roundEndTime as Timestamp | undefined;
 
-    // Exit if the timer hasn't actually expired yet.
-    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
+    if (!roundEndTime || roundEndTime.toMillis() > nowMs()) return;
     
-    // Any active player can nudge the game forward
-    const isPlayer = getActivePlayers(game).some(p => p.id === callerId);
-    if (!isPlayer) return;
-
-    // Clear the timer to prevent this logic from running again for this phase
-    tx.update(gameRef, { [`${FIELD_TRAP_STATE}.timerEndsAt`]: deleteField() });
+    // Clear timer to prevent multiple runs
+    tx.update(gameRef, { [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField() });
 
     switch (game.gameState) {
       case 'category-selection': {
         const categories: string[] = state.fiveRandomCategories || [];
-        if (categories.length === 0) return; // Should not happen, but safe to guard.
+        if (categories.length === 0) return;
         
         const randomCategory = categories[Math.floor(Math.random() * categories.length)];
         const question = await fetchRandomQuestionByCategory(randomCategory);
@@ -558,6 +548,12 @@ export async function handleTimeout(gameId: string, callerId: string) {
     }
   });
 }
+
+// Backward compatibility (can be removed later)
+export async function handleTimeout(gameId: string, _callerId: string) {
+  await tickGame(gameId);
+}
+
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
   const gameRef = doc(db, 'games', gameId);
