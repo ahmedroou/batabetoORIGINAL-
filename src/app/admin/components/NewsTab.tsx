@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -46,7 +46,7 @@ import {
   runAiJournalist,
   deleteOldArticles,
 } from "@/lib/actions/news";
-import { adminSearchUsers } from "@/lib/actions/admin";
+import { adminSearchUsers } from "@/lib/actions/admin/users";
 import { Timestamp } from "firebase/firestore";
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -922,5 +922,3 @@ export default function NewsTab() {
     </Tabs>
   );
 }
-
-    
