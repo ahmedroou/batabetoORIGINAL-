@@ -116,13 +116,13 @@ export function calculateTrapAnswerScores(
     
     // Log who was tricked by whom
     if (!group.authors.has(guesserId)) {
-      const oneAuthor = pickOneAuthorStable(authors);
-      if (oneAuthor) {
+      // A player can be tricked by multiple authors if they submitted the same trap.
+      authors.forEach(authorId => {
         if (!newTrickStats.trickedBy[guesserId]) newTrickStats.trickedBy[guesserId] = [];
-        if (!newTrickStats.trickedBy[guesserId].includes(oneAuthor)) {
-          newTrickStats.trickedBy[guesserId].push(oneAuthor);
+        if (!newTrickStats.trickedBy[guesserId].includes(authorId)) {
+          newTrickStats.trickedBy[guesserId].push(authorId);
         }
-      }
+      });
     }
   }
 

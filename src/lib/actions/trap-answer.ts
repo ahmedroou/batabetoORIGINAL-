@@ -340,6 +340,8 @@ export async function handleTimeout(gameId: string, callerId: string) {
 
     if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
 
+    // Caller doesn't have to be host, but we only run logic if timer is actually expired.
+
     tx.update(gameRef, { [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField() });
 
     if (game.gameState === 'category-selection') {
@@ -384,8 +386,8 @@ export async function setAwayStatus(gameId: string, playerId: string, isAway: bo
 // -----------------------------------------------------------------------------
 function _getGuessingPhaseUpdates(game: Game, playerAnswers: Record<string, string | null>) {
   const state = (game as any)[FIELD_TRAP_STATE] || {};
-  const answerTime = state.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
-  const endsAt = tsFromNowS(answerTime);
+  const guessingTime = state.settings?.guessingTime ?? DEFAULT_ANSWER_TIME_S;
+  const endsAt = tsFromNowS(guessingTime);
   ensure(state.currentQuestion, 'Question data missing.');
 
   return {

@@ -198,4 +198,3 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
 
     return { success: true, data: { updates, winUpdate, specialAwards }};
 }
-
