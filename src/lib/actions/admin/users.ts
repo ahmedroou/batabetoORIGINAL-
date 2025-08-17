@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -22,7 +21,7 @@ import {
   runTransaction,
   Timestamp,
 } from 'firebase/firestore';
-import type { UserProfile, Mail, Game, MatchHistoryItem } from '@/types';
+import type { UserProfile, Mail, Game, MatchHistoryItem, GameKing } from '@/types';
 import { sendSystemMail } from '../user/mail';
 import { calculateEndOfGameAwards } from '../user/awards';
 import { getRanks, recordMatchHistory } from '../user/queries';
@@ -299,4 +298,52 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
         }
         return { success: false, error: `فشل توزيع الجوائز: ${error.message}` };
     }
+}
+
+/**
+ * Recalculates and updates the "Game King" for each game type based on win counts.
+ * This is an expensive operation and should be run manually by an admin.
+ * @returns {Promise<{success: boolean, updatedCount?: number, error?: string}>} The result of the operation.
+ */
+export async function recalculateGameKings(): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
+  try {
+    const allUsersSnapshot = await getDocs(collection(db, 'users'));
+    if (allUsersSnapshot.empty) {
+      return { success: true, updatedCount: 0 };
+    }
+
+    const users = allUsersSnapshot.docs.map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile));
+
+    const gameTypes = Object.values(users.reduce((acc, user) => {
+        Object.keys(user.winCounts || {}).forEach(gameType => acc.add(gameType));
+        return acc;
+    }, new Set<string>()));
+
+    const batch = writeBatch(db);
+    let updatedCount = 0;
+
+    for (const gameType of gameTypes) {
+      const topPlayer = users
+        .filter((u) => u.winCounts && u.winCounts[gameType as keyof Game['winCounts']] > 0)
+        .sort((a, b) => (b.winCounts![gameType as keyof Game['winCounts']] || 0) - (a.winCounts![gameType as keyof Game['winCounts']] || 0))[0];
+
+      if (topPlayer) {
+        const kingRef = doc(db, 'game_kings', gameType);
+        const kingData: GameKing = {
+          kingId: topPlayer.uid,
+          name: topPlayer.name,
+          avatarId: topPlayer.avatarId,
+          winCount: topPlayer.winCounts![gameType as keyof Game['winCounts']] || 0,
+        };
+        batch.set(kingRef, kingData, { merge: true });
+        updatedCount++;
+      }
+    }
+
+    await batch.commit();
+    return { success: true, updatedCount };
+  } catch (error: any) {
+    console.error('Error recalculating game kings:', error);
+    return { success: false, error: error.message || 'فشل إعادة حساب ملوك الألعاب.' };
+  }
 }
