@@ -402,5 +402,3 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         return { success: false, winnersCount: 0, error: error.message };
     });
 }
-
-    
