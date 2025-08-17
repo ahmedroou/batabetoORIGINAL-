@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -315,7 +316,7 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
     const users = allUsersSnapshot.docs.map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile));
 
     const gameTypes = Object.values(users.reduce((acc, user) => {
-        Object.keys(user.winCounts || {}).forEach(gameType => acc.add(gameType));
+        Object.keys(user.gamesPlayed || {}).forEach(gameType => acc.add(gameType));
         return acc;
     }, new Set<string>()));
 
@@ -324,8 +325,8 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
 
     for (const gameType of gameTypes) {
       const topPlayer = users
-        .filter((u) => u.winCounts && u.winCounts[gameType as keyof Game['winCounts']] > 0)
-        .sort((a, b) => (b.winCounts![gameType as keyof Game['winCounts']] || 0) - (a.winCounts![gameType as keyof Game['winCounts']] || 0))[0];
+        .filter((u) => u.gamesPlayed && u.gamesPlayed[gameType as keyof Game['gamesPlayed']] > 0)
+        .sort((a, b) => (b.gamesPlayed![gameType as keyof Game['gamesPlayed']] || 0) - (a.gamesPlayed![gameType as keyof Game['gamesPlayed']] || 0))[0];
 
       if (topPlayer) {
         const kingRef = doc(db, 'game_kings', gameType);
@@ -333,7 +334,7 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
           kingId: topPlayer.uid,
           name: topPlayer.name,
           avatarId: topPlayer.avatarId,
-          winCount: topPlayer.winCounts![gameType as keyof Game['winCounts']] || 0,
+          winCount: topPlayer.gamesPlayed![gameType as keyof Game['gamesPlayed']] || 0,
         };
         batch.set(kingRef, kingData, { merge: true });
         updatedCount++;
