@@ -406,7 +406,7 @@ export default function GameClient() {
       <div className="mt-20 mb-6 w-[min(1200px,98vw)]">
         <AnimatePresence mode="wait">
           <motion.div
-            key={game.id + game.gameState}
+            key={game.id}
             initial={{ opacity: 0, y: 14, scale: 0.995 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10 }}
