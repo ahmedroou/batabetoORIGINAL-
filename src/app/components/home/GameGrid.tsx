@@ -145,7 +145,7 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
         <p className="mt-1 text-muted-foreground">اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3">
         {gameCardsData.map((game, i) => {
           const Icon = (GAME_ICONS as any)[game.type] || Star;
           const loadingThis = isLoading === (`create-${game.type}` as LoadingState);
@@ -173,26 +173,26 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
             >
                 <Card className="relative h-full border-border/60 bg-card/60 backdrop-blur-sm transition-all hover:shadow-xl hover:-translate-y-1 flex flex-col">
                     <div aria-hidden className={`pointer-events-none absolute -inset-px opacity-0 group-hover:opacity-70 blur-xl bg-gradient-to-br ${game.accent.from} ${game.accent.via ?? ''} ${game.accent.to} transition-opacity duration-300`} />
-                    <CardHeader className="text-center p-3">
+                    <CardHeader className="text-center p-2">
                     {tag && (
-                        <span className="absolute start-2 top-2 select-none rounded-full border border-white/10 bg-background/70 px-2 py-0.5 text-[10px] font-semibold shadow-sm backdrop-blur inline-flex items-center gap-1">
+                        <span className="absolute start-1.5 top-1.5 select-none rounded-full border border-white/10 bg-background/70 px-2 py-0.5 text-[9px] font-semibold shadow-sm backdrop-blur inline-flex items-center gap-1">
                         <TagIcon className="w-3 h-3" /> {tag}
                         </span>
                     )}
-                    <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl border border-white/15 bg-gradient-to-b from-background/70 to-background/40 shadow-inner">
-                        <Icon className="h-7 w-7 text-primary transition-transform duration-300 group-hover:scale-110" />
+                    <div className="mx-auto grid h-10 w-10 place-items-center rounded-lg border border-white/15 bg-gradient-to-b from-background/70 to-background/40 shadow-inner">
+                        <Icon className="h-6 w-6 text-primary transition-transform duration-300 group-hover:scale-110" />
                     </div>
-                    <CardTitle className="text-base font-bold tracking-tight">{game.title}</CardTitle>
+                    <CardTitle className="text-sm font-bold tracking-tight">{game.title}</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex-grow p-3 pt-0">
-                        <CardDescription className="text-xs leading-relaxed line-clamp-2">
+                    <CardContent className="flex-grow p-2 pt-0">
+                        <CardDescription className="text-[11px] leading-relaxed line-clamp-2">
                             {game.description}
                         </CardDescription>
                     </CardContent>
-                    <CardFooter className="mt-auto pt-2 pb-3 px-3 flex items-center justify-between">
+                    <CardFooter className="mt-auto pt-2 pb-2 px-2 flex items-center justify-between">
                         <Popover>
                             <PopoverTrigger asChild>
-                                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary gap-1">
+                                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary gap-1 h-8 w-8 p-0">
                                     <Trophy className="w-4 h-4 text-amber-400"/>
                                 </Button>
                             </PopoverTrigger>
@@ -215,7 +215,7 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
                         </Popover>
                         <Button
                             size="sm"
-                            className="rounded-lg bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg transition-transform hover:opacity-90 focus-visible:translate-y-[1px]"
+                            className="rounded-md bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg transition-transform hover:opacity-90 focus-visible:translate-y-px h-8 text-xs"
                             onClick={() => handleCreate(game.type)}
                             disabled={!!isLoading}
                             aria-busy={loadingThis}
