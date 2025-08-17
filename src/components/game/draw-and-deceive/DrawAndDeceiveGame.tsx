@@ -1,9 +1,10 @@
 
-      
 'use client';
 
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
+import { LobbyPhase } from './phases/LobbyPhase';
+import { DrawingPhase } from './phases/DrawingPhase';
 
 interface DrawAndDeceiveGameProps {
     game: Game;
@@ -17,9 +18,9 @@ export function DrawAndDeceiveGame({ game, self }: DrawAndDeceiveGameProps) {
     const renderContent = () => {
         switch (phase) {
             case 'lobby':
-                return <div>Lobby Phase (To be implemented)</div>;
+                return <LobbyPhase game={game} self={self} />;
             case 'drawing':
-                return <div>Drawing Phase (To be implemented)</div>;
+                return <DrawingPhase game={game} self={self} />;
             case 'trapping':
                  return <div>Trapping Phase (To be implemented)</div>;
             case 'guessing':
@@ -50,5 +51,3 @@ export function DrawAndDeceiveGame({ game, self }: DrawAndDeceiveGameProps) {
         </div>
     );
 }
-
-    

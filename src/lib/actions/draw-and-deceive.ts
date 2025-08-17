@@ -1,11 +1,11 @@
 
-      
 'use server';
 
 import { db } from '@/lib/firebase';
 import { doc, runTransaction, Timestamp } from 'firebase/firestore';
 import type { Game, Player, DrawAndDeceiveState } from '@/types';
 import { shuffle } from './helpers';
+import { WORD_WAR_WORDS } from '@/data/word-war-words';
 
 // --- Constants ---
 const DEFAULT_SETTINGS = {
@@ -37,6 +37,9 @@ export async function startGame(gameId: string, hostId: string) {
 
         const turnOrder = shuffle(game.players.map(p => p.id));
         const rounds = Math.min(10, Math.max(1, game.drawAndDeceiveState?.settings?.rounds ?? DEFAULT_SETTINGS.rounds));
+        const drawingTime = game.drawAndDeceiveState?.settings?.drawingTime ?? DEFAULT_SETTINGS.drawingTime;
+        
+        const wordToDraw = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)];
 
         const initialState: DrawAndDeceiveState = {
             settings: { ...DEFAULT_SETTINGS, ...game.drawAndDeceiveState?.settings, rounds },
@@ -45,9 +48,10 @@ export async function startGame(gameId: string, hostId: string) {
             round: 1,
             phase: 'drawing',
             artistId: turnOrder[0],
+            wordToDraw,
             playerTraps: {},
             playerGuesses: {},
-            timerEndsAt: inSec(game.drawAndDeceiveState?.settings?.drawingTime ?? DEFAULT_SETTINGS.drawingTime),
+            timerEndsAt: inSec(drawingTime),
         };
 
         tx.update(gameRef, {
@@ -58,4 +62,30 @@ export async function startGame(gameId: string, hostId: string) {
     });
 }
 
+
+export async function submitDrawing(gameId: string, playerId: string, drawingDataUrl: string, correctAnswer: string) {
+    const gameRef = doc(db, 'games', gameId);
+
+    await runTransaction(db, async (tx) => {
+        const gameDoc = await tx.get(gameRef);
+        ensure(gameDoc.exists(), 'Game not found.');
+        const game = gameDoc.data() as Game;
+        
+        const state = game.drawAndDeceiveState;
+        ensure(state, 'Game state not initialized for Draw and Deceive.');
+        ensure(state.phase === 'drawing', 'Not in the drawing phase.');
+        ensure(state.artistId === playerId, 'Only the artist can submit a drawing.');
+        ensure(drawingDataUrl, 'Drawing data is missing.');
+        ensure(correctAnswer && correctAnswer.trim().length > 0, 'The correct answer/title is required.');
+
+        const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
+
+        tx.update(gameRef, {
+            'drawAndDeceiveState.phase': 'trapping',
+            'drawAndDeceiveState.drawingDataUrl': drawingDataUrl,
+            'drawAndDeceiveState.correctAnswer': correctAnswer.trim(),
+            'drawAndDeceiveState.timerEndsAt': inSec(trappingTime),
+        });
+    });
+}
     

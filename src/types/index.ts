@@ -1,4 +1,5 @@
 
+
       
 
 import type { Timestamp } from 'firebase/firestore';
@@ -441,9 +442,9 @@ export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type EducatedMerchantGameState = "lobby" | "rolling" | "movement" | "property_action" | "question" | "turn_end" | "final_results";
 export type QuizSwapGameState = 'lobby' | 'peek' | 'playing' | 'discarding' | 'answering' | 'final_results';
-export type DrawAndDeceiveState = 'lobby' | 'drawing' | 'trapping' | 'guessing' | 'results' | 'final_results';
+export type DrawAndDeceivePhase = 'lobby' | 'drawing' | 'trapping' | 'guessing' | 'results' | 'final_results';
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState | QuizSwapGameState | DrawAndDeceiveState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState | QuizSwapGameState | DrawAndDeceivePhase;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -633,10 +634,11 @@ export interface DrawAndDeceiveState {
     turnOrder: string[];
     currentTurnIndex: number;
     round: number;
-    phase: 'drawing' | 'trapping' | 'guessing' | 'results';
+    phase: DrawAndDeceivePhase;
     
     // State per round
     artistId?: string;
+    wordToDraw?: string;
     drawingDataUrl?: string; // The drawing itself as a base64 string
     correctAnswer?: string; // The 2-word title from the artist
     
