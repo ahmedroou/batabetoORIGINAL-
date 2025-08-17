@@ -1,4 +1,5 @@
 
+
 import type { Game, SocialRank, PermissionId } from '@/types';
 import { recordGamePointsScoredEvent } from '../events';
 
@@ -25,7 +26,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     });
 
     let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
-    let specialAwards: Game['trapAnswerState']['finalAwards'] = {};
+    let specialAwards: Game['trapAnswerState']['finalAwards'] | Game['drawAndDeceiveState']['lastRoundResults'] = {};
     
     const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
     
@@ -148,6 +149,21 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         specialAwards = { cunningDeceiver, deceivedFool, afkStats };
     }
     
+    if (game.gameType === 'draw-and-deceive') {
+        const sortedPlayerIds = Object.keys(finalScores).sort((a, b) => (finalScores[b] || 0) - (finalScores[a] || 0));
+        if (sortedPlayerIds.length > 0) {
+            const winnerId = sortedPlayerIds[0];
+            const winningScore = finalScores[winnerId];
+            const winners = sortedPlayerIds.filter(pid => (finalScores[pid] || 0) === winningScore);
+            if (winners.length === 1) {
+                 winUpdate = { userId: winnerId, gameType: 'draw-and-deceive' };
+                 if (updates[winnerId]) {
+                    updates[winnerId].winCounts = { 'draw-and-deceive': 1 };
+                 }
+            }
+        }
+    }
+
     // --- Fire off events for any challenge points scored ---
     Object.entries(updates).forEach(([playerId, playerUpdates]) => {
         if (playerUpdates.challengePoints && playerUpdates.challengePoints > 0) {
@@ -183,4 +199,3 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     return { success: true, data: { updates, winUpdate, specialAwards }};
 }
 
-    

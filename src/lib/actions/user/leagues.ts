@@ -1,3 +1,5 @@
+
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -287,10 +289,10 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
         leagueSnapshot.forEach(leagueDoc => {
             const leagueData = leagueDoc.data() as League;
             const newScores: Record<string, number> = {};
-            const newGamesPlayed: Record<string, number> = {};
+            const newGamesPlayed: Record<string, Record<string, number>> = {}; // Changed to match per-game structure
             leagueData.members.forEach(memberId => {
                 newScores[memberId] = 0;
-                newGamesPlayed[memberId] = 0;
+                newGamesPlayed[memberId] = {}; // Reset per-game stats for each member
             });
             batch.update(leagueDoc.ref, {
                 scores: newScores,
@@ -309,6 +311,8 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
 };
 
 export async function updateLeagueScoresForGameEnd(game: Game) {
+    if (!game || !game.playerUids || game.playerUids.length === 0) return;
+    
     const leaguesQuery = query(collection(db, 'leagues'), where('members', 'array-contains-any', game.playerUids));
     const leaguesSnapshot = await getDocs(leaguesQuery);
     
@@ -326,7 +330,9 @@ export async function updateLeagueScoresForGameEnd(game: Game) {
         const leagueUpdates: { [key: string]: any } = {};
         Object.entries(updates).forEach(([playerId, playerUpdates]) => {
             if(leagueDoc.data().members.includes(playerId)) {
-                leagueUpdates[`scores.${playerId}`] = increment(playerUpdates.challengePoints || 0);
+                if (playerUpdates.challengePoints && playerUpdates.challengePoints !== 0) {
+                     leagueUpdates[`scores.${playerId}`] = increment(playerUpdates.challengePoints);
+                }
                 if (game.gameType) {
                     leagueUpdates[`gamesPlayed.${playerId}.${game.gameType}`] = increment(1);
                 }
@@ -339,3 +345,4 @@ export async function updateLeagueScoresForGameEnd(game: Game) {
 
     await batch.commit();
 }
+
