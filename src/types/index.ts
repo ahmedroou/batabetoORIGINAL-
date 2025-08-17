@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -482,13 +483,16 @@ export interface SmartGridPuzzleData {
 
 export interface TrapQuestion {
     id: string;
-    question: string;
+    type: 'text' | 'image';
+    question?: string; // Optional for image questions
+    imageUrl?: string; // Optional for text questions
     answer: string;
     category: string;
     dummyAnswers?: string[];
     randomKey?: number;
     createdAt?: Timestamp;
 }
+
 
 export interface PrisonQuestion {
     id: string;

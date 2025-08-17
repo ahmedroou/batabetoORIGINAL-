@@ -1,15 +1,18 @@
+
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
-import type { Game, Player } from '@/types';
+import type { Game, Player, EmojiReaction, EmojiReactionType, TrapQuestion } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { submitTrapAnswer } from '@/lib/actions/trap-answer';
-import { Loader2, EyeOff, Send } from 'lucide-react';
+import { Loader2, EyeOff, Send, Image as ImageIcon } from 'lucide-react';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
+import Image from 'next/image';
 
 const hasOwn = (obj: unknown, key: string) =>
   !!obj && Object.prototype.hasOwnProperty.call(obj as Record<string, unknown>, key);
@@ -111,6 +114,31 @@ const StableAnswerInput = memo(function StableAnswerInput({
 });
 StableAnswerInput.displayName = 'StableAnswerInput';
 
+const QuestionDisplay = ({ question }: { question: TrapQuestion }) => {
+  if (question.type === 'image' && question.imageUrl) {
+    return (
+      <div className="mb-4">
+        <p className="text-xl font-bold pt-2 mb-2">{question.question || 'ماذا في الصورة؟'}</p>
+        <div className="relative aspect-video w-full max-w-md mx-auto rounded-lg overflow-hidden border">
+          <Image
+            src={question.imageUrl}
+            alt={question.question || 'Question Image'}
+            fill
+            className="object-contain"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <CardDescription className="text-2xl font-bold pt-2">
+      {question.question ?? '—'}
+    </CardDescription>
+  );
+};
+
+
 export function AnswerSubmissionPhase({ game, self }: { game: Game, self: Player }) {
     const { toast } = useToast();
     const [loading, setLoading] = useState(false);
@@ -122,6 +150,7 @@ export function AnswerSubmissionPhase({ game, self }: { game: Game, self: Player
     }, [game.players, game.trapAnswerState?.playerAnswers]);
 
     const awayPlayerIds = useMemo(() => game.trapAnswerState?.awayPlayerIds || [], [game.trapAnswerState?.awayPlayerIds]);
+    const currentQuestion = game.trapAnswerState?.currentQuestion;
 
     const handleSubmitAnswer = useCallback(
         async (text: string) => {
@@ -163,9 +192,11 @@ export function AnswerSubmissionPhase({ game, self }: { game: Game, self: Player
             )}
             <CardHeader className="text-center pt-20">
                 <CardTitle>السؤال</CardTitle>
-                <CardDescription className="text-2xl font-bold pt-2">
-                    {game.trapAnswerState?.currentQuestion?.question ?? '—'}
-                </CardDescription>
+                 {currentQuestion ? (
+                    <QuestionDisplay question={currentQuestion} />
+                ) : (
+                    <CardDescription className="text-2xl font-bold pt-2">—</CardDescription>
+                )}
             </CardHeader>
             <CardContent>
                 {hasSubmitted ? (
