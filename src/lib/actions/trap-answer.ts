@@ -38,11 +38,10 @@ import { distributeEndOfGameAwards } from './admin/users';
 // -----------------------------------------------------------------------------
 // Constants & small helpers
 // -----------------------------------------------------------------------------
-const SIMILARITY_THRESHOLD = 0.75 as const;
-const SIMILARITY_BLOCK = 0.95 as const;
-const CATEGORY_SELECTION_TIME_S = 30;
-const DEFAULT_ANSWER_TIME_S = 60;
-const DEFAULT_RESULTS_TIME_S = 90;
+const SIMILARITY_BLOCK = 0.70 as const;
+const CATEGORY_SELECTION_TIME_S = 30 as const;
+const DEFAULT_ANSWER_TIME_S = 60 as const;
+const DEFAULT_RESULTS_TIME_S = 90 as const;
 const FIELD_TRAP_STATE = 'trapAnswerState';
 const TIMEOUT_TOKEN = '__TIMEOUT__';
 
@@ -93,21 +92,29 @@ function buildShuffledAnswers(
   question: TrapQuestion,
   playerAnswers: Record<string, string | null>
 ): string[] {
-  const traps = new Set(Object.values(playerAnswers).filter((ans): ans is string => !!ans?.trim()).map(ans => ans.trim()));
-  const all = new Set<string>([String(question.answer)]);
-
-  traps.forEach(t => {
-    if (safeCompareStrings(t, question.answer) < SIMILARITY_BLOCK) all.add(t);
-  });
-
-  const dummies = shuffle(Array.isArray(question.dummyAnswers) ? [...question.dummyAnswers] : []);
-  for (const d of dummies) {
-    if (all.size >= 4) break;
-    if (safeCompareStrings(d, question.answer) < SIMILARITY_BLOCK) all.add(String(d));
+  const allOptions = new Set<string>([question.answer]);
+  
+  // Add player traps, filtering those too similar to the correct answer.
+  for (const answer of Object.values(playerAnswers)) {
+    if (answer && answer.trim()) {
+      if (safeCompareStrings(answer, question.answer) < SIMILARITY_BLOCK) {
+        allOptions.add(answer.trim());
+      }
+    }
   }
 
-  if (all.size < 2) all.add('— لا أعرف —');
-  return shuffle(Array.from(all));
+  // Add dummy answers, also filtering those too similar to the correct one.
+  const dummies = shuffle(Array.isArray(question.dummyAnswers) ? [...question.dummyAnswers] : []);
+  for (const dummy of dummies) {
+    if (allOptions.size >= 4) break;
+    if (safeCompareStrings(dummy, question.answer) < SIMILARITY_BLOCK) {
+      allOptions.add(dummy.trim());
+    }
+  }
+
+  if (allOptions.size < 2) allOptions.add('— لا أعرف —');
+  
+  return shuffle(Array.from(allOptions));
 }
 
 // -----------------------------------------------------------------------------
@@ -241,18 +248,7 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
       if (game.gameState !== 'answer-submission') return;
 
       const state = (game as any)[FIELD_TRAP_STATE] || {};
-      if (hasOwn(state.playerAnswers || {}, playerId)) return;
-
       const finalAnswer = answer.trim() || null;
-      const correctAnswer = state.currentQuestion?.answer;
-
-      if (correctAnswer && finalAnswer && safeCompareStrings(finalAnswer, correctAnswer) > SIMILARITY_BLOCK) {
-        throw new Error('لا يمكنك إدخال إجابة مطابقة أو شبيهة بالإجابة الصحيحة.');
-      }
-
-      // **FIX**: The error is here. You must read first, then write.
-      // The logic is to check if ALL players have answered AFTER this one.
-      // So, we read first to get the current state, and then write all changes at the end.
       
       const currentAnswers = { ...(state.playerAnswers || {}), [playerId]: finalAnswer };
       const activePlayers = getActivePlayers(game);

@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Helper functions for the "Trap Answer" game logic (pure).
  * Preserves public API. Safer canonical mapping to displayed options,
@@ -6,7 +7,8 @@
 import type { Game, Player, TrapQuestion } from '@/types';
 import { safeCompareStrings, getSimilaritySignature } from '../helpers';
 
-const SIMILARITY_THRESHOLD = 0.95 as const; // Increased for more accurate grouping
+const SIMILARITY_THRESHOLD_GROUP = 0.95 as const;
+const SIMILARITY_BLOCK_AGAINST_CORRECT = 0.70 as const;
 const TIMEOUT_TOKEN = '__TIMEOUT__' as const;
 
 type RoundScores = Game['trapAnswerState']['lastRoundResults']['scores'];
@@ -24,35 +26,6 @@ function pickOneAuthorStable(authorIds: string[]): string | null {
   return [...authorIds].sort((a, b) => a.localeCompare(b))[0] || null;
 }
 
-/** Build canonical option map from displayed answers: signature → displayed text */
-function buildCanonicalOptionsMap(options: string[]) {
-  const map = new Map<string, string>();
-  for (const opt of options) {
-    const sig = getSimilaritySignature(opt);
-    if (sig) map.set(sig, opt);
-  }
-  return map;
-}
-
-/** Find group index by similarity threshold. */
-function findSimilarGroup(
-  groups: { text: string; authors: Set<string> }[],
-  text: string
-): { index: number; score: number } {
-    if (!text) return { index: -1, score: 0 };
-    let bestIndex = -1;
-    let bestScore = 0;
-    for (let i = 0; i < groups.length; i++) {
-        const score = safeCompareStrings(groups[i].text, text);
-        if (score > bestScore) {
-            bestScore = score;
-            bestIndex = i;
-        }
-    }
-    return { index: bestIndex, score: bestScore };
-}
-
-
 export function calculateTrapAnswerScores(
   activePlayers: Player[],
   question: TrapQuestion,
@@ -61,7 +34,6 @@ export function calculateTrapAnswerScores(
   awayPlayerIdsInRound: string[],
   shuffledAnswers: string[]
 ) {
-  // Initialize round scores for active players only
   const roundScores: RoundScores = activePlayers.reduce((acc, p) => {
     acc[p.id] = { points: 0, breakdown: [] };
     return acc;
@@ -69,75 +41,59 @@ export function calculateTrapAnswerScores(
 
   const newTrickStats: TrickStats = { trickedBy: {}, trickedOthers: {} };
   const timedOutGuesserIds: string[] = [];
-  
-  const canonicalMap = buildCanonicalOptionsMap(shuffledAnswers);
+
   const correctSig = getSimilaritySignature(question.answer);
-  const correctDisplayedOpt =
-    [...canonicalMap.entries()].find(
-      ([sig, txt]) => safeCompareStrings(txt, question.answer) > SIMILARITY_THRESHOLD || sig === correctSig
-    )?.[1] ?? question.answer;
-
-  // Group similar trap answers
-  const answerGroups: { text: string; authors: Set<string> }[] = [];
+  
+  // Group identical trap answers (after normalization)
+  const answerGroups = new Map<string, { text: string; authors: Set<string> }>();
   for (const [authorId, answerText] of Object.entries(playerAnswers)) {
-    if (answerText === null) continue;
-    const trimmed = answerText.trim();
-    if (!trimmed) continue;
+    if (!answerText) continue;
     
-    // Check against correct answer first
-    if (safeCompareStrings(trimmed, question.answer) > 0.70) continue;
-
-    const { index, score } = findSimilarGroup(answerGroups, trimmed);
-    if (index !== -1 && score > SIMILARITY_THRESHOLD) {
-        answerGroups[index].authors.add(authorId);
+    // Reject answers too similar to the correct one
+    if (safeCompareStrings(answerText, question.answer) >= SIMILARITY_BLOCK_AGAINST_CORRECT) {
+        continue;
+    }
+    
+    const sig = getSimilaritySignature(answerText);
+    if (!sig) continue;
+    
+    if (answerGroups.has(sig)) {
+      answerGroups.get(sig)!.authors.add(authorId);
     } else {
-        answerGroups.push({ text: trimmed, authors: new Set([authorId]) });
+      answerGroups.set(sig, { text: answerText.trim(), authors: new Set([authorId]) });
     }
   }
 
-
   // Scoring
-  for (const [guesserId, rawGuess] of Object.entries(playerGuesses)) {
-    if (rawGuess === TIMEOUT_TOKEN) {
-      timedOutGuesserIds.push(guesserId);
+  for (const [guesserId, guess] of Object.entries(playerGuesses)) {
+    if (guess === TIMEOUT_TOKEN || !guess) {
+      if(guess === TIMEOUT_TOKEN) timedOutGuesserIds.push(guesserId);
       continue;
     }
-    if (rawGuess == null) continue;
-    
-    const guessSig = getSimilaritySignature(rawGuess);
-    const displayedGuess = canonicalMap.get(guessSig)
-      ?? [...canonicalMap.values()].find(opt => safeCompareStrings(opt, rawGuess) > SIMILARITY_THRESHOLD);
 
-    if (!displayedGuess) continue;
-
-    const isCorrect = safeCompareStrings(displayedGuess, correctDisplayedOpt) > SIMILARITY_THRESHOLD
-      || (getSimilaritySignature(displayedGuess) === getSimilaritySignature(correctDisplayedOpt));
+    const guessSig = getSimilaritySignature(guess);
+    const isCorrect = guessSig === correctSig;
 
     if (isCorrect) {
       ensureBucket(roundScores, guesserId);
       roundScores[guesserId].points += 2;
-      roundScores[guesserId].breakdown.push({ reason: "إجابة صحيحة", points: 2 });
+      roundScores[guesserId].breakdown.push({ reason: 'إجابة صحيحة', points: 2 });
       continue;
     }
 
-    const { index: chosenGroupIdx } = findSimilarGroup(answerGroups, displayedGuess);
-    if (chosenGroupIdx < 0) continue;
+    const group = answerGroups.get(guessSig);
+    if (!group) continue;
     
-    const group = answerGroups[chosenGroupIdx];
-    const authors = [...group.authors];
+    const authors = Array.from(group.authors);
+    const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
 
     if (group.authors.has(guesserId)) {
-      ensureBucket(roundScores, guesserId);
-      roundScores[guesserId].points -= 1;
-      roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
+        ensureBucket(roundScores, guesserId);
+        roundScores[guesserId].points -= 1;
+        roundScores[guesserId].breakdown.push({ reason: 'صوّت لنفسه', points: -1 });
     }
 
-    const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
     for (const authorId of authors) {
-      if (authorId === guesserId && roundScores[guesserId].breakdown.some(b => b.reason === 'صوّت لنفسه')) {
-         // If a player votes for their own answer, they should get both the penalty and the points for tricking others.
-         // Let's ensure the logic reflects this if needed, but for now, we separate.
-      }
       ensureBucket(roundScores, authorId);
       roundScores[authorId].points += 1;
       roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
@@ -147,7 +103,7 @@ export function calculateTrapAnswerScores(
         newTrickStats.trickedOthers[authorId].push(guesserId);
       }
     }
-
+    
     if (!group.authors.has(guesserId)) {
       const oneAuthor = pickOneAuthorStable(authors);
       if (oneAuthor) {
@@ -159,33 +115,51 @@ export function calculateTrapAnswerScores(
     }
   }
 
-  // Build results list
+  // Build results list for display
   const resultsByAnswer: ResultsByAnswer = [];
-  for (const optionText of shuffledAnswers) {
-    const isCorrect =
-      safeCompareStrings(optionText, correctDisplayedOpt) > SIMILARITY_THRESHOLD ||
-      (getSimilaritySignature(optionText) === getSimilaritySignature(correctDisplayedOpt));
-    
-    const { index: groupIndex } = findSimilarGroup(answerGroups, optionText);
-    const group = groupIndex !== -1 ? answerGroups[groupIndex] : null;
+  const addedSigs = new Set<string>();
 
-    const guesserIds = Object.entries(playerGuesses)
-      .filter(([pid, g]) => g !== TIMEOUT_TOKEN && g != null && (safeCompareStrings(g, optionText) > SIMILARITY_THRESHOLD))
-      .map(([pid]) => pid);
+  // Add correct answer
+  resultsByAnswer.push({
+    text: question.answer,
+    isCorrect: true,
+    authorIds: [],
+    guesserIds: Object.entries(playerGuesses).filter(([_, g]) => getSimilaritySignature(g ?? '') === correctSig).map(([pid]) => pid),
+  });
+  addedSigs.add(correctSig);
 
+  // Add trap answers
+  for (const [sig, group] of answerGroups.entries()) {
+    if(addedSigs.has(sig)) continue;
     resultsByAnswer.push({
-      text: optionText,
-      isCorrect,
-      authorIds: isCorrect ? [] : group ? [...group.authors] : [],
-      guesserIds
+        text: group.text,
+        isCorrect: false,
+        authorIds: Array.from(group.authors),
+        guesserIds: Object.entries(playerGuesses).filter(([_,g]) => getSimilaritySignature(g ?? '') === sig).map(([pid]) => pid)
     });
+    addedSigs.add(sig);
   }
+  
+  // Add any remaining shuffled dummy answers that weren't submitted
+  for (const option of shuffledAnswers) {
+      const sig = getSimilaritySignature(option);
+      if(!addedSigs.has(sig)) {
+          resultsByAnswer.push({
+              text: option,
+              isCorrect: false,
+              authorIds: [],
+              guesserIds: Object.entries(playerGuesses).filter(([_, g]) => getSimilaritySignature(g ?? '') === sig).map(([pid]) => pid)
+          })
+      }
+  }
+  
 
   return {
     roundScores,
     resultsByAnswer,
     newTrickStats,
     timedOutGuesserIds,
-    awayPlayerIdsDuringRound: awayPlayerIdsInRound
+    awayPlayerIdsDuringRound: awayPlayerIdsInRound,
   };
 }
+
