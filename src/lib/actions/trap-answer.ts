@@ -196,6 +196,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
       [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt,
       [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
       [`${FIELD_TRAP_STATE}.afkStats`]: {},
+       [`${FIELD_TRAP_STATE}.history`]: [], // Initialize history
     });
   });
 }
@@ -415,6 +416,13 @@ function _getResultsPhaseUpdates(game: Game, playerGuesses: Record<string, strin
 
   const resultsTime = state.settings?.resultsTime ?? DEFAULT_RESULTS_TIME_S;
   const endsAt = tsFromNowS(resultsTime);
+  
+  const currentHistory = state.history || [];
+  const newHistoryEntry = { 
+      round: game.round || 1, 
+      results: { scores: roundScores, answers: resultsByAnswer, timedOutGuesserIds },
+      awayPlayerIdsDuringRound: state.awayPlayerIds || [],
+  };
 
   return {
     updates: {
@@ -423,6 +431,7 @@ function _getResultsPhaseUpdates(game: Game, playerGuesses: Record<string, strin
       [`${FIELD_TRAP_STATE}.lastRoundResults`]: { scores: roundScores, answers: resultsByAnswer, timedOutGuesserIds, awayPlayerIdsDuringRound: state.awayPlayerIds },
       [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt,
       [`${FIELD_TRAP_STATE}.trickStats`]: mergeTrickStats(state.trickStats, newTrickStats),
+      [`${FIELD_TRAP_STATE}.history`]: [...currentHistory, newHistoryEntry],
     },
   };
 }

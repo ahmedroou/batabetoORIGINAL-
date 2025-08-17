@@ -641,6 +641,7 @@ export interface Game {
     winner: PlayerTeam | 'draw' | 'game_over' | string;
     message: string;
     ranking?: any[];
+    finalAwards?: any;
   };
   
   // king-of-genius specific fields
@@ -702,6 +703,7 @@ export interface Game {
     awayPlayerIds?: string[]; 
     awayPlayerIdsInAnsweringPhase?: string[];
     afkStats?: Record<string, number>;
+    history?: any[];
   };
 
   // "خلف القناع" (Mafia) specific state

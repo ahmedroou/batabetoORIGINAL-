@@ -108,6 +108,19 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     if (game.gameType === 'trap-answer' && trapState) {
         let deceivedFool: Game['trapAnswerState']['finalAwards']['deceivedFool'] = null;
         let cunningDeceiver: Game['trapAnswerState']['finalAwards']['cunningDeceiver'] = null;
+        const afkStats: Record<string, number> = {};
+
+        // Aggregate AFK stats across all rounds
+        if (Array.isArray(trapState.history)) {
+            for (const roundHistory of trapState.history) {
+                if (Array.isArray(roundHistory.awayPlayerIdsDuringRound)) {
+                    for (const afkPlayerId of roundHistory.awayPlayerIdsDuringRound) {
+                        afkStats[afkPlayerId] = (afkStats[afkPlayerId] || 0) + 1;
+                    }
+                }
+            }
+        }
+
 
         const trickStats = trapState.trickStats || { trickedBy: {}, trickedOthers: {} };
 
@@ -135,7 +148,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             }
         }
         
-        specialAwards = { cunningDeceiver, deceivedFool };
+        specialAwards = { cunningDeceiver, deceivedFool, afkStats };
     }
 
     // --- New Permissions Calculation ---
