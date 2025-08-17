@@ -88,4 +88,39 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
         });
     });
 }
+
+export async function submitTrap(gameId: string, playerId: string, trap: string) {
+    const gameRef = doc(db, 'games', gameId);
+
+    await runTransaction(db, async (tx) => {
+        const gameDoc = await tx.get(gameRef);
+        ensure(gameDoc.exists(), 'Game not found.');
+        const game = gameDoc.data() as Game;
+        
+        const state = game.drawAndDeceiveState;
+        ensure(state, 'Game state not initialized.');
+        ensure(state.phase === 'trapping', 'Not in the trapping phase.');
+        ensure(state.artistId !== playerId, 'The artist cannot submit a trap.');
+        ensure(trap && trap.trim().length > 0, 'Trap answer cannot be empty.');
+
+        const updatedTraps = { ...state.playerTraps, [playerId]: trap.trim() };
+
+        tx.update(gameRef, {
+            'drawAndDeceiveState.playerTraps': updatedTraps
+        });
+        
+        // Check if all non-artists have submitted a trap
+        const activePlayers = game.players.filter(p => p.status !== 'left');
+        const nonArtists = activePlayers.filter(p => p.id !== state.artistId);
+        
+        if (Object.keys(updatedTraps).length === nonArtists.length) {
+            // All traps are in, move to guessing phase
+            const guessingTime = state.settings?.guessingTime ?? DEFAULT_SETTINGS.guessingTime;
+             tx.update(gameRef, {
+                'drawAndDeceiveState.phase': 'guessing',
+                'drawAndDeceiveState.timerEndsAt': inSec(guessingTime),
+            });
+        }
+    });
+}
     
