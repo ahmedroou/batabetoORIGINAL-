@@ -1,9 +1,9 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { TimerIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { tickGame as tickTrapAnswerGame } from '@/lib/actions/trap-answer';
 import { handleTimeout as handleEducatedMerchantTimeout } from '@/lib/actions/educated-merchant';
 import { handleTimeout as handlePrisonTimeout } from '@/lib/actions/prison';
 import type { Game } from '@/types';
@@ -34,20 +34,13 @@ export const CountdownTimer = ({ gameId, gameType, expiryTimestamp, selfId, isHo
         const timer = setInterval(() => {
             const remaining = calculateTimeLeft();
             setTimeLeft(remaining);
-
-            // Tick on approach to zero to sync client/server timers
-            if(gameType === 'trap-answer' && remaining <= 2) {
-                tickTrapAnswerGame(gameId);
-            }
             
             if (remaining <= 0 && !timeoutProcessed.current) {
                  timeoutProcessed.current = true;
                  clearInterval(timer);
                  // Any active player can nudge the game state forward.
                  switch (gameType) {
-                    case 'trap-answer':
-                        tickTrapAnswerGame(gameId); // Final tick
-                        break;
+                    // Timeout logic for trap-answer is handled by the host in the main component.
                     case 'educated-merchant':
                         // This game's timeout logic is still host-driven in its current form
                         if (isHost) handleEducatedMerchantTimeout(gameId, selfId);
