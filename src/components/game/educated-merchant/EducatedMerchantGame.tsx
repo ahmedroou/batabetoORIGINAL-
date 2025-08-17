@@ -1,5 +1,5 @@
 
-"use client";
+'use client';
 
 import type { Game, Player } from '@/types';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -26,10 +26,16 @@ const LoadingState = ({ text }: { text: string }) => (
 );
 
 export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) {
-    const renderContent = () => {
-        switch (game.gameState) {
-            case 'lobby':
-                return (
+    const gameState = game.gameState;
+
+    // Helper to determine if we are in an active game state
+    const isActiveGamePhase = (state: Game['gameState']) => 
+        ['rolling', 'movement', 'property_action', 'question', 'turn_end'].includes(state);
+
+    return (
+        <div className="w-full h-screen flex items-center justify-center relative bg-gray-100 dark:bg-gray-900">
+             <AnimatePresence mode="wait">
+                {gameState === 'lobby' && (
                      <motion.div
                         key="lobby"
                         initial={{ opacity: 0, scale: 0.95 }}
@@ -40,9 +46,20 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
                     >
                         <EducatedMerchantLobby game={game} self={self} />
                     </motion.div>
-                );
-            case 'final_results':
-                return (
+                )}
+                {isActiveGamePhase(gameState) && (
+                     <motion.div
+                        key="game_board" // This key is now stable across all active game phases
+                        initial={{ opacity: 0, scale: 1 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 1 }}
+                        transition={{ duration: 0.5 }}
+                        className="w-full h-full flex items-center justify-center"
+                    >
+                        <GameBoard game={game} self={self} />
+                    </motion.div>
+                )}
+                 {gameState === 'final_results' && (
                      <motion.div
                         key="final_results"
                         initial={{ opacity: 0, scale: 0.95 }}
@@ -53,29 +70,9 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
                     >
                         <FinalResults game={game} self={self} />
                     </motion.div>
-                );
-            case 'rolling':
-            case 'movement':
-            case 'property_action':
-            case 'question':
-            case 'turn_end':
-                 return (
-                    // We now use a consistent key here to prevent the GameBoard from unmounting and remounting
-                    // between active game states. The logic inside GameBoard will handle showing/hiding modals.
+                )}
+                {!['lobby', 'final_results'].includes(gameState) && !isActiveGamePhase(gameState) && (
                      <motion.div
-                        key="game_board"
-                        initial={{ opacity: 0, scale: 1 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 1 }}
-                        transition={{ duration: 0.5 }}
-                        className="w-full h-full flex items-center justify-center"
-                    >
-                        <GameBoard game={game} self={self} />
-                    </motion.div>
-                );
-            default:
-                return (
-                    <motion.div
                         key="loading"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -83,14 +80,7 @@ export function EducatedMerchantGame({ game, self }: EducatedMerchantGameProps) 
                     >
                          <LoadingState text={`حالة غير معروفة: ${game.gameState}`} />
                     </motion.div>
-                );
-        }
-    };
-
-    return (
-        <div className="w-full h-screen flex items-center justify-center relative bg-gray-100 dark:bg-gray-900">
-             <AnimatePresence mode="wait">
-                {renderContent()}
+                )}
             </AnimatePresence>
         </div>
     );
