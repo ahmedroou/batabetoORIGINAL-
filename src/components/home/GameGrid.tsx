@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -88,7 +87,7 @@ const gameCardsData: Array<{
       { rank: 'المركز الثالث', points: 1, coins: 1 },
     ],
   },
-  {
+   {
     type: 'quiz-swap',
     title: 'تبديل الأسئلة',
     description: 'جمع أسهل 4 أسئلة للفوز بالنقاط الأعلى.',
