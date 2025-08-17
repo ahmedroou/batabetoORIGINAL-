@@ -13,6 +13,9 @@ import { submitTrapAnswer } from '@/lib/actions/trap-answer';
 import { Loader2, EyeOff, Send, Image as ImageIcon } from 'lucide-react';
 import { CountdownTimer } from '@/components/game/CountdownTimer';
 import Image from 'next/image';
+import { safeCompareStrings } from '@/lib/actions/helpers';
+
+const SIMILARITY_THRESHOLD = 0.70 as const;
 
 const hasOwn = (obj: unknown, key: string) =>
   !!obj && Object.prototype.hasOwnProperty.call(obj as Record<string, unknown>, key);
@@ -155,13 +158,24 @@ export function AnswerSubmissionPhase({ game, self }: { game: Game, self: Player
     const handleSubmitAnswer = useCallback(
         async (text: string) => {
             if (hasOwn(game.trapAnswerState?.playerAnswers, self.id)) return;
-            if (!text.trim()) {
+            const trapAnswer = text.trim();
+            if (!trapAnswer) {
                 toast({ title: 'الرجاء إدخال إجابة', variant: 'destructive' });
                 return;
             }
+
+            // Client-side similarity check
+            if (currentQuestion?.answer) {
+                 const similarity = safeCompareStrings(trapAnswer, currentQuestion.answer);
+                 if (similarity >= SIMILARITY_THRESHOLD) {
+                     toast({ title: 'إجابة قريبة جداً!', description: 'إجابتك المفخخة شديدة الشبه بالإجابة الصحيحة. الرجاء إدخال إجابة مختلفة.', variant: 'destructive' });
+                     return;
+                 }
+            }
+            
             setLoading(true);
             try {
-                const result = await submitTrapAnswer(game.id, self.id, text.trim());
+                const result = await submitTrapAnswer(game.id, self.id, trapAnswer);
                 if ((result as any)?.error) {
                     toast({ title: 'خطأ', description: (result as any).error, variant: 'destructive' });
                 } else {
@@ -174,7 +188,7 @@ export function AnswerSubmissionPhase({ game, self }: { game: Game, self: Player
                 setLoading(false);
             }
         },
-        [game.id, self.id, toast, game.trapAnswerState?.playerAnswers]
+        [game.id, self.id, toast, game.trapAnswerState?.playerAnswers, currentQuestion?.answer]
     );
 
     return (
@@ -226,5 +240,3 @@ export function AnswerSubmissionPhase({ game, self }: { game: Game, self: Player
         </Card>
     );
 }
-
-    
