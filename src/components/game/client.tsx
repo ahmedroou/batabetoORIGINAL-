@@ -17,6 +17,7 @@ import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMa
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { EducatedMerchantGame } from '@/components/game/educated-merchant/EducatedMerchantGame';
 import { QuizSwapGame } from '@/components/game/quiz-swap/QuizSwapGame';
+import { DrawAndDeceiveGame } from '@/components/game/draw-and-deceive/DrawAndDeceiveGame';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { leaveGame } from '@/lib/actions/room';
@@ -76,6 +77,12 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
     chip: 'bg-lime-500/15 text-lime-200 border-lime-400/30',
     title: 'text-lime-200',
   },
+  'draw-and-deceive': {
+    bg: 'from-cyan-900/60 via-sky-900/40 to-slate-900/70',
+    ring: 'ring-cyan-500/40',
+    chip: 'bg-cyan-500/15 text-cyan-200 border-cyan-400/30',
+    title: 'text-cyan-200',
+  },
   default: {
     bg: 'from-violet-900/60 via-slate-900/50 to-black',
     ring: 'ring-violet-500/40',
@@ -129,6 +136,11 @@ const stateLabel: Record<NonNullable<Game['gameState']>, string> = {
   playing: 'اللعب',
   answering: 'الإجابة',
   ended: 'انتهت',
+  // Draw and Deceive
+  drawing: 'الرسم',
+  trapping: 'وضع الفخاخ',
+  // `guessing` is shared
+  // `results` is shared
 };
 
 
@@ -374,6 +386,8 @@ export default function GameClient() {
         return <EducatedMerchantGame game={game} self={self} />;
       case 'quiz-swap':
         return <QuizSwapGame game={game} self={self} />;
+      case 'draw-and-deceive':
+        return <DrawAndDeceiveGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة للعبة "{game.gameType}"</p>;
     }
