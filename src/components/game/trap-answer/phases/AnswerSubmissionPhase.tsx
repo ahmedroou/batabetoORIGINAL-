@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
+import React, { useState, useMemo, useCallback, useRef, memo } from 'react';
 import type { Game, Player, EmojiReaction, EmojiReactionType, TrapQuestion } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
