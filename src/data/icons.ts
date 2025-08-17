@@ -1,6 +1,7 @@
 
+      
 
-import { BrainCircuit, Bomb, VenetianMask, Swords, Palette, TestTube, Dices, LandPlot, Building2, HelpCircle } from "lucide-react";
+import { BrainCircuit, Bomb, VenetianMask, Swords, Palette, TestTube, Dices, LandPlot, Building2, HelpCircle, Brush } from "lucide-react";
 import type { Game } from "@/types";
 
 export const GAME_ICONS: Record<string, React.ElementType> = {
@@ -11,6 +12,7 @@ export const GAME_ICONS: Record<string, React.ElementType> = {
     'prison': TestTube,
     'educated-merchant': Building2,
     'quiz-swap': HelpCircle,
+    'draw-and-deceive': Brush,
 };
 
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
@@ -21,4 +23,8 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'prison': 'السجن',
     'educated-merchant': 'التاجر المتعلم',
     'quiz-swap': 'تبديل الأسئلة',
+    'draw-and-deceive': 'ارسم واخدع'
 };
+
+
+    

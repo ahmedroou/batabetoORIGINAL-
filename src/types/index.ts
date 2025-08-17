@@ -1,4 +1,5 @@
 
+      
 
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
@@ -440,8 +441,9 @@ export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type EducatedMerchantGameState = "lobby" | "rolling" | "movement" | "property_action" | "question" | "turn_end" | "final_results";
 export type QuizSwapGameState = 'lobby' | 'peek' | 'playing' | 'discarding' | 'answering' | 'final_results';
+export type DrawAndDeceiveState = 'lobby' | 'drawing' | 'trapping' | 'guessing' | 'results' | 'final_results';
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState | QuizSwapGameState;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState | QuizSwapGameState | DrawAndDeceiveState;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -617,6 +619,36 @@ export interface QuizSwapState {
 
 
 // -------------------------------------------------------------
+// Draw & Deceive Game Types
+// -------------------------------------------------------------
+
+export interface DrawAndDeceiveState {
+    settings: {
+        drawingTime: number; // seconds
+        trappingTime: number; // seconds
+        guessingTime: number; // seconds
+        resultsTime: number; // seconds
+        rounds: number;
+    };
+    turnOrder: string[];
+    currentTurnIndex: number;
+    round: number;
+    phase: 'drawing' | 'trapping' | 'guessing' | 'results';
+    
+    // State per round
+    artistId?: string;
+    drawingDataUrl?: string; // The drawing itself as a base64 string
+    correctAnswer?: string; // The 2-word title from the artist
+    
+    playerTraps: Record<string, string>; // { [playerId]: "deceptive answer" }
+    playerGuesses: Record<string, string>; // { [playerId]: "chosen answer" }
+
+    lastRoundResults?: any; // Similar to TrapAnswer's results
+    timerEndsAt?: Timestamp;
+}
+
+
+// -------------------------------------------------------------
 // Game Root Type
 // -------------------------------------------------------------
 export interface Game {
@@ -631,7 +663,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'prison' | 'educated-merchant' | 'quiz-swap';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'prison' | 'educated-merchant' | 'quiz-swap' | 'draw-and-deceive';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -829,6 +861,9 @@ export interface Game {
 
   // "QuizSwap" specific state
   quizSwapState?: QuizSwapState;
+
+  // "Draw & Deceive" specific state
+  drawAndDeceiveState?: DrawAndDeceiveState;
 }
 
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
@@ -838,7 +873,8 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'prison': 'السجن',
     'educated-merchant': 'التاجر المتعلم',
-    'quiz-swap': 'تبديل الأسئلة'
+    'quiz-swap': 'تبديل الأسئلة',
+    'draw-and-deceive': 'ارسم واخدع'
 };
 
 // -------------------------------------------------------------
@@ -904,5 +940,7 @@ export interface MafiaSettings {
 
 /** خريطة التصويت: voterId -> targetId|null */
 export type VoteMap = Record<string, string | null>;
+
+    
 
     
