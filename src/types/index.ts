@@ -647,7 +647,7 @@ export interface DrawAndDeceiveState {
     drawingDataUrl?: string;
     correctAnswer?: string;
     
-    playerTraps: Record<string, string>; 
+    playerTraps: Record<string, string | null>; 
     playerGuesses: Record<string, string>; 
     shuffledAnswers: string[];
 

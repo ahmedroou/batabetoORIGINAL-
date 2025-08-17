@@ -6,6 +6,7 @@ import { doc, runTransaction, Timestamp } from 'firebase/firestore';
 import type { Game, Player, DrawAndDeceiveState, DrawAndDeceiveRoundResult } from '@/types';
 import { shuffle } from './helpers';
 import { WORD_WAR_WORDS } from '@/data/word-war-words';
+import { distributeEndOfGameAwards } from './admin/users';
 
 // --- Constants ---
 const DEFAULT_SETTINGS = {
@@ -21,6 +22,54 @@ const now = () => Timestamp.now();
 const inSec = (s: number) => Timestamp.fromMillis(Date.now() + s * 1000);
 const ensure = (condition: any, message: string): asserts condition => {
     if (!condition) throw new Error(message);
+};
+
+const calculateRoundResults = (game: Game, playerGuesses: Record<string, string>): { resultsState: any, updatedScores: any } => {
+    const state = game.drawAndDeceiveState!;
+    const scores: Record<string, { points: number; breakdown: { reason: string; points: number }[] }> = {};
+    const answersResult: DrawAndDeceiveRoundResult[] = [];
+    const updatedPlayerScores = { ...game.playerScores };
+    
+    const getPlayer = (id: string) => game.players.find(p => p.id === id);
+    const addScore = (playerId: string, points: number, reason: string) => {
+        if (!scores[playerId]) scores[playerId] = { points: 0, breakdown: [] };
+        scores[playerId]!.points += points;
+        scores[playerId]!.breakdown.push({ reason, points });
+        updatedPlayerScores[playerId] = (updatedPlayerScores[playerId] || 0) + points;
+    };
+
+    const correctAnswer = state.correctAnswer!;
+    const allAnswers = [correctAnswer, ...Object.values(state.playerTraps)].filter((a): a is string => !!a);
+    
+    for (const answer of allAnswers) {
+        const isCorrect = answer === correctAnswer;
+        const authorIds = isCorrect ? [state.artistId!] : Object.entries(state.playerTraps).filter(([, trap]) => trap === answer).map(([id]) => id);
+        const guesserIds = Object.entries(playerGuesses).filter(([, guess]) => guess === answer).map(([id]) => id);
+        
+        answersResult.push({ answer, isCorrect, authorIds, guesserIds });
+
+        if (isCorrect) {
+            guesserIds.forEach(guesserId => {
+                if(guesserId !== state.artistId) {
+                    addScore(guesserId, 2, 'إجابة صحيحة');
+                    addScore(state.artistId!, 1, `تخمين صحيح من ${getPlayer(guesserId)?.name || 'لاعب'}`);
+                }
+            });
+        } else {
+             guesserIds.forEach(guesserId => {
+                 authorIds.forEach(authorId => {
+                    if (guesserId !== authorId) {
+                        addScore(authorId, 1, `خدع ${getPlayer(guesserId)?.name || 'لاعب'}`);
+                    }
+                 });
+            });
+        }
+    }
+    
+    return { 
+        resultsState: { scores, answers: answersResult }, 
+        updatedScores 
+    };
 };
 
 // --- Game Logic: Start ---
@@ -146,7 +195,6 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
         const activePlayers = game.players.filter(p => p.status !== 'left');
         if (Object.keys(updatedGuesses).length === activePlayers.length) {
-            // All guesses are in, move to results phase
             const { resultsState, updatedScores } = calculateRoundResults(game, updatedGuesses);
             const resultsTime = state.settings?.resultsTime ?? DEFAULT_SETTINGS.resultsTime;
             tx.update(gameRef, {
@@ -161,7 +209,9 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
 // --- Game Logic: Results & Next Round ---
 export async function handleTimeout(gameId: string, hostId: string) {
+    let finalGameData: Game | null = null;
     const gameRef = doc(db, 'games', gameId);
+    
     await runTransaction(db, async (tx) => {
         const gameDoc = await tx.get(gameRef);
         ensure(gameDoc.exists(), 'Game not found.');
@@ -174,20 +224,21 @@ export async function handleTimeout(gameId: string, hostId: string) {
         if (state.phase === 'results') {
             const nextRound = (state.round || 0) + 1;
             if (nextRound > state.settings.rounds) {
-                // End Game
                 const winnerId = Object.entries(game.playerScores || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || 'none';
+                const gameResult = { winner: winnerId, message: `The winner is determined!` };
                 tx.update(gameRef, {
                     gameState: 'final_results',
                     'drawAndDeceiveState.phase': 'final_results',
-                    gameResult: { winner: winnerId, message: `The winner is determined!` },
+                    gameResult: gameResult,
                 });
+                finalGameData = { ...game, gameState: 'final_results', gameResult };
             } else {
-                // Next Round
                 const nextTurnIndex = (state.currentTurnIndex + 1) % game.players.length;
                 const nextArtistId = state.turnOrder[nextTurnIndex];
                 const newWord = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)]!;
                 
                 tx.update(gameRef, {
+                    gameState: 'drawing',
                     'drawAndDeceiveState.phase': 'drawing',
                     'drawAndDeceiveState.round': nextRound,
                     'drawAndDeceiveState.currentTurnIndex': nextTurnIndex,
@@ -202,56 +253,38 @@ export async function handleTimeout(gameId: string, hostId: string) {
                     'drawAndDeceiveState.timerEndsAt': inSec(state.settings.drawingTime),
                 });
             }
-        } else {
-             // Handle timeouts for other phases if needed (e.g., auto-submit empty)
-             // For now, let's assume the host manually triggers this from results
+        }
+        // Handle timeouts for other phases
+        else if (state.phase === 'drawing') {
+            // Artist didn't draw, skip turn? For now, we move to trapping with no drawing.
+             tx.update(gameRef, {
+                'drawAndDeceiveState.phase': 'trapping',
+                'drawAndDeceiveState.timerEndsAt': inSec(state.settings.trappingTime),
+            });
+        }
+        else if (state.phase === 'trapping') {
+            // Not all players submitted traps, move on with available traps
+            const allAnswers = [state.correctAnswer, ...Object.values(state.playerTraps)].filter((a): a is string => !!a);
+            const shuffledAnswers = shuffle(allAnswers);
+            tx.update(gameRef, {
+                'drawAndDeceiveState.phase': 'guessing',
+                'drawAndDeceiveState.shuffledAnswers': shuffledAnswers,
+                'drawAndDeceiveState.timerEndsAt': inSec(state.settings.guessingTime),
+            });
+        }
+        else if (state.phase === 'guessing') {
+            // Not all players guessed, calculate results with available guesses.
+            const { resultsState, updatedScores } = calculateRoundResults(game, state.playerGuesses);
+            tx.update(gameRef, {
+                'drawAndDeceiveState.phase': 'results',
+                'drawAndDeceiveState.lastRoundResults': resultsState,
+                playerScores: updatedScores,
+                'drawAndDeceiveState.timerEndsAt': inSec(state.settings.resultsTime),
+            });
         }
     });
-}
 
-
-// --- Pure Helpers for Scoring ---
-function calculateRoundResults(game: Game, playerGuesses: Record<string, string>) {
-    const state = game.drawAndDeceiveState!;
-    const scores: Record<string, { points: number; breakdown: { reason: string; points: number }[] }> = {};
-    const answersResult: DrawAndDeceiveRoundResult[] = [];
-    const updatedPlayerScores = { ...game.playerScores };
-    
-    const getPlayer = (id: string) => game.players.find(p => p.id === id);
-    const addScore = (playerId: string, points: number, reason: string) => {
-        if (!scores[playerId]) scores[playerId] = { points: 0, breakdown: [] };
-        scores[playerId].points += points;
-        scores[playerId].breakdown.push({ reason, points });
-        updatedPlayerScores[playerId] = (updatedPlayerScores[playerId] || 0) + points;
-    };
-
-    const correctAnswer = state.correctAnswer!;
-    const allAnswers = [correctAnswer, ...Object.values(state.playerTraps)];
-    
-    for (const answer of allAnswers) {
-        const isCorrect = answer === correctAnswer;
-        const authorIds = isCorrect ? [state.artistId!] : Object.entries(state.playerTraps).filter(([, trap]) => trap === answer).map(([id]) => id);
-        const guesserIds = Object.entries(playerGuesses).filter(([, guess]) => guess === answer).map(([id]) => id);
-        
-        answersResult.push({ answer, isCorrect, authorIds, guesserIds });
-
-        if (isCorrect) {
-            guesserIds.forEach(guesserId => {
-                if(guesserId !== state.artistId) { // Artist cannot guess
-                    addScore(guesserId, 2, 'إجابة صحيحة');
-                    addScore(state.artistId!, 1, `تخمين صحيح من ${getPlayer(guesserId)?.name}`);
-                }
-            });
-        } else {
-             guesserIds.forEach(guesserId => {
-                 authorIds.forEach(authorId => {
-                    if (guesserId !== authorId) {
-                        addScore(authorId, 1, `خدع ${getPlayer(guesserId)?.name}`);
-                    }
-                 });
-            });
-        }
+    if (finalGameData) {
+        await distributeEndOfGameAwards(finalGameData.id);
     }
-
-    return { resultsState: { scores, answers: answersResult }, updatedScores };
 }
