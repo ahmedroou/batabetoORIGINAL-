@@ -6,6 +6,7 @@ import { TimerIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { handleTimeout as handleEducatedMerchantTimeout } from '@/lib/actions/educated-merchant';
 import { handleTimeout as handlePrisonTimeout } from '@/lib/actions/prison';
+import { handleTimeout as handleTrapAnswerTimeout } from '@/lib/actions/trap-answer';
 import type { Game } from '@/types';
 
 interface CountdownTimerProps {
@@ -40,7 +41,10 @@ export const CountdownTimer = ({ gameId, gameType, expiryTimestamp, selfId, isHo
                  clearInterval(timer);
                  // Any active player can nudge the game state forward.
                  switch (gameType) {
-                    // Timeout logic for trap-answer is handled by the host in the main component.
+                    case 'trap-answer':
+                        // This action is now idempotent and can be called by any client.
+                        handleTrapAnswerTimeout(gameId, selfId);
+                        break;
                     case 'educated-merchant':
                         // This game's timeout logic is still host-driven in its current form
                         if (isHost) handleEducatedMerchantTimeout(gameId, selfId);

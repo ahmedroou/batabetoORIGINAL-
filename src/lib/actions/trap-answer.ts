@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -286,51 +287,73 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 }
 
 export async function nextTrapAnswerRound(gameId: string, hostId: string): Promise<void> {
-  const gameRef = doc(db, 'games', gameId);
-  const { isGameOver } = await runTransaction(db, async (tx) => {
-    const snap = await tx.get(gameRef);
-    ensure(snap.exists(), 'اللعبة غير موجودة.');
-    const game = snap.data() as Game;
-    ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
-    if (game.gameState !== 'round-results') return { isGameOver: false };
-    return await _startNextRound(tx, gameRef, game);
-  });
+    const gameRef = doc(db, 'games', gameId);
+    let isGameOver = false;
 
-  if (isGameOver) {
-    const res = await distributeEndOfGameAwards(gameId);
-    if (!res.success) throw new Error(res.error || 'فشل توزيع الجوائز النهائية.');
-  }
+    await runTransaction(db, async (tx) => {
+        const snap = await tx.get(gameRef);
+        ensure(snap.exists(), 'اللعبة غير موجودة.');
+        const game = snap.data() as Game;
+        ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
+        if (game.gameState !== 'round-results') return;
+        const result = await _startNextRound(tx, gameRef, game);
+        isGameOver = result.isGameOver;
+    });
+
+    if (isGameOver) {
+        const res = await distributeEndOfGameAwards(gameId);
+        if (!res.success) {
+            console.error(`Failed to distribute awards for game ${gameId}:`, res.error);
+            // Optionally, update game state to show error to user
+            await updateDoc(gameRef, { 'gameResult.error': res.error });
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
 // Timeout & Reactions
 // -----------------------------------------------------------------------------
-export async function handleTimeout(gameId: string, hostId: string) {
+export async function handleTimeout(gameId: string, callerId: string) {
   const gameRef = doc(db, 'games', gameId);
+  let isGameOver = false;
+
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
+
     const game = snap.data() as Game;
     const state = (game as any)[FIELD_TRAP_STATE] || {};
     const timerEndsAt = state.roundEndTime as Timestamp | undefined;
 
-    if (timerEndsAt && timerEndsAt.toMillis() > nowMs() && game.hostId !== hostId) return;
+    // Allow any player to call, but only proceed if timer has expired.
+    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
+
+    // To prevent race conditions, only one update per state should succeed.
+    // By deleting the timer, subsequent calls to handleTimeout will fail the check above.
+    tx.update(gameRef, { [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField() });
 
     if (game.gameState === 'category-selection') {
       const categories: string[] = state.fiveRandomCategories || [];
       const randomCategory = categories.length > 0 ? categories[Math.floor(Math.random() * categories.length)] : '';
+      // This will set a new timer for the next phase.
       await selectCategoryAndGetQuestion(gameId, state.turnOrder[state.currentTurnIndex], randomCategory);
     } else if (game.gameState === 'answer-submission') {
       await _advanceToGuessing(tx, gameRef, game, true);
     } else if (game.gameState === 'guessing') {
       await _advanceToResults(tx, gameRef, game, true);
     } else if (game.gameState === 'round-results') {
-      const { isGameOver } = await _startNextRound(tx, gameRef, game);
-      if (isGameOver) {
-        // Defer distribution to client or a separate call to avoid tx complexity
-      }
+      const result = await _startNextRound(tx, gameRef, game);
+      isGameOver = result.isGameOver;
     }
   });
+
+  if (isGameOver) {
+      const res = await distributeEndOfGameAwards(gameId);
+      if (!res.success) {
+          console.error(`Failed to distribute awards for game ${gameId}:`, res.error);
+          await updateDoc(gameRef, { 'gameResult.error': res.error });
+      }
+  }
 }
 
 export async function sendReaction(gameId: string, playerId: string, emoji: EmojiReactionType) {
