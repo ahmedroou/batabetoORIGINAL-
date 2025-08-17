@@ -1,6 +1,7 @@
+
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -108,7 +109,7 @@ export function DrawingPhase({
     // إعادة عرض التاريخ الحالي
     if (historyIndex >= 0 && history[historyIndex]) {
       const img = new Image();
-      img.src = history[historyIndex];
+      img.src = history[historyIndex]!;
       img.onload = () => {
         ctx.clearRect(0, 0, targetW, targetH);
         ctx.drawImage(img, 0, 0, targetW, targetH);
@@ -139,6 +140,23 @@ export function DrawingPhase({
     if (!canvasRef.current || !overlayRef.current) return;
     resizeCanvas();
   }, [resizeCanvas]);
+
+  const pushHistory = useCallback(
+    (custom?: string) => {
+      const dataUrl = custom ?? canvasRef.current!.toDataURL('image/png');
+      setHistory(prev => {
+        const idx = Math.min(Math.max(historyIndexRef.current, -1), prev.length - 1);
+        const upto = prev.slice(0, idx + 1);
+        const next = [...upto, dataUrl].slice(-maxHistory);
+        const newIndex = next.length - 1;
+        historyIndexRef.current = newIndex;
+        setHistoryIndex(newIndex);
+        return next;
+      });
+      onDrawEnd?.(dataUrl);
+    },
+    [maxHistory, onDrawEnd]
+  );
 
   // تحميل صورة ابتدائية
   useEffect(() => {
@@ -265,53 +283,36 @@ export function DrawingPhase({
     }
     ctx.restore();
   };
-
-  const pushHistory = useCallback(
-    (custom?: string) => {
-      const dataUrl = custom ?? canvasRef.current!.toDataURL('image/png');
-      setHistory(prev => {
-        const idx = Math.min(Math.max(historyIndexRef.current, -1), prev.length - 1);
-        const upto = prev.slice(0, idx + 1);
-        const next = [...upto, dataUrl].slice(-maxHistory);
-        const newIndex = next.length - 1;
-        historyIndexRef.current = newIndex;
-        setHistoryIndex(newIndex);
-        return next;
-      });
-      onDrawEnd?.(dataUrl);
-    },
-    [maxHistory, onDrawEnd]
-  );
-
-  const undo = () => {
+  
+  const undo = useCallback(() => {
     if (historyIndexRef.current <= 0) return;
     const newIndex = historyIndexRef.current - 1;
     setHistoryIndex(newIndex);
     historyIndexRef.current = newIndex;
     const img = new Image();
-    img.src = history[newIndex];
+    img.src = history[newIndex]!;
     img.onload = () => {
       const ctx = getCtx();
       ctx.clearRect(0, 0, size.w, size.h);
       ctx.drawImage(img, 0, 0, size.w, size.h);
-      onDrawEnd?.(history[newIndex]);
+      onDrawEnd?.(history[newIndex]!);
     };
-  };
+  }, [history, onDrawEnd, size.h, size.w]);
 
-  const redo = () => {
+  const redo = useCallback(() => {
     if (historyIndexRef.current >= history.length - 1) return;
     const newIndex = historyIndexRef.current + 1;
     setHistoryIndex(newIndex);
     historyIndexRef.current = newIndex;
     const img = new Image();
-    img.src = history[newIndex];
+    img.src = history[newIndex]!;
     img.onload = () => {
       const ctx = getCtx();
       ctx.clearRect(0, 0, size.w, size.h);
       ctx.drawImage(img, 0, 0, size.w, size.h);
-      onDrawEnd?.(history[newIndex]);
+      onDrawEnd?.(history[newIndex]!);
     };
-  };
+  }, [history, onDrawEnd, size.h, size.w]);
 
   // أحداث المؤشر/اللمس
   const onPointerDown = (e: React.PointerEvent) => {
@@ -350,7 +351,7 @@ export function DrawingPhase({
       const rawY = Math.floor((pan.y + pt.y * zoom) * dpr);
       const { data } = ctx.getImageData(rawX, rawY, 1, 1);
       const [r, g, b] = data;
-      const hex = `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`;
+      const hex = `#${[r, g, b].map(v => v!.toString(16).padStart(2, '0')).join('')}`;
       setColor(hex);
       setTool('pen');
       return;
@@ -430,22 +431,23 @@ export function DrawingPhase({
   };
 
   const importImage = (file: File) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      const ctx = getCtx();
-      ctx.clearRect(0, 0, size.w, size.h);
-      // احتواء الصورة داخل اللوحة
-      const scale = Math.min(size.w / img.width, size.h / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      const x = (size.w - w) / 2;
-      const y = (size.h - h) / 2;
-      ctx.drawImage(img, x, y, w, h);
-      pushHistory();
-      URL.revokeObjectURL(url);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            const ctx = getCtx();
+            ctx.clearRect(0, 0, size.w, size.h);
+            const scale = Math.min(size.w / img.width, size.h / img.height);
+            const w = img.width * scale;
+            const h = img.height * scale;
+            const x = (size.w - w) / 2;
+            const y = (size.h - h) / 2;
+            ctx.drawImage(img, x, y, w, h);
+            pushHistory();
+        };
+        img.src = e.target?.result as string;
     };
-    img.src = url;
+    reader.readAsDataURL(file);
   };
 
   const downloadPng = () => {
@@ -479,7 +481,7 @@ export function DrawingPhase({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [disabled, history.length, undo, redo]);
+  }, [disabled, undo, redo]);
 
   return (
     <div ref={containerRef} className={cn('relative w-full select-none', className)}>
