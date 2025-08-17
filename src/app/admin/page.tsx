@@ -255,12 +255,12 @@ function AdminPageContent() {
         {/* Header */}
         <Card className="backdrop-blur supports-[backdrop-filter]:bg-background/70">
           <CardHeader>
-             <div className="flex flex-wrap items-start justify-between gap-4">
+             <div className="flex flex-col sm:flex-row flex-wrap items-start justify-between gap-4">
                 <div>
                   <CardTitle className="text-2xl md:text-3xl">لوحة تحكم الأدمن</CardTitle>
                   <CardDescription>إدارة محتوى اللعبة وإعداداتها.</CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <Button variant="secondary" asChild>
                       <Link href="/store"><Eye className="ml-2 h-4 w-4" /> عرض متجر اللاعبين</Link>
                   </Button>

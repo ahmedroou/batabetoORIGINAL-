@@ -33,7 +33,6 @@ import type {
   AvatarPrice,
 } from '@/types';
 import { DEFAULT_SOCIAL_RANKS } from '@/data/social-ranks';
-import { getTopUsers as adminGetTopUsers } from '../admin/users';
 
 // -------------------------------------------------------------
 // Utilities
@@ -325,7 +324,15 @@ export async function getTopUsers(
   field: 'coins' | 'leaderboardPoints',
   count: number
 ): Promise<UserProfile[]> {
-  return adminGetTopUsers(field, count);
+    try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, orderBy(field, 'desc'), limit(count));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+    } catch (error) {
+        console.error(`Error getting top users by ${field}:`, error);
+        return [];
+    }
 }
 
 export async function getTopPunisher(): Promise<UserProfile | null> {

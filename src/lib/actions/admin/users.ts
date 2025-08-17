@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -201,7 +202,6 @@ export async function applyPunishment(actorId: string, targetId: string, penalty
         }
 
         if (Object.keys(updates).length > 0) transaction.update(targetRef, updates);
-
          const mailContent = {
             subject: 'لقد تلقيت عقوبة!',
             body: `لقد طبق المشرف عليك عقوبة: خصم ${penalty.points || 0} نقاط و ${penalty.coins || 0} كوينز. السبب: ${reason}`
@@ -341,6 +341,7 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
           name: topPlayer.name,
           avatarId: topPlayer.avatarId,
           winCount: topPlayer.winCounts![gameType as keyof Game['winCounts']] || 0,
+          totalLeaderboardPoints: topPlayer.leaderboardPoints || 0
         };
         batch.set(kingRef, kingData, { merge: true });
         updatedCount++;

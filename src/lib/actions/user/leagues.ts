@@ -36,6 +36,9 @@ export async function getLeagueData(leagueId: string): Promise<{ league: League 
                 snapshot.forEach(doc => {
                      const userData = doc.data();
                      const leaguePoints = league.scores?.[doc.id] || 0;
+                     // This part is tricky. We are overriding the global gamesPlayed with league-specific.
+                     // A better structure would be to have league-specific stats separate.
+                     // For now, this makes the league leaderboard display correctly.
                      const gamesPlayedInLeague = league.gamesPlayed?.[doc.id] || 0;
                      members.push({ ...userData, uid: doc.id, leaderboardPoints: leaguePoints, gamesPlayed: { total: gamesPlayedInLeague } } as UserProfile);
                 });
@@ -71,6 +74,9 @@ export async function updateUserStats(adminId: string, leagueId: string, userId:
 
         transaction.update(leagueRef, {
             [`scores.${userId}`]: stats.points,
+            // This needs to be adapted for per-game counts, this action might be deprecated or changed.
+            // For now, it will update a generic 'total' which doesn't exist.
+            // A more specific action would be needed to update stats for a *specific* game.
         });
 
         return { success: true };
@@ -142,6 +148,7 @@ export async function joinLeague(userId: string, leagueId: string, password?: st
             transaction.update(leagueRef, {
                 members: arrayUnion(userId),
                 [`scores.${userId}`]: 0,
+                // gamesPlayed doesn't need to be initialized here as it's per-game type
             });
             transaction.update(userRef, {
                 leagues: arrayUnion({ id: leagueId, name: league.name })

@@ -11,7 +11,7 @@
 // Explicitly import and export to avoid namespace collisions and help bundlers.
 import { createUserProfile, updateUserName, updateUserAvatar, updateUserGender } from './user/profile';
 import { purchaseAvatar, purchasePunishmentAvatar, exchangeCoinsForHonor, exchangeCoinsForRebellion, exchangeCoinsForLoyaltyPoints } from './user/currency';
-import { getPlayerFromUserId, getGameKings, getKingOfGames, getAllUsers, updateUserWinCount, getRanks, getUsersByRank, getTopUsers, getTopPunisher, getKingsPageData, recordMatchHistory } from './user/queries';
+import { getPlayerFromUserId, getGameKings, getKingOfGames, getAllUsers, updateUserWinCount, getRanks, getUsersByRank, getTopPunisher, getKingsPageData, recordMatchHistory } from './user/queries';
 import { sendSystemMail, getMail, markMailAsRead, claimMailCoins } from './user/mail';
 import { 
     getLeagueData, 
@@ -28,6 +28,7 @@ import { giveReward, applyPunishment, humiliatePlayer, issueDecree, begForMercy,
 import { requestAllegiance, respondToAllegianceRequest } from './user/allegiance';
 import { joinChallenge } from './challenges';
 import { distributeEndOfGameAwards } from './admin/users';
+import { getTopUsers } from './user/queries';
 
 
 export {
