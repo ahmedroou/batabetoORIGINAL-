@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { createGameRoom } from '@/lib/actions/room';
-import { Card, CardDescription, CardFooter, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { GAME_ICONS } from '@/data/icons';
 import type { Game } from '@/types';
@@ -145,7 +145,7 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
         <p className="mt-1 text-muted-foreground">اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {gameCardsData.map((game, i) => {
           const Icon = (GAME_ICONS as any)[game.type] || Star;
           const loadingThis = isLoading === (`create-${game.type}` as LoadingState);
@@ -174,13 +174,13 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
               <Card className="relative h-full border-border/60 bg-card/60 backdrop-blur-sm transition-all hover:shadow-xl hover:-translate-y-1 flex flex-col">
                 <div aria-hidden className={`pointer-events-none absolute -inset-px opacity-0 group-hover:opacity-70 blur-xl bg-gradient-to-br ${game.accent.from} ${game.accent.via ?? ''} ${game.accent.to} transition-opacity duration-300`} />
                 
-                <CardContent className="p-4 flex-grow flex flex-col">
-                  <div className="flex items-start gap-4">
-                    <div className="grid h-16 w-16 place-items-center rounded-lg border border-white/15 bg-gradient-to-b from-background/70 to-background/40 shadow-inner flex-shrink-0">
-                      <Icon className="h-8 w-8 text-primary transition-transform duration-300 group-hover:scale-110" />
+                <CardContent className="p-3 flex-grow flex flex-col">
+                  <div className="flex items-start gap-3">
+                    <div className="grid h-14 w-14 place-items-center rounded-lg border border-white/15 bg-gradient-to-b from-background/70 to-background/40 shadow-inner flex-shrink-0">
+                      <Icon className="h-7 w-7 text-primary transition-transform duration-300 group-hover:scale-110" />
                     </div>
                     <div className="flex-grow">
-                      <CardTitle className="text-lg font-bold tracking-tight">{game.title}</CardTitle>
+                      <CardTitle className="text-base font-bold tracking-tight">{game.title}</CardTitle>
                       <CardDescription className="text-xs leading-relaxed mt-1 line-clamp-2">
                         {game.description}
                       </CardDescription>
@@ -196,8 +196,8 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
                 <CardFooter className="mt-auto pt-2 pb-3 px-3 flex items-center justify-between">
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary gap-1 h-8">
-                        <Trophy className="w-4 h-4 text-amber-400"/> الجوائز
+                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary gap-1 h-7 px-2">
+                        <Trophy className="w-3.5 h-3.5 text-amber-400"/> الجوائز
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="center">
