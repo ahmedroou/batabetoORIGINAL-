@@ -250,12 +250,20 @@ export async function submitTrapAnswer(gameId: string, playerId: string, answer:
         throw new Error('لا يمكنك إدخال إجابة مطابقة أو شبيهة بالإجابة الصحيحة.');
       }
       
-      const newPlayerAnswers = { ...(state.playerAnswers || {}), [playerId]: finalAnswer };
-      tx.update(gameRef, { [`${FIELD_TRAP_STATE}.playerAnswers`]: newPlayerAnswers });
+      // Use dot notation to set a specific player's answer atomically.
+      tx.update(gameRef, { [`${FIELD_TRAP_STATE}.playerAnswers.${playerId}`]: finalAnswer });
+      
+      // We need to re-fetch the game state to check if everyone answered AFTER our update.
+      const updatedSnap = await tx.get(gameRef);
+      const updatedGame = updatedSnap.data() as Game;
+      const newPlayerAnswers = { ...(updatedGame.trapAnswerState?.playerAnswers || {}), [playerId]: finalAnswer };
 
-      const active = getActivePlayers(game);
+      const active = getActivePlayers(updatedGame);
       const everyoneAnswered = active.every(p => hasOwn(newPlayerAnswers, p.id));
-      if (everyoneAnswered) await _advanceToGuessing(tx, gameRef, game);
+      if (everyoneAnswered) {
+        // Pass the most up-to-date state to the advancing function.
+        await _advanceToGuessing(tx, gameRef, { ...updatedGame, trapAnswerState: { ...updatedGame.trapAnswerState, playerAnswers: newPlayerAnswers } });
+      }
     });
     return { success: true };
   } catch (error) {
@@ -275,14 +283,20 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
     const finalGuess = guess === null ? TIMEOUT_TOKEN : String(guess);
 
     const prev = (state.playerGuesses || {})[playerId];
-    if (prev === finalGuess) return;
+    if (prev === finalGuess && prev !== undefined) return;
 
-    const newPlayerGuesses = { ...(state.playerGuesses || {}), [playerId]: finalGuess };
-    tx.update(gameRef, { [`${FIELD_TRAP_STATE}.playerGuesses`]: newPlayerGuesses });
+    tx.update(gameRef, { [`${FIELD_TRAP_STATE}.playerGuesses.${playerId}`]: finalGuess });
 
-    const active = getActivePlayers(game);
+    // Re-fetch to check if everyone has guessed after this update.
+    const updatedSnap = await tx.get(gameRef);
+    const updatedGame = updatedSnap.data() as Game;
+    const newPlayerGuesses = { ...(updatedGame.trapAnswerState?.playerGuesses || {}), [playerId]: finalGuess };
+
+    const active = getActivePlayers(updatedGame);
     const everyoneGuessed = active.every(p => hasOwn(newPlayerGuesses, p.id));
-    if (everyoneGuessed) await _advanceToResults(tx, gameRef, game);
+    if (everyoneGuessed) {
+      await _advanceToResults(tx, gameRef, { ...updatedGame, trapAnswerState: { ...updatedGame.trapAnswerState, playerGuesses: newPlayerGuesses } });
+    }
   });
 }
 
@@ -335,8 +349,10 @@ export async function handleTimeout(gameId: string, callerId: string) {
     if (game.gameState === 'category-selection') {
       const categories: string[] = state.fiveRandomCategories || [];
       const randomCategory = categories.length > 0 ? categories[Math.floor(Math.random() * categories.length)] : '';
+      const turnOrder = state.turnOrder || [];
+      const currentPlayerId = turnOrder[state.currentTurnIndex || 0];
       // This will set a new timer for the next phase.
-      await selectCategoryAndGetQuestion(gameId, state.turnOrder[state.currentTurnIndex], randomCategory);
+      await selectCategoryAndGetQuestion(gameId, currentPlayerId, randomCategory);
     } else if (game.gameState === 'answer-submission') {
       await _advanceToGuessing(tx, gameRef, game, true);
     } else if (game.gameState === 'guessing') {
