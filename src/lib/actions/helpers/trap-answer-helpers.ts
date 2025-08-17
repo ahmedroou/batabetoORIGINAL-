@@ -1,13 +1,14 @@
 
+
 /**
  * @fileoverview Helper functions for the "Trap Answer" game logic (pure).
  * Preserves public API. Safer canonical mapping to displayed options,
  * stable grouping, and hardened trick stats.
  */
 import type { Game, Player, TrapQuestion } from '@/types';
-import { safeCompareStrings, getSimilaritySignature } from '../helpers';
+import { safeCompareStrings } from '../helpers';
 
-const SIMILARITY_THRESHOLD_GROUP = 0.95 as const;
+const SIMILARITY_THRESHOLD_GROUP = 1.0 as const; // Only 100% matches
 const SIMILARITY_BLOCK_AGAINST_CORRECT = 0.70 as const;
 const TIMEOUT_TOKEN = '__TIMEOUT__' as const;
 
@@ -26,6 +27,10 @@ function pickOneAuthorStable(authorIds: string[]): string | null {
   return [...authorIds].sort((a, b) => a.localeCompare(b))[0] || null;
 }
 
+// Normalize text for strict comparison (used as map keys)
+const normalizeForStrictKey = (s: string) => (s || '').trim().replace(/\s+/g, ' ');
+
+
 export function calculateTrapAnswerScores(
   activePlayers: Player[],
   question: TrapQuestion,
@@ -42,25 +47,23 @@ export function calculateTrapAnswerScores(
   const newTrickStats: TrickStats = { trickedBy: {}, trickedOthers: {} };
   const timedOutGuesserIds: string[] = [];
 
-  const correctSig = getSimilaritySignature(question.answer);
-  
-  // Group identical trap answers (after normalization)
+  // Group identical trap answers (100% match)
   const answerGroups = new Map<string, { text: string; authors: Set<string> }>();
   for (const [authorId, answerText] of Object.entries(playerAnswers)) {
     if (!answerText) continue;
-    
+
+    const normalizedText = normalizeForStrictKey(answerText);
+    if (!normalizedText) continue;
+
     // Reject answers too similar to the correct one
-    if (safeCompareStrings(answerText, question.answer) >= SIMILARITY_BLOCK_AGAINST_CORRECT) {
+    if (safeCompareStrings(normalizedText, question.answer) >= SIMILARITY_BLOCK_AGAINST_CORRECT) {
         continue;
     }
     
-    const sig = getSimilaritySignature(answerText);
-    if (!sig) continue;
-    
-    if (answerGroups.has(sig)) {
-      answerGroups.get(sig)!.authors.add(authorId);
+    if (answerGroups.has(normalizedText)) {
+      answerGroups.get(normalizedText)!.authors.add(authorId);
     } else {
-      answerGroups.set(sig, { text: answerText.trim(), authors: new Set([authorId]) });
+      answerGroups.set(normalizedText, { text: answerText.trim(), authors: new Set([authorId]) });
     }
   }
 
@@ -71,8 +74,8 @@ export function calculateTrapAnswerScores(
       continue;
     }
 
-    const guessSig = getSimilaritySignature(guess);
-    const isCorrect = guessSig === correctSig;
+    const normalizedGuess = normalizeForStrictKey(guess);
+    const isCorrect = normalizeForStrictKey(question.answer) === normalizedGuess;
 
     if (isCorrect) {
       ensureBucket(roundScores, guesserId);
@@ -81,19 +84,26 @@ export function calculateTrapAnswerScores(
       continue;
     }
 
-    const group = answerGroups.get(guessSig);
+    const group = answerGroups.get(normalizedGuess);
     if (!group) continue;
     
     const authors = Array.from(group.authors);
     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
 
+    // Apply self-vote penalty
     if (group.authors.has(guesserId)) {
         ensureBucket(roundScores, guesserId);
         roundScores[guesserId].points -= 1;
         roundScores[guesserId].breakdown.push({ reason: 'صوّت لنفسه', points: -1 });
     }
-
+    
+    // Award points to trickers
     for (const authorId of authors) {
+      // *** FIX: Do not give a trick point to a player for tricking themselves ***
+      if (authorId === guesserId) {
+        continue;
+      }
+      
       ensureBucket(roundScores, authorId);
       roundScores[authorId].points += 1;
       roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
@@ -104,6 +114,7 @@ export function calculateTrapAnswerScores(
       }
     }
     
+    // Log who was tricked by whom
     if (!group.authors.has(guesserId)) {
       const oneAuthor = pickOneAuthorStable(authors);
       if (oneAuthor) {
@@ -117,43 +128,45 @@ export function calculateTrapAnswerScores(
 
   // Build results list for display
   const resultsByAnswer: ResultsByAnswer = [];
-  const addedSigs = new Set<string>();
+  const addedAnswers = new Set<string>();
 
   // Add correct answer
+  const normalizedCorrect = normalizeForStrictKey(question.answer);
   resultsByAnswer.push({
     text: question.answer,
     isCorrect: true,
     authorIds: [],
-    guesserIds: Object.entries(playerGuesses).filter(([_, g]) => getSimilaritySignature(g ?? '') === correctSig).map(([pid]) => pid),
+    guesserIds: Object.entries(playerGuesses).filter(([_, g]) => normalizeForStrictKey(g ?? '') === normalizedCorrect).map(([pid]) => pid),
   });
-  addedSigs.add(correctSig);
+  addedAnswers.add(normalizedCorrect);
 
   // Add trap answers
-  for (const [sig, group] of answerGroups.entries()) {
-    if(addedSigs.has(sig)) continue;
+  for (const group of answerGroups.values()) {
+    const normalizedText = normalizeForStrictKey(group.text);
+    if(addedAnswers.has(normalizedText)) continue;
     resultsByAnswer.push({
         text: group.text,
         isCorrect: false,
         authorIds: Array.from(group.authors),
-        guesserIds: Object.entries(playerGuesses).filter(([_,g]) => getSimilaritySignature(g ?? '') === sig).map(([pid]) => pid)
+        guesserIds: Object.entries(playerGuesses).filter(([_,g]) => normalizeForStrictKey(g ?? '') === normalizedText).map(([pid]) => pid)
     });
-    addedSigs.add(sig);
+    addedAnswers.add(normalizedText);
   }
   
-  // Add any remaining shuffled dummy answers that weren't submitted
+  // Add any remaining shuffled dummy answers that weren't submitted and weren't guessed
   for (const option of shuffledAnswers) {
-      const sig = getSimilaritySignature(option);
-      if(!addedSigs.has(sig)) {
+      const normalizedOption = normalizeForStrictKey(option);
+      if(!addedAnswers.has(normalizedOption)) {
           resultsByAnswer.push({
               text: option,
               isCorrect: false,
               authorIds: [],
-              guesserIds: Object.entries(playerGuesses).filter(([_, g]) => getSimilaritySignature(g ?? '') === sig).map(([pid]) => pid)
+              guesserIds: Object.entries(playerGuesses).filter(([_, g]) => normalizeForStrictKey(g ?? '') === normalizedOption).map(([pid]) => pid)
           })
+          addedAnswers.add(normalizedOption);
       }
   }
   
-
   return {
     roundScores,
     resultsByAnswer,
@@ -162,4 +175,3 @@ export function calculateTrapAnswerScores(
     awayPlayerIdsDuringRound: awayPlayerIdsInRound,
   };
 }
-

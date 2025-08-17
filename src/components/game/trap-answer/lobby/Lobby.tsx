@@ -282,7 +282,7 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                 >
                   <div className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(6, 45, 30)}>
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(3, 20, 20)}>
                         <Wand2 className="w-4 h-4 ml-1"/> سريع
                       </Button>
                       <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(10, 60, 90)}>
