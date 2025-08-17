@@ -16,6 +16,8 @@ import WordWarGame from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { EducatedMerchantGame } from '@/components/game/educated-merchant/EducatedMerchantGame';
+import { QuizSwapGame } from '@/components/game/quiz-swap/QuizSwapGame';
+import { DrawAndDeceiveGame } from '@/components/game/draw-and-deceive/DrawAndDeceiveGame';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { leaveGame } from '@/lib/actions/room';
@@ -33,23 +35,23 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
   chip: string; // شارات الحالة
   title: string; // لون العنوان
 }> = {
+  'king-of-genius': {
+    bg: 'from-amber-900/60 via-orange-900/40 to-slate-900/70',
+    ring: 'ring-amber-500/40',
+    chip: 'bg-amber-500/15 text-amber-200 border-amber-400/30',
+    title: 'text-amber-200',
+  },
   'trap-answer': {
     bg: 'from-fuchsia-900/60 via-purple-900/40 to-slate-900/70',
     ring: 'ring-fuchsia-500/40',
     chip: 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-400/30',
     title: 'text-fuchsia-200',
   },
-  'word_war': {
-    bg: 'from-emerald-900/60 via-teal-900/40 to-slate-900/70',
-    ring: 'ring-emerald-500/40',
-    chip: 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30',
-    title: 'text-emerald-200',
-  },
-  'king-of-genius': {
-    bg: 'from-amber-900/60 via-orange-900/40 to-slate-900/70',
-    ring: 'ring-amber-500/40',
-    chip: 'bg-amber-500/15 text-amber-200 border-amber-400/30',
-    title: 'text-amber-200',
+   'quiz-swap': {
+    bg: 'from-teal-900/60 via-cyan-900/40 to-slate-900/70',
+    ring: 'ring-teal-500/40',
+    chip: 'bg-teal-500/15 text-teal-200 border-teal-400/30',
+    title: 'text-teal-200',
   },
   'behind-the-mask': {
     bg: 'from-rose-900/60 via-indigo-900/40 to-slate-900/70',
@@ -57,7 +59,13 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
     chip: 'bg-rose-500/15 text-rose-200 border-rose-400/30',
     title: 'text-rose-200',
   },
-  prison: {
+  'word_war': {
+    bg: 'from-emerald-900/60 via-teal-900/40 to-slate-900/70',
+    ring: 'ring-emerald-500/40',
+    chip: 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30',
+    title: 'text-emerald-200',
+  },
+  'prison': {
     bg: 'from-sky-900/60 via-blue-900/40 to-slate-900/70',
     ring: 'ring-sky-500/40',
     chip: 'bg-sky-500/15 text-sky-200 border-sky-400/30',
@@ -68,6 +76,12 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
     ring: 'ring-lime-500/40',
     chip: 'bg-lime-500/15 text-lime-200 border-lime-400/30',
     title: 'text-lime-200',
+  },
+  'draw-and-deceive': {
+    bg: 'from-cyan-900/60 via-sky-900/40 to-slate-900/70',
+    ring: 'ring-cyan-500/40',
+    chip: 'bg-cyan-500/15 text-cyan-200 border-cyan-400/30',
+    title: 'text-cyan-200',
   },
   default: {
     bg: 'from-violet-900/60 via-slate-900/50 to-black',
@@ -82,7 +96,53 @@ const stateLabel: Record<NonNullable<Game['gameState']>, string> = {
   lobby: 'الانتظار',
   active: 'جارية',
   final_results: 'النتائج',
+  // King of Genius
+  team_selection: 'توزيع الفرق',
+  challenge_intro: 'مقدمة التحدي',
+  challenge_active: 'التحدي قائم',
+  challenge_results: 'نتائج الجولة',
+  // Trap Answer
+  'category-selection': 'اختيار القسم',
+  'answer-submission': 'تقديم الإجابات',
+  guessing: 'مرحلة التخمين',
+  'round-results': 'نتائج الجولة',
+  // Behind the Mask
+  role_reveal: 'كشف الأدوار',
+  night: 'الليل',
+  day: 'النهار',
+  voting: 'التصويت',
+  execution: 'الإعدام',
+  // Word War
+  preparation: 'التجهيز',
+  guide_turn: 'دور المرشد',
+  guesser_turn: 'دور المخمن',
+  board_reveal: 'كشف اللوحة',
+  // Prison
+  instructions: 'التعليمات',
+  open_auction: 'مزاد مفتوح',
+  closed_auction_bidding: 'مزايدة مغلقة',
+  closed_auction_answering: 'إجابة المزاد',
+  judging: 'الحكم',
+  rejudging: 'إعادة الحكم',
+  results: 'النتائج',
+  // Educated Merchant
+  rolling: 'رمي النرد',
+  movement: 'تحرك',
+  property_action: 'قرار الملكية',
+  question: 'سؤال',
+  turn_end: 'نهاية الدور',
+  // QuizSwap
+  peek: 'نظرة خاطفة',
+  playing: 'اللعب',
+  answering: 'الإجابة',
+  ended: 'انتهت',
+  // Draw and Deceive
+  drawing: 'الرسم',
+  trapping: 'وضع الفخاخ',
+  // `guessing` is shared
+  // `results` is shared
 };
+
 
 // ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
 // ✨ خلفية زخرفية تفاعلية
@@ -324,12 +384,16 @@ export default function GameClient() {
         return <PrisonGame game={game} self={self} />;
       case 'educated-merchant':
         return <EducatedMerchantGame game={game} self={self} />;
+      case 'quiz-swap':
+        return <QuizSwapGame game={game} self={self} />;
+      case 'draw-and-deceive':
+        return <DrawAndDeceiveGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة للعبة "{game.gameType}"</p>;
     }
   };
 
-  const tone = (game.gameType ?? 'default') as keyof typeof THEME;
+  const tone = (game.gameType && game.gameType in THEME) ? game.gameType : 'default';
 
   return (
     <main className={cn('relative flex min-h-screen flex-col items-center justify-center p-2 md:p-4')}> 
@@ -340,7 +404,7 @@ export default function GameClient() {
 
       {/* حاوية محتوى اللعبة (زجاجية + حواف متوهّجة) */}
       <div className="mt-20 mb-6 w-[min(1200px,98vw)]">
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence mode="wait">
           <motion.div
             key={game.id + game.gameState}
             initial={{ opacity: 0, y: 14, scale: 0.995 }}
