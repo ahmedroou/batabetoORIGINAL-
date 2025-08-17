@@ -416,7 +416,7 @@ export default function NewsTab() {
     setIsGeneratingArticle(true);
     const result = await runAiJournalist(aiDirective.trim() || undefined);
     if (result.success) {
-      toast({ title: "نجاح", description: `تم إنشاء ونشر مقال جديد بعنوان: "${result.data?.headline}"` });
+      toast({ title: "نجاح", description: `تم إنشاء ونشر مقال جديد بعنوان: "${result.article?.headline}"` });
       fetchAllData();
     } else {
       toast({ title: "فشل إنشاء المقال", description: result.error, variant: "destructive" });
