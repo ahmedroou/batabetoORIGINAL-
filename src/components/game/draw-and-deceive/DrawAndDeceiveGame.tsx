@@ -6,6 +6,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { LobbyPhase } from './phases/LobbyPhase';
 import { DrawingPhase } from './phases/DrawingPhase';
 import { TrappingPhase } from './phases/TrappingPhase';
+import { GuessingPhase } from './phases/GuessingPhase';
+import { ResultsPhase } from './phases/ResultsPhase';
+import { FinalResultsPhase } from './phases/FinalResultsPhase';
 
 interface DrawAndDeceiveGameProps {
     game: Game;
@@ -25,11 +28,11 @@ export function DrawAndDeceiveGame({ game, self }: DrawAndDeceiveGameProps) {
             case 'trapping':
                  return <TrappingPhase game={game} self={self} />;
             case 'guessing':
-                 return <div>Guessing Phase (To be implemented)</div>;
+                 return <GuessingPhase game={game} self={self} />;
             case 'results':
-                 return <div>Results Phase (To be implemented)</div>;
+                 return <ResultsPhase game={game} self={self} />;
             case 'final_results':
-                 return <div>Final Results Phase (To be implemented)</div>;
+                 return <FinalResultsPhase game={game} self={self} />;
             default:
                 return <div>Unknown phase: {phase}</div>;
         }

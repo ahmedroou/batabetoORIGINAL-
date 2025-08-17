@@ -622,13 +622,18 @@ export interface QuizSwapState {
 // -------------------------------------------------------------
 // Draw & Deceive Game Types
 // -------------------------------------------------------------
-
+export type DrawAndDeceiveRoundResult = {
+    answer: string;
+    isCorrect: boolean;
+    authorIds: string[];
+    guesserIds: string[];
+};
 export interface DrawAndDeceiveState {
     settings: {
-        drawingTime: number; // seconds
-        trappingTime: number; // seconds
-        guessingTime: number; // seconds
-        resultsTime: number; // seconds
+        drawingTime: number; 
+        trappingTime: number; 
+        guessingTime: number; 
+        resultsTime: number; 
         rounds: number;
     };
     turnOrder: string[];
@@ -639,13 +644,17 @@ export interface DrawAndDeceiveState {
     // State per round
     artistId?: string;
     wordToDraw?: string;
-    drawingDataUrl?: string; // The drawing itself as a base64 string
-    correctAnswer?: string; // The 2-word title from the artist
+    drawingDataUrl?: string;
+    correctAnswer?: string;
     
-    playerTraps: Record<string, string>; // { [playerId]: "deceptive answer" }
-    playerGuesses: Record<string, string>; // { [playerId]: "chosen answer" }
+    playerTraps: Record<string, string>; 
+    playerGuesses: Record<string, string>; 
+    shuffledAnswers: string[];
 
-    lastRoundResults?: any; // Similar to TrapAnswer's results
+    lastRoundResults?: {
+        scores: Record<string, { points: number; breakdown: { reason: string; points: number }[] }>;
+        answers: DrawAndDeceiveRoundResult[];
+    };
     timerEndsAt?: Timestamp;
 }
 
