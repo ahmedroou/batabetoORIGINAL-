@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -958,4 +959,3 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
 
   return renderGameBoard();
 }
-```
