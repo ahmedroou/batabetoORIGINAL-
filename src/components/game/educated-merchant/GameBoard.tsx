@@ -300,7 +300,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
     if (property.ownerId && property.color) { dynamicStyle.backgroundColor = property.color; borderColor = 'border-white/50'; }
     return (
       <motion.div
-        className={cn('w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500 cursor-pointer', baseBg, borderColor, isNewlyBought && 'animate-pulse-glow', isHighlighted && 'tile-highlight')}
+        className={cn('w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-1 text-center text-white shadow-lg transition-all duration-500 cursor-pointer', baseBg, borderColor, isHighlighted && 'tile-highlight')}
         style={dynamicStyle}
         whileHover={{ scale: 1.03, zIndex: 10 }}
         transition={{ duration: 0.22 }}
