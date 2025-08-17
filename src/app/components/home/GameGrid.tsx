@@ -9,7 +9,7 @@ import { Card, CardDescription, CardFooter, CardHeader, CardTitle, CardContent }
 import { Button } from '@/components/ui/button';
 import { GAME_ICONS } from '@/data/icons';
 import type { Game } from '@/types';
-import { Star, Loader2, Heart, TrendingUp, Trophy, Coins } from 'lucide-react';
+import { Star, Loader2, Heart, TrendingUp, Trophy, Coins, Brush } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
@@ -20,6 +20,7 @@ type LoadingState =
   | 'create-word_war'
   | 'create-prison'
   | 'create-educated-merchant'
+  | 'create-draw-and-deceive'
   | null;
 
 const gameCardsData: Array<{
@@ -57,6 +58,18 @@ const gameCardsData: Array<{
         { rank: 'المركز الأول', points: 3, coins: 2 },
         { rank: 'المركز الثاني', points: 2, coins: 1 },
         { rank: 'المركز الثالث', points: 1, coins: 0 },
+    ]
+  },
+  {
+    type: 'draw-and-deceive',
+    title: 'ارسم واخدع',
+    description: 'ارسم الكلمة، واكتب فخاخًا لخداع الآخرين.',
+    defaultTag: 'جديد',
+    accent: { from: 'from-sky-500/25', to: 'to-cyan-500/25' },
+    prizes: [
+        { rank: 'المركز الأول', points: 3, coins: 2 },
+        { rank: 'المركز الثاني', points: 2, coins: 1 },
+        { rank: 'الرسام المبدع', points: 1, coins: 0 },
     ]
   },
   { 
