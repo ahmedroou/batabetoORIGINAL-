@@ -33,7 +33,7 @@ interface DrawingCanvasProps {
   height?: number;
 }
 
-export function DrawingCanvas({
+export function DrawingPhase({
   className,
   disabled = false,
   onDrawEnd,
@@ -479,7 +479,7 @@ export function DrawingCanvas({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [disabled, history.length]);
+  }, [disabled, history.length, undo, redo]);
 
   return (
     <div ref={containerRef} className={cn('relative w-full select-none', className)}>
