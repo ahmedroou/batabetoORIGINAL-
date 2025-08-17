@@ -1,7 +1,6 @@
 
-
 import type { Game, SocialRank, PermissionId } from '@/types';
-
+import { recordGamePointsScoredEvent } from '../events';
 
 /**
  * A pure function for testability. It calculates the updates needed for players at the end of a game.
@@ -11,12 +10,10 @@ import type { Game, SocialRank, PermissionId } from '@/types';
  */
 export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     const finalScores = game.playerScores || {};
-    // This now correctly gets all player IDs from the game object itself.
     const playerIdsInGame = game.players.map(p => p.id);
 
     const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<string, number>, winCounts?: Record<string, number>, challengePoints?: number, permissions?: PermissionId[] }> = {};
     
-    // Initialize updates for all players in the game.
     playerIdsInGame.forEach(pid => {
         updates[pid] = {
             leaderboardPoints: 0,
@@ -32,29 +29,26 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     
     const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
     
-    // Check for short game condition safely
     const trapState = game.trapAnswerState;
     const isShortTrapAnswerGame = game.gameType === 'trap-answer' && (trapState?.settings?.rounds ?? 10) < 2;
 
 
     const isEducatedMerchantGame = game.gameType === 'educated-merchant';
 
-    // Define awards based on rank
     const awardTiers = [
-        { leaderboardPoints: 3, coins: 2 }, // 1st place
-        { leaderboardPoints: 2, coins: 1 }, // 2nd place
-        { leaderboardPoints: 1, coins: 0 }, // 3rd place
+        { leaderboardPoints: 3, coins: 2 },
+        { leaderboardPoints: 2, coins: 1 },
+        { leaderboardPoints: 1, coins: 0 },
     ];
     
     const educatedMerchantAwardTiers = [
-        { leaderboardPoints: 4, coins: 3 }, // 1st place
-        { leaderboardPoints: 2, coins: 1 }, // 2nd place
-        { leaderboardPoints: 1, coins: 1 }, // 3rd place
+        { leaderboardPoints: 4, coins: 3 },
+        { leaderboardPoints: 2, coins: 1 },
+        { leaderboardPoints: 1, coins: 1 },
     ];
 
     
     if (isTeamGame) {
-        // Team-based awards
         const winningTeam = game.gameResult!.winner;
         game.players.forEach(player => {
             if (!player.team) return;
@@ -64,8 +58,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             updates[player.id].coins = isWinner ? 2 : 0;
             updates[player.id].challengePoints = points;
         });
-    } else if (!isShortTrapAnswerGame) { // Awards for non-short individual games
-        // Individual awards
+    } else if (!isShortTrapAnswerGame) { 
         const sortedPlayerIds = Object.keys(finalScores).sort((a, b) => (finalScores[b] || 0) - (finalScores[a] || 0));
         const playerRanks: { id: string, rank: number }[] = [];
         let currentRank = 0;
@@ -115,7 +108,6 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         let cunningDeceiver: Game['trapAnswerState']['finalAwards']['cunningDeceiver'] = null;
         const afkStats: Record<string, number> = {};
 
-        // Aggregate AFK stats across all rounds
         if (Array.isArray(trapState.history)) {
             for (const roundHistory of trapState.history) {
                 if (Array.isArray(roundHistory.awayPlayerIdsDuringRound)) {
@@ -155,11 +147,18 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         
         specialAwards = { cunningDeceiver, deceivedFool, afkStats };
     }
+    
+    // --- Fire off events for any challenge points scored ---
+    Object.entries(updates).forEach(([playerId, playerUpdates]) => {
+        if (playerUpdates.challengePoints && playerUpdates.challengePoints > 0) {
+            // This is a fire-and-forget operation, no need to await it.
+            recordGamePointsScoredEvent(playerId, game.gameType, game.id, playerUpdates.challengePoints);
+        }
+    });
 
-    // --- New Permissions Calculation ---
-    // This part is crucial for the optimization.
+
     const getRank = (points: number) => {
-        const ranks = allRanks || []; // Fallback to empty array if not provided
+        const ranks = allRanks || []; 
         const sortedRanks = [...ranks].sort((a, b) => b.threshold - a.threshold);
         for (const rank of sortedRanks) {
             if (points >= rank.threshold) return rank;
@@ -183,3 +182,5 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
 
     return { success: true, data: { updates, winUpdate, specialAwards }};
 }
+
+    

@@ -21,8 +21,9 @@ import {
     runTransaction,
     limit,
 } from 'firebase/firestore';
-import type { Challenge, ChallengePrize, Game, UserProfile } from '@/types';
+import type { Challenge, ChallengePrize, Game, UserProfile, GamePointsScoredEvent } from '@/types';
 import { sendSystemMail } from './user/mail';
+import { recordGamePointsScoredEvent } from './events';
 
 
 type CreateChallengeInput = Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt' | 'participantCount' | 'scores'> & { durationInHours: number };
@@ -301,6 +302,32 @@ export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
     }
 }
 
+async function updateChallengeScores(challenge: Challenge): Promise<Record<string, number>> {
+    const eventsRef = collection(db, 'social_events');
+    const q = query(eventsRef, 
+        where('type', '==', 'game_points_scored'),
+        where('timestamp', '>=', challenge.createdAt),
+        where('timestamp', '<=', challenge.endsAt)
+    );
+
+    const snapshot = await getDocs(q);
+    const newScores: Record<string, number> = {};
+
+    snapshot.docs.forEach(doc => {
+        const event = doc.data() as GamePointsScoredEvent;
+        if (
+            challenge.participantIds.includes(event.playerId) &&
+            (challenge.specificGameType === 'all' || challenge.specificGameType === event.gameType)
+        ) {
+            newScores[event.playerId] = (newScores[event.playerId] || 0) + event.points;
+        }
+    });
+
+    // Update the challenge doc with the new scores.
+    await updateDoc(doc(db, 'challenges', challenge.id), { scores: newScores });
+
+    return newScores;
+}
 
 export async function finalizeChallenge(challengeId: string): Promise<{ success: boolean; winnersCount: number; error?: string }> {
     const challengeRef = doc(db, 'challenges', challengeId);
@@ -312,7 +339,9 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
 
         if (challengeData.winners) throw new Error("This challenge has already been finalized.");
 
-        const scores = challengeData.scores || {};
+        // New logic: Recalculate scores from events before finalizing.
+        const scores = await updateChallengeScores(challengeData);
+        
         const sortedWinners = Object.entries(scores)
             .sort(([, scoreA], [, scoreB]) => scoreB - scoreA)
             .slice(0, 3);
@@ -373,3 +402,5 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         return { success: false, winnersCount: 0, error: error.message };
     });
 }
+
+    

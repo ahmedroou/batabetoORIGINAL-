@@ -345,11 +345,17 @@ export interface Decree {
     taxToLift: number;
 }
 
-export interface SocialEvent {
-    type: 'allegiance' | 'rebellion' | 'humiliation' | 'game_end';
-    description: string;
-    timestamp: Date;
+export interface GamePointsScoredEvent {
+    id: string;
+    type: 'game_points_scored';
+    playerId: string;
+    gameType: Game['gameType'];
+    gameId: string;
+    points: number;
+    timestamp: Timestamp;
 }
+
+export type SocialEvent = Humiliation | AllegianceRequest | TaxDemand | Alliance | Decree | GamePointsScoredEvent;
 
 
 export interface ClanInvitation {
@@ -427,7 +433,7 @@ export interface GameKing {
 // Game States (per game)
 // -------------------------------------------------------------
 export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
-export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final_results";
+export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
 export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
 export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
@@ -894,3 +900,5 @@ export interface MafiaSettings {
 
 /** خريطة التصويت: voterId -> targetId|null */
 export type VoteMap = Record<string, string | null>;
+
+    
