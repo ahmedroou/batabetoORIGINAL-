@@ -53,7 +53,7 @@ function dedupeLocal<T>(arr: T[], keyer: (t: T) => string) {
   return out;
 }
 
-type QAJson = { question: string; answer: string; dummyAnswers?: string[] };
+type QAJson = { question: string; answer: string; dummyAnswers?: string[], type?: 'text' | 'image', imageUrl?: string };
 type PrisonJson = { text: string };
 
 export async function uploadEducatedMerchantQuestionsFromJson(questions: QAJson[], category: string) {
@@ -63,7 +63,7 @@ export async function uploadEducatedMerchantQuestionsFromJson(questions: QAJson[
     try {
         const questionsCol = collection(db, 'educated_merchant_questions');
         let valid = 0;
-        const cleaned = dedupeLocal(questions.filter(q => stringNonEmpty(q.question) && stringNonEmpty(q.answer)), q => getSimilaritySignature(normalize(q.question)));
+        const cleaned = dedupeLocal(questions.filter(q => (stringNonEmpty(q.question) || stringNonEmpty(q.imageUrl)) && stringNonEmpty(q.answer)), q => getSimilaritySignature(normalize(q.question || q.imageUrl)));
         const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
 
         for (const q of cleaned) {
@@ -73,8 +73,10 @@ export async function uploadEducatedMerchantQuestionsFromJson(questions: QAJson[
                 question: normalize(q.question),
                 answer: normalize(q.answer),
                 category: normalize(category),
+                type: q.type === 'image' ? 'image' : 'text',
+                imageUrl: q.imageUrl || '',
                 randomKey: Math.random(),
-                similaritySignature: getSimilaritySignature(normalize(q.question)),
+                similaritySignature: getSimilaritySignature(normalize(q.question || q.imageUrl)),
                 ...(hasDummy && { dummyAnswers: q.dummyAnswers!.map(d => normalize(d)) }),
                 createdAt: serverTimestamp(),
             };
@@ -98,7 +100,7 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: QAJson[], cat
     try {
         const questionsCol = collection(db, 'trap_answer_questions');
         let valid = 0;
-        const cleaned = dedupeLocal(questions.filter(q => stringNonEmpty(q.question) && stringNonEmpty(q.answer)), q => getSimilaritySignature(normalize(q.question)));
+        const cleaned = dedupeLocal(questions.filter(q => (stringNonEmpty(q.question) || stringNonEmpty(q.imageUrl)) && stringNonEmpty(q.answer)), q => getSimilaritySignature(normalize(q.question || q.imageUrl)));
         const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
 
         for (const q of cleaned) {
@@ -108,8 +110,10 @@ export async function uploadTrapAnswerQuestionsFromJson(questions: QAJson[], cat
                 question: normalize(q.question),
                 answer: normalize(q.answer),
                 category: normalize(category),
+                type: q.type === 'image' ? 'image' : 'text',
+                imageUrl: q.imageUrl || '',
                 randomKey: Math.random(),
-                similaritySignature: getSimilaritySignature(normalize(q.question)),
+                similaritySignature: getSimilaritySignature(normalize(q.question || q.imageUrl)),
                 ...(hasDummy && { dummyAnswers: q.dummyAnswers!.map(d => normalize(d)) }),
                 createdAt: serverTimestamp(),
             };
@@ -368,3 +372,5 @@ export async function deleteSimilarQuestions(
         return { error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
     }
 }
+
+    

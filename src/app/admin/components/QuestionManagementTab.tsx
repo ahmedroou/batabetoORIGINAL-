@@ -80,9 +80,13 @@ import { Info, Upload, Trash2, Sparkles, Edit, Save, Loader2, FileUp, FileX2, X,
  * أنواع/مخططات التحقق Zod
  * ----------------------------------------------------------- */
 const TrapOrMerchantSchema = z.object({
-  question: z.string().min(1, "نص السؤال مطلوب"),
+  question: z.string().optional(), // Question can be optional for image type
   answer: z.string().min(1, "نص الجواب مطلوب"),
   dummyAnswers: z.array(z.string().min(1)).optional(),
+  type: z.enum(['text', 'image']).optional(),
+  imageUrl: z.string().optional(),
+}).refine(data => data.type === 'image' ? !!data.imageUrl : !!data.question, {
+    message: "لأسئلة الصور، رابط الصورة مطلوب. للأسئلة النصية، نص السؤال مطلوب.",
 });
 
 const PrisonSchema = z.object({
@@ -491,7 +495,7 @@ const QuestionManagementTab: React.FC = () => {
         if (!parsed.success) throw new Error(parsed.error.errors?.[0]?.message || "JSON غير صالح.");
 
         // إزالة التكرار داخل الملف نفسه
-        const cleaned = dedupeLocal(parsed.data, (q) => signature(q.question));
+        const cleaned = dedupeLocal(parsed.data, (q) => signature(q.question || q.imageUrl || ''));
         setUploadPreview({
           validCount: cleaned.length,
           rejectedCount: parsed.data.length - cleaned.length,
@@ -525,9 +529,9 @@ const QuestionManagementTab: React.FC = () => {
   const getUploadHelperText = useCallback(() => {
     switch (selectedGame) {
       case "trap-answer":
-        return "الملف: مصفوفة من الكائنات بكل عنصر { question, answer, dummyAnswers?: string[] }.";
+        return "الملف: مصفوفة من الكائنات بكل عنصر { question, answer, type?, imageUrl?, dummyAnswers? }.";
       case "educated-merchant":
-        return "الملف: مصفوفة { question, answer, dummyAnswers?: string[] } (الدمي اختيارية).";
+        return "الملف: مصفوفة { question, answer, type?, imageUrl?, dummyAnswers? } (الدمي اختيارية).";
       case "word_war":
         return "الملف: مصفوفة من الكلمات (strings).";
       case "prison":
@@ -543,8 +547,8 @@ const QuestionManagementTab: React.FC = () => {
       case "trap-answer":
       case "educated-merchant":
         data = [
-          { question: "ما عاصمة فرنسا؟", answer: "باريس", dummyAnswers: ["روما", "مدريد"] },
-          { question: "كم 2+2؟", answer: "4" },
+          { question: "ما عاصمة فرنسا؟", answer: "باريس", dummyAnswers: ["روما", "مدريد"], type: "text" },
+          { question: "ماذا في هذه الصورة؟", answer: "قطة", imageUrl: "https://placehold.co/600x400.png", type: "image" },
         ];
         break;
       case "word_war":
@@ -1062,3 +1066,5 @@ const QuestionManagementTab: React.FC = () => {
 };
 
 export default QuestionManagementTab;
+
+    
