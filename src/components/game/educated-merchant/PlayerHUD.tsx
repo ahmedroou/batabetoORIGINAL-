@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -167,7 +168,7 @@ export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDPro
                               animate={{ y: -12, opacity: 1 }}
                               exit={{ y: -22, opacity: 0 }}
                               transition={{ duration: 0.6 }}
-                              className={cn( 'absolute left-1/2 -translate-x-1/2 -top-3 px-2 py-0.5 rounded-full text-[11px] font-semibold shadow', delta > 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white' )}>
+                              className={cn( 'absolute left-1/2 -translate-x-1/2 -top-3 px-1.5 py-0.5 rounded-full text-[11px] font-semibold shadow', delta > 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white' )}>
                               {delta > 0 ? `+${nf.format(delta)}` : `-${nf.format(Math.abs(delta))}`}
                             </motion.div>
                           )}

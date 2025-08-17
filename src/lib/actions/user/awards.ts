@@ -1,4 +1,5 @@
 
+
 import type { Game, SocialRank, PermissionId } from '@/types';
 
 
@@ -13,7 +14,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     // This now correctly gets all player IDs from the game object itself.
     const playerIdsInGame = game.players.map(p => p.id);
 
-    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<string, number>, challengePoints?: number, permissions?: PermissionId[] }> = {};
+    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<string, number>, winCounts?: Record<string, number>, challengePoints?: number, permissions?: PermissionId[] }> = {};
     
     // Initialize updates for all players in the game.
     playerIdsInGame.forEach(pid => {
@@ -21,6 +22,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             leaderboardPoints: 0,
             coins: 0,
             gamesPlayed: { [game.gameType]: 1 },
+            winCounts: {},
             challengePoints: 0,
         };
     });
@@ -101,6 +103,9 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             const winners = sortedPlayerIds.filter(pid => (finalScores[pid] || 0) === firstPlaceScore);
             if (winners.length === 1) {
                 winUpdate = { userId: playerRanks[0].id, gameType: game.gameType };
+                if (updates[winUpdate.userId]) {
+                    updates[winUpdate.userId].winCounts = { [game.gameType]: 1 };
+                }
             }
         }
     }

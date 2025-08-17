@@ -36,9 +36,6 @@ export async function getLeagueData(leagueId: string): Promise<{ league: League 
                 snapshot.forEach(doc => {
                      const userData = doc.data();
                      const leaguePoints = league.scores?.[doc.id] || 0;
-                     // This part is tricky. We are overriding the global gamesPlayed with league-specific.
-                     // A better structure would be to have league-specific stats separate.
-                     // For now, this makes the league leaderboard display correctly.
                      const gamesPlayedInLeague = league.gamesPlayed?.[doc.id] || 0;
                      members.push({ ...userData, uid: doc.id, leaderboardPoints: leaguePoints, gamesPlayed: { total: gamesPlayedInLeague } } as UserProfile);
                 });
@@ -74,9 +71,6 @@ export async function updateUserStats(adminId: string, leagueId: string, userId:
 
         transaction.update(leagueRef, {
             [`scores.${userId}`]: stats.points,
-            // This needs to be adapted for per-game counts, this action might be deprecated or changed.
-            // For now, it will update a generic 'total' which doesn't exist.
-            // A more specific action would be needed to update stats for a *specific* game.
         });
 
         return { success: true };
@@ -148,7 +142,6 @@ export async function joinLeague(userId: string, leagueId: string, password?: st
             transaction.update(leagueRef, {
                 members: arrayUnion(userId),
                 [`scores.${userId}`]: 0,
-                [`gamesPlayed.${userId}`]: 0, // This is now per-game, so this initialization is less meaningful.
             });
             transaction.update(userRef, {
                 leagues: arrayUnion({ id: leagueId, name: league.name })
@@ -308,42 +301,34 @@ export async function resetAllLeagueStats(adminId: string): Promise<{ success: b
     }
 };
 
-export async function updateLeagueScoresForGameEnd(gameId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    try {
-        const gameDoc = await getDoc(gameRef);
-        if (!gameDoc.exists()) return;
-        const game = gameDoc.data() as Game;
-        
-        // This function is now responsible for getting ranks and calculating awards.
-        const allRanks = await getRanks();
-        const { success, data } = calculateEndOfGameAwards(game, allRanks);
-        
-        if (!success || !data) return;
+export async function updateLeagueScoresForGameEnd(game: Game) {
+    const leaguesQuery = query(collection(db, 'leagues'), where('members', 'array-contains-any', game.playerUids));
+    const leaguesSnapshot = await getDocs(leaguesQuery);
+    
+    if (leaguesSnapshot.empty) return;
+    
+    const allRanks = await getRanks();
+    const { data } = calculateEndOfGameAwards(game, allRanks);
+    if (!data) return;
 
-        const { updates, winUpdate, specialAwards } = data;
-        
-        const leaguesQuery = query(collection(db, 'leagues'), where('members', 'array-contains-any', Object.keys(updates)));
-        const leaguesSnapshot = await getDocs(leaguesQuery);
-        
-        const batch = writeBatch(db);
+    const { updates } = data;
+    
+    const batch = writeBatch(db);
 
-        leaguesSnapshot.forEach(leagueDoc => {
-            const leagueUpdates: { [key: string]: any } = {};
-            Object.entries(updates).forEach(([playerId, playerUpdates]) => {
-                if(leagueDoc.data().members.includes(playerId)) {
-                    leagueUpdates[`scores.${playerId}`] = increment(playerUpdates.challengePoints || playerUpdates.leaderboardPoints || 0);
-                    leagueUpdates[`gamesPlayed.${playerId}`] = increment(1);
+    leaguesSnapshot.forEach(leagueDoc => {
+        const leagueUpdates: { [key: string]: any } = {};
+        Object.entries(updates).forEach(([playerId, playerUpdates]) => {
+            if(leagueDoc.data().members.includes(playerId)) {
+                leagueUpdates[`scores.${playerId}`] = increment(playerUpdates.challengePoints || 0);
+                if (game.gameType) {
+                    leagueUpdates[`gamesPlayed.${playerId}.${game.gameType}`] = increment(1);
                 }
-            });
-             if (Object.keys(leagueUpdates).length > 0) {
-                batch.update(leagueDoc.ref, leagueUpdates);
             }
         });
+        if (Object.keys(leagueUpdates).length > 0) {
+            batch.update(leagueDoc.ref, leagueUpdates);
+        }
+    });
 
-        await batch.commit();
-        
-    } catch (error) {
-        console.error(`Error updating league scores for game ${gameId}:`, error);
-    }
+    await batch.commit();
 }
