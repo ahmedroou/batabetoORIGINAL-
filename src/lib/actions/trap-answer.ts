@@ -461,10 +461,10 @@ async function _advanceToResults(tx: any, gameRef: any, game: Game, isTimeout = 
 
 async function _startNextRound(tx: any, gameRef: any, game: Game): Promise<{ isGameOver: boolean }> {
   const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const settings = sanitizeSettings(state.settings, []);
   const currentRound = game.round || 0;
-  const totalRounds = state.settings?.rounds || 10;
-
-  if (currentRound >= totalRounds) {
+  
+  if (currentRound >= settings.rounds) {
     const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) => ((game.playerScores?.[a] || 0) > (game.playerScores?.[b] || 0) ? a : b), '');
     tx.update(gameRef, {
       gameState: 'final_results',
