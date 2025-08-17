@@ -6,7 +6,7 @@
 import type { Game, Player, TrapQuestion } from '@/types';
 import { safeCompareStrings, getSimilaritySignature } from '../helpers';
 
-const SIMILARITY_THRESHOLD = 0.90 as const;
+const SIMILARITY_THRESHOLD = 0.95 as const; // Increased for more accurate grouping
 const TIMEOUT_TOKEN = '__TIMEOUT__' as const;
 
 type RoundScores = Game['trapAnswerState']['lastRoundResults']['scores'];
@@ -35,13 +35,23 @@ function buildCanonicalOptionsMap(options: string[]) {
 }
 
 /** Find group index by similarity threshold. */
-function findSimilarGroupIdx(groups: { text: string; authors: Set<string> }[], text: string) {
-  const t = text.trim();
-  for (let i = 0; i < groups.length; i++) {
-    if (safeCompareStrings(groups[i].text, t) > SIMILARITY_THRESHOLD) return i;
-  }
-  return -1;
+function findSimilarGroup(
+  groups: { text: string; authors: Set<string> }[],
+  text: string
+): { index: number; score: number } {
+    if (!text) return { index: -1, score: 0 };
+    let bestIndex = -1;
+    let bestScore = 0;
+    for (let i = 0; i < groups.length; i++) {
+        const score = safeCompareStrings(groups[i].text, text);
+        if (score > bestScore) {
+            bestScore = score;
+            bestIndex = i;
+        }
+    }
+    return { index: bestIndex, score: bestScore };
 }
+
 
 export function calculateTrapAnswerScores(
   activePlayers: Player[],
@@ -59,8 +69,7 @@ export function calculateTrapAnswerScores(
 
   const newTrickStats: TrickStats = { trickedBy: {}, trickedOthers: {} };
   const timedOutGuesserIds: string[] = [];
-
-  // Canonical map for displayed options (ensures scoring aligns with what players actually saw)
+  
   const canonicalMap = buildCanonicalOptionsMap(shuffledAnswers);
   const correctSig = getSimilaritySignature(question.answer);
   const correctDisplayedOpt =
@@ -68,20 +77,24 @@ export function calculateTrapAnswerScores(
       ([sig, txt]) => safeCompareStrings(txt, question.answer) > SIMILARITY_THRESHOLD || sig === correctSig
     )?.[1] ?? question.answer;
 
-  // Group similar trap answers (authors as a Set for uniqueness)
+  // Group similar trap answers
   const answerGroups: { text: string; authors: Set<string> }[] = [];
   for (const [authorId, answerText] of Object.entries(playerAnswers)) {
     if (answerText === null) continue;
     const trimmed = answerText.trim();
     if (!trimmed) continue;
+    
+    // Check against correct answer first
+    if (safeCompareStrings(trimmed, question.answer) > 0.70) continue;
 
-    const idx = findSimilarGroupIdx(answerGroups, trimmed);
-    if (idx >= 0) {
-      answerGroups[idx].authors.add(authorId);
+    const { index, score } = findSimilarGroup(answerGroups, trimmed);
+    if (index !== -1 && score > SIMILARITY_THRESHOLD) {
+        answerGroups[index].authors.add(authorId);
     } else {
-      answerGroups.push({ text: trimmed, authors: new Set([authorId]) });
+        answerGroups.push({ text: trimmed, authors: new Set([authorId]) });
     }
   }
+
 
   // Scoring
   for (const [guesserId, rawGuess] of Object.entries(playerGuesses)) {
@@ -90,18 +103,13 @@ export function calculateTrapAnswerScores(
       continue;
     }
     if (rawGuess == null) continue;
-
-    // Map guess to a canonical displayed option; ignore if not a displayed option
+    
     const guessSig = getSimilaritySignature(rawGuess);
     const displayedGuess = canonicalMap.get(guessSig)
       ?? [...canonicalMap.values()].find(opt => safeCompareStrings(opt, rawGuess) > SIMILARITY_THRESHOLD);
 
-    if (!displayedGuess) {
-      // Safety: skip guesses that weren't on the board
-      continue;
-    }
+    if (!displayedGuess) continue;
 
-    // Correct guess?
     const isCorrect = safeCompareStrings(displayedGuess, correctDisplayedOpt) > SIMILARITY_THRESHOLD
       || (getSimilaritySignature(displayedGuess) === getSimilaritySignature(correctDisplayedOpt));
 
@@ -112,39 +120,34 @@ export function calculateTrapAnswerScores(
       continue;
     }
 
-    // Otherwise: guessed a trap (find the group whose representative matches the displayed guess)
-    const chosenGroupIdx = findSimilarGroupIdx(answerGroups, displayedGuess);
-    if (chosenGroupIdx < 0) {
-      // Not matching any trap group (e.g., dummy answer) → no points change
-      continue;
-    }
-
+    const { index: chosenGroupIdx } = findSimilarGroup(answerGroups, displayedGuess);
+    if (chosenGroupIdx < 0) continue;
+    
     const group = answerGroups[chosenGroupIdx];
     const authors = [...group.authors];
 
-    // Self-vote penalty
     if (group.authors.has(guesserId)) {
       ensureBucket(roundScores, guesserId);
       roundScores[guesserId].points -= 1;
       roundScores[guesserId].breakdown.push({ reason: "صوّت لنفسه", points: -1 });
     }
 
-    // Award authors (excluding the guesser)
     const guesserName = activePlayers.find(p => p.id === guesserId)?.name || 'لاعب';
     for (const authorId of authors) {
-      if (authorId === guesserId) continue;
+      if (authorId === guesserId && roundScores[guesserId].breakdown.some(b => b.reason === 'صوّت لنفسه')) {
+         // If a player votes for their own answer, they should get both the penalty and the points for tricking others.
+         // Let's ensure the logic reflects this if needed, but for now, we separate.
+      }
       ensureBucket(roundScores, authorId);
       roundScores[authorId].points += 1;
       roundScores[authorId].breakdown.push({ reason: `خدع ${guesserName}`, points: 1 });
 
-      // trickedOthers: credit all authors who fooled this guesser
       if (!newTrickStats.trickedOthers[authorId]) newTrickStats.trickedOthers[authorId] = [];
       if (!newTrickStats.trickedOthers[authorId].includes(guesserId)) {
         newTrickStats.trickedOthers[authorId].push(guesserId);
       }
     }
 
-    // trickedBy: register exactly ONE author (deterministic)
     if (!group.authors.has(guesserId)) {
       const oneAuthor = pickOneAuthorStable(authors);
       if (oneAuthor) {
@@ -156,31 +159,24 @@ export function calculateTrapAnswerScores(
     }
   }
 
-  // Build results list exactly in the display order (merged options stay merged)
+  // Build results list
   const resultsByAnswer: ResultsByAnswer = [];
   for (const optionText of shuffledAnswers) {
     const isCorrect =
       safeCompareStrings(optionText, correctDisplayedOpt) > SIMILARITY_THRESHOLD ||
       (getSimilaritySignature(optionText) === getSimilaritySignature(correctDisplayedOpt));
+    
+    const { index: groupIndex } = findSimilarGroup(answerGroups, optionText);
+    const group = groupIndex !== -1 ? answerGroups[groupIndex] : null;
 
-    const group = answerGroups.find(g => safeCompareStrings(g.text, optionText) > SIMILARITY_THRESHOLD);
-
-    // Collect guessers for this displayed option (exclude timeouts)
     const guesserIds = Object.entries(playerGuesses)
-      .filter(([pid, g]) => g !== TIMEOUT_TOKEN && g != null)
-      .map(([pid, g]) => {
-        // map each raw guess to its displayed canonical option, then match
-        const sig = getSimilaritySignature(String(g));
-        const displayed = canonicalMap.get(sig)
-          ?? [...canonicalMap.values()].find(opt => safeCompareStrings(opt, String(g)) > SIMILARITY_THRESHOLD);
-        return displayed && safeCompareStrings(displayed, optionText) > SIMILARITY_THRESHOLD ? pid : null;
-      })
-      .filter((pid): pid is string => !!pid);
+      .filter(([pid, g]) => g !== TIMEOUT_TOKEN && g != null && (safeCompareStrings(g, optionText) > SIMILARITY_THRESHOLD))
+      .map(([pid]) => pid);
 
     resultsByAnswer.push({
       text: optionText,
       isCorrect,
-      authorIds: isCorrect ? null : group ? [...group.authors] : [],
+      authorIds: isCorrect ? [] : group ? [...group.authors] : [],
       guesserIds
     });
   }
