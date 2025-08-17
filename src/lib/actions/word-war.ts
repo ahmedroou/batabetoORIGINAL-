@@ -1,4 +1,3 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -289,7 +288,6 @@ export async function revealCard(
   cardText: string,
   opts?: { expectedTurnId?: number; clientSentAtMs?: number }
 ) {
-  let gameDataForLeagueUpdate: Game | null = null;
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (t) => {
     const gameDoc = await t.get(gameRef);
@@ -375,16 +373,7 @@ export async function revealCard(
       'metrics.lastRevealAt': serverTimestamp(),
       ...(opts?.clientSentAtMs ? { 'metrics.latency.lastRevealMsApprox': Math.max(0, nowMs() - opts.clientSentAtMs) } : {}),
     });
-
-    if (updates.gameState === 'board_reveal') {
-      gameDataForLeagueUpdate = { ...game, ...(updates as any) };
-    }
   });
-
-  if (gameDataForLeagueUpdate) {
-    await distributeEndOfGameAwards(gameDataForLeagueUpdate);
-    await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
-  }
 }
 
 export async function endTurn(gameId: string, playerId: string, opts?: { expectedTurnId?: number; clientSentAtMs?: number }) {
@@ -460,7 +449,9 @@ export async function handleTimeout(gameId: string, actorId: string, opts?: { ex
       bumpTurnId(t, gameRef, game.wordWarState.turnId);
       setTimer(t, gameRef, 'guide', getTurnTime(game));
     } else if (game.gameState === 'board_reveal') {
-      t.update(gameRef, { gameState: 'final_results', 'wordWarState.timer': deleteField() });
+      // In this version, we no longer transition directly to final_results from here.
+      // We just clear the timer. The host will trigger the next step.
+      clearTimer(t, gameRef);
     }
   });
 }
@@ -500,23 +491,30 @@ export async function toggleSuspicion(gameId: string, playerId: string, cardText
   });
 }
 
-export async function proceedToFinalResults(gameId: string, hostId: string) {
-  const gameRef = doc(db, 'games', gameId);
-  await runTransaction(db, async (t) => {
-    const gameDoc = await t.get(gameRef);
-    if (!gameDoc.exists()) throw new Error('Game not found.');
-    const game = gameDoc.data() as Game;
+export async function proceedToFinalResults(gameId: string, hostId: string): Promise<void> {
+    let gameDataForLeagueUpdate: Game | null = null;
+    const gameRef = doc(db, 'games', gameId);
 
-    ensureHost(game, hostId);
-    if (game.gameState !== 'board_reveal') return;
+    await runTransaction(db, async (t) => {
+        const gameDoc = await t.get(gameRef);
+        if (!gameDoc.exists()) throw new Error('Game not found.');
+        const game = gameDoc.data() as Game;
 
-    t.update(gameRef, {
-      gameState: 'final_results',
-      'metrics.finalizedAt': serverTimestamp(),
+        ensureHost(game, hostId);
+        if (game.gameState !== 'board_reveal') return;
+
+        t.update(gameRef, {
+            gameState: 'final_results',
+            'wordWarState.timer': deleteField(),
+            'metrics.finalizedAt': serverTimestamp(),
+        });
+
+        // Prepare the game object with the final state to pass to the award functions
+        gameDataForLeagueUpdate = { ...game, gameState: 'final_results' };
     });
 
-    clearTimer(t, gameRef);
-  });
+    if (gameDataForLeagueUpdate) {
+        await distributeEndOfGameAwards(gameDataForLeagueUpdate);
+        await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    }
 }
-
-    
