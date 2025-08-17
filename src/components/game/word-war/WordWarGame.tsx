@@ -201,7 +201,7 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
   const expectedTurnId = ww?.turnId as number | undefined;
 
   const [hintWord, setHintWord] = useState("");
-  const [hintNumber, setHintNumber] = useState(1);
+  const [hintNumberInput, setHintNumberInput] = useState("1");
   const [isCopying, setIsCopying] = useState(false);
   const [playerToKick, setPlayerToKick] = useState<Player | null>(null);
   const [turnTime, setTurnTime] = useState<string>(String(ww?.settings?.turnTime || 60));
@@ -361,7 +361,9 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
     );
   };
 
-  const isHintValid = hintWord.trim().length > 0 && hintNumber >= 1;
+  const hintNumber = parseInt(hintNumberInput, 10);
+  const isHintValid = hintWord.trim().length > 0 && !isNaN(hintNumber) && hintNumber >= 1 && hintNumber <= 9;
+
 
   const renderActionPanel = () => {
     if (game.gameState === "final_results" || game.gameState === "board_reveal") return null;
@@ -400,21 +402,22 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
       const handleSubmitHint = async (e: React.FormEvent) => {
         e.preventDefault();
         const trimmed = hintWord.trim();
-        if (!trimmed || hintNumber < 1) {
+        const num = parseInt(hintNumberInput, 10);
+        if (!trimmed || isNaN(num) || num < 1 || num > 9) {
           toast({
             title: "تلميح غير صالح",
-            description: "الرجاء إدخال كلمة، وعدد أكبر من صفر.",
+            description: "الرجاء إدخال كلمة، وعدد بين 1 و 9.",
             variant: "destructive",
           });
           return;
         }
         try {
-          await asAny(wordWarActions).submitHint(game.id, self.id, trimmed, hintNumber, {
+          await asAny(wordWarActions).submitHint(game.id, self.id, trimmed, num, {
             expectedTurnId,
             clientSentAtMs: Date.now(),
           });
           setHintWord("");
-          setHintNumber(1);
+          setHintNumberInput("1");
         } catch (e: any) {
           toast({ title: "خطأ", description: e?.message || "حاول مجددًا.", variant: "destructive" });
         }
@@ -448,13 +451,14 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                 </span>
               </div>
               <Input
-                type="number"
-                value={hintNumber}
-                onChange={(e) => setHintNumber(Math.min(9, Math.max(1, parseInt(e.target.value, 10) || 1)))}
-                min={1}
-                max={9}
+                type="text"
+                value={hintNumberInput}
+                onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9]/g, '');
+                    setHintNumberInput(val);
+                }}
                 className="w-24 text-lg h-12 text-center"
-              />
+                />
               <Button type="submit" size="lg" disabled={!isHintValid} aria-disabled={!isHintValid} title={!isHintValid ? "أدخل تلميحًا صحيحًا" : undefined}>
                 <Send />
               </Button>
@@ -954,3 +958,4 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
 
   return renderGameBoard();
 }
+```
