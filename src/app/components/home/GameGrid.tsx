@@ -12,6 +12,7 @@ import type { Game } from '@/types';
 import { Star, Loader2, Heart, TrendingUp, Trophy, Coins, Brush } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 type LoadingState =
   | 'create-king-of-genius'
@@ -144,7 +145,7 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
         <p className="mt-1 text-muted-foreground">اختر لعبة لإنشاء غرفتك الخاصة ودعوة أصدقائك.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {gameCardsData.map((game, i) => {
           const Icon = (GAME_ICONS as any)[game.type] || Star;
           const loadingThis = isLoading === (`create-${game.type}` as LoadingState);
@@ -163,90 +164,74 @@ export default function GameGrid({ favoriteGame, popularGame }: GameGridProps) {
           }
 
           return (
-            <motion.article
+            <motion.div
               key={game.type}
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: i * 0.05 }}
-              className="group relative overflow-hidden rounded-2xl border bg-card/70 shadow-sm backdrop-blur transition-all hover:shadow-xl"
+              transition={{ duration: 0.35, delay: i * 0.04 }}
+              className="group relative"
             >
-              <div aria-hidden className={`pointer-events-none absolute -inset-1 opacity-70 blur-2xl bg-gradient-to-br ${game.accent.from} ${game.accent.via ?? ''} ${game.accent.to}`} />
-              <div aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10" />
-
-              <Card className="relative h-full border-none bg-transparent shadow-none flex flex-col">
-                <CardHeader className="relative text-center pb-3">
-                  {tag && (
-                    <span className="absolute start-3 top-3 select-none rounded-full border border-white/10 bg-background/70 px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur inline-flex items-center gap-1">
-                      <TagIcon className="w-3 h-3" /> {tag}
-                    </span>
-                  )}
-                  <div className="mx-auto mb-2 grid h-14 w-14 place-items-center rounded-2xl border border-white/15 bg-gradient-to-b from-background/70 to-background/40 shadow-inner">
-                    <Icon className="h-8 w-8 text-primary transition-transform duration-300 group-hover:scale-105" />
-                  </div>
-                  <CardTitle className="text-lg font-bold tracking-tight">{game.title}</CardTitle>
-                  <CardDescription className="mx-auto max-w-[28ch] leading-relaxed text-xs">
-                    {game.description}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-grow px-4 py-2 flex flex-col items-center justify-center">
-                    <div className="border-t border-white/10 my-2 w-full"></div>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button variant="ghost" size="sm" className="inline-flex items-center gap-1 text-muted-foreground hover:text-primary">
-                                <Trophy className="w-4 h-4 text-amber-400"/>
-                                <span>عرض الجوائز</span>
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="center">
-                            <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-violet-900/50 via-background/60 to-violet-900/50 p-3 text-sm text-foreground shadow-lg backdrop-blur">
-                                <h4 className="font-bold text-center mb-2">الجوائز</h4>
-                                <div className="space-y-2">
-                                {game.prizes.map((prize, pIdx) => (
-                                    <div key={pIdx} className="flex items-center justify-between gap-4 rounded-md bg-black/30 p-2">
-                                        <span className="font-semibold">{prize.rank}:</span>
-                                        <div className="flex items-center gap-3">
-                                            <span className="inline-flex items-center gap-1.5"><Star className="w-4 h-4 text-primary"/> {prize.points}</span>
-                                            {prize.coins > 0 && <span className="inline-flex items-center gap-1.5"><Coins className="w-4 h-4 text-yellow-400"/> {prize.coins}</span>}
-                                        </div>
-                                    </div>
-                                ))}
-                                </div>
-                            </div>
-                        </PopoverContent>
-                    </Popover>
-                </CardContent>
-                <CardFooter className="relative mt-auto pt-3 pb-4 px-4">
-                  <Button
-                    className="w-full rounded-xl bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg transition-transform hover:opacity-90 focus-visible:translate-y-[1px]"
-                    onClick={() => handleCreate(game.type)}
-                    disabled={!!isLoading}
-                    aria-busy={loadingThis}
-                    aria-label={`إنشاء غرفة ${game.title}`}
-                  >
-                    {loadingThis ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        جاري الإنشاء…
-                      </span>
-                    ) : (
-                      'أنشئ غرفة'
+                <Card className="relative h-full border-border/60 bg-card/60 backdrop-blur-sm transition-all hover:shadow-xl hover:-translate-y-1 flex flex-col">
+                    <div aria-hidden className={`pointer-events-none absolute -inset-px opacity-0 group-hover:opacity-70 blur-xl bg-gradient-to-br ${game.accent.from} ${game.accent.via ?? ''} ${game.accent.to} transition-opacity duration-300`} />
+                    <CardHeader className="text-center p-3">
+                    {tag && (
+                        <span className="absolute start-2 top-2 select-none rounded-full border border-white/10 bg-background/70 px-2 py-0.5 text-[10px] font-semibold shadow-sm backdrop-blur inline-flex items-center gap-1">
+                        <TagIcon className="w-3 h-3" /> {tag}
+                        </span>
                     )}
-                  </Button>
-                </CardFooter>
-                <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-24 translate-y-10 bg-gradient-to-t from-black/10 to-transparent opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100" />
-              </Card>
-              <button
-                className="absolute inset-0 -z-10 cursor-pointer"
-                tabIndex={-1} 
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    if (!isLoading) handleCreate(game.type);
-                  }
-                }}
-                aria-label={`فتح ${game.title}`}
-              />
-            </motion.article>
+                    <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl border border-white/15 bg-gradient-to-b from-background/70 to-background/40 shadow-inner">
+                        <Icon className="h-7 w-7 text-primary transition-transform duration-300 group-hover:scale-110" />
+                    </div>
+                    <CardTitle className="text-base font-bold tracking-tight">{game.title}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-grow p-3 pt-0">
+                        <CardDescription className="text-xs leading-relaxed line-clamp-2">
+                            {game.description}
+                        </CardDescription>
+                    </CardContent>
+                    <CardFooter className="mt-auto pt-2 pb-3 px-3 flex items-center justify-between">
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary gap-1">
+                                    <Trophy className="w-4 h-4 text-amber-400"/>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="center">
+                                <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-violet-900/50 via-background/60 to-violet-900/50 p-3 text-sm text-foreground shadow-lg backdrop-blur">
+                                    <h4 className="font-bold text-center mb-2">الجوائز</h4>
+                                    <div className="space-y-2">
+                                    {game.prizes.map((prize, pIdx) => (
+                                        <div key={pIdx} className="flex items-center justify-between gap-4 rounded-md bg-black/30 p-2">
+                                            <span className="font-semibold">{prize.rank}:</span>
+                                            <div className="flex items-center gap-3">
+                                                <span className="inline-flex items-center gap-1.5"><Star className="w-4 h-4 text-primary"/> {prize.points}</span>
+                                                {prize.coins > 0 && <span className="inline-flex items-center gap-1.5"><Coins className="w-4 h-4 text-yellow-400"/> {prize.coins}</span>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    </div>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                        <Button
+                            size="sm"
+                            className="rounded-lg bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg transition-transform hover:opacity-90 focus-visible:translate-y-[1px]"
+                            onClick={() => handleCreate(game.type)}
+                            disabled={!!isLoading}
+                            aria-busy={loadingThis}
+                            aria-label={`إنشاء غرفة ${game.title}`}
+                        >
+                            {loadingThis ? (
+                            <span className="inline-flex items-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            </span>
+                            ) : (
+                            'أنشئ غرفة'
+                            )}
+                        </Button>
+                    </CardFooter>
+                </Card>
+            </motion.div>
           );
         })}
       </div>
