@@ -48,17 +48,18 @@ import {
   giveReward as adminGiveReward,
   applyPunishment as adminApplyPunishment,
   adminSearchUsers,
-  adminSendMail,
+  recalculateGameKings,
 } from "@/lib/actions/admin/users";
 import {
   setAnnouncement,
   getAnnouncement,
 } from "@/lib/actions/admin/settings";
 import {
-  recalculateGameKings,
   backfillPunishmentStatus,
   backfillUserPermissions,
 } from "@/lib/actions/admin/maintenance";
+import { adminSendMail } from "@/lib/actions/news";
+
 
 import { GAME_TYPE_NAMES } from "@/types";
 import { cn } from "@/lib/utils";
@@ -357,7 +358,7 @@ export default function SocietyTab() {
       return;
     }
     setIsSendingMail(true);
-    const result = await adminSendMail(Array.from(selectedUserIds), mailSubject.trim(), mailBody.trim(), coinsToSend);
+    const result = await adminSendMail(adminProfile.uid, Array.from(selectedUserIds), mailSubject.trim(), mailBody.trim(), coinsToSend);
     if (result?.success) {
       toast({ title: "تم الإرسال", description: `تم إرسال الرسالة إلى ${selectedUserIds.size} مستخدم.` });
       setIsMailDialogOpen(false);
