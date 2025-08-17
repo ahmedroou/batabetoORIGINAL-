@@ -11,6 +11,7 @@ import { submitGuess } from '@/lib/actions/draw-and-deceive';
 import { Loader2, HelpCircle, ZoomIn, Check, Users } from 'lucide-react';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 interface GuessingPhaseProps {
   game: Game;
