@@ -1,5 +1,3 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -315,6 +313,9 @@ async function updateChallengeScores(challenge: Challenge): Promise<Record<strin
     const snapshot = await getDocs(q);
     const newScores: Record<string, number> = {};
 
+    // Initialize scores for all participants to 0
+    challenge.participantIds.forEach(id => newScores[id] = 0);
+    
     snapshot.docs.forEach(doc => {
         const event = doc.data() as GamePointsScoredEvent;
         if (
