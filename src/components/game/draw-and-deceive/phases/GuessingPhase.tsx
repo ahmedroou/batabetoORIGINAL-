@@ -9,11 +9,11 @@ import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { submitGuess } from '@/lib/actions/draw-and-deceive';
-import { Loader2, HelpCircle, ZoomIn, Check, Users } from 'lucide-react';
+import { Loader2, HelpCircle, ZoomIn, Check, Users, Eye } from 'lucide-react';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { DrawingCanvas } from './DrawingCanvas';
+import { PlayerAvatar } from '../../PlayerAvatar';
 
 interface GuessingPhaseProps {
   game: Game;
@@ -30,6 +30,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
   const submittingRef = useRef(false);
 
   const hasGuessed = !!state.playerGuesses[self.id];
+  const isArtist = state.artistId === self.id;
   const artist = game.players.find((p) => p.id === state.artistId);
 
   const answers = state.shuffledAnswers ?? [];
@@ -44,7 +45,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
   // تنقّل بلوحة المفاتيح بين الخيارات + Enter للإرسال
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (hasGuessed || isSubmitting) return;
+      if (hasGuessed || isSubmitting || isArtist) return;
       const idx = selectedAnswer ? answers.findIndex((a) => a === selectedAnswer) : -1;
       if (['ArrowRight', 'ArrowDown'].includes(e.key)) {
         e.preventDefault();
@@ -62,7 +63,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAnswer, answers, hasGuessed, isSubmitting]);
+  }, [selectedAnswer, answers, hasGuessed, isSubmitting, isArtist]);
 
   const handleSubmit = async () => {
     if (!selectedAnswer) {
@@ -74,7 +75,6 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
     setIsSubmitting(true);
     try {
       await submitGuess(game.id, self.id, selectedAnswer);
-      // لا نعرض التوست هنا دائماً — ستنتقل الواجهة لحالة "تم التسجيل"
     } catch (error: any) {
       toast({ title: 'خطأ', description: error?.message ?? 'تعذر الإرسال', variant: 'destructive' });
       setIsSubmitting(false);
@@ -89,28 +89,44 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
     return () => window.removeEventListener('keydown', onEsc);
   }, []);
 
+  const WaitingView = ({ title, description }: { title: string; description: string }) => (
+    <Card className="w-full max-w-lg text-center">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="animate-pulse text-lg">{description}</p>
+        <div className="mt-4 w-full max-w-md mx-auto">
+          <div className="h-2 w-full bg-muted rounded">
+            <div
+              className="h-full bg-primary rounded"
+              style={{ width: `${progress}%` }}
+              aria-hidden
+            />
+          </div>
+          <div className="mt-2 text-xs text-muted-foreground">
+            {guessedCount} من {totalPlayers} قاموا بالتخمين
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  if (isArtist) {
+    return (
+      <WaitingView
+        title="اللاعبون يخمنون"
+        description="أنت الفنان، شاهد اللاعبين وهم يقعون في فخاخ بعضهم البعض!"
+      />
+    );
+  }
+
   if (hasGuessed) {
     return (
-      <Card className="w-full max-w-lg text-center">
-        <CardHeader>
-          <CardTitle>تم تسجيل تخمينك!</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="animate-pulse text-lg">في انتظار بقية اللاعبين...</p>
-          <div className="mt-4 w-full max-w-md mx-auto">
-            <div className="h-2 w-full bg-muted rounded">
-              <div
-                className="h-full bg-primary rounded"
-                style={{ width: `${progress}%` }}
-                aria-hidden
-              />
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground">
-              {guessedCount} من {totalPlayers} قاموا بالتخمين
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <WaitingView
+        title="تم تسجيل تخمينك!"
+        description="في انتظار بقية اللاعبين..."
+      />
     );
   }
 
@@ -126,7 +142,6 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {/* المعاينة + لايتبوكس */}
         {state.drawingDataUrl ? (
           <>
             <div className="relative aspect-video w-full max-w-xl mx-auto rounded-lg overflow-hidden border bg-white">
@@ -154,7 +169,6 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
               </Button>
             </div>
 
-            {/* لايتبوكس بسيط */}
             <AnimatePresence>
               {lightboxOpen && (
                 <motion.div
@@ -173,19 +187,8 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
                     exit={{ scale: 0.95 }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Image
-                      src={state.drawingDataUrl}
-                      alt="لوحة الرسم مكبرة"
-                      fill
-                      className="object-contain"
-                      priority
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="absolute top-3 left-3"
-                      onClick={() => setLightboxOpen(false)}
-                    >
+                    <Image src={state.drawingDataUrl} alt="لوحة الرسم مكبرة" fill className="object-contain" priority />
+                    <Button type="button" size="sm" className="absolute top-3 left-3" onClick={() => setLightboxOpen(false)}>
                       إغلاق
                     </Button>
                   </motion.div>
@@ -197,7 +200,6 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
           <div className="relative aspect-video w-full max-w-xl mx-auto rounded-lg overflow-hidden border bg-muted" />
         )}
 
-        {/* تقدّم اللاعبين */}
         <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
           <Users className="w-4 h-4" />
           <span>
@@ -208,11 +210,10 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
           <div className="h-full bg-primary rounded" style={{ width: `${progress}%` }} />
         </div>
 
-        {/* خيارات التخمين */}
         <RadioGroup
           value={selectedAnswer ?? ''}
           onValueChange={(v) => setSelectedAnswer(v)}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+          className="grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
           {answers.map((answer, i) => {
             const id = `answer-${i}`;
@@ -228,25 +229,15 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
               >
                 <Label
                   htmlFor={id}
-                  className={[
-                    'group relative p-4 border rounded-md cursor-pointer transition-all',
-                    'hover:shadow-sm focus-within:ring-2 focus-within:ring-primary',
-                    isSelected ? 'bg-primary/15 border-primary' : 'bg-background',
-                  ].join(' ')}
+                  className={cn(
+                    'group relative p-4 border rounded-lg cursor-pointer transition-all flex items-start gap-3',
+                    'hover:shadow-sm focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary',
+                    isSelected ? 'bg-primary/15 border-primary ring-2 ring-primary' : 'bg-background'
+                  )}
                 >
-                  <div className="absolute top-2 right-2 text-xs px-2 py-0.5 rounded-full bg-muted">
-                    {letter}
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <RadioGroupItem id={id} value={answer} className="mt-1" />
-                    <div className="flex-1">
-                      <div className="font-semibold" dir="auto">{answer}</div>
-                      {isSelected && (
-                        <div className="mt-1 inline-flex items-center gap-1 text-xs text-primary">
-                          <Check className="w-3.5 h-3.5" /> اختيارك الحالي
-                        </div>
-                      )}
-                    </div>
+                  <RadioGroupItem id={id} value={answer} className="mt-1" />
+                  <div className="flex-1">
+                    <div className="font-semibold text-base" dir="auto">{answer}</div>
                   </div>
                 </Label>
               </motion.div>
@@ -254,14 +245,13 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
           })}
         </RadioGroup>
 
-        {/* إرسال */}
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
           <div
             className="text-xs text-muted-foreground self-center"
             aria-live="polite"
             aria-atomic="true"
           >
-            يمكنك استخدام الأسهم للتنقّل وEnter للتأكيد.
+            استخدم الأسهم للاختيار وEnter للتأكيد.
           </div>
           <Button
             onClick={handleSubmit}

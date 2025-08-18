@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -81,6 +82,8 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
       </Card>
     );
   }
+  
+  const charsLeft = 20 - correctAnswer.length;
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-4xl">
@@ -99,17 +102,21 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
                 <span>الوقت المتبقي: {timeLeft}</span>
             </div>
           <DrawingCanvas onDrawEnd={setDrawingDataUrl} />
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input
-              placeholder="اكتب هنا الوصف الصحيح للرسمة..."
-              value={correctAnswer}
-              onChange={(e) => setCorrectAnswer(e.target.value)}
-              className="flex-grow"
-              disabled={isSubmitting}
-            />
-            <Button onClick={handleSubmit} disabled={isSubmitting || !drawingDataUrl || !correctAnswer.trim()} className="sm:w-auto w-full">
-              {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2"/> إرسال الرسمة</>}
-            </Button>
+          <div className="space-y-2">
+            <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                placeholder="اكتب هنا الوصف الصحيح للرسمة..."
+                value={correctAnswer}
+                onChange={(e) => setCorrectAnswer(e.target.value)}
+                className="flex-grow"
+                disabled={isSubmitting}
+                maxLength={20}
+                />
+                <Button onClick={handleSubmit} disabled={isSubmitting || !drawingDataUrl || !correctAnswer.trim()} className="sm:w-auto w-full">
+                {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2"/> إرسال الرسمة</>}
+                </Button>
+            </div>
+            <p className="text-xs text-muted-foreground text-left pr-2">الأحرف المتبقية: {charsLeft}</p>
           </div>
         </CardContent>
       </Card>
