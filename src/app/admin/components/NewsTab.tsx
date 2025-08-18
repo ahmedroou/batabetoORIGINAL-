@@ -25,7 +25,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 
 // Icons
-import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown, Bot, RotateCcw, BrainCircuit, Image as ImageIcon, Filter, SortAsc, SortDesc, Eye, EyeOff, CheckCircle2, XCircle, RefreshCw, Megaphone, UploadCloud, CheckCheck, Search } from "lucide-react";
+import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown, RotateCcw, Image as ImageIcon, Filter, SortAsc, SortDesc, Eye, EyeOff, CheckCircle2, XCircle, RefreshCw, Megaphone, UploadCloud, CheckCheck, Search } from "lucide-react";
 
 // Types & helpers
 import type { Article, AudienceGroup, UserProfile } from "@/types";
@@ -42,8 +42,6 @@ import {
   addPlayerToAudienceGroup,
   deleteAudienceGroup,
   removePlayerFromAudienceGroup,
-  runAiJournalist,
-  deleteOldArticles,
 } from "@/lib/actions/news";
 import { adminSearchUsers } from "@/lib/actions/admin/users";
 import { Timestamp } from "firebase/firestore";
@@ -267,11 +265,6 @@ export default function NewsTab() {
   const [searchedUsers, setSearchedUsers] = useState<UserProfile[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
 
-  // AI journalist
-  const [isGeneratingArticle, setIsGeneratingArticle] = useState(false);
-  const [isDeletingOld, setIsDeletingOld] = useState(false);
-  const [aiDirective, setAiDirective] = useState("");
-
   // Form
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -411,31 +404,6 @@ export default function NewsTab() {
     setIsLoadingUsers(false);
   };
 
-  const handleRunAiJournalist = async () => {
-    setIsGeneratingArticle(true);
-    const result = await runAiJournalist(aiDirective.trim() || undefined);
-    if (result.success) {
-      toast({ title: "نجاح", description: `تم إنشاء ونشر مقال جديد بعنوان: "${result.article?.headline}"` });
-      fetchAllData();
-    } else {
-      toast({ title: "فشل إنشاء المقال", description: result.error, variant: "destructive" });
-    }
-    setIsGeneratingArticle(false);
-  };
-
-  const handleDeleteOldArticlesConfirm = async () => {
-    setIsDeletingOld(true);
-    const result = await deleteOldArticles();
-    if (result.success) {
-      toast({ title: "نجاح", description: `تم حذف ${result.data?.deletedCount || 0} مقال قديم.` });
-      fetchAllData();
-    } else {
-      toast({ title: "فشل الحذف", description: result.error, variant: "destructive" });
-    }
-    setIsDeletingOld(false);
-    setShowDeleteOldArticlesDialog(false);
-  };
-
   // Derived: filters / sort / stats
   const filtered = useMemo(() => {
     let list = [...articles];
@@ -521,7 +489,7 @@ export default function NewsTab() {
               <CardTitle className="flex items-center gap-2 text-2xl">
                 <Newspaper /> لوحة الأخبار والمجموعات
               </CardTitle>
-              <CardDescription>إنشاء وتعديل المقالات، وإدارة مجموعات الجمهور، وأتمتة النشر.</CardDescription>
+              <CardDescription>إنشاء وتعديل المقالات، وإدارة مجموعات الجمهور.</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="secondary" onClick={fetchAllData}>
@@ -544,10 +512,9 @@ export default function NewsTab() {
       </div>
 
       {/* Tabs */}
-      <TabsList className="grid w-full grid-cols-3">
+      <TabsList className="grid w-full grid-cols-2">
         <TabsTrigger value="articles">إدارة المقالات</TabsTrigger>
         <TabsTrigger value="groups">إدارة المجموعات</TabsTrigger>
-        <TabsTrigger value="ai_journalist">المراسل الذكي</TabsTrigger>
       </TabsList>
 
       {/* Articles */}
@@ -772,48 +739,6 @@ export default function NewsTab() {
         </Card>
       </TabsContent>
 
-      {/* AI Journalist */}
-      <TabsContent value="ai_journalist">
-        <Card className="bg-gradient-to-br from-background to-muted/40">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Bot /> المراسل الصحفي الذكي</CardTitle>
-            <CardDescription>ولّد مقالات تلقائياً ونظّف الأرشيف القديم.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="ai-directive">توجيه (اختياري)</Label>
-                <Input id="ai-directive" value={aiDirective} onChange={(e) => setAiDirective(e.target.value)} placeholder="مثال: ركّز على بطولة هذا الأسبوع والصراع بين س و ص" />
-                <Button className="w-full mt-1" onClick={handleRunAiJournalist} disabled={isGeneratingArticle}>
-                  {isGeneratingArticle ? <Loader2 className="animate-spin" /> : <BrainCircuit className="ml-2" />} توليد مقال
-                </Button>
-              </div>
-              <div className="rounded-xl border p-3 bg-card/70">
-                <p className="text-sm text-muted-foreground">تلميحات سريعة:</p>
-                <ul className="list-disc pr-5 text-sm mt-2 space-y-1">
-                  <li>اكتب كلمات مفتاحية (أسماء لاعبين/بطولات) ليدمجها الذكاء الاصطناعي.</li>
-                  <li>استخدم لهجة الخبر أو المقال التحليلي كما تريد.</li>
-                  <li>يمكنك تعديل المقال بعد إنشائه من تبويب "إدارة المقالات".</li>
-                </ul>
-              </div>
-            </div>
-            <div className="h-px w-full bg-border" />
-            <div className="space-y-2">
-              <Label className="text-destructive">صيانة الجريدة</Label>
-              <p className="text-xs text-muted-foreground">حذف كل المقالات الأقدم من 7 أيام لتنظيف قاعدة البيانات.</p>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="destructive" onClick={() => setShowDeleteOldArticlesDialog(true)} disabled={isDeletingOld}>
-                  <RotateCcw className="ml-2" /> {isDeletingOld ? <Loader2 className="animate-spin" /> : "حذف المقالات القديمة"}
-                </Button>
-                <Button variant="outline" onClick={fetchAllData}>
-                  <RefreshCw className="ml-2" /> تحديث القائمة
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
       {/* Create/Edit Article Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[720px]">
@@ -900,24 +825,6 @@ export default function NewsTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Delete Old Articles */}
-      <AlertDialog open={showDeleteOldArticlesDialog} onOpenChange={setShowDeleteOldArticlesDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد حذف المقالات القديمة</AlertDialogTitle>
-            <AlertDialogDescription>
-              هل أنت متأكد من حذف جميع المقالات التي يزيد عمرها عن 7 أيام؟ لا يمكن التراجع عن هذا الإجراء.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteOldArticlesConfirm} disabled={isDeletingOld} className="bg-destructive hover:bg-destructive/90">
-              {isDeletingOld ? <Loader2 className="animate-spin" /> : "نعم، قم بالحذف"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </Tabs>
   );
 }

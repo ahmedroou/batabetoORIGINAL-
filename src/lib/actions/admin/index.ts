@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -52,11 +53,7 @@ import {
   distributeEndOfGameAwards,
 } from './users';
 
-import { runAiJournalist } from './ai';
-
 export {
-  // AI
-  runAiJournalist,
   // Content
   uploadEducatedMerchantQuestionsFromJson,
   uploadTrapAnswerQuestionsFromJson,
