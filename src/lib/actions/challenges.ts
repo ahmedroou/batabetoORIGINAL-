@@ -305,8 +305,9 @@ export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
 
 async function updateChallengeScores(challenge: Challenge): Promise<Record<string, number>> {
     const eventsRef = collection(db, 'social_events');
-    
-    if (!challenge.participantIds || challenge.participantIds.length === 0) {
+    const participants = challenge.participantIds || [];
+
+    if (participants.length === 0) {
         return challenge.scores || {};
     }
 
@@ -319,12 +320,12 @@ async function updateChallengeScores(challenge: Challenge): Promise<Record<strin
     const snapshot = await getDocs(q);
     const newScores: Record<string, number> = {};
 
-    challenge.participantIds.forEach(id => newScores[id] = 0);
+    participants.forEach(id => newScores[id] = 0);
     
     snapshot.docs.forEach(doc => {
         const event = doc.data() as GamePointsScoredEvent;
-        if (
-            challenge.participantIds.includes(event.playerId) &&
+        // Check if the event player is a participant of this challenge
+        if (participants.includes(event.playerId) &&
             (challenge.specificGameType === 'all' || challenge.specificGameType === event.gameType)
         ) {
             newScores[event.playerId] = (newScores[event.playerId] || 0) + event.points;
@@ -358,20 +359,29 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         
         if (sortedWinners.length > 0) {
             const firstPlaceId = sortedWinners[0][0];
-            winners.first = { id: firstPlaceId, name: '' }; // Name will be fetched
-            if(challengeData.firstPlacePrize?.length > 0) prizeAwardBatch.push({userId: firstPlaceId, prize: challengeData.firstPlacePrize, rank: 1});
+            const firstPlayerDoc = await transaction.get(doc(db, 'users', firstPlaceId));
+            if(firstPlayerDoc.exists()){
+                winners.first = { id: firstPlaceId, name: firstPlayerDoc.data().name || 'Unknown' };
+                if(challengeData.firstPlacePrize?.length > 0) prizeAwardBatch.push({userId: firstPlaceId, prize: challengeData.firstPlacePrize, rank: 1});
+            }
         }
         
         if (sortedWinners.length > 1) {
             const secondPlaceId = sortedWinners[1][0];
-            winners.second = { id: secondPlaceId, name: '' };
-             if(challengeData.secondPlacePrize?.length > 0) prizeAwardBatch.push({userId: secondPlaceId, prize: challengeData.secondPlacePrize, rank: 2});
+            const secondPlayerDoc = await transaction.get(doc(db, 'users', secondPlaceId));
+             if(secondPlayerDoc.exists()){
+                winners.second = { id: secondPlaceId, name: secondPlayerDoc.data().name || 'Unknown' };
+                if(challengeData.secondPlacePrize?.length > 0) prizeAwardBatch.push({userId: secondPlaceId, prize: challengeData.secondPlacePrize, rank: 2});
+            }
         }
         
         if (sortedWinners.length > 2) {
             const thirdPlaceId = sortedWinners[2][0];
-            winners.third = { id: thirdPlaceId, name: '' };
-             if(challengeData.thirdPlacePrize?.length > 0) prizeAwardBatch.push({userId: thirdPlaceId, prize: challengeData.thirdPlacePrize, rank: 3});
+            const thirdPlayerDoc = await transaction.get(doc(db, 'users', thirdPlaceId));
+            if(thirdPlayerDoc.exists()){
+                winners.third = { id: thirdPlaceId, name: thirdPlayerDoc.data().name || 'Unknown' };
+                if(challengeData.thirdPlacePrize?.length > 0) prizeAwardBatch.push({userId: thirdPlaceId, prize: challengeData.thirdPlacePrize, rank: 3});
+            }
         }
         
         transaction.update(challengeRef, { winners: winners });
