@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -35,12 +34,15 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
 
   const answers = state.shuffledAnswers ?? [];
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  
+  const totalGuessers = useMemo(() => game.players.filter(p => p.id !== state.artistId).length, [game.players, state.artistId]);
+  
   const guessedCount = useMemo(
     () => Object.keys(state.playerGuesses ?? {}).length,
     [state.playerGuesses]
   );
-  const totalPlayers = game.players.length;
-  const progress = totalPlayers ? Math.min(100, Math.round((guessedCount / totalPlayers) * 100)) : 0;
+  
+  const progress = totalGuessers > 0 ? Math.min(100, Math.round((guessedCount / totalGuessers) * 100)) : 100;
 
   // تنقّل بلوحة المفاتيح بين الخيارات + Enter للإرسال
   useEffect(() => {
@@ -105,7 +107,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
             />
           </div>
           <div className="mt-2 text-xs text-muted-foreground">
-            {guessedCount} من {totalPlayers} قاموا بالتخمين
+            {guessedCount} من {totalGuessers} قاموا بالتخمين
           </div>
         </div>
       </CardContent>
@@ -203,7 +205,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
         <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
           <Users className="w-4 h-4" />
           <span>
-            {guessedCount} من {totalPlayers} قاموا بالتخمين
+            {guessedCount} من {totalGuessers} قاموا بالتخمين
           </span>
         </div>
         <div className="h-2 w-full bg-muted rounded">
