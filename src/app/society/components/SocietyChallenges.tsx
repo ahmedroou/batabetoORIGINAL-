@@ -180,7 +180,7 @@ const ChallengeCard = ({ challenge, index, isEnded, onChallengeUpdate }: { chall
     const topThree = challenge.topParticipants || [];
 
     const isParticipant = userProfile && challenge.participantIds?.includes(userProfile.uid);
-    const hasClaimed = isParticipant && challenge.claimedBy?.includes(userProfile.uid);
+    const hasClaimed = isParticipant && (challenge.claimedBy || []).includes(userProfile.uid);
     
     useEffect(() => {
         if (isEnded) {

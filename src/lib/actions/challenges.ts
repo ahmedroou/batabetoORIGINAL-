@@ -1,4 +1,3 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -346,6 +345,12 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         let challengeData = challengeDoc.data() as Challenge;
 
         if (challengeData.winners) throw new Error("This challenge has already been finalized.");
+        
+        const participantIds = challengeData.participantIds || [];
+        if (participantIds.length === 0) {
+            transaction.update(challengeRef, { winners: {} }); // Finalize with no winners
+            return { success: true, winnersCount: 0 };
+        }
 
         const scores = await updateChallengeScores(challengeData);
         challengeData.scores = scores;
@@ -384,7 +389,7 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
             }
         }
         
-        transaction.update(challengeRef, { winners: winners });
+        transaction.update(challengeRef, { winners: winners, claimedBy: [] });
 
         for (const award of prizeAwardBatch) {
             const userRef = doc(db, 'users', award.userId);
