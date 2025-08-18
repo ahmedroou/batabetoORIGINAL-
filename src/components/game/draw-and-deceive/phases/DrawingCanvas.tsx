@@ -654,7 +654,7 @@ export function DrawingCanvas({
       return;
     }
 
-    // أشكال/قلم
+    // أشكال/قلم  ل
     isDrawingRef.current = true;
     if (tool === 'line' || tool === 'rect' || tool === 'circle') {
       drawPreviewShape(ptCss, ptCss);
