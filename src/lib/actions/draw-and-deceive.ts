@@ -41,6 +41,11 @@ const calculateRoundResults = (game: Game, playerGuesses: Record<string, string>
     const correctAnswer = state.correctAnswer!;
     const allAnswers = [correctAnswer, ...Object.values(state.playerTraps)].filter((a): a is string => !!a);
     
+    // Initialize score buckets for all players in this round
+    game.players.forEach(p => {
+        if (!scores[p.id]) scores[p.id] = { points: 0, breakdown: [] };
+    });
+
     for (const answer of allAnswers) {
         const isCorrect = answer === correctAnswer;
         const authorIds = isCorrect ? [state.artistId!] : Object.entries(state.playerTraps).filter(([, trap]) => trap === answer).map(([id]) => id);
@@ -55,13 +60,17 @@ const calculateRoundResults = (game: Game, playerGuesses: Record<string, string>
                     addScore(state.artistId!, 1, `تخمين صحيح من ${getPlayer(guesserId)?.name || 'لاعب'}`);
                 }
             });
-        } else {
+        } else { // It's a trap
              guesserIds.forEach(guesserId => {
-                 authorIds.forEach(authorId => {
-                    if (guesserId !== authorId) {
-                        addScore(authorId, 1, `خدع ${getPlayer(guesserId)?.name || 'لاعب'}`);
-                    }
-                 });
+                 // Check for self-vote
+                 if (authorIds.includes(guesserId)) {
+                     addScore(guesserId, -3, 'صوّت لنفسه');
+                 } else {
+                    // Award points to all authors of this trap for this guesser
+                    authorIds.forEach(authorId => {
+                        addScore(authorId, 2, `خدع ${getPlayer(guesserId)?.name || 'لاعب'}`);
+                    });
+                 }
             });
         }
     }
@@ -193,7 +202,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
             'drawAndDeceiveState.playerGuesses': updatedGuesses
         });
 
-        const activePlayers = game.players.filter(p => p.status !== 'left');
+        const activePlayers = game.players.filter(p => p.status !== 'left' && p.id !== state.artistId);
         if (Object.keys(updatedGuesses).length === activePlayers.length) {
             const { resultsState, updatedScores } = calculateRoundResults(game, updatedGuesses);
             const resultsTime = state.settings?.resultsTime ?? DEFAULT_SETTINGS.resultsTime;
@@ -288,3 +297,5 @@ export async function handleTimeout(gameId: string, hostId: string) {
         await distributeEndOfGameAwards(finalGameData.id);
     }
 }
+
+    
