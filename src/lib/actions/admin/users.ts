@@ -1,5 +1,4 @@
 
-
 'use server';
 
 /**
@@ -27,6 +26,7 @@ import type { UserProfile, Mail, Game, MatchHistoryItem, GameKing } from '@/type
 import { sendSystemMail } from '../user/mail';
 import { calculateEndOfGameAwards } from '../user/awards';
 import { getRanks, recordMatchHistory } from '../user/queries';
+import { GAME_TYPE_NAMES } from '@/types';
 
 const normalize = (s: any) => (typeof s === 'string' ? s : String(s ?? '')).trim().replace(/\s+/g, ' ');
 const stringNonEmpty = (s: any) => typeof s === 'string' && normalize(s).length > 0;
@@ -301,12 +301,44 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
     }
 }
 
-/**
- * This function is now deprecated and will be handled by a scheduled cloud function.
- * It remains in the code to avoid breaking existing calls but will do nothing.
- * @returns {Promise<{success: boolean, updatedCount?: number, error?: string}>}
- */
 export async function recalculateGameKings(): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
-  console.warn('recalculateGameKings is deprecated and will be removed. This is now an automated weekly process.');
-  return { success: true, updatedCount: 0 };
+    try {
+        const gameTypes = Object.keys(GAME_TYPE_NAMES);
+        const kingsCollection = collection(db, 'game_kings');
+        const usersCollection = collection(db, 'users');
+        const batch = writeBatch(db);
+        let updatedCount = 0;
+
+        for (const gameType of gameTypes) {
+            const winCountsQuery = query(
+                usersCollection,
+                where(`winCounts.${gameType}`, '>', 0),
+                orderBy(`winCounts.${gameType}`, 'desc'),
+                limit(1)
+            );
+
+            const snapshot = await getDocs(winCountsQuery);
+
+            if (!snapshot.empty) {
+                const kingDoc = snapshot.docs[0];
+                const kingData = kingDoc.data() as UserProfile;
+                
+                const gameKingRef = doc(kingsCollection, gameType);
+                batch.set(gameKingRef, {
+                    kingId: kingDoc.id,
+                    name: kingData.name,
+                    avatarId: kingData.avatarId,
+                    winCount: kingData.winCounts?.[gameType as keyof typeof kingData.winCounts] || 0,
+                    updatedAt: serverTimestamp(),
+                }, { merge: true });
+                updatedCount++;
+            }
+        }
+        
+        await batch.commit();
+        return { success: true, updatedCount };
+    } catch (e: any) {
+        console.error("Error recalculating game kings:", e);
+        return { success: false, error: e.message || 'فشل تحديث ملوك الألعاب.' };
+    }
 }
