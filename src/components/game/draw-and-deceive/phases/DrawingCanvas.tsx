@@ -12,6 +12,8 @@ import {
   Minus, Grid, Trash2, Hand, PaintBucket, Copy as CopyIcon, RefreshCcw, HelpCircle, Keyboard
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
 
 type Tool =
@@ -793,165 +795,112 @@ export function DrawingCanvas({
   return (
     <div ref={containerRef} className={cn('w-full select-none flex flex-col gap-2', className)}>
       {/* شريط الأدوات */}
-      <div className="flex flex-wrap gap-2 items-center bg-white/75 backdrop-blur rounded-2xl p-2 shadow">
-        <div className="flex items-center gap-1">
-          <Button size="icon" variant={tool === 'pen' ? 'default' : 'secondary'} onClick={() => setTool('pen')} title="قلم">
-            <Pencil className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant={tool === 'marker' ? 'default' : 'secondary'} onClick={() => setTool('marker')} title="ماركر">
-            <Highlighter className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant={tool === 'eraser' ? 'default' : 'secondary'} onClick={() => setTool('eraser')} title="ممحاة">
-            <Eraser className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant={tool === 'fill' ? 'default' : 'secondary'} onClick={() => setTool('fill')} title="تعبئة">
-            <PaintBucket className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant={tool === 'line' ? 'default' : 'secondary'} onClick={() => setTool('line')} title="خط">
-            <Minus className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant={tool === 'rect' ? 'default' : 'secondary'} onClick={() => setTool('rect')} title="مستطيل">
-            <Square className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant={tool === 'circle' ? 'default' : 'secondary'} onClick={() => setTool('circle')} title="دائرة">
-            <Circle className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant={tool === 'text' ? 'default' : 'secondary'} onClick={() => setTool('text')} title="نص">
-            <Type className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant={tool === 'eyedropper' ? 'default' : 'secondary'} onClick={() => setTool('eyedropper')} title="قطّارة">
-            <Droplet className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant={tool === 'pan' ? 'default' : 'secondary'} onClick={() => setTool('pan')} title="تحريك">
-            <Hand className="w-4 h-4" />
-          </Button>
-        </div>
-
-        <div className="hidden lg:flex items-center gap-3 ml-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs">السماكة</span>
-            <div className="w-28">
-              <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0])} />
+      <ScrollArea className="w-full whitespace-nowrap rounded-2xl bg-white/75 dark:bg-slate-900/50 backdrop-blur shadow border border-border/50">
+        <div className="flex items-center gap-2 p-2">
+            <div className="flex items-center gap-1">
+              <Button size="icon" variant={tool === 'pen' ? 'default' : 'secondary'} onClick={() => setTool('pen')} title="قلم">
+                <Pencil className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant={tool === 'marker' ? 'default' : 'secondary'} onClick={() => setTool('marker')} title="ماركر">
+                <Highlighter className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant={tool === 'eraser' ? 'default' : 'secondary'} onClick={() => setTool('eraser')} title="ممحاة">
+                <Eraser className="w-4 h-4" />
+              </Button>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs">الشفافية</span>
-            <div className="w-28">
-              <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0])} />
+            <Separator orientation="vertical" className="h-6" />
+            <div className="flex items-center gap-1">
+              <Button size="icon" variant={tool === 'line' ? 'default' : 'secondary'} onClick={() => setTool('line')} title="خط">
+                <Minus className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant={tool === 'rect' ? 'default' : 'secondary'} onClick={() => setTool('rect')} title="مستطيل">
+                <Square className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant={tool === 'circle' ? 'default' : 'secondary'} onClick={() => setTool('circle')} title="دائرة">
+                <Circle className="w-4 h-4" />
+              </Button>
+               <label className="flex items-center gap-2 pl-2">
+                <input type="checkbox" checked={shapeFill} onChange={e => setShapeFill(e.target.checked)} className="h-4 w-4 rounded" />
+                <span className="text-xs">تعبئة</span>
+              </label>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs">لون</span>
-            <Input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-8 p-1" />
-          </div>
-
-          {tool === 'text' && (
-            <>
-              <span className="text-xs">حجم النص</span>
-              <div className="w-28">
-                <Slider min={12} max={96} step={2} value={[textSize]} onValueChange={v => setTextSize(v[0])} />
-              </div>
-              <Input
-                placeholder="أدخل النص…"
-                value={textValue}
-                onChange={(e) => setTextValue(e.target.value)}
-                className="w-40"
-                maxLength={120}
-              />
-            </>
-          )}
-
-          {tool === 'fill' && (
-            <>
-              <span className="text-xs">تسامح التعبئة</span>
-              <div className="w-28">
-                <Slider min={0} max={100} step={1} value={[fillTolerance]} onValueChange={v => setFillTolerance(v[0])} />
-              </div>
-            </>
-          )}
-
-          {(tool === 'rect' || tool === 'circle') && (
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={shapeFill} onChange={e => setShapeFill(e.target.checked)} />
-              <span className="text-xs">تعبئة الشكل</span>
-            </label>
-          )}
-        </div>
-
-        {/* أدوات يمين */}
-        <div className="ml-auto flex items-center gap-1">
-          <Button size="icon" variant="secondary" onClick={() => setShowGrid(s => !s)} title="شبكة">
-            <Grid className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant="secondary" onClick={undo} disabled={historyIndex <= 0} title="تراجع">
-            <Undo2 className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant="secondary" onClick={redo} disabled={historyIndex >= history.length - 1} title="إعادة">
-            <Redo2 className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant="secondary" onClick={clearAll} title="مسح الكل">
-            <Trash2 className="w-4 h-4" />
-          </Button>
-
-          <label className="inline-flex items-center">
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => e.target.files && importImage(e.target.files[0])}
-            />
-            <Button size="icon" variant="secondary" title="استيراد صورة" asChild>
-              <span><ImageIcon className="w-4 h-4" /></span>
-            </Button>
-          </label>
-
-          <Button size="icon" variant="secondary" onClick={copyToClipboard} title="نسخ إلى الحافظة">
-            <CopyIcon className="w-4 h-4" />
-          </Button>
-
-          <Button size="icon" variant="secondary" onClick={downloadPng} title="حفظ كصورة">
-            <Download className="w-4 h-4" />
-          </Button>
-
-          <div className="hidden sm:flex items-center gap-1">
-            <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.min(6, z * 1.2))} title="تكبير">
-              <Maximize2 className="w-4 h-4" />
-            </Button>
-            <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.max(0.25, z / 1.2))} title="تصغير">
-              <Minimize2 className="w-4 h-4" />
-            </Button>
-            <Button size="icon" variant="secondary" onClick={resetView} title="إعادة التعيين">
-              <RefreshCcw className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* عناصر للجوال */}
-        <div className="flex lg:hidden w-full gap-2">
-          <div className="flex-1 flex items-center gap-2">
-            <span className="text-xs">السماكة</span>
-            <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0])} />
-          </div>
-          <Input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-8 p-1" />
-          {tool === 'fill' && (
-            <div className="flex-1 flex items-center gap-2">
-              <span className="text-xs">تسامح</span>
-              <Slider min={0} max={100} step={1} value={[fillTolerance]} onValueChange={v => setFillTolerance(v[0])} />
+             <Separator orientation="vertical" className="h-6" />
+            <div className="flex items-center gap-1">
+               <Button size="icon" variant={tool === 'fill' ? 'default' : 'secondary'} onClick={() => setTool('fill')} title="تعبئة">
+                <PaintBucket className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant={tool === 'text' ? 'default' : 'secondary'} onClick={() => setTool('text')} title="نص">
+                <Type className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant={tool === 'eyedropper' ? 'default' : 'secondary'} onClick={() => setTool('eyedropper')} title="قطّارة">
+                <Droplet className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant={tool === 'pan' ? 'default' : 'secondary'} onClick={() => setTool('pan')} title="تحريك">
+                <Hand className="w-4 h-4" />
+              </Button>
             </div>
-          )}
-          {(tool === 'rect' || tool === 'circle') && (
-            <label className="flex items-center gap-2 ml-auto">
-              <input type="checkbox" checked={shapeFill} onChange={e => setShapeFill(e.target.checked)} />
-              <span className="text-xs">تعبئة</span>
-            </label>
-          )}
+             <Separator orientation="vertical" className="h-6" />
+            <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                    <span className="text-xs">السماكة</span>
+                    <div className="w-28">
+                    <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0])} />
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs">الشفافية</span>
+                    <div className="w-28">
+                    <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0])} />
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs">لون</span>
+                    <Input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-8 p-1 bg-transparent" />
+                </div>
+            </div>
+            
+            <Separator orientation="vertical" className="h-6" />
+
+            <div className="flex items-center gap-1">
+              <Button size="icon" variant="secondary" onClick={() => setShowGrid(s => !s)} title="شبكة">
+                <Grid className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant="secondary" onClick={undo} disabled={historyIndex <= 0} title="تراجع">
+                <Undo2 className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant="secondary" onClick={redo} disabled={historyIndex >= history.length - 1} title="إعادة">
+                <Redo2 className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant="secondary" onClick={clearAll} title="مسح الكل">
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <Separator orientation="vertical" className="h-6" />
+
+            <div className="flex items-center gap-1">
+              <label className="inline-flex items-center">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => e.target.files && importImage(e.target.files[0])}
+                />
+                <Button size="icon" variant="secondary" title="استيراد صورة" asChild>
+                  <span><ImageIcon className="w-4 h-4" /></span>
+                </Button>
+              </label>
+              <Button size="icon" variant="secondary" onClick={copyToClipboard} title="نسخ إلى الحافظة">
+                <CopyIcon className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant="secondary" onClick={downloadPng} title="حفظ كصورة">
+                <Download className="w-4 h-4" />
+              </Button>
+            </div>
         </div>
-        {tool === 'text' && (
-          <div className="lg:hidden flex w-full items-center gap-2">
-            <Input placeholder="أدخل النص…" value={textValue} onChange={(e) => setTextValue(e.target.value)} />
-          </div>
-        )}
-      </div>
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
+      
       {/* سطح الرسم + الشبكة */}
       <div
         className={cn('relative w-full rounded-xl overflow-hidden border bg-white', disabled && 'pointer-events-none opacity-75')}
@@ -973,28 +922,7 @@ export function DrawingCanvas({
         <canvas ref={overlayRef} className="pointer-events-none absolute inset-0" />
       </div>
 
-      <div className="mt-2 text-xs text-muted-foreground flex items-center gap-2">
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full">
-              <HelpCircle className="w-4 h-4" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-3 text-sm" dir="rtl">
-            <div className="space-y-1.5 font-sans">
-              <p><strong>⌘/Ctrl+Z</strong>: تراجع</p>
-              <p><strong>⇧+⌘/Ctrl+Z</strong>: إعادة</p>
-              <p><strong>عجلة الماوس + ⌘/Ctrl</strong>: تكبير/تصغير</p>
-              <p><strong>زر الوسط / Alt</strong>: تحريك اللوحة</p>
-              <p><strong>Shift</strong>: رسم خطوط مستقيمة/أشكال منتظمة</p>
-              <p><strong>نقرة مزدوجة</strong>: إعادة ضبط العرض</p>
-            </div>
-          </PopoverContent>
-        </Popover>
-        <span>
-            اختصارات لوحة المفاتيح
-        </span>
-      </div>
     </div>
   );
 }
+
