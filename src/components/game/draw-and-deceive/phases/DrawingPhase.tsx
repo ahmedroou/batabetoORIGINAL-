@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -93,7 +92,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
             <Palette /> دورك في الرسم!
           </CardTitle>
           <CardDescription>
-            الكلمة التي يجب عليك رسمها هي: <strong className="text-primary text-xl">{state.wordToDraw}</strong>
+            ارسم ما يخطر في بالك! ثم اكتب وصفًا دقيقًا له من كلمة أو كلمتين.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

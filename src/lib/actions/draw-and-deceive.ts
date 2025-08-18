@@ -9,7 +9,6 @@ import type {
   DrawAndDeceiveRoundResult,
 } from '@/types';
 import { shuffle } from './helpers';
-import { WORD_WAR_WORDS } from '@/data/word-war-words';
 import { distributeEndOfGameAwards } from './admin/users';
 
 /* ----------------------------- Constants ----------------------------- */
@@ -116,21 +115,21 @@ const calculateRoundResults = (
     answersResult.push({ answer, isCorrect, authorIds, guesserIds });
 
     if (isCorrect) {
-      // +2 لكل مُخَمِّن صحيح (غير الفنان)، +1 للفنان عن كل تخمين صحيح
+      // +1 للرسام عن كل تخمين صحيح (غير الفنان)
       guesserIds.forEach(guesserId => {
         if (guesserId !== state.artistId) {
-          addScore(guesserId, 2, 'إجابة صحيحة');
-          addScore(state.artistId!, 1, `تخمين صحيح من ${getPlayer(guesserId)?.name || 'لاعب'}`);
+            addScore(guesserId, 2, 'إجابة صحيحة');
+            addScore(state.artistId!, 1, `تخمين صحيح من ${getPlayer(guesserId)?.name || 'لاعب'}`);
         }
       });
     } else {
-      // فخ: -3 إذا صوّت المؤلف لنفسه، وإلا +1 لمؤلف(ي) الفخ عن كل ضحية
+      // فخ: -3 إذا صوّت المؤلف لنفسه، وإلا +2 لمؤلف(ي) الفخ عن كل ضحية
       guesserIds.forEach(guesserId => {
         if (authorIds.includes(guesserId)) {
           addScore(guesserId, -3, 'صوّت لنفسه');
         } else {
           authorIds.forEach(authorId => {
-            addScore(authorId, 1, `خدع ${getPlayer(guesserId)?.name || 'لاعب'}`);
+            addScore(authorId, 2, `خدع ${getPlayer(guesserId)?.name || 'لاعب'}`);
           });
         }
       });
@@ -161,7 +160,6 @@ export async function startGame(gameId: string, hostId: string) {
 
     const activePlayers = game.players.filter(p => p.status !== 'left').map(p => p.id);
     const turnOrder = shuffle(activePlayers);
-    const wordToDraw = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)]!;
 
     const initialState: DrawAndDeceiveState = {
       settings: { ...baseSettings, rounds },
@@ -170,7 +168,7 @@ export async function startGame(gameId: string, hostId: string) {
       round: 1,
       phase: 'drawing',
       artistId: turnOrder[0]!,
-      wordToDraw,
+      wordToDraw: null, // Artist will decide
       playerTraps: {},
       playerGuesses: {},
       shuffledAnswers: [],
@@ -246,7 +244,7 @@ export async function submitTrap(gameId: string, playerId: string, trap: string)
     const nonArtists = activePlayers.filter(p => p.id !== state.artistId);
 
     if (Object.keys(updatedTraps).length === nonArtists.length) {
-      const correct = state.correctAnswer ?? state.wordToDraw; // احتياط
+      const correct = state.correctAnswer;
       const allAnswers = [correct, ...Object.values(updatedTraps)].filter((a): a is string => !!a);
       const shuffledAnswers = shuffle(allAnswers);
 
@@ -309,6 +307,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
 export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
+  let isGameOver = false;
 
   await runTransaction(db, async tx => {
     const gameSnap = await tx.get(gameRef);
@@ -332,8 +331,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
           'drawAndDeceiveState.phase': 'final_results',
           gameResult,
         });
-
-        // بعد خروجنا من المعاملة سنستدعي الجوائز باستخدام gameId مباشرة
+        isGameOver = true;
       } else {
         // حدد الفنان التالي الفعّال
         const { nextIndex, artistId } = nextActiveArtist(
@@ -341,7 +339,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
           state.currentTurnIndex,
           game.players
         );
-        const newWord = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)]!;
 
         tx.update(gameRef, {
           gameState: 'drawing',
@@ -349,7 +346,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
           'drawAndDeceiveState.round': nextRound,
           'drawAndDeceiveState.currentTurnIndex': nextIndex,
           'drawAndDeceiveState.artistId': artistId,
-          'drawAndDeceiveState.wordToDraw': newWord,
+          'drawAndDeceiveState.wordToDraw': null,
           'drawAndDeceiveState.drawingDataUrl': null,
           'drawAndDeceiveState.correctAnswer': null,
           'drawAndDeceiveState.playerTraps': {},
@@ -369,7 +366,7 @@ export async function handleTimeout(gameId: string, hostId: string) {
       });
     } else if (state.phase === 'trapping') {
       // ننتقل للتخمين بما هو متاح
-      const correct = state.correctAnswer ?? state.wordToDraw;
+      const correct = state.correctAnswer;
       const allAnswers = [correct, ...Object.values(state.playerTraps)].filter(
         (a): a is string => !!a
       );
@@ -398,7 +395,11 @@ export async function handleTimeout(gameId: string, hostId: string) {
     }
   });
 
-  // استدعاء الجوائز بعد إنهاء المعاملة لتفادي التعارض
-  // نستخدم gameId مباشرة (بدل finalGameData.id الذي قد لا يكون متوفراً على الـ snapshot)
-  await distributeEndOfGameAwards(gameId);
+  if (isGameOver) {
+      const res = await distributeEndOfGameAwards(gameId);
+      if (!res.success) {
+          console.error(`Failed to distribute awards for game ${gameId}:`, res.error);
+          await updateDoc(gameRef, { 'gameResult.error': res.error });
+      }
+  }
 }

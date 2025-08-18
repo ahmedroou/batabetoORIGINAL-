@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -44,7 +43,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
             <CardHeader className="text-center">
                 <CardTitle className="text-2xl">نتائج الجولة</CardTitle>
                 <CardDescription>
-                    الكلمة الأصلية كانت: <strong className="text-primary">{state.wordToDraw}</strong> | الوصف الصحيح: <strong className="text-primary">{state.correctAnswer}</strong>
+                    الوصف الصحيح كان: <strong className="text-primary">{state.correctAnswer}</strong>
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
