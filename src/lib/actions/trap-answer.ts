@@ -40,7 +40,8 @@ import { distributeEndOfGameAwards } from './admin/users';
 // -----------------------------------------------------------------------------
 const SIMILARITY_BLOCK = 0.70 as const;
 const CATEGORY_SELECTION_TIME_S = 30 as const;
-const DEFAULT_ANSWER_TIME_S = 60 as const;
+const DEFAULT_TRAP_TIME_S = 35 as const;
+const DEFAULT_GUESSING_TIME_S = 25 as const;
 const DEFAULT_RESULTS_TIME_S = 90 as const;
 const FIELD_TRAP_STATE = 'trapAnswerState';
 const TIMEOUT_TOKEN = '__TIMEOUT__';
@@ -58,11 +59,12 @@ const getActivePlayers = (game: Game): Player[] =>
 // -----------------------------------------------------------------------------
 function sanitizeSettings(input: any, fallbackCats: string[]) {
   const rounds = Number.isFinite(Number(input?.rounds)) && Number(input.rounds) >= 1 ? Number(input.rounds) : 10;
-  const answerTime = Number.isFinite(Number(input?.answerTime)) && Number(input.answerTime) >= 10 ? Number(input.answerTime) : DEFAULT_ANSWER_TIME_S;
+  const trapTime = Number.isFinite(Number(input?.trapTime)) && Number(input.trapTime) >= 10 ? Number(input.trapTime) : DEFAULT_TRAP_TIME_S;
+  const guessingTime = Number.isFinite(Number(input?.guessingTime)) && Number(input.guessingTime) >= 10 ? Number(input.guessingTime) : DEFAULT_GUESSING_TIME_S;
   const resultsTime = Number.isFinite(Number(input?.resultsTime)) && Number(input.resultsTime) >= 10 ? Number(input.resultsTime) : DEFAULT_RESULTS_TIME_S;
   const categories = Array.isArray(input?.categories) && input.categories.length > 0 ? input.categories.filter(Boolean) : fallbackCats;
   ensure(categories.length > 0, 'لا توجد أقسام صالحة.');
-  return { rounds, answerTime, resultsTime, categories };
+  return { rounds, trapTime, guessingTime, resultsTime, categories };
 }
 
 // -----------------------------------------------------------------------------
@@ -206,7 +208,7 @@ export async function startTrapAnswerGame(gameId: string, hostId: string) {
 // -----------------------------------------------------------------------------
 export async function selectCategoryAndGetQuestion(gameId: string, playerId: string, category: string) {
   const gameRef = doc(db, 'games', gameId);
-  let answerTime = DEFAULT_ANSWER_TIME_S;
+  let trapTime = DEFAULT_TRAP_TIME_S;
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -218,11 +220,11 @@ export async function selectCategoryAndGetQuestion(gameId: string, playerId: str
     const currentTurnPlayerId = turnOrder[state.currentTurnIndex || 0];
     ensure(currentTurnPlayerId === playerId, 'ليس دورك لاختيار القسم.');
     ensure(state.fiveRandomCategories?.includes(category), 'القسم المختار غير متاح.');
-    answerTime = state.settings?.answerTime || DEFAULT_ANSWER_TIME_S;
+    trapTime = state.settings?.trapTime || DEFAULT_TRAP_TIME_S;
   });
 
   const randomQuestion = await fetchRandomQuestionByCategory(category);
-  const endsAt = tsFromNowS(answerTime);
+  const endsAt = tsFromNowS(trapTime);
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -386,7 +388,7 @@ export async function setAwayStatus(gameId: string, playerId: string, isAway: bo
 // -----------------------------------------------------------------------------
 function _getGuessingPhaseUpdates(game: Game, playerAnswers: Record<string, string | null>) {
   const state = (game as any)[FIELD_TRAP_STATE] || {};
-  const guessingTime = state.settings?.guessingTime ?? DEFAULT_ANSWER_TIME_S;
+  const guessingTime = state.settings?.guessingTime ?? DEFAULT_GUESSING_TIME_S;
   const endsAt = tsFromNowS(guessingTime);
   ensure(state.currentQuestion, 'Question data missing.');
 

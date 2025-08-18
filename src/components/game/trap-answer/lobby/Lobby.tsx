@@ -1,5 +1,5 @@
 
-"use client";
+'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { Game, Player } from '@/types';
@@ -47,11 +47,12 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
 
-  const initialSettings = game.trapAnswerState?.settings || { rounds: 10, answerTime: 60, resultsTime: 90, categories: [] };
+  const initialSettings = game.trapAnswerState?.settings || { rounds: 10, trapTime: 35, guessingTime: 25, resultsTime: 90, categories: [] };
   const [lobbySettings, setLobbySettings] = useState(initialSettings);
 
   const [roundsInput, setRoundsInput] = useState<string>(String(initialSettings.rounds ?? 10));
-  const [answerInput, setAnswerInput] = useState<string>(String(initialSettings.answerTime ?? 60));
+  const [trapTimeInput, setTrapTimeInput] = useState<string>(String(initialSettings.trapTime ?? 35));
+  const [guessingTimeInput, setGuessingTimeInput] = useState<string>(String(initialSettings.guessingTime ?? 25));
   const [resultsInput, setResultsInput] = useState<string>(String(initialSettings.resultsTime ?? 90));
 
   const [allCategories, setAllCategories] = useState<string[]>([]);
@@ -61,7 +62,8 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
     if (next) {
       setLobbySettings(next);
       setRoundsInput(String(next.rounds ?? ''));
-      setAnswerInput(String(next.answerTime ?? ''));
+      setTrapTimeInput(String(next.trapTime ?? ''));
+      setGuessingTimeInput(String(next.guessingTime ?? ''));
       setResultsInput(String(next.resultsTime ?? ''));
     }
   }, [game.trapAnswerState?.settings]);
@@ -83,10 +85,15 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
     return Number.isFinite(n) ? n : lobbySettings.rounds || 10;
   }, [roundsInput, lobbySettings.rounds]);
 
-  const currentAnswerTime = useMemo(() => {
-    const n = parseInt(answerInput, 10);
-    return Number.isFinite(n) ? n : lobbySettings.answerTime || 60;
-  }, [answerInput, lobbySettings.answerTime]);
+  const currentTrapTime = useMemo(() => {
+    const n = parseInt(trapTimeInput, 10);
+    return Number.isFinite(n) ? n : lobbySettings.trapTime || 35;
+  }, [trapTimeInput, lobbySettings.trapTime]);
+
+  const currentGuessingTime = useMemo(() => {
+    const n = parseInt(guessingTimeInput, 10);
+    return Number.isFinite(n) ? n : lobbySettings.guessingTime || 25;
+  }, [guessingTimeInput, lobbySettings.guessingTime]);
   
   const currentResultsTime = useMemo(() => {
     const n = parseInt(resultsInput, 10);
@@ -94,9 +101,9 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
   }, [resultsInput, lobbySettings.resultsTime]);
 
   const estimatedSeconds = useMemo(() => {
-    const perRound = clamp(currentAnswerTime, 10, 600) + clamp(currentAnswerTime, 10, 600) + clamp(currentResultsTime, 10, 600) + 8;
+    const perRound = clamp(currentTrapTime, 10, 600) + clamp(currentGuessingTime, 10, 600) + clamp(currentResultsTime, 10, 600) + 8;
     return (currentRounds || 10) * perRound;
-  }, [currentAnswerTime, currentRounds, currentResultsTime]);
+  }, [currentTrapTime, currentGuessingTime, currentRounds, currentResultsTime]);
 
   const copyGameIdOrLink = useCallback(async () => {
     try {
@@ -159,33 +166,37 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
     setBusySaving(true);
     try {
       const rStr = (roundsInput ?? '').trim();
-      const aStr = (answerInput ?? '').trim();
+      const tStr = (trapTimeInput ?? '').trim();
+      const gStr = (guessingTimeInput ?? '').trim();
       const resStr = (resultsInput ?? '').trim();
 
-      if (rStr === '' || aStr === '' || resStr === '') {
+      if (rStr === '' || tStr === '' || gStr === '' || resStr === '') {
         toast({ title: 'حقول ناقصة', description: 'املأ جميع حقول الوقت والجولات قبل الحفظ.', variant: 'destructive' });
         setBusySaving(false);
         return;
       }
       const rParsed = parseInt(rStr, 10);
-      const aParsed = parseInt(aStr, 10);
+      const tParsed = parseInt(tStr, 10);
+      const gParsed = parseInt(gStr, 10);
       const resParsed = parseInt(resStr, 10);
 
-      if (!Number.isFinite(rParsed) || !Number.isFinite(aParsed) || !Number.isFinite(resParsed)) {
+      if (!Number.isFinite(rParsed) || !Number.isFinite(tParsed) || !Number.isFinite(gParsed) || !Number.isFinite(resParsed)) {
         toast({ title: 'قيم غير صالحة', description: 'يرجى إدخال أرقام صحيحة.', variant: 'destructive' });
         setBusySaving(false);
         return;
       }
       const safeRounds = clamp(rParsed, 1, 50);
-      const safeAnswer = clamp(aParsed, 10, 600);
+      const safeTrap = clamp(tParsed, 10, 600);
+      const safeGuessing = clamp(gParsed, 10, 600);
       const safeResults = clamp(resParsed, 10, 600);
       const safeCats = Array.isArray(lobbySettings.categories) ? lobbySettings.categories.filter(Boolean) : [];
 
-      await updateGameSettings(game.id, self.id, { rounds: safeRounds, answerTime: safeAnswer, resultsTime: safeResults, categories: safeCats });
+      await updateGameSettings(game.id, self.id, { rounds: safeRounds, trapTime: safeTrap, guessingTime: safeGuessing, resultsTime: safeResults, categories: safeCats });
 
-      setLobbySettings(prev => ({ ...prev, rounds: safeRounds, answerTime: safeAnswer, resultsTime: safeResults }));
+      setLobbySettings(prev => ({ ...prev, rounds: safeRounds, trapTime: safeTrap, guessingTime: safeGuessing, resultsTime: safeResults }));
       setRoundsInput(String(safeRounds));
-      setAnswerInput(String(safeAnswer));
+      setTrapTimeInput(String(safeTrap));
+      setGuessingTimeInput(String(safeGuessing));
       setResultsInput(String(safeResults));
 
       toast({ title: "تم حفظ الإعدادات" });
@@ -197,11 +208,12 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
     }
   };
 
-  const applyPreset = (rounds: number, answerTime: number, resultsTime: number) => {
+  const applyPreset = (rounds: number, trapTime: number, guessingTime: number, resultsTime: number) => {
     if (!isHost) return;
-    setLobbySettings(prev => ({ ...prev, rounds, answerTime, resultsTime }));
+    setLobbySettings(prev => ({ ...prev, rounds, trapTime, guessingTime, resultsTime }));
     setRoundsInput(String(rounds));
-    setAnswerInput(String(answerTime));
+    setTrapTimeInput(String(trapTime));
+    setGuessingTimeInput(String(guessingTime));
     setResultsInput(String(resultsTime));
   };
 
@@ -259,7 +271,7 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
               <Label className='font-bold text-base'>إعدادات اللعبة</Label>
               <div className="flex items-center gap-2">
                 <div className="text-xs text-muted-foreground hidden sm:block">
-                  جولات: <b>{currentRounds}</b> • وقت الإجابة: <b>{currentAnswerTime}s</b> • وقت النتائج: <b>{currentResultsTime}s</b> • أقسام: <b>{lobbySettings.categories?.length || 0}</b>
+                  جولات: <b>{currentRounds}</b> • فخ: <b>{currentTrapTime}s</b> • تخمين: <b>{currentGuessingTime}s</b> • نتائج: <b>{currentResultsTime}s</b> • أقسام: <b>{lobbySettings.categories?.length || 0}</b>
                 </div>
                 {isHost && (
                   <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(v => !v)} aria-expanded={isSettingsOpen} aria-controls="settings-panel">
@@ -282,21 +294,21 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                 >
                   <div className="p-4 border rounded-lg space-y-4 mt-1 bg-muted/50">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(3, 20, 20)}>
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(3, 20, 20, 20)}>
                         <Wand2 className="w-4 h-4 ml-1"/> سريع
                       </Button>
-                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(10, 60, 90)}>
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(10, 35, 25, 90)}>
                         افتراضي
                       </Button>
-                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(10, 25, 20)}>
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(10, 25, 20, 20)}>
                         القالب المميز
                       </Button>
-                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(20, 60, 90)}>
+                      <Button type="button" variant="outline" className="w-full" disabled={!isHost} onClick={() => applyPreset(20, 60, 45, 90)}>
                         ماراثون
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="space-y-1">
                         <Label htmlFor="rounds-setting">عدد الجولات</Label>
                         <Input
@@ -310,17 +322,30 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                           className={cn(roundsInput === '' && 'ring-1 ring-destructive/40 focus-visible:ring-destructive')}
                         />
                       </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="answering-time">وقت الإجابة (ث)</Label>
+                       <div className="space-y-1">
+                        <Label htmlFor="trap-time">وقت الفخ (ث)</Label>
                         <Input
-                          id="answering-time"
+                          id="trap-time"
                           type="number"
-                          value={answerInput}
+                          value={trapTimeInput}
                           disabled={!isHost}
                           min={10}
                           max={600}
-                          onChange={e => setAnswerInput(e.target.value)}
-                          className={cn(answerInput === '' && 'ring-1 ring-destructive/40 focus-visible:ring-destructive')}
+                          onChange={e => setTrapTimeInput(e.target.value)}
+                          className={cn(trapTimeInput === '' && 'ring-1 ring-destructive/40 focus-visible:ring-destructive')}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="guessing-time">وقت التخمين (ث)</Label>
+                        <Input
+                          id="guessing-time"
+                          type="number"
+                          value={guessingTimeInput}
+                          disabled={!isHost}
+                          min={10}
+                          max={600}
+                          onChange={e => setGuessingTimeInput(e.target.value)}
+                          className={cn(guessingTimeInput === '' && 'ring-1 ring-destructive/40 focus-visible:ring-destructive')}
                         />
                       </div>
                        <div className="space-y-1">

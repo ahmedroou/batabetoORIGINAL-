@@ -712,7 +712,8 @@ export interface Game {
       settings: {
           categories: string[];
           rounds: number;
-          answerTime: number;
+          trapTime: number;
+          guessingTime: number;
           resultsTime: number;
       };
       turnOrder?: string[];

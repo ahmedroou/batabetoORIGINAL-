@@ -19,7 +19,9 @@ import { getActivePlayers, tsFromNowS } from '../helpers';
 const SIMILARITY_THRESHOLD = 0.75 as const;
 const SIMILARITY_BLOCK = 0.95 as const; // block traps/dummies too similar to the real answer
 const CATEGORY_SELECTION_TIME_S = 30 as const;
-const DEFAULT_ANSWER_TIME_S = 60 as const;
+const DEFAULT_TRAP_TIME_S = 35;
+const DEFAULT_GUESSING_TIME_S = 25;
+const DEFAULT_RESULTS_TIME_S = 90;
 const FIELD_TRAP_STATE = 'trapAnswerState' as const;
 const TIMEOUT_TOKEN = '__TIMEOUT__' as const;
 
