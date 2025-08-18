@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -440,7 +441,7 @@ export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type EducatedMerchantGameState = "lobby" | "rolling" | "movement" | "property_action" | "question" | "turn_end" | "final_results";
 export type QuizSwapGameState = 'lobby' | 'peek' | 'playing' | 'discarding' | 'answering' | 'final_results';
-export type DrawAndDeceivePhase = 'lobby' | 'drawing' | 'trapping' | 'guessing' | 'results' | 'final_results';
+export type DrawAndDeceivePhase = 'lobby' | 'drawing' | 'writing' | 'trapping' | 'guessing' | 'results' | 'final_results' | 'kick_vote';
 
 export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState | QuizSwapGameState | DrawAndDeceivePhase;
 
@@ -629,6 +630,7 @@ export type DrawAndDeceiveRoundResult = {
 export interface DrawAndDeceiveState {
     settings: {
         drawingTime: number; 
+        writingTime: number;
         trappingTime: number; 
         guessingTime: number; 
         resultsTime: number; 
@@ -641,12 +643,17 @@ export interface DrawAndDeceiveState {
     
     // State per round
     artistId?: string;
-    drawingDataUrl?: string;
+    drawingDataUrl?: string | null;
     correctAnswer?: string;
     
     playerTraps: Record<string, string | null>; 
     playerGuesses: Record<string, string>; 
     shuffledAnswers: string[];
+    
+    kickVote?: {
+        votes: Record<string, 'kick' | 'spare'>;
+        voterIds: string[];
+    };
 
     lastRoundResults?: {
         scores: Record<string, { points: number; breakdown: { reason: string; points: number }[] }>;

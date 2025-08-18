@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -6,20 +7,18 @@ import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { submitDrawing } from '@/lib/actions/draw-and-deceive';
-import { Loader2, Palette, Send, Timer, Eye, ZoomIn } from 'lucide-react';
+import { Loader2, Palette, Send, Timer, Eye } from 'lucide-react';
 import { DrawingCanvas } from './DrawingCanvas';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Progress } from '@/components/ui/progress';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
 
 interface DrawingPhaseProps {
   game: Game;
   self: Player;
 }
 
-/** احسب مقاسات مثالية للكانفس بناءً على عرض الحاوية واتجاه الشاشة */
 function useResponsiveCanvasSize(containerRef: React.RefObject<HTMLDivElement>) {
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 800, h: 450 });
 
@@ -33,7 +32,6 @@ function useResponsiveCanvasSize(containerRef: React.RefObject<HTMLDivElement>) 
       const vw = window.innerWidth;
       const isPortrait = vh > vw;
 
-      // Make height more responsive on portrait mode
       const targetH = isPortrait
         ? Math.min(Math.round(cw * 1.1), Math.round(vh * 0.5))
         : Math.round(cw * 9 / 16);
@@ -56,7 +54,6 @@ function useResponsiveCanvasSize(containerRef: React.RefObject<HTMLDivElement>) 
   return size;
 }
 
-/** حوّل DataURL إلى WebP لتخفيف الحجم */
 async function toWebPDataURL(dataUrl: string, quality = 0.92): Promise<string> {
   if (typeof window === 'undefined' || !dataUrl.startsWith('data:image/')) return dataUrl;
   const img = new Image();
@@ -72,7 +69,7 @@ async function toWebPDataURL(dataUrl: string, quality = 0.92): Promise<string> {
         const webp = c.toDataURL('image/webp', quality);
         resolve(webp);
       } catch (e) {
-        resolve(dataUrl); // fallback PNG
+        resolve(dataUrl);
       }
     };
     img.onerror = reject;
@@ -88,7 +85,6 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   const artist = game.players.find(p => p.id === state.artistId);
 
   const [drawingDataUrl, setDrawingDataUrl] = useState<string | null>(null);
-  const [correctAnswer, setCorrectAnswer] = useState('');
   const [blankSig, setBlankSig] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
@@ -100,24 +96,20 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   });
 
   const handleSubmit = useCallback(async () => {
-    if (!isArtist || submittingRef.current || !correctAnswer.trim()) {
-      if(!correctAnswer.trim()){
-        toast({title: "الوصف مطلوب", description: "يجب كتابة وصف للرسمة.", variant: "destructive"});
-      }
-      return;
-    }
-
+    if (!isArtist || submittingRef.current) return;
+    
     submittingRef.current = true;
     setIsSubmitting(true);
     try {
       const webp = drawingDataUrl ? await toWebPDataURL(drawingDataUrl, 0.9) : null;
-      await submitDrawing(game.id, self.id, webp || undefined, correctAnswer);
+      await submitDrawing(game.id, self.id, webp || undefined);
+      // No need to show toast here, server will advance phase
     } catch (error: any) {
       toast({ title: 'خطأ', description: error?.message ?? 'لم يتم الإرسال', variant: 'destructive' });
       setIsSubmitting(false); // Allow retry
       submittingRef.current = false;
     }
-  }, [isArtist, drawingDataUrl, correctAnswer, game.id, self.id, toast]);
+  }, [isArtist, drawingDataUrl, game.id, self.id, toast]);
   
   useEffect(() => {
     if (!isArtist) return;
@@ -183,7 +175,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
             <Palette /> دورك في الرسم!
           </CardTitle>
           <CardDescription>
-            ارسم ما يخطر في بالك! سيتم سؤالك عن وصف الرسمة في المرحلة التالية.
+            لديك {totalTime} ثانية لرسم لوحتك الفنية.
           </CardDescription>
         </CardHeader>
 
@@ -208,24 +200,14 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
             />
           </div>
           
-           <div className="max-w-xl mx-auto space-y-2">
-                <Input 
-                    placeholder="اكتب الوصف الصحيح لرسمتك هنا..."
-                    value={correctAnswer}
-                    onChange={(e) => setCorrectAnswer(e.target.value)}
-                    disabled={isSubmitting || timeLeft === 0}
-                    className="text-center"
-                />
-            </div>
-
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pb-[env(safe-area-inset-bottom)]">
               <Button
                 onClick={handleSubmit}
-                disabled={isSubmitting || !drawingDataUrl || timeLeft === 0 || !correctAnswer.trim()}
+                disabled={isSubmitting || !drawingDataUrl}
                 className="w-full sm:w-auto"
                 size="lg"
               >
-                {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2" /> إرسال الرسمة والوصف</>}
+                {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2" /> إرسال الرسمة</>}
               </Button>
           </div>
         </CardContent>

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import type { Game, Player } from '@/types';
@@ -19,10 +20,12 @@ const PhaseSkeleton = () => (
 
 const LobbyPhase = dynamic(() => import('./phases/LobbyPhase').then(m => m.LobbyPhase), { ssr: false, loading: () => <PhaseSkeleton /> });
 const DrawingPhase = dynamic(() => import('./phases/DrawingPhase').then(m => m.DrawingPhase), { ssr: false, loading: () => <PhaseSkeleton /> });
+const WritingPhase = dynamic(() => import('./phases/WritingPhase').then(m => m.WritingPhase), { ssr: false, loading: () => <PhaseSkeleton /> });
 const TrappingPhase = dynamic(() => import('./phases/TrappingPhase').then(m => m.TrappingPhase), { ssr: false, loading: () => <PhaseSkeleton /> });
 const GuessingPhase = dynamic(() => import('./phases/GuessingPhase').then(m => m.GuessingPhase), { ssr: false, loading: () => <PhaseSkeleton /> });
 const ResultsPhase = dynamic(() => import('./phases/ResultsPhase').then(m => m.ResultsPhase), { ssr: false, loading: () => <PhaseSkeleton /> });
 const FinalResultsPhase = dynamic(() => import('./phases/FinalResultsPhase').then(m => m.FinalResultsPhase), { ssr: false, loading: () => <PhaseSkeleton /> });
+const KickVotePhase = dynamic(() => import('./phases/KickVotePhase').then(m => m.KickVotePhase), { ssr: false, loading: () => <PhaseSkeleton /> });
 
 interface DrawAndDeceiveGameProps {
   game: Game;
@@ -45,12 +48,16 @@ export function DrawAndDeceiveGame({ game, self }: DrawAndDeceiveGameProps) {
         return <LobbyPhase game={game} self={self} />;
       case 'drawing':
         return <DrawingPhase game={game} self={self} />;
+      case 'writing':
+        return <WritingPhase game={game} self={self} />;
       case 'trapping':
         return <TrappingPhase game={game} self={self} />;
       case 'guessing':
         return <GuessingPhase game={game} self={self} />;
       case 'results':
         return <ResultsPhase game={game} self={self} />;
+      case 'kick_vote':
+        return <KickVotePhase game={game} self={self} />;
       case 'final_results':
         return <FinalResultsPhase game={game} self={self} />;
       default:

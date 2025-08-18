@@ -19,7 +19,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogContent, AlertDialogFooter } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -693,7 +692,7 @@ export default function NewsTab() {
                 </Button>
               </div>
             </div>
-            <Separator />
+            <div className="h-px w-full bg-border" />
             <div className="space-y-2">
               <Label>المجموعات الحالية</Label>
               <ScrollArea className="h-[55vh] pr-2">
@@ -798,7 +797,7 @@ export default function NewsTab() {
                 </ul>
               </div>
             </div>
-            <Separator />
+            <div className="h-px w-full bg-border" />
             <div className="space-y-2">
               <Label className="text-destructive">صيانة الجريدة</Label>
               <p className="text-xs text-muted-foreground">حذف كل المقالات الأقدم من 7 أيام لتنظيف قاعدة البيانات.</p>
