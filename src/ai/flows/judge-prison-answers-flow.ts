@@ -58,7 +58,7 @@ const rejudgePrompt = ai.definePrompt({
   name: 'rejudgePrompt',
   input: { schema: JudgePrisonAnswersInputSchema },
   output: { schema: JudgePrisonAnswersOutputSchema },
-  model: 'googleai/gemini-1.5-pro-latest',
+  model: 'googleai/gemini-1.5-flash-latest',
   prompt: `أنت حكم خبير ومحايد، طُلب منك إعادة تقييم حكم سابق بسبب اعتراض من أحد اللاعبين.
 
 **السؤال الأصلي:** "{{{question}}}"
@@ -141,5 +141,3 @@ const judgePrisonAnswersFlow = ai.defineFlow(
     }
   }
 );
-
-    
