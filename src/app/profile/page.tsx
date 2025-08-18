@@ -52,6 +52,7 @@ import {
   Users as UsersIcon,
   VenetianMask,
 } from "lucide-react";
+import type { Timestamp } from "firebase/firestore";
 
 function toDate(input?: unknown): Date | null {
   if (!input) return null;
@@ -65,6 +66,34 @@ function toDate(input?: unknown): Date | null {
   return null;
 }
 
+// Component to safely render time-sensitive information on the client
+function TimeRemaining({ until }: { until?: any }) {
+    const [renderedTime, setRenderedTime] = useState<string>('');
+
+    useEffect(() => {
+        const dt = toDate(until);
+        if (!dt) {
+            setRenderedTime('');
+            return;
+        }
+        
+        const update = () => {
+            try {
+                setRenderedTime(formatDistanceToNow(dt, { addSuffix: true, locale: ar }));
+            } catch {
+                setRenderedTime('');
+            }
+        };
+
+        update();
+        const timer = setInterval(update, 60000); // Update every minute
+        return () => clearInterval(timer);
+    }, [until]);
+
+    return <>{renderedTime}</>;
+}
+
+
 export default function ProfilePage() {
   const { user, userProfile, loading, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
   const router = useRouter();
@@ -76,8 +105,8 @@ export default function ProfilePage() {
   const [newName, setNewName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
 
-  const [isPayingTax, setIsPayingTax] = useState(false);
-  const [openTaxConfirm, setOpenTaxConfirm] = useState(false);
+  const [isPayingTax, setIsPayingTax = useState(false);
+  const [openTaxConfirm, setOpenTaxConfirm = useState(false);
 
   const currentRank: SocialRank | null = useMemo(() => {
     if (!userProfile) return null;
@@ -121,7 +150,7 @@ export default function ProfilePage() {
     if (!next) return { label: currentRank?.name ?? "", pct: 100, toNext: 0, nextName: null as string | null };
     const rangeStart = sorted[currentIndex]?.threshold ?? 0;
     const rangeEnd = next.threshold;
-    const pct = Math.max(0, Math.min(100, ((points - rangeStart) / (rangeEnd - rangeStart)) * 100));
+    const pct = Math.max(0, Math.min(100, ((points - rangeStart) / (rangeEnd - start)) * 100));
     const toNext = Math.max(0, rangeEnd - points);
     return { label: currentRank?.name ?? "", pct, toNext, nextName: next.name };
   }, [userProfile?.leaderboardPoints, socialRanks, currentRank?.name]);
@@ -243,11 +272,8 @@ export default function ProfilePage() {
     return `hsl(${hue} 70% 50%)`;
   }, [currentRank?.threshold]);
 
-  const timeRemaining = (until?: any) => {
-    const dt = toDate(until);
-    if (!dt) return "";
-    try { return formatDistanceToNow(dt, { addSuffix: true, locale: ar }); } catch { return ""; }
-  };
+  const updatedAtDate = toDate(userProfile?.updatedAt);
+  const updatedAtString = updatedAtDate ? updatedAtDate.toLocaleDateString('ar-SA') : null;
 
   if (loading || !userProfile) {
     return (
@@ -451,7 +477,7 @@ export default function ProfilePage() {
                         : `تم إذلالك بواسطة ${currentPunishment.details.byName ?? "—"}.`}
                     </p>
                     {currentPunishment.details?.until && (
-                      <p className="mt-1 text-xs text-muted-foreground">تنتهي {timeRemaining(currentPunishment.details.until)}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">تنتهي <TimeRemaining until={currentPunishment.details.until} /></p>
                     )}
                     {!!currentPunishment.details?.taxToLift && (
                       <div className="mt-3">
@@ -487,7 +513,7 @@ export default function ProfilePage() {
           </CardContent>
           <CardFooter className="justify-between text-xs text-muted-foreground">
             <span>معرف المستخدم: <strong className="font-mono tracking-wider">{userProfile.uid.slice(0, 6)}…</strong></span>
-            <span>آخر تحديث للملف: {(toDate(userProfile.updatedAt) ?? new Date()).toLocaleDateString("ar-SA")}</span>
+            {updatedAtString && <span>آخر تحديث للملف: {updatedAtString}</span>}
           </CardFooter>
         </Card>
       </div>
@@ -521,3 +547,4 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
     </div>
   );
 }
+
