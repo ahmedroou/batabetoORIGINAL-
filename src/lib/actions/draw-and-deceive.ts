@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -162,13 +163,13 @@ const calculateRoundResults = (
         }
       });
     } else {
-      // Traps: if you picked your own trap => -3, else trap authors gain +2 each per fooled guesser
+      // Traps: if you picked your own trap => -3, else trap authors gain +1 each per fooled guesser
       guesserIds.forEach((guesserId) => {
         if (authorIds.includes(guesserId)) {
           addScore(guesserId, -3, 'صوّت لفخه');
         } else {
           authorIds.forEach((authorId) => {
-            addScore(authorId, 2, `خدع ${getPlayer(game, guesserId)?.name || 'لاعب'}`);
+            addScore(authorId, 1, `خدع ${getPlayer(game, guesserId)?.name || 'لاعب'}`);
           });
         }
       });
@@ -300,7 +301,7 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
     const state = game.drawAndDeceiveState;
 
     ensure(state, 'Game state not initialized for Draw and Deceive.');
-    ensure(state.phase === 'drawing', 'Not in the drawing phase.');
+    ensure(state.phase === 'drawing' || state.kickVote?.active, 'Not in the drawing phase or kick vote.');
     ensure(state.artistId === playerId, 'Only the artist can submit a drawing.');
     ensure(state.correctAnswer, 'The correct answer must be submitted before the drawing.');
 
@@ -493,18 +494,35 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
     // 1) Drawing: if no vote active, open vote. If vote expired (active), resolve it fairly.
     if (state.phase === 'drawing') {
-      if (!state.kickVote?.active) {
-        const voteTime = state.settings?.kickVoteTime ?? DEFAULT_SETTINGS.kickVoteTime;
-        tx.update(gameRef, {
-          [F.s_kickVote]: { active: true, votes: {}, voterIds: [] as string[] },
-          [F.s_timer]: inSec(voteTime),
-        });
+        const hasSubmittedDrawing = state.drawingDataUrl;
+        // If the artist has submitted their drawing, but the timer ran out (e.g. while they were writing a trap),
+        // we can assume the timeout is for the drawing phase itself being over.
+        // In the new flow, the artist submits the description first. If the timer runs out *before* that,
+        // it means they were AFK. Let's start a kick vote.
+        if (!state.correctAnswer) {
+            // Kick vote time for AFK artist.
+            const voteTime = state.settings?.kickVoteTime ?? DEFAULT_SETTINGS.kickVoteTime;
+            tx.update(gameRef, {
+                [F.s_kickVote]: { active: true, votes: {}, voterIds: [] as string[] },
+                [F.s_timer]: inSec(voteTime),
+            });
+        } else {
+            // They wrote the description but didn't submit the drawing in time.
+            // Force submit an empty drawing and proceed.
+            tx.update(gameRef, {
+                [F.s_phase]: 'trapping',
+                [F.s_drawing]: null,
+                [F.s_timer]: inSec(state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime),
+                [F.s_kickVote]: null,
+            });
+        }
         return;
-      }
-
-      // Kick vote time ran out — resolve according to votes
-      await processKickVote(gameRef.id, tx, game);
-      return;
+    }
+    
+    // if a kick vote is active and its timer runs out
+    if (state.kickVote?.active) {
+        await processKickVote(gameId, tx, game);
+        return;
     }
 
     // 2) Trapping: move to guessing with current traps (even if some are missing)
