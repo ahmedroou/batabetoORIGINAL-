@@ -38,7 +38,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 
 // Server Actions
 import {
@@ -582,7 +581,7 @@ export default function SocietyTab() {
           <div className="flex flex-wrap gap-2 items-center text-xs text-muted-foreground">
             <Badge variant="secondary">النتائج: {searchedUsers.length}</Badge>
             <span>صفحة: {pager.page}/{totalPages}</span>
-            <Separator orientation="vertical" className="h-4" />
+            <div className="w-px h-4 bg-border" />
             <Button onClick={handleSelectAllPage} variant="outline" size="sm" disabled={pagedUsers.length === 0}>
               تحديد هذا الصفحة
             </Button>

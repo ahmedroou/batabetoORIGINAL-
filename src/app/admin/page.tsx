@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 
 import {
   Store,
@@ -255,7 +254,7 @@ function AdminPageContent() {
         {/* Header */}
         <Card className="backdrop-blur supports-[backdrop-filter]:bg-background/70">
           <CardHeader>
-             <div className="flex flex-col sm:flex-row flex-wrap items-start justify-between gap-4">
+             <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <CardTitle className="text-2xl md:text-3xl">لوحة تحكم الأدمن</CardTitle>
                   <CardDescription>إدارة محتوى اللعبة وإعداداتها.</CardDescription>
@@ -280,7 +279,7 @@ function AdminPageContent() {
               <span className="inline-flex items-center gap-1">
                 <Keyboard className="h-3.5 w-3.5" /> Alt + [1-6] للتبديل بين التبويبات بسرعة
               </span>
-              <Separator orientation="vertical" className="h-3 hidden md:block" />
+              <div className="h-3 w-px bg-border hidden md:block" />
               <span className="hidden sm:inline">آخر دخول: {new Date().toLocaleString()}</span>
             </div>
           </CardContent>
