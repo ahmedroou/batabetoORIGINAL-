@@ -96,59 +96,41 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     return Math.max(0, Math.round((state.timerEndsAt.toMillis() - Date.now()) / 1000));
   });
 
+  const handleSubmit = useCallback(async () => {
+    if (!isArtist) return;
+    setIsSubmitting(true);
+    try {
+      const finalAnswer = correctAnswer.trim() || undefined; // undefined triggers random word on server
+      const webp = drawingDataUrl ? await toWebPDataURL(drawingDataUrl, 0.9) : undefined;
+      await submitDrawing(game.id, self.id, webp, finalAnswer);
+    } catch (error: any) {
+      toast({ title: 'خطأ', description: error?.message ?? 'لم يتم الإرسال', variant: 'destructive' });
+      setIsSubmitting(false); // Allow retry
+    }
+  }, [isArtist, drawingDataUrl, correctAnswer, game.id, self.id, toast]);
+  
   useEffect(() => {
     if (!isArtist) return;
     const timer = setInterval(() => {
-      setTimeLeft(prev => (prev <= 1 ? 0 : prev - 1));
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleSubmit();
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
     return () => clearInterval(timer);
-  }, [isArtist]);
-
-  // عند انتهاء الوقت: إرسال تلقائي إن توفرت البيانات، وإلا إظهار تنبيه
-  useEffect(() => {
-    if (!isArtist || timeLeft !== 0) return;
-    if (!drawingDataUrl || !correctAnswer.trim()) {
-      toast({
-        title: 'انتهى الوقت',
-        description: 'لم نتمكّن من الإرسال لأن البيانات غير مكتملة.',
-        variant: 'destructive',
-      });
-    } else {
-      handleSubmit(); // إرسال تلقائي
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft]);
+  }, [isArtist, handleSubmit]);
 
   const onCanvasChange = useCallback((dataUrl: string) => {
-    // أول DataURL نعتبره بصمة الخلفية الفارغة (من الـCanvas)
     if (!blankSig) {
       setBlankSig(dataUrl);
       return;
     }
-    // تخطّي الإطارات المتطابقة مع الفارغ
     if (dataUrl !== blankSig) setDrawingDataUrl(dataUrl);
   }, [blankSig]);
-
-  const handleSubmit = useCallback(async () => {
-    if (!isArtist || !drawingDataUrl || !correctAnswer.trim()) {
-      toast({
-        title: 'بيانات ناقصة',
-        description: 'يجب أن ترسم شيئًا وتكتب الوصف الصحيح قبل الإرسال.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      // ضغط WebP لتسريع الشبكة (fallback PNG محفوظ)
-      const webp = await toWebPDataURL(drawingDataUrl, 0.9);
-      await submitDrawing(game.id, self.id, webp, correctAnswer.trim());
-    } catch (error: any) {
-      toast({ title: 'خطأ', description: error?.message ?? 'لم يتم الإرسال', variant: 'destructive' });
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [isArtist, drawingDataUrl, correctAnswer, game.id, self.id, toast]);
 
   // ليس فنانًا
   if (!isArtist) {
@@ -233,7 +215,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
               />
               <Button
                 onClick={handleSubmit}
-                disabled={isSubmitting || !drawingDataUrl || !correctAnswer.trim() || timeLeft === 0}
+                disabled={isSubmitting || !drawingDataUrl || timeLeft === 0}
                 className="sm:w-auto w-full"
               >
                 {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2" /> إرسال الرسمة</>}

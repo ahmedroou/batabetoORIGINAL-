@@ -16,7 +16,6 @@ import { distributeEndOfGameAwards } from './admin/users';
 /* ----------------------------- Constants ----------------------------- */
 const DEFAULT_SETTINGS = {
   drawingTime: 120,
-  writingTime: 20, // New setting for the writing phase
   trappingTime: 45,
   guessingTime: 60,
   resultsTime: 20,
@@ -25,7 +24,7 @@ const DEFAULT_SETTINGS = {
 
 const MAX_ROUNDS = 10;
 const MIN_ROUNDS = 1;
-const MAX_ANSWER_LEN = 20; // As per new request
+const MAX_ANSWER_LEN = 20;
 
 /* ------------------------------ Utilities ---------------------------- */
 const inSec = (s: number) => Timestamp.fromMillis(Date.now() + s * 1000);
@@ -178,7 +177,7 @@ export async function startGame(gameId: string, hostId: string) {
 }
 
 /* ---------------------------- Drawing Phase -------------------------- */
-export async function submitDrawing(gameId: string, playerId: string, drawingDataUrl: string) {
+export async function submitDrawing(gameId: string, playerId: string, drawingDataUrl?: string, correctAnswer?: string) {
   const gameRef = doc(db, 'games', gameId);
 
   await runTransaction(db, async tx => {
@@ -190,37 +189,19 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
     ensure(state, 'Game state not initialized for Draw and Deceive.');
     ensure(state.phase === 'drawing', 'Not in the drawing phase.');
     ensure(state.artistId === playerId, 'Only the artist can submit a drawing.');
-    ensure(!!drawingDataUrl, 'Drawing data is missing.');
+    
+    let finalAnswer = correctAnswer;
+    if (!finalAnswer) {
+      finalAnswer = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)];
+    }
 
-    const writingTime = state.settings?.writingTime ?? DEFAULT_SETTINGS.writingTime;
-
-    tx.update(gameRef, {
-      'drawAndDeceiveState.phase': 'writing',
-      'drawAndDeceiveState.drawingDataUrl': drawingDataUrl,
-      'drawAndDeceiveState.timerEndsAt': inSec(writingTime),
-    });
-  });
-}
-
-/* ---------------------------- Writing Phase -------------------------- */
-export async function submitCorrectAnswer(gameId: string, playerId: string, correctAnswer: string) {
-  const gameRef = doc(db, 'games', gameId);
-  await runTransaction(db, async tx => {
-    const gameSnap = await tx.get(gameRef);
-    ensure(gameSnap.exists(), 'Game not found.');
-    const game = gameSnap.data() as Game;
-
-    const state = game.drawAndDeceiveState;
-    ensure(state, 'Game state not initialized.');
-    ensure(state.phase === 'writing', 'Not in the writing phase.');
-    ensure(state.artistId === playerId, 'Only the artist can submit the answer.');
-
-    const normalized = normalizeAnswer(correctAnswer);
+    const normalizedAnswer = normalizeAnswer(finalAnswer);
     const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
-
+    
     tx.update(gameRef, {
       'drawAndDeceiveState.phase': 'trapping',
-      'drawAndDeceiveState.correctAnswer': normalized,
+      'drawAndDeceiveState.drawingDataUrl': drawingDataUrl || null,
+      'drawAndDeceiveState.correctAnswer': normalizedAnswer,
       'drawAndDeceiveState.timerEndsAt': inSec(trappingTime),
     });
   });
@@ -229,51 +210,55 @@ export async function submitCorrectAnswer(gameId: string, playerId: string, corr
 /* ---------------------------- Trapping Phase ------------------------- */
 export async function submitTrap(gameId: string, playerId: string, trap: string) {
   const gameRef = doc(db, 'games', gameId);
+  try {
+    await runTransaction(db, async tx => {
+      const gameSnap = await tx.get(gameRef);
+      ensure(gameSnap.exists(), 'Game not found.');
+      const game = gameSnap.data() as Game;
 
-  await runTransaction(db, async tx => {
-    const gameSnap = await tx.get(gameRef);
-    ensure(gameSnap.exists(), 'Game not found.');
-    const game = gameSnap.data() as Game;
+      const state = game.drawAndDeceiveState;
+      ensure(state, 'Game state not initialized.');
+      ensure(state.phase === 'trapping', 'Not in the trapping phase.');
+      ensure(state.artistId !== playerId, 'The artist cannot submit a trap.');
+      ensure(!state.playerTraps[playerId], 'Trap already submitted.');
 
-    const state = game.drawAndDeceiveState;
-    ensure(state, 'Game state not initialized.');
-    ensure(state.phase === 'trapping', 'Not in the trapping phase.');
-    ensure(state.artistId !== playerId, 'The artist cannot submit a trap.');
-    ensure(!state.playerTraps[playerId], 'Trap already submitted.');
+      const normalizedTrap = normalizeAnswer(trap);
 
-    const normalizedTrap = normalizeAnswer(trap);
-
-    // Reject traps similar to the correct answer
-    if(state.correctAnswer) {
+      // Reject traps similar to the correct answer
+      if (state.correctAnswer) {
         const similarity = safeCompareStrings(normalizedTrap, state.correctAnswer);
         if (similarity >= 0.70) {
-            throw new Error('فخك شديد الشبه بالإجابة الصحيحة. حاول مجددًا.');
+          throw new Error('فخك شديد الشبه بالإجابة الصحيحة. حاول مجددًا.');
         }
-    }
+      }
 
-    const updatedTraps = { ...state.playerTraps, [playerId]: normalizedTrap };
+      const updatedTraps = { ...state.playerTraps, [playerId]: normalizedTrap };
 
-    tx.update(gameRef, {
-      'drawAndDeceiveState.playerTraps': updatedTraps,
-    });
-
-    const activePlayers = game.players.filter(p => p.status !== 'left');
-    const nonArtists = activePlayers.filter(p => p.id !== state.artistId);
-
-    if (Object.keys(updatedTraps).length === nonArtists.length) {
-      const correct = state.correctAnswer;
-      ensure(correct, 'Correct answer is missing.');
-      const allAnswers = [correct, ...Object.values(updatedTraps)].filter((a): a is string => !!a);
-      const shuffledAnswers = shuffle(allAnswers);
-      const guessingTime = state.settings?.guessingTime ?? DEFAULT_SETTINGS.guessingTime;
-      
       tx.update(gameRef, {
-        'drawAndDeceiveState.phase': 'guessing',
-        'drawAndDeceiveState.shuffledAnswers': shuffledAnswers,
-        'drawAndDeceiveState.timerEndsAt': inSec(guessingTime),
+        'drawAndDeceiveState.playerTraps': updatedTraps,
       });
-    }
-  });
+
+      const activePlayers = game.players.filter(p => p.status !== 'left');
+      const nonArtists = activePlayers.filter(p => p.id !== state.artistId);
+
+      if (Object.keys(updatedTraps).length === nonArtists.length) {
+        const correct = state.correctAnswer;
+        ensure(correct, 'Correct answer is missing.');
+        const allAnswers = [correct, ...Object.values(updatedTraps)].filter((a): a is string => !!a);
+        const shuffledAnswers = shuffle(allAnswers);
+        const guessingTime = state.settings?.guessingTime ?? DEFAULT_SETTINGS.guessingTime;
+        
+        tx.update(gameRef, {
+          'drawAndDeceiveState.phase': 'guessing',
+          'drawAndDeceiveState.shuffledAnswers': shuffledAnswers,
+          'drawAndDeceiveState.timerEndsAt': inSec(guessingTime),
+        });
+      }
+    });
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
 }
 
 /* ---------------------------- Guessing Phase ------------------------- */
@@ -357,22 +342,12 @@ export async function handleTimeout(gameId: string, hostId: string) {
         });
       }
     } else if (state.phase === 'drawing') {
-      // Artist didn't submit a drawing, skip their turn essentially.
-      // We need a correct answer to proceed. We'll pick a random word.
       const randomWord = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)];
       tx.update(gameRef, {
         'drawAndDeceiveState.phase': 'trapping',
         'drawAndDeceiveState.correctAnswer': randomWord,
         'drawAndDeceiveState.timerEndsAt': inSec(state.settings.trappingTime),
       });
-    } else if (state.phase === 'writing') {
-        // Artist didn't submit a description. Pick a random word.
-        const randomWord = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)];
-        tx.update(gameRef, {
-          'drawAndDeceiveState.phase': 'trapping',
-          'drawAndDeceiveState.correctAnswer': randomWord,
-          'drawAndDeceiveState.timerEndsAt': inSec(state.settings.trappingTime),
-        });
     } else if (state.phase === 'trapping') {
       const correct = state.correctAnswer;
       ensure(correct, 'Correct answer is missing for timeout.');

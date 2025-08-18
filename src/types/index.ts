@@ -1,7 +1,3 @@
-
-
-      
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -643,7 +639,6 @@ export interface DrawAndDeceiveState {
     
     // State per round
     artistId?: string;
-    wordToDraw?: string;
     drawingDataUrl?: string;
     correctAnswer?: string;
     
@@ -951,7 +946,3 @@ export interface MafiaSettings {
 
 /** خريطة التصويت: voterId -> targetId|null */
 export type VoteMap = Record<string, string | null>;
-
-    
-
-    
