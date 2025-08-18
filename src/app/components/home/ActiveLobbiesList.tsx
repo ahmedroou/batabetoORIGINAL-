@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, Star, Loader2, Clock, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,12 +23,6 @@ export default function ActiveLobbiesList({ onJoin, onLobbiesUpdate }: ActiveLob
   const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
   const [isLoadingLobbies, setIsLoadingLobbies] = useState(true);
   const [joiningLobbyId, setJoiningLobbyId] = useState<string | null>(null);
-  const [now, setNow] = useState<number>(Date.now());
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     const q = query(
@@ -95,14 +89,13 @@ export default function ActiveLobbiesList({ onJoin, onLobbiesUpdate }: ActiveLob
           <LobbyRow
             key={lobby.id}
             lobby={lobby}
-            now={now}
             joiningLobbyId={joiningLobbyId}
             onJoin={() => handleJoinClick(lobby.id)}
           />
         ))}
       </AnimatePresence>
     );
-  }, [activeLobbies, isLoadingLobbies, joiningLobbyId, now]);
+  }, [activeLobbies, isLoadingLobbies, joiningLobbyId]);
 
   return (
     <Card className="relative overflow-hidden" dir="rtl" lang="ar">
@@ -132,15 +125,20 @@ export default function ActiveLobbiesList({ onJoin, onLobbiesUpdate }: ActiveLob
 
 function LobbyRow({
   lobby,
-  now,
   joiningLobbyId,
   onJoin,
 }: {
   lobby: Game;
-  now: number;
   joiningLobbyId: string | null;
   onJoin: () => void;
 }) {
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  
   const GameIcon = (GAME_ICONS as any)[lobby.gameType] || Star;
   const players = (lobby as any).players ?? [];
   const hostName = players?.[0]?.name ?? 'غير معروف';
@@ -212,7 +210,6 @@ function LobbyRow({
                   r="16"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="3"
                   className={isUrgent ? 'text-destructive' : 'text-primary'}
                   initial={{ pathLength: 0 }}
                   animate={{ pathLength: progressToExpire }}
