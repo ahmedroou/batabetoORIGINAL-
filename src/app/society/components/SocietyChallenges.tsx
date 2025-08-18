@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -171,7 +172,7 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
     const { user, userProfile, refreshUserProfile } = useAuth();
     const { toast } = useToast();
     const [isJoining, setIsJoining] = useState(false);
-    const [isConfirmingJoin, setIsConfirmingJoin = useState(false);
+    const [isConfirmingJoin, setIsConfirmingJoin] = useState(false);
     const [progress, setProgress] = useState(0);
     const [endsInLabel, setEndsInLabel] = useState('...');
     
