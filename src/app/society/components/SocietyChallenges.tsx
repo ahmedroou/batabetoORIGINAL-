@@ -1,5 +1,4 @@
-
-"use client";
+'use client';
 
 import * as React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -172,8 +171,10 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
     const { user, userProfile, refreshUserProfile } = useAuth();
     const { toast } = useToast();
     const [isJoining, setIsJoining] = useState(false);
-    const [isConfirmingJoin, setIsConfirmingJoin] = useState(false);
+    const [isConfirmingJoin, setIsConfirmingJoin = useState(false);
     const [progress, setProgress] = useState(0);
+    const [endsInLabel, setEndsInLabel] = useState('...');
+    
     const topThree = challenge.topParticipants || [];
 
     const isParticipant = userProfile && challenge.participantIds?.includes(userProfile.uid);
@@ -181,10 +182,11 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
     useEffect(() => {
         if (isEnded) {
             setProgress(100);
+            setEndsInLabel('انتهى');
             return;
         }
+
         const calculateProgress = () => {
-            if (!challenge.createdAt || !challenge.endsAt) return;
             const createdAt = challenge.createdAt instanceof Timestamp ? challenge.createdAt.toDate() : new Date(challenge.createdAt);
             const endsAt = challenge.endsAt instanceof Timestamp ? challenge.endsAt.toDate() : new Date(challenge.endsAt);
 
@@ -197,6 +199,7 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
             const elapsed = Date.now() - createdAt.getTime();
             const progressPercentage = Math.min(100, (elapsed / totalDuration) * 100);
             setProgress(progressPercentage);
+            setEndsInLabel(formatDistanceToNowStrict(endsAt, { locale: ar, addSuffix: true }));
         };
         calculateProgress();
         const timer = setInterval(calculateProgress, 60000);
