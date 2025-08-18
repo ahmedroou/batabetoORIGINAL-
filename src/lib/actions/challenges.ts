@@ -1,431 +1,611 @@
-
 'use server';
+
+/**
+ * Challenges Service — Refactor & Hardening (GPT-5 Thinking)
+ *
+ * Key improvements:
+ * - Safer Firestore usage (batching `in` queries, transaction hygiene, timestamp guards).
+ * - Consistent timestamp handling and derived Date objects for UI.
+ * - Validation on inputs and updates; prevents illegal field edits.
+ * - Finalization split into two phases to avoid sending emails inside transactions.
+ * - Arabic error messages preserved / improved.
+ * - Utility helpers to keep code clean and testable.
+ */
 
 import { db } from '@/lib/firebase';
 import {
-    collection,
-    addDoc,
-    serverTimestamp,
-    query,
-    where,
-    getDocs,
-    Timestamp,
-    orderBy,
-    writeBatch,
-    doc,
-    arrayUnion,
-    updateDoc,
-    deleteDoc,
-    getDoc,
-    increment,
-    runTransaction,
-    limit,
+  collection,
+  addDoc,
+  serverTimestamp,
+  query,
+  where,
+  getDocs,
+  Timestamp,
+  orderBy,
+  writeBatch,
+  doc,
+  arrayUnion,
+  updateDoc,
+  deleteDoc,
+  getDoc,
+  increment,
+  runTransaction,
+  limit,
+  DocumentData,
 } from 'firebase/firestore';
-import type { Challenge, ChallengePrize, Game, UserProfile, GamePointsScoredEvent } from '@/types';
+
+import type {
+  Challenge,
+  ChallengePrize,
+  Game,
+  UserProfile,
+  GamePointsScoredEvent,
+} from '@/types';
+
 import { sendSystemMail } from './user/mail';
 import { recordGamePointsScoredEvent } from './events';
 
+// --------------------------------------------------
+// Types & Helpers
+// --------------------------------------------------
 
-type CreateChallengeInput = Omit<Challenge, 'id' | 'createdAt' | 'participantIds' | 'endsAt' | 'participantCount' | 'scores'> & { durationInHours: number };
+type CreateChallengeInput = Omit<
+  Challenge,
+  'id' | 'createdAt' | 'participantIds' | 'endsAt' | 'participantCount' | 'scores' | 'claimedBy' | 'participants' | 'topParticipants' | 'winners'
+> & { durationInHours: number };
+
+const USERS_COLLECTION = 'users';
+const CHALLENGES_COLLECTION = 'challenges';
+const EVENTS_COLLECTION = 'social_events';
+const EVENTS_TYPE_FIELD = 'type';
+const EVENTS_TIMESTAMP_FIELD = 'timestamp';
+
+const IN_MAX = 10; // Firestore `in` operator limit
+
+/** Chunk an array to a given size. */
+function chunk<T>(arr: T[], size: number = IN_MAX): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/** Returns Date from Firestore value. */
+function asDate(v: any): Date | null {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  if (v instanceof Timestamp) return v.toDate();
+  if (typeof v === 'number') return new Date(v);
+  if (typeof v?.toDate === 'function') return v.toDate();
+  return null;
+}
+
+/** Ensure a future endsAt from createdAt + hours. */
+function computeEndsAt(createdAt: Date, durationInHours: number): Timestamp {
+  const ms = Math.max(1, Math.floor(durationInHours)) * 60 * 60 * 1000;
+  return Timestamp.fromMillis(createdAt.getTime() + ms);
+}
+
+/** Guard updates from mutating protected fields at runtime. */
+function stripIllegalUpdateFields(data: Record<string, any>): Record<string, any> {
+  const illegal = new Set([
+    'id',
+    'createdAt',
+    'participantIds',
+    'participantCount',
+    'scores',
+    'winners',
+    'claimedBy',
+    'participants',
+    'topParticipants',
+  ]);
+  const clean: Record<string, any> = {};
+  for (const [k, v] of Object.entries(data)) if (!illegal.has(k)) clean[k] = v;
+  return clean;
+}
+
+/** Resolve a user-friendly name from profile; fallback gracefully. */
+function getDisplayName(user?: Partial<UserProfile> | null): string {
+  if (!user) return 'Unknown';
+  return (
+    (user as any).name ||
+    (user as any).displayName ||
+    (user as any).username ||
+    'Unknown'
+  );
+}
+
+/** Map prize type keys to user fields (normalize naming variants). */
+function prizeFieldKey(type: ChallengePrize['type']): keyof UserProfile | string {
+  // Normalize common aliases without breaking existing schema.
+  switch (type) {
+    case 'coins':
+      return 'coins';
+    case 'diamonds':
+      return 'diamonds';
+    case 'honorPoints':
+    case 'honourPoints':
+    case 'honor':
+      return 'honorPoints';
+    case 'leaderboardPoints':
+    case 'points':
+      return 'leaderboardPoints';
+    default:
+      return type as string; // allow custom prize fields if schema supports
+  }
+}
+
+// --------------------------------------------------
+// Create
+// --------------------------------------------------
 
 /**
  * Creates a new tournament-style challenge. Admin only.
- * @param {CreateChallengeInput} challengeData - The data for the new challenge.
- * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function createChallenge(challengeData: CreateChallengeInput): Promise<{ success: boolean; error?: string }> {
-    const challengesCollectionRef = collection(db, 'challenges');
-
-    try {
-        const { durationInHours, ...restOfChallengeData } = challengeData;
-        const endsAt = Timestamp.fromMillis(Date.now() + durationInHours * 60 * 60 * 1000);
-
-        const newChallenge: Omit<Challenge, 'id'> = {
-            ...restOfChallengeData,
-            createdAt: serverTimestamp() as Timestamp,
-            endsAt: endsAt,
-            participantIds: [],
-            participantCount: 0,
-            scores: {},
-            claimedBy: [],
-        };
-
-        await addDoc(challengesCollectionRef, newChallenge);
-        
-        return { success: true };
-    } catch (error) {
-        console.error("Error creating challenge:", error);
-        return { success: false, error: 'فشل إنشاء البطولة.' };
+export async function createChallenge(
+  challengeData: CreateChallengeInput
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!challengeData?.title) {
+      return { success: false, error: 'العنوان مطلوب.' };
     }
+    if (!Number.isFinite(challengeData.durationInHours) || challengeData.durationInHours <= 0) {
+      return { success: false, error: 'مدة البطولة يجب أن تكون أكبر من 0 ساعة.' };
+    }
+
+    const { durationInHours, ...rest } = challengeData;
+    const now = new Date();
+
+    const newChallenge: Omit<Challenge, 'id'> = {
+      ...rest,
+      createdAt: serverTimestamp() as unknown as Timestamp,
+      endsAt: computeEndsAt(now, durationInHours),
+      participantIds: [],
+      participantCount: 0,
+      scores: {},
+      claimedBy: [],
+    } as unknown as Omit<Challenge, 'id'>;
+
+    await addDoc(collection(db, CHALLENGES_COLLECTION), newChallenge);
+    return { success: true };
+  } catch (error) {
+    console.error('Error creating challenge:', error);
+    return { success: false, error: 'فشل إنشاء البطولة.' };
+  }
 }
 
+// --------------------------------------------------
+// Read (Public)
+// --------------------------------------------------
 
 /**
- * Retrieves all challenges, optimized to reduce database reads.
- * It fetches the latest 15 challenges and performs a single bulk fetch for top participants.
- * @returns {Promise<Challenge[]>} An array of challenges with top participant data.
+ * Retrieves latest challenges (paginated window) with top participants resolved in a single batched pass.
  */
 export async function getChallenges(): Promise<Challenge[]> {
-    try {
-        const challengesCol = collection(db, 'challenges');
-        // Optimization: Fetch only the latest 15 challenges to limit the main query size.
-        const q = query(challengesCol, orderBy('createdAt', 'desc'), limit(15));
-        const snapshot = await getDocs(q);
-        
-        let challenges = snapshot.docs.map(doc => {
-            const data = doc.data();
-            const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date();
-            const endsAt = data.endsAt instanceof Timestamp ? data.endsAt.toDate() : new Date(Date.now() + 24 * 60 * 60 * 1000);
-            return {
-                id: doc.id,
-                ...data,
-                createdAt,
-                endsAt,
-                topParticipants: [], // Initialize with an empty array
-            } as Challenge;
-        });
+  try {
+    const qChallenges = query(
+      collection(db, CHALLENGES_COLLECTION),
+      orderBy('createdAt', 'desc'),
+      limit(15)
+    );
 
-        // Optimization: Collect all top participant IDs from all challenges into a single set.
-        const allTopParticipantIds = new Set<string>();
-        challenges.forEach(challenge => {
-            if (challenge.scores && Object.keys(challenge.scores).length > 0) {
-                const sortedParticipantIds = Object.keys(challenge.scores).sort((a, b) => (challenge.scores[b] || 0) - (challenge.scores[a] || 0));
-                sortedParticipantIds.slice(0, 3).forEach(id => allTopParticipantIds.add(id));
-            }
-        });
+    const snapshot = await getDocs(qChallenges);
 
-        // Optimization: Fetch all unique top participants in a single batch query.
-        if (allTopParticipantIds.size > 0) {
-            const idsArray = Array.from(allTopParticipantIds);
-            const usersQuery = query(collection(db, 'users'), where('__name__', 'in', idsArray));
-            const usersSnapshot = await getDocs(usersQuery);
-            const usersDataMap = new Map<string, UserProfile>();
-            usersSnapshot.docs.forEach(d => usersDataMap.set(d.id, { uid: d.id, ...d.data() } as UserProfile));
-            
-            // Map the fetched user data back to each challenge.
-            challenges.forEach(challenge => {
-                 if (challenge.scores && Object.keys(challenge.scores).length > 0) {
-                    const sortedParticipantIds = Object.keys(challenge.scores).sort((a, b) => (challenge.scores[b] || 0) - (challenge.scores[a] || 0));
-                    const top3Ids = sortedParticipantIds.slice(0, 3);
-                    challenge.topParticipants = top3Ids
-                        .map(id => usersDataMap.get(id))
-                        .filter((user): user is UserProfile => !!user)
-                        .sort((a,b) => (challenge.scores[b.uid] || 0) - (challenge.scores[a.uid] || 0));
-                 }
-            });
-        }
-        
-        return challenges;
+    const challenges: Challenge[] = snapshot.docs.map((d) => {
+      const data = d.data();
+      const createdAt = asDate((data as any).createdAt) ?? new Date();
+      const endsAt = asDate((data as any).endsAt) ?? new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
+      return {
+        id: d.id,
+        ...(data as DocumentData),
+        createdAt,
+        endsAt,
+        topParticipants: [],
+      } as unknown as Challenge;
+    });
 
-    } catch (error) {
-        console.error("Error fetching challenges:", error);
-        return [];
+    // Collect unique top-3 ids across challenges
+    const allTopIds = new Set<string>();
+    for (const ch of challenges) {
+      const scores = (ch.scores ?? {}) as Record<string, number>;
+      const ids = Object.keys(scores);
+      if (ids.length) {
+        ids
+          .sort((a, b) => (scores[b] ?? 0) - (scores[a] ?? 0))
+          .slice(0, 3)
+          .forEach((id) => allTopIds.add(id));
+      }
     }
-}
 
+    // Batched user fetches to respect `in` limit
+    const usersMap = new Map<string, UserProfile>();
+    const idsArray = Array.from(allTopIds);
+    for (const group of chunk(idsArray, IN_MAX)) {
+      if (!group.length) continue;
+      const qUsers = query(collection(db, USERS_COLLECTION), where('__name__', 'in', group));
+      const usersSnap = await getDocs(qUsers);
+      usersSnap.docs.forEach((u) => usersMap.set(u.id, { uid: u.id, ...(u.data() as DocumentData) } as UserProfile));
+    }
+
+    // Map back top participants (sorted by score desc)
+    for (const ch of challenges) {
+      const scores = (ch.scores ?? {}) as Record<string, number>;
+      const sortedIds = Object.keys(scores).sort((a, b) => (scores[b] ?? 0) - (scores[a] ?? 0));
+      const top3 = sortedIds
+        .slice(0, 3)
+        .map((id) => usersMap.get(id))
+        .filter((u): u is UserProfile => !!u)
+        .sort((a, b) => (scores[b.uid] ?? 0) - (scores[a.uid] ?? 0));
+      (ch as any).topParticipants = top3;
+    }
+
+    return challenges;
+  } catch (error) {
+    console.error('Error fetching challenges:', error);
+    return [];
+  }
+}
 
 /**
  * Gets full details for a single challenge, including the top 10 participants.
- * This is optimized to only fetch necessary data.
- * @param {string} challengeId - The ID of the challenge to fetch.
- * @returns {Promise<Challenge | null>} The challenge object with top 10 participant details.
  */
 export async function getChallengeDetails(challengeId: string): Promise<Challenge | null> {
-    try {
-        const challengeRef = doc(db, 'challenges', challengeId);
-        const challengeDoc = await getDoc(challengeRef);
-        if (!challengeDoc.exists()) return null;
+  try {
+    const ref = doc(db, CHALLENGES_COLLECTION, challengeId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
 
-        const data = challengeDoc.data();
-        const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date();
-        const endsAt = data.endsAt instanceof Timestamp ? data.endsAt.toDate() : new Date();
+    const data = snap.data();
+    const createdAt = asDate((data as any).createdAt) ?? new Date();
+    const endsAt = asDate((data as any).endsAt) ?? new Date();
 
-        const challengeData: Challenge = {
-            id: challengeDoc.id,
-            ...data,
-            createdAt,
-            endsAt,
-        } as Challenge;
+    const ch: Challenge = {
+      id: snap.id,
+      ...(data as DocumentData),
+      createdAt,
+      endsAt,
+    } as unknown as Challenge;
 
-        if (challengeData.scores && Object.keys(challengeData.scores).length > 0) {
-            const sortedParticipantIds = Object.keys(challengeData.scores).sort((a, b) => (challengeData.scores[b] || 0) - (challengeData.scores[a] || 0));
-            const top10Ids = sortedParticipantIds.slice(0, 10);
-            
-            if (top10Ids.length > 0) {
-                const usersQuery = query(collection(db, 'users'), where('__name__', 'in', top10Ids));
-                const usersSnapshot = await getDocs(usersQuery);
-                const topUsersData = usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
-                challengeData.participants = topUsersData.sort((a, b) => (challengeData.scores[b.uid] || 0) - (challengeData.scores[a.uid] || 0));
-            } else {
-                challengeData.participants = [];
-            }
-        } else {
-             challengeData.participants = [];
-        }
-
-        return challengeData;
-
-    } catch (error) {
-        console.error("Error fetching challenge details:", error);
-        return null;
+    const scores = (ch.scores ?? {}) as Record<string, number>;
+    const ids = Object.keys(scores);
+    if (!ids.length) {
+      (ch as any).participants = [];
+      return ch;
     }
+
+    const top10 = ids.sort((a, b) => (scores[b] ?? 0) - (scores[a] ?? 0)).slice(0, 10);
+
+    const participants: UserProfile[] = [];
+    for (const group of chunk(top10, IN_MAX)) {
+      const qUsers = query(collection(db, USERS_COLLECTION), where('__name__', 'in', group));
+      const usersSnap = await getDocs(qUsers);
+      usersSnap.docs.forEach((u) => participants.push({ uid: u.id, ...(u.data() as DocumentData) } as UserProfile));
+    }
+
+    (ch as any).participants = participants.sort((a, b) => (scores[b.uid] ?? 0) - (scores[a.uid] ?? 0));
+    return ch;
+  } catch (error) {
+    console.error('Error fetching challenge details:', error);
+    return null;
+  }
 }
 
+// --------------------------------------------------
+// Mutations (Public)
+// --------------------------------------------------
 
 /**
  * Allows a user to join a challenge.
- * @param {string} challengeId - The ID of the challenge to join.
- * @param {string} userId - The ID of the user joining.
- * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function joinChallenge(challengeId: string, userId: string): Promise<{ success: boolean; error?: string }> {
-    const challengeRef = doc(db, 'challenges', challengeId);
-    const userRef = doc(db, 'users', userId);
-    
-    return runTransaction(db, async (transaction) => {
-        const [challengeDoc, userDoc] = await Promise.all([
-            transaction.get(challengeRef),
-            transaction.get(userRef)
-        ]);
+export async function joinChallenge(
+  challengeId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  const challengeRef = doc(db, CHALLENGES_COLLECTION, challengeId);
+  const userRef = doc(db, USERS_COLLECTION, userId);
 
-        if (!challengeDoc.exists()) {
-            throw new Error("البطولة غير موجودة.");
+  try {
+    await runTransaction(db, async (tx) => {
+      const [challengeDoc, userDoc] = await Promise.all([
+        tx.get(challengeRef),
+        tx.get(userRef),
+      ]);
+
+      if (!challengeDoc.exists()) throw new Error('البطولة غير موجودة.');
+      if (!userDoc.exists()) throw new Error('المستخدم غير موجود.');
+
+      const ch = challengeDoc.data() as Challenge;
+      const now = new Date();
+      const endsAt = asDate((ch as any).endsAt) ?? now;
+      if (endsAt.getTime() <= now.getTime()) {
+        throw new Error('انتهت مدة البطولة، لا يمكن الانضمام.');
+      }
+
+      const participants = (ch.participantIds ?? []) as string[];
+      if (participants.includes(userId)) throw new Error('أنت مشترك بالفعل في هذه البطولة.');
+
+      // Handle entry fee (optional)
+      const fee = (ch as any).entryFee as { type?: string; value?: number } | undefined;
+      if (fee && fee.value && fee.value > 0 && fee.type) {
+        const key = prizeFieldKey(fee.type as any);
+        const user = userDoc.data() as UserProfile;
+        const current = (user as any)[key] ?? 0;
+        if ((current as number) < fee.value) {
+          const label = key === 'coins' ? 'الكوينز' : key === 'leaderboardPoints' ? 'نقاط الصدارة' : String(key);
+          throw new Error(`ليس لديك ما يكفي من ${label} للانضمام (المطلوب: ${fee.value}).`);
         }
-        if (!userDoc.exists()) {
-            throw new Error("المستخدم غير موجود.");
-        }
-        const challengeData = challengeDoc.data() as Challenge;
-        const userData = userDoc.data() as UserProfile;
+        tx.update(userRef, { [key]: increment(-fee.value) });
+      }
 
-        if (challengeData.participantIds?.includes(userId)) {
-            throw new Error("أنت مشترك بالفعل في هذه البطولة.");
-        }
+      tx.update(challengeRef, {
+        participantIds: arrayUnion(userId),
+        participantCount: increment(1),
+        [`scores.${userId}`]: 0,
+      });
 
-        if (challengeData.entryFee && challengeData.entryFee.value > 0) {
-            const { type, value } = challengeData.entryFee;
-            const userCurrency = type === 'coins' ? userData.coins : userData.leaderboardPoints;
-            if ((userCurrency || 0) < value) {
-                throw new Error(`ليس لديك ما يكفي من ${type === 'coins' ? 'الكوينز' : 'نقاط الصدارة'} للانضمام (المطلوب: ${value}).`);
-            }
-            transaction.update(userRef, { [type]: increment(-value) });
-        }
-
-
-        transaction.update(challengeRef, {
-            participantIds: arrayUnion(userId),
-            participantCount: increment(1),
-            [`scores.${userId}`]: 0,
-        });
-
-        transaction.update(userRef, {
-            challenges: arrayUnion({
-                id: challengeId,
-                title: challengeData.title,
-                joinedAt: Timestamp.now(),
-            })
-        });
-
-        return { success: true };
-    }).catch((error: any) => {
-        console.error("Error joining challenge:", error);
-        return { success: false, error: error.message || "فشل الانضمام للبطولة." };
+      tx.update(userRef, {
+        challenges: arrayUnion({ id: challengeId, title: (ch as any).title, joinedAt: Timestamp.now() }),
+      });
     });
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error joining challenge:', error);
+    return { success: false, error: error?.message || 'فشل الانضمام للبطولة.' };
+  }
 }
+
+// --------------------------------------------------
+// Admin Mutations
+// --------------------------------------------------
 
 /**
  * Updates an existing challenge. Admin only.
- * @param {string} challengeId - The ID of the challenge to update.
- * @param {Partial<Challenge>} data - The data to update.
- * @returns {Promise<{ success: boolean; error?: string }>}
  */
-export async function updateChallenge(challengeId: string, data: Partial<Omit<Challenge, 'id' | 'createdAt' | 'participantCount' | 'participantIds' | 'scores'>> & {durationInHours?: number}): Promise<{ success: boolean; error?: string }> {
-    try {
-        const challengeRef = doc(db, 'challenges', challengeId);
-        let updateData: any = { ...data };
+export async function updateChallenge(
+  challengeId: string,
+  data: Partial<Omit<Challenge, 'id' | 'createdAt' | 'participantCount' | 'participantIds' | 'scores' | 'winners' | 'claimedBy'>> & {
+    durationInHours?: number;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const ref = doc(db, CHALLENGES_COLLECTION, challengeId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) throw new Error('البطولة غير موجودة.');
 
-        const docSnap = await getDoc(challengeRef);
-        if(!docSnap.exists()){
-            throw new Error("Challenge not found.");
-        }
-        const challenge = docSnap.data() as Challenge;
-        
-        if (updateData.durationInHours) {
-            const createdAt = challenge.createdAt instanceof Timestamp ? challenge.createdAt.toDate() : new Date();
-            updateData.endsAt = Timestamp.fromMillis(createdAt.getTime() + updateData.durationInHours * 60 * 60 * 1000);
-            delete updateData.durationInHours;
-        }
+    const ch = snap.data() as Challenge;
+    const cleanUpdate = stripIllegalUpdateFields({ ...data });
 
-        await updateDoc(challengeRef, updateData);
-        return { success: true };
-    } catch (error: any) {
-        console.error("Error updating challenge:", error);
-        return { success: false, error: "فشل تحديث البطولة." };
+    if (typeof cleanUpdate.durationInHours !== 'undefined') {
+      const createdAt = asDate((ch as any).createdAt) ?? new Date();
+      cleanUpdate.endsAt = computeEndsAt(createdAt, Number(cleanUpdate.durationInHours));
+      delete (cleanUpdate as any).durationInHours;
     }
+
+    await updateDoc(ref, cleanUpdate);
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error updating challenge:', error);
+    return { success: false, error: 'فشل تحديث البطولة.' };
+  }
 }
 
 /**
  * Deletes a challenge. Admin only.
- * @param {string} challengeId - The ID of the challenge to delete.
- * @returns {Promise<{ success: boolean; error?: string }>}
  */
 export async function deleteChallenge(challengeId: string): Promise<{ success: boolean; error?: string }> {
-    try {
-        const challengeRef = doc(db, 'challenges', challengeId);
-        await deleteDoc(challengeRef);
-        return { success: true };
-    } catch (error: any) {
-        console.error("Error deleting challenge:", error);
-        return { success: false, error: "فشل حذف البطولة." };
-    }
+  try {
+    await deleteDoc(doc(db, CHALLENGES_COLLECTION, challengeId));
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting challenge:', error);
+    return { success: false, error: 'فشل حذف البطولة.' };
+  }
 }
 
+/**
+ * Admin list (larger page) — latest 50.
+ */
 export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
-     try {
-        const challengesCol = collection(db, 'challenges');
-        const q = query(challengesCol, orderBy('createdAt', 'desc'), limit(50));
-        const snapshot = await getDocs(q);
-        
-        return snapshot.docs.map(doc => {
-            const data = doc.data();
-            const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date();
-            const endsAt = data.endsAt instanceof Timestamp ? data.endsAt.toDate() : new Date();
-            return {
-                id: doc.id,
-                ...data,
-                createdAt,
-                endsAt,
-            } as Challenge;
-        });
-
-    } catch (error) {
-        console.error("Error fetching all challenges for admin:", error);
-        return [];
-    }
-}
-
-async function updateChallengeScores(challenge: Challenge): Promise<Record<string, number>> {
-    const participants = challenge.participantIds || [];
-    if (participants.length === 0) {
-        return challenge.scores || {};
-    }
-    
-    const eventsRef = collection(db, 'social_events');
-
-    const q = query(eventsRef, 
-        where('type', '==', 'game_points_scored'),
-        where('timestamp', '>=', challenge.createdAt),
-        where('timestamp', '<=', challenge.endsAt)
+  try {
+    const qChallenges = query(
+      collection(db, CHALLENGES_COLLECTION),
+      orderBy('createdAt', 'desc'),
+      limit(50)
     );
-
-    const snapshot = await getDocs(q);
-    const newScores: Record<string, number> = {};
-
-    participants.forEach(id => newScores[id] = 0);
-    
-    snapshot.docs.forEach(doc => {
-        const event = doc.data() as GamePointsScoredEvent;
-        // Check if the event player is a participant of this challenge
-        if (participants.includes(event.playerId) &&
-            (challenge.specificGameType === 'all' || challenge.specificGameType === event.gameType)
-        ) {
-            newScores[event.playerId] = (newScores[event.playerId] || 0) + event.points;
-        }
+    const snapshot = await getDocs(qChallenges);
+    return snapshot.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...(data as DocumentData),
+        createdAt: asDate((data as any).createdAt) ?? new Date(),
+        endsAt: asDate((data as any).endsAt) ?? new Date(),
+      } as unknown as Challenge;
     });
-
-    await updateDoc(doc(db, 'challenges', challenge.id), { scores: newScores });
-
-    return newScores;
+  } catch (error) {
+    console.error('Error fetching all challenges for admin:', error);
+    return [];
+  }
 }
 
-export async function finalizeChallenge(challengeId: string): Promise<{ success: boolean; winnersCount: number; error?: string }> {
-    const challengeRef = doc(db, 'challenges', challengeId);
-    
-    return runTransaction(db, async (transaction) => {
-        const challengeDoc = await transaction.get(challengeRef);
-        if (!challengeDoc.exists()) throw new Error("Challenge not found.");
-        
-        let challengeData = challengeDoc.data() as Challenge;
+// --------------------------------------------------
+// Scoring & Finalization
+// --------------------------------------------------
 
-        if (challengeData.winners) {
-            // Already finalized, just return.
-            return { success: true, winnersCount: Object.keys(challengeData.winners).length };
-        }
+/**
+ * Rebuild scores for a given challenge based on GamePointsScoredEvent within window.
+ * Writes the recomputed scores to the challenge document and returns them.
+ */
+async function updateChallengeScores(challenge: Challenge): Promise<Record<string, number>> {
+  const participants: string[] = (challenge.participantIds ?? []) as string[];
+  if (!participants.length) return challenge.scores ?? {};
 
-        const scores = challengeData.scores || {};
-        const sortedWinners = Object.entries(scores)
-            .sort(([, scoreA], [, scoreB]) => scoreB - scoreA)
-            .slice(0, 3);
+  const createdAt = asDate((challenge as any).createdAt) ?? new Date(0);
+  const endsAt = asDate((challenge as any).endsAt) ?? new Date();
 
-        const winners: Challenge['winners'] = {};
-        const prizeAwardBatch: { userId: string, prize: ChallengePrize[], rank: number }[] = [];
-        
-        if (sortedWinners.length > 0) {
-            const firstPlaceId = sortedWinners[0][0];
-            winners.first = { id: firstPlaceId, name: 'Unknown' }; // Placeholder, will be updated
-            if (challengeData.firstPlacePrize?.length > 0) {
-                prizeAwardBatch.push({ userId: firstPlaceId, prize: challengeData.firstPlacePrize, rank: 1 });
-            }
-        }
-        
-        if (sortedWinners.length > 1) {
-            const secondPlaceId = sortedWinners[1][0];
-            winners.second = { id: secondPlaceId, name: 'Unknown' };
-            if (challengeData.secondPlacePrize?.length > 0) {
-                prizeAwardBatch.push({ userId: secondPlaceId, prize: challengeData.secondPlacePrize, rank: 2 });
-            }
-        }
-        
-        if (sortedWinners.length > 2) {
-            const thirdPlaceId = sortedWinners[2][0];
-            winners.third = { id: thirdPlaceId, name: 'Unknown' };
-            if (challengeData.thirdPlacePrize?.length > 0) {
-                prizeAwardBatch.push({ userId: thirdPlaceId, prize: challengeData.thirdPlacePrize, rank: 3 });
-            }
-        }
+  // Build query — prefer using Timestamp for range filters
+  const qEvents = query(
+    collection(db, EVENTS_COLLECTION),
+    where(EVENTS_TYPE_FIELD, '==', 'game_points_scored'),
+    where(EVENTS_TIMESTAMP_FIELD, '>=', Timestamp.fromMillis(createdAt.getTime())),
+    where(EVENTS_TIMESTAMP_FIELD, '<=', Timestamp.fromMillis(endsAt.getTime()))
+  );
 
-        // Fetch winner user data to get names
-        const winnerIds = Object.values(winners).map(w => w.id);
-        if (winnerIds.length > 0) {
-            const usersQuery = query(collection(db, 'users'), where('__name__', 'in', winnerIds));
-            const usersSnapshot = await getDocs(usersQuery);
-            const usersData = new Map<string, UserProfile>();
-            usersSnapshot.forEach(d => usersData.set(d.id, d.data() as UserProfile));
+  const snap = await getDocs(qEvents);
+  const newScores: Record<string, number> = Object.fromEntries(participants.map((id) => [id, 0]));
 
-            if(winners.first && usersData.has(winners.first.id)) winners.first.name = usersData.get(winners.first.id)!.name;
-            if(winners.second && usersData.has(winners.second.id)) winners.second.name = usersData.get(winners.second.id)!.name;
-            if(winners.third && usersData.has(winners.third.id)) winners.third.name = usersData.get(winners.third.id)!.name;
-        }
+  snap.docs.forEach((d) => {
+    const ev = d.data() as GamePointsScoredEvent;
+    const pid = (ev as any).playerId as string;
+    const gtype = (ev as any).gameType as Game | 'all' | undefined;
+    const pts = (ev as any).points as number;
 
-        // Update challenge with winner info
-        transaction.update(challengeRef, { winners: winners, claimedBy: [] });
-        
-        // Award prizes and send mail
-        for (const award of prizeAwardBatch) {
-            const userRef = doc(db, 'users', award.userId);
-            const userUpdates: { [key: string]: any } = {};
-            
-            award.prize.forEach(p => {
-                userUpdates[p.type] = increment(p.value);
-            });
+    if (!pid || typeof pts !== 'number') return;
 
-            transaction.update(userRef, userUpdates);
+    const allowGame = (challenge as any).specificGameType === 'all' || !((challenge as any).specificGameType) || (challenge as any).specificGameType === gtype;
+    if (allowGame && participants.includes(pid)) {
+      newScores[pid] = (newScores[pid] ?? 0) + pts;
+    }
+  });
 
-            const prizeDescriptions = award.prize.map(p => `${p.value} ${p.type === 'coins' ? 'كوينز' : p.type === 'diamonds' ? 'ألماس' : 'نقاط شرف'}`).join('، ');
-
-             await sendSystemMail(
-                award.userId,
-                {
-                    subject: `لقد فزت بالمركز ${award.rank} في البطولة!`,
-                    body: `تهانينا! لقد فزت بالمركز ${award.rank} في بطولة "${challengeData.title}". تمت إضافة: ${prizeDescriptions} إلى رصيدك.`,
-                },
-                transaction
-            );
-        }
-
-        return { success: true, winnersCount: Object.keys(winners).length };
-
-    }).catch((error: any) => {
-        console.error("Error finalizing challenge:", error);
-        return { success: false, winnersCount: 0, error: error.message };
-    });
+  await updateDoc(doc(db, CHALLENGES_COLLECTION, (challenge as any).id), { scores: newScores });
+  return newScores;
 }
+
+/**
+ * Finalizes a challenge, computes top 3, writes winners, and awards prizes.
+ *
+ * NOTE: We recompute scores BEFORE the transaction, then in a transaction we
+ * write winners + balances (no external calls). After commit, we send mails.
+ */
+export async function finalizeChallenge(
+  challengeId: string
+): Promise<{ success: boolean; winnersCount: number; error?: string }> {
+  const challengeRef = doc(db, CHALLENGES_COLLECTION, challengeId);
+
+  try {
+    // Phase 1: Ensure scores are up to date (outside transaction)
+    const existing = await getDoc(challengeRef);
+    if (!existing.exists()) throw new Error('Challenge not found.');
+    const challengeData = { id: existing.id, ...(existing.data() as DocumentData) } as unknown as Challenge;
+
+    // Optional: prevent early finalization
+    const now = new Date();
+    const endsAt = asDate((challengeData as any).endsAt) ?? now;
+    if (now.getTime() < endsAt.getTime()) {
+      // Allowing finalization before end is usually a mistake — guard it.
+      throw new Error('لا يمكن إنهاء البطولة قبل موعد الانتهاء.');
+    }
+
+    await updateChallengeScores(challengeData);
+
+    // Phase 2: Transaction — compute winners and award prizes
+    type AwardPlan = { userId: string; prize: ChallengePrize[]; rank: 1 | 2 | 3 };
+    const awardPlans: AwardPlan[] = [];
+    let winnersWritten: number = 0;
+    let winnersPayload: Challenge['winners'] | undefined;
+
+    await runTransaction(db, async (tx) => {
+      const fresh = await tx.get(challengeRef);
+      if (!fresh.exists()) throw new Error('Challenge not found.');
+      const ch = fresh.data() as Challenge;
+
+      if ((ch as any).winners) {
+        // Already finalized
+        winnersWritten = Object.keys((ch as any).winners || {}).length;
+        winnersPayload = (ch as any).winners;
+        return;
+      }
+
+      const scores = (ch.scores ?? {}) as Record<string, number>;
+      const sorted = Object.entries(scores).sort(([, a], [, b]) => (b ?? 0) - (a ?? 0));
+
+      const winners: Challenge['winners'] = {} as Challenge['winners'];
+
+      if (sorted[0]) {
+        const firstId = sorted[0][0];
+        winners.first = { id: firstId, name: 'Unknown' } as any;
+        if ((ch as any).firstPlacePrize?.length) awardPlans.push({ userId: firstId, prize: (ch as any).firstPlacePrize, rank: 1 });
+      }
+      if (sorted[1]) {
+        const secondId = sorted[1][0];
+        winners.second = { id: secondId, name: 'Unknown' } as any;
+        if ((ch as any).secondPlacePrize?.length) awardPlans.push({ userId: secondId, prize: (ch as any).secondPlacePrize, rank: 2 });
+      }
+      if (sorted[2]) {
+        const thirdId = sorted[2][0];
+        winners.third = { id: thirdId, name: 'Unknown' } as any;
+        if ((ch as any).thirdPlacePrize?.length) awardPlans.push({ userId: thirdId, prize: (ch as any).thirdPlacePrize, rank: 3 });
+      }
+
+      // Apply balance updates inside the transaction, but DO NOT send emails here.
+      for (const plan of awardPlans) {
+        const uref = doc(db, USERS_COLLECTION, plan.userId);
+        const updates: Record<string, any> = {};
+        for (const p of plan.prize) {
+          const key = prizeFieldKey(p.type);
+          updates[key] = increment(p.value);
+        }
+        tx.update(uref, updates);
+      }
+
+      tx.update(challengeRef, { winners, claimedBy: [] });
+
+      winnersWritten = Object.keys(winners).length;
+      winnersPayload = winners;
+    });
+
+    // Phase 3: Post-commit side effects — Fetch winner names & send mails
+    if (winnersWritten > 0 && winnersPayload) {
+      const ids = [winnersPayload.first?.id, winnersPayload.second?.id, winnersPayload.third?.id].filter(Boolean) as string[];
+
+      const usersMap = new Map<string, UserProfile>();
+      for (const group of chunk(ids, IN_MAX)) {
+        const qUsers = query(collection(db, USERS_COLLECTION), where('__name__', 'in', group));
+        const usersSnap = await getDocs(qUsers);
+        usersSnap.docs.forEach((u) => usersMap.set(u.id, u.data() as UserProfile));
+      }
+
+      const firstName = winnersPayload.first ? getDisplayName(usersMap.get(winnersPayload.first.id)) : undefined;
+      const secondName = winnersPayload.second ? getDisplayName(usersMap.get(winnersPayload.second.id)) : undefined;
+      const thirdName = winnersPayload.third ? getDisplayName(usersMap.get(winnersPayload.third.id)) : undefined;
+
+      // Update names (best-effort, no race impact if it fails)
+      await updateDoc(challengeRef, {
+        'winners.first.name': firstName ?? 'Unknown',
+        'winners.second.name': secondName ?? 'Unknown',
+        'winners.third.name': thirdName ?? 'Unknown',
+      }).catch(() => void 0);
+
+      // Send mails (non-transactional, avoids duplicates on txn retries)
+      const mailPlans: Array<{ uid: string; rank: number; prizes: ChallengePrize[] }> = [];
+      if (winnersPayload.first && (existing.data() as any).firstPlacePrize?.length) mailPlans.push({ uid: winnersPayload.first.id, rank: 1, prizes: (existing.data() as any).firstPlacePrize });
+      if (winnersPayload.second && (existing.data() as any).secondPlacePrize?.length) mailPlans.push({ uid: winnersPayload.second.id, rank: 2, prizes: (existing.data() as any).secondPlacePrize });
+      if (winnersPayload.third && (existing.data() as any).thirdPlacePrize?.length) mailPlans.push({ uid: winnersPayload.third.id, rank: 3, prizes: (existing.data() as any).thirdPlacePrize });
+
+      for (const m of mailPlans) {
+        const desc = m.prizes
+          .map((p) => `${p.value} ${p.type === 'coins' ? 'كوينز' : p.type === 'diamonds' ? 'ألماس' : p.type === 'leaderboardPoints' ? 'نقاط الصدارة' : 'نقاط شرف'}`)
+          .join('، ');
+        await sendSystemMail(m.uid, {
+          subject: `لقد فزت بالمركز ${m.rank} في البطولة!`,
+          body: `تهانينا! لقد فزت بالمركز ${m.rank} في بطولة "${(challengeData as any).title}". تمت إضافة: ${desc} إلى رصيدك.`,
+        }).catch(() => void 0);
+      }
+    }
+
+    return { success: true, winnersCount: winnersWritten };
+  } catch (error: any) {
+    console.error('Error finalizing challenge:', error);
+    return { success: false, winnersCount: 0, error: error?.message };
+  }
+}
+
+// --------------------------------------------------
+// Notes / Indexes (for reference)
+// --------------------------------------------------
+/**
+ * Required Firestore indexes (ensure via Firebase console):
+ * - social_events: composite index on (type == 'game_points_scored', timestamp ASC/DESC) for the range query.
+ * - challenges: createdAt ordered queries.
+ */

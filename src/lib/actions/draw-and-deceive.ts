@@ -8,13 +8,15 @@ import type {
   DrawAndDeceiveState,
   DrawAndDeceiveRoundResult,
 } from '@/types';
-import { shuffle } from './helpers';
+import { shuffle, safeCompareStrings } from './helpers';
+import { WORD_WAR_WORDS } from '@/data/word-war-words';
 import { distributeEndOfGameAwards } from './admin/users';
 
-/* ----------------------------- Constants ----------------------------- */
 
+/* ----------------------------- Constants ----------------------------- */
 const DEFAULT_SETTINGS = {
   drawingTime: 120,
+  writingTime: 20, // New setting for the writing phase
   trappingTime: 45,
   guessingTime: 60,
   resultsTime: 20,
@@ -23,20 +25,18 @@ const DEFAULT_SETTINGS = {
 
 const MAX_ROUNDS = 10;
 const MIN_ROUNDS = 1;
-const MAX_ANSWER_LEN = 30;
+const MAX_ANSWER_LEN = 20; // As per new request
 
 /* ------------------------------ Utilities ---------------------------- */
-
 const inSec = (s: number) => Timestamp.fromMillis(Date.now() + s * 1000);
 const ensure = (condition: any, message: string): asserts condition => {
   if (!condition) throw new Error(message);
 };
 
-// تطبيع الإجابات: تقليم + طيّ المسافات + التحقق أنها كلمة أو كلمتان
 const normalizeAnswer = (raw: string): string => {
   const trimmed = (raw ?? '').trim().replace(/\s+/g, ' ');
   if (!trimmed) throw new Error('النص فارغ.');
-  if (trimmed.length > MAX_ANSWER_LEN) throw new Error('النص طويل جداً.');
+  if (trimmed.length > MAX_ANSWER_LEN) throw new Error(`الوصف طويل جدًا (الحد الأقصى ${MAX_ANSWER_LEN} حرفًا).`);
   const words = trimmed.split(' ');
   if (words.length > 2) throw new Error('الوصف يجب أن يكون كلمة أو كلمتين فقط.');
   return trimmed;
@@ -56,12 +56,10 @@ const nextActiveArtist = (
       return { nextIndex: idx, artistId: candidate };
     }
   }
-  // إن لم يوجد أي لاعب فعّال (حالة نادرة)
   return { nextIndex: currentTurnIndex, artistId: turnOrder[currentTurnIndex]! };
 };
 
 /* ------------------------- Round Result Logic ------------------------ */
-
 type RoundScoreBucket = {
   points: number;
   breakdown: { reason: string; points: number }[];
@@ -94,7 +92,7 @@ const calculateRoundResults = (
     (a): a is string => !!a
   );
 
-  // تهيئة السلال لكل اللاعبين
+  // Initialize score buckets for all players
   game.players.forEach(p => {
     if (!scores[p.id]) scores[p.id] = { points: 0, breakdown: [] };
   });
@@ -115,15 +113,13 @@ const calculateRoundResults = (
     answersResult.push({ answer, isCorrect, authorIds, guesserIds });
 
     if (isCorrect) {
-      // +1 للرسام عن كل تخمين صحيح (غير الفنان)
       guesserIds.forEach(guesserId => {
         if (guesserId !== state.artistId) {
-            addScore(guesserId, 2, 'إجابة صحيحة');
-            addScore(state.artistId!, 1, `تخمين صحيح من ${getPlayer(guesserId)?.name || 'لاعب'}`);
+          addScore(guesserId, 2, 'إجابة صحيحة');
+          addScore(state.artistId!, 1, `تخمين صحيح من ${getPlayer(guesserId)?.name || 'لاعب'}`);
         }
       });
     } else {
-      // فخ: -3 إذا صوّت المؤلف لنفسه، وإلا +2 لمؤلف(ي) الفخ عن كل ضحية
       guesserIds.forEach(guesserId => {
         if (authorIds.includes(guesserId)) {
           addScore(guesserId, -3, 'صوّت لنفسه');
@@ -143,7 +139,6 @@ const calculateRoundResults = (
 };
 
 /* ------------------------------- Start ------------------------------- */
-
 export async function startGame(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async tx => {
@@ -168,7 +163,6 @@ export async function startGame(gameId: string, hostId: string) {
       round: 1,
       phase: 'drawing',
       artistId: turnOrder[0]!,
-      wordToDraw: null, // Artist will decide
       playerTraps: {},
       playerGuesses: {},
       shuffledAnswers: [],
@@ -184,13 +178,7 @@ export async function startGame(gameId: string, hostId: string) {
 }
 
 /* ---------------------------- Drawing Phase -------------------------- */
-
-export async function submitDrawing(
-  gameId: string,
-  playerId: string,
-  drawingDataUrl: string,
-  correctAnswer: string
-) {
+export async function submitDrawing(gameId: string, playerId: string, drawingDataUrl: string) {
   const gameRef = doc(db, 'games', gameId);
 
   await runTransaction(db, async tx => {
@@ -204,12 +192,34 @@ export async function submitDrawing(
     ensure(state.artistId === playerId, 'Only the artist can submit a drawing.');
     ensure(!!drawingDataUrl, 'Drawing data is missing.');
 
+    const writingTime = state.settings?.writingTime ?? DEFAULT_SETTINGS.writingTime;
+
+    tx.update(gameRef, {
+      'drawAndDeceiveState.phase': 'writing',
+      'drawAndDeceiveState.drawingDataUrl': drawingDataUrl,
+      'drawAndDeceiveState.timerEndsAt': inSec(writingTime),
+    });
+  });
+}
+
+/* ---------------------------- Writing Phase -------------------------- */
+export async function submitCorrectAnswer(gameId: string, playerId: string, correctAnswer: string) {
+  const gameRef = doc(db, 'games', gameId);
+  await runTransaction(db, async tx => {
+    const gameSnap = await tx.get(gameRef);
+    ensure(gameSnap.exists(), 'Game not found.');
+    const game = gameSnap.data() as Game;
+
+    const state = game.drawAndDeceiveState;
+    ensure(state, 'Game state not initialized.');
+    ensure(state.phase === 'writing', 'Not in the writing phase.');
+    ensure(state.artistId === playerId, 'Only the artist can submit the answer.');
+
     const normalized = normalizeAnswer(correctAnswer);
     const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
 
     tx.update(gameRef, {
       'drawAndDeceiveState.phase': 'trapping',
-      'drawAndDeceiveState.drawingDataUrl': drawingDataUrl,
       'drawAndDeceiveState.correctAnswer': normalized,
       'drawAndDeceiveState.timerEndsAt': inSec(trappingTime),
     });
@@ -217,7 +227,6 @@ export async function submitDrawing(
 }
 
 /* ---------------------------- Trapping Phase ------------------------- */
-
 export async function submitTrap(gameId: string, playerId: string, trap: string) {
   const gameRef = doc(db, 'games', gameId);
 
@@ -233,22 +242,31 @@ export async function submitTrap(gameId: string, playerId: string, trap: string)
     ensure(!state.playerTraps[playerId], 'Trap already submitted.');
 
     const normalizedTrap = normalizeAnswer(trap);
+
+    // Reject traps similar to the correct answer
+    if(state.correctAnswer) {
+        const similarity = safeCompareStrings(normalizedTrap, state.correctAnswer);
+        if (similarity >= 0.70) {
+            throw new Error('فخك شديد الشبه بالإجابة الصحيحة. حاول مجددًا.');
+        }
+    }
+
     const updatedTraps = { ...state.playerTraps, [playerId]: normalizedTrap };
 
     tx.update(gameRef, {
       'drawAndDeceiveState.playerTraps': updatedTraps,
     });
 
-    // تحقق من اكتمال الجميع (اللاعبين النشِطين غير الفنان)
     const activePlayers = game.players.filter(p => p.status !== 'left');
     const nonArtists = activePlayers.filter(p => p.id !== state.artistId);
 
     if (Object.keys(updatedTraps).length === nonArtists.length) {
       const correct = state.correctAnswer;
+      ensure(correct, 'Correct answer is missing.');
       const allAnswers = [correct, ...Object.values(updatedTraps)].filter((a): a is string => !!a);
       const shuffledAnswers = shuffle(allAnswers);
-
       const guessingTime = state.settings?.guessingTime ?? DEFAULT_SETTINGS.guessingTime;
+      
       tx.update(gameRef, {
         'drawAndDeceiveState.phase': 'guessing',
         'drawAndDeceiveState.shuffledAnswers': shuffledAnswers,
@@ -259,7 +277,6 @@ export async function submitTrap(gameId: string, playerId: string, trap: string)
 }
 
 /* ---------------------------- Guessing Phase ------------------------- */
-
 export async function submitGuess(gameId: string, playerId: string, guess: string) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async tx => {
@@ -274,22 +291,14 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
     ensure(!state.playerGuesses[playerId], 'Guess already submitted.');
 
     const normalizedGuess = normalizeAnswer(guess);
-
-    // تأكد أن الاختيار ضمن القائمة المعروضة
-    ensure(
-      (state.shuffledAnswers || []).includes(normalizedGuess),
-      'Invalid answer choice.'
-    );
+    ensure((state.shuffledAnswers || []).includes(normalizedGuess), 'Invalid answer choice.');
 
     const updatedGuesses = { ...state.playerGuesses, [playerId]: normalizedGuess };
     tx.update(gameRef, {
       'drawAndDeceiveState.playerGuesses': updatedGuesses,
     });
 
-    // عند اكتمال جميع التخمينات (اللاعبين النشِطين غير الفنان)
-    const activePlayers = game.players.filter(
-      p => p.status !== 'left' && p.id !== state.artistId
-    );
+    const activePlayers = game.players.filter(p => p.status !== 'left' && p.id !== state.artistId);
     if (Object.keys(updatedGuesses).length === activePlayers.length) {
       const { resultsState, updatedPlayerScores } = calculateRoundResults(game, updatedGuesses);
       const resultsTime = state.settings?.resultsTime ?? DEFAULT_SETTINGS.resultsTime;
@@ -304,7 +313,6 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 }
 
 /* ---------------------- Results & Next Round / Timeout --------------------- */
-
 export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   let isGameOver = false;
@@ -317,11 +325,10 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
     ensure(game.hostId === hostId, 'Only host can advance the game.');
     ensure(state && state.timerEndsAt && state.timerEndsAt.toMillis() <= Date.now(), 'Timer has not expired yet.');
-
+    
     if (state.phase === 'results') {
       const nextRound = (state.round || 0) + 1;
       if (nextRound > state.settings.rounds) {
-        // إعلان الفائز
         const entries = Object.entries(game.playerScores || {});
         const winnerId = entries.sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] || 'none';
         const gameResult = { winner: winnerId, message: `The winner is determined!` };
@@ -333,20 +340,13 @@ export async function handleTimeout(gameId: string, hostId: string) {
         });
         isGameOver = true;
       } else {
-        // حدد الفنان التالي الفعّال
-        const { nextIndex, artistId } = nextActiveArtist(
-          state.turnOrder,
-          state.currentTurnIndex,
-          game.players
-        );
-
+        const { nextIndex, artistId } = nextActiveArtist(state.turnOrder, state.currentTurnIndex, game.players);
         tx.update(gameRef, {
           gameState: 'drawing',
           'drawAndDeceiveState.phase': 'drawing',
           'drawAndDeceiveState.round': nextRound,
           'drawAndDeceiveState.currentTurnIndex': nextIndex,
           'drawAndDeceiveState.artistId': artistId,
-          'drawAndDeceiveState.wordToDraw': null,
           'drawAndDeceiveState.drawingDataUrl': null,
           'drawAndDeceiveState.correctAnswer': null,
           'drawAndDeceiveState.playerTraps': {},
@@ -357,49 +357,44 @@ export async function handleTimeout(gameId: string, hostId: string) {
         });
       }
     } else if (state.phase === 'drawing') {
-      // لم يرسل الفنان: ننتقل للتلغيم مع تثبيت الإجابة الصحيحة إلى الكلمة المطلوبة
-      const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
+      // Artist didn't submit a drawing, skip their turn essentially.
+      // We need a correct answer to proceed. We'll pick a random word.
+      const randomWord = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)];
       tx.update(gameRef, {
         'drawAndDeceiveState.phase': 'trapping',
-        'drawAndDeceiveState.correctAnswer': state.correctAnswer ?? state.wordToDraw,
-        'drawAndDeceiveState.timerEndsAt': inSec(trappingTime),
+        'drawAndDeceiveState.correctAnswer': randomWord,
+        'drawAndDeceiveState.timerEndsAt': inSec(state.settings.trappingTime),
       });
+    } else if (state.phase === 'writing') {
+        // Artist didn't submit a description. Pick a random word.
+        const randomWord = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)];
+        tx.update(gameRef, {
+          'drawAndDeceiveState.phase': 'trapping',
+          'drawAndDeceiveState.correctAnswer': randomWord,
+          'drawAndDeceiveState.timerEndsAt': inSec(state.settings.trappingTime),
+        });
     } else if (state.phase === 'trapping') {
-      // ننتقل للتخمين بما هو متاح
       const correct = state.correctAnswer;
-      const allAnswers = [correct, ...Object.values(state.playerTraps)].filter(
-        (a): a is string => !!a
-      );
+      ensure(correct, 'Correct answer is missing for timeout.');
+      const allAnswers = [correct, ...Object.values(state.playerTraps)].filter((a): a is string => !!a);
       const shuffledAnswers = shuffle(allAnswers);
-      const guessingTime = state.settings?.guessingTime ?? DEFAULT_SETTINGS.guessingTime;
-
       tx.update(gameRef, {
         'drawAndDeceiveState.phase': 'guessing',
         'drawAndDeceiveState.shuffledAnswers': shuffledAnswers,
-        'drawAndDeceiveState.timerEndsAt': inSec(guessingTime),
+        'drawAndDeceiveState.timerEndsAt': inSec(state.settings.guessingTime),
       });
     } else if (state.phase === 'guessing') {
-      // نحتسب النتائج بما هو متاح
-      const { resultsState, updatedPlayerScores } = calculateRoundResults(
-        game,
-        state.playerGuesses
-      );
-      const resultsTime = state.settings?.resultsTime ?? DEFAULT_SETTINGS.resultsTime;
-
+      const { resultsState, updatedPlayerScores } = calculateRoundResults(game, state.playerGuesses);
       tx.update(gameRef, {
         'drawAndDeceiveState.phase': 'results',
         'drawAndDeceiveState.lastRoundResults': resultsState,
         playerScores: updatedPlayerScores,
-        'drawAndDeceiveState.timerEndsAt': inSec(resultsTime),
+        'drawAndDeceiveState.timerEndsAt': inSec(state.settings.resultsTime),
       });
     }
   });
 
   if (isGameOver) {
-      const res = await distributeEndOfGameAwards(gameId);
-      if (!res.success) {
-          console.error(`Failed to distribute awards for game ${gameId}:`, res.error);
-          await updateDoc(gameRef, { 'gameResult.error': res.error });
-      }
+      await distributeEndOfGameAwards(gameId);
   }
 }
