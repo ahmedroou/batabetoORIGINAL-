@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
@@ -777,7 +778,7 @@ export function DrawingCanvas({
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [disabled]);
+  }, [disabled, redo, undo]);
 
   // إعادة العرض عند تغيّر الكاميرا
   useEffect(() => {
@@ -788,9 +789,9 @@ export function DrawingCanvas({
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); renderAll(); };
 
   return (
-    <div ref={containerRef} className={cn('relative w-full select-none', className)}>
+    <div ref={containerRef} className={cn('w-full select-none flex flex-col gap-2', className)}>
       {/* شريط الأدوات */}
-      <div className="absolute z-20 left-2 top-2 right-2 flex flex-wrap gap-2 items-center bg-white/75 backdrop-blur rounded-2xl p-2 shadow">
+      <div className="flex flex-wrap gap-2 items-center bg-white/75 backdrop-blur rounded-2xl p-2 shadow">
         <div className="flex items-center gap-1">
           <Button size="icon" variant={tool === 'pen' ? 'default' : 'secondary'} onClick={() => setTool('pen')} title="قلم">
             <Pencil className="w-4 h-4" />
@@ -926,7 +927,7 @@ export function DrawingCanvas({
         {/* عناصر للجوال */}
         <div className="flex lg:hidden w-full gap-2">
           <div className="flex-1 flex items-center gap-2">
-            <span className="text-xs">سماكة</span>
+            <span className="text-xs">السماكة</span>
             <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0])} />
           </div>
           <Input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-8 p-1" />
@@ -949,7 +950,6 @@ export function DrawingCanvas({
           </div>
         )}
       </div>
-
       {/* سطح الرسم + الشبكة */}
       <div
         className={cn('relative w-full rounded-xl overflow-hidden border bg-white', disabled && 'pointer-events-none opacity-75')}
