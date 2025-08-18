@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -346,16 +347,11 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
 
         if (challengeData.winners) throw new Error("This challenge has already been finalized.");
         
-        const participantIds = challengeData.participantIds || [];
-        if (participantIds.length === 0) {
-            transaction.update(challengeRef, { winners: {} }); // Finalize with no winners
-            return { success: true, winnersCount: 0 };
-        }
-
+        // Ensure scores exist before trying to sort them
         const scores = await updateChallengeScores(challengeData);
-        challengeData.scores = scores;
+        challengeData.scores = scores || {};
         
-        const sortedWinners = Object.entries(scores)
+        const sortedWinners = Object.entries(challengeData.scores)
             .sort(([, scoreA], [, scoreB]) => scoreB - scoreA)
             .slice(0, 3);
 
@@ -420,3 +416,5 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         return { success: false, winnersCount: 0, error: error.message };
     });
 }
+
+    
