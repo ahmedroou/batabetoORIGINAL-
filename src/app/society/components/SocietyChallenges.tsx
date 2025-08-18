@@ -4,7 +4,7 @@
 import * as React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Challenge, ChallengePrize, UserProfile, EntryFee, GameKing, SocialRank, Game } from '@/types';
-import { getChallenges, joinChallenge, getChallengeDetails, getAllChallengesForAdmin, claimChallengePrize } from '@/lib/actions/challenges';
+import { getChallenges, joinChallenge, getChallengeDetails } from '@/lib/actions/challenges';
 import { getGameKings, getKingOfGames } from '@/lib/actions/user';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -84,7 +84,7 @@ const ChallengeLeaderboardDialog = ({ challenge, trigger }: { challenge: Challen
         if (details) {
             setParticipants(details.participants || []);
         }
-        setGameKings(kings);
+        setGameKings(kings as any);
         setKingOfGames(kog);
         setIsLoading(false);
     }, [isOpen, challenge.id]);
@@ -173,7 +173,6 @@ const ChallengeCard = ({ challenge, index, isEnded, onChallengeUpdate }: { chall
     const { toast } = useToast();
     const [isJoining, setIsJoining] = useState(false);
     const [isConfirmingJoin, setIsConfirmingJoin] = useState(false);
-    const [isClaiming, setIsClaiming] = useState(false);
 
     const [progress, setProgress] = useState(0);
     const [endsInLabel, setEndsInLabel] = useState('...');
@@ -218,7 +217,6 @@ const ChallengeCard = ({ challenge, index, isEnded, onChallengeUpdate }: { chall
         if (result.success) {
             toast({ title: "لقد انضممت إلى البطولة بنجاح!" });
             if (refreshUserProfile) refreshUserProfile();
-            // Optimistically update the local state
             const updatedChallenge = { ...challenge, participantIds: [...challenge.participantIds, user.uid], participantCount: challenge.participantCount + 1 };
             onChallengeUpdate(updatedChallenge);
         } else {
@@ -226,21 +224,6 @@ const ChallengeCard = ({ challenge, index, isEnded, onChallengeUpdate }: { chall
         }
         setIsJoining(false);
         setIsConfirmingJoin(false);
-    };
-    
-    const handleClaim = async () => {
-        if (!user || !isParticipant) return;
-        setIsClaiming(true);
-        const result = await claimChallengePrize(challenge.id, user.uid);
-        if (result.success) {
-            toast({ title: "تم استلام الجائزة!", description: result.message });
-            if (refreshUserProfile) refreshUserProfile();
-            const updatedChallenge = { ...challenge, claimedBy: [...(challenge.claimedBy || []), user.uid] };
-            onChallengeUpdate(updatedChallenge);
-        } else {
-            toast({ title: "خطأ", description: result.error, variant: 'destructive' });
-        }
-        setIsClaiming(false);
     };
 
     const cardVariants = {
@@ -332,13 +315,8 @@ const ChallengeCard = ({ challenge, index, isEnded, onChallengeUpdate }: { chall
                         }/>
                     </div>
                      
-                     {isEnded && isParticipant && challenge.winners && !hasClaimed && (
-                        <Button onClick={handleClaim} disabled={isClaiming} className="w-full bg-green-600 hover:bg-green-700 mt-2">
-                             {isClaiming ? <Loader2 className="animate-spin" /> : <><Trophy className="ml-2 w-4 h-4" /> احصل على جائزتك</>}
-                        </Button>
-                     )}
-                     {isEnded && isParticipant && hasClaimed && (
-                         <Button disabled className="w-full mt-2"><Check className="ml-2 w-4 h-4"/> تم استلام الجائزة</Button>
+                     {isEnded && challenge.winners && (
+                         <div className="w-full mt-2 text-center text-sm text-green-300 font-bold">تم توزيع الجوائز!</div>
                      )}
                      {!isEnded && (
                         <Button onClick={() => setIsConfirmingJoin(true)} disabled={isJoining || isParticipant} className="w-full bg-purple-600 hover:bg-purple-700 mt-2">
