@@ -1,12 +1,11 @@
-
 "use client";
 
-import type { Game, Player, DayEvent, PublicChatMessage, PrivateEvent } from '@/types';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import type { Game, Player, PublicChatMessage, PrivateEvent } from '@/types';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Sun, Skull, ShieldCheck, Search, Gavel, Info, FileText, Send, Loader2, User, UserCheck, UserX, ThumbsUp, ThumbsDown, Vote, Ban, Square, CheckSquare, X, VenetianMask } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { Gavel, ShieldCheck, FileText, Send, Ban, X, VenetianMask, User } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { processDay, sendPublicMessage, submitVote, transitionToVoting } from '@/lib/actions/behind-the-mask';
@@ -19,11 +18,44 @@ import { ROLES } from '@/data/mafia-roles';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from '@/components/ui/badge';
 
-// -------------------------------------------------------------
-// Secret Report Modal
-// -------------------------------------------------------------
+/* -------------------------------------------------------------------------- */
+/* Constants & helpers                                                         */
+/* -------------------------------------------------------------------------- */
+
+type QuickReaction = "👍" | "👎" | "🤔" | "🤫";
+const QUICK_REACTIONS: QuickReaction[] = ["👍", "👎", "🤔", "🤫"];
+
+const PLAYER_COLORS = [
+  'text-red-400', 'text-blue-400', 'text-green-400', 'text-yellow-400',
+  'text-purple-400', 'text-pink-400', 'text-indigo-400', 'text-teal-400'
+];
+
+const MS = {
+  CHAT_MIN_INTERVAL: 950, // محليًا — أقل بقليل من السيرفر 1000ms
+};
+
+const formatTime = (total: number) => {
+  const m = Math.floor(total / 60);
+  const s = Math.max(0, total % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+const isTimestamp = (v: any): v is Timestamp => v && typeof v?.toMillis === 'function';
+
+/* -------------------------------------------------------------------------- */
+/* Secret Report Modal                                                         */
+/* -------------------------------------------------------------------------- */
+
 const SecretReportCard = ({ event, onClose }: { event: PrivateEvent, onClose: () => void }) => {
+  const prefersReducedMotion = useReducedMotion();
   const roleDetails = event.targetPlayer?.role ? ROLES[event.targetPlayer.role] : null;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <motion.div
       className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
@@ -31,13 +63,16 @@ const SecretReportCard = ({ event, onClose }: { event: PrivateEvent, onClose: ()
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       onClick={onClose}
+      aria-modal
+      role="dialog"
+      aria-label="تقرير سري"
     >
       <motion.div
         className="w-full max-w-sm"
-        initial={{ scale: 0.5, rotateY: 90 }}
+        initial={{ scale: prefersReducedMotion ? 1 : 0.5, rotateY: prefersReducedMotion ? 0 : 90 }}
         animate={{ scale: 1, rotateY: 0 }}
-        exit={{ scale: 0.5, rotateY: -90 }}
-        transition={{ duration: 0.4, type: 'spring' }}
+        exit={{ scale: prefersReducedMotion ? 1 : 0.5, rotateY: prefersReducedMotion ? 0 : -90 }}
+        transition={{ duration: prefersReducedMotion ? 0 : 0.4, type: 'spring' }}
         onClick={(e) => e.stopPropagation()}
       >
         <Card className="bg-slate-800 border-yellow-500/50 text-white shadow-2xl overflow-hidden">
@@ -46,7 +81,7 @@ const SecretReportCard = ({ event, onClose }: { event: PrivateEvent, onClose: ()
               <CardTitle className="flex items-center gap-2 text-yellow-300">
                 <FileText /> تقرير سري
               </CardTitle>
-              <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white h-8 w-8" onClick={onClose}>
+              <Button aria-label="إغلاق" variant="ghost" size="icon" className="text-slate-400 hover:text-white h-8 w-8" onClick={onClose}>
                 <X/>
               </Button>
             </div>
@@ -68,29 +103,27 @@ const SecretReportCard = ({ event, onClose }: { event: PrivateEvent, onClose: ()
   );
 };
 
-// -------------------------------------------------------------
-// Main Component
-// -------------------------------------------------------------
+/* -------------------------------------------------------------------------- */
+/* Main Component                                                              */
+/* -------------------------------------------------------------------------- */
+
 interface DayPhaseProps {
   game: Game;
   self: Player;
 }
 
 type DisplayMessage = PublicChatMessage & { pending?: boolean };
-type QuickReaction = "👍" | "👎" | "🤔" | "🤫";
-
-const PLAYER_COLORS = [
-  'text-red-400', 'text-blue-400', 'text-green-400', 'text-yellow-400',
-  'text-purple-400', 'text-pink-400', 'text-indigo-400', 'text-teal-400'
-];
 
 export function DayPhaseAlt({ game, self }: DayPhaseProps) {
   const { toast } = useToast();
+  const prefersReducedMotion = useReducedMotion();
+
   const [message, setMessage] = useState("");
   const [timeLeft, setTimeLeft] = useState(180);
   const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
   const [selectedVote, setSelectedVote] = useState<string | null>(game.mafiaState?.votes?.[self.id] ?? null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hostActionPending, setHostActionPending] = useState(false);
   const [selectedReport, setSelectedReport] = useState<PrivateEvent | null>(null);
 
   const privateEvents = game.mafiaState?.privateEvents?.[self.id] || [];
@@ -103,6 +136,8 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
   const isVotingPhase = phase === 'voting';
 
   const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const processedRef = useRef(false); // يمنع تكرار processDay عند انتهاء الوقت
+  const lastSendAtRef = useRef<number>(0);
 
   // Keep selected vote in sync with server state
   useEffect(() => {
@@ -110,17 +145,22 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
   }, [game.mafiaState?.votes, self.id]);
 
   const handleProcessDay = useCallback(async () => {
-    if (isHost) {
-      try {
-        await processDay(game.id, self.id);
-      } catch (e: any) {
-        console.error('Host failed to process day on timeout', e);
-      }
+    if (!isHost || processedRef.current) return;
+    try {
+      setHostActionPending(true);
+      await processDay(game.id, self.id);
+      processedRef.current = true;
+    } catch (e: any) {
+      // لا نعرض toast لكل المستخدمين غير المضيفين
+      console.error('Host failed to process day on timeout', e);
+    } finally {
+      setHostActionPending(false);
     }
   }, [isHost, game.id, self.id]);
 
-  // Global timer for both day & voting
+  // Global timer for both day & voting — يحدّث كل ثانية، وينادي processDay مرة واحدة عند انتهاء العداد
   useEffect(() => {
+    processedRef.current = false; // إعادة الضبط عندما يتغيّر مؤقّت السيرفر
     if (!game.mafiaState?.timerEndsAt) return;
     const endTime = game.mafiaState.timerEndsAt.toMillis();
     const updateTimer = () => {
@@ -133,14 +173,21 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
     return () => clearInterval(timer);
   }, [game.mafiaState?.timerEndsAt, handleProcessDay]);
 
-  // Auto-scroll chat
-  useEffect(() => {
-    if (scrollViewportRef.current) {
-      scrollViewportRef.current.scrollTo({ top: scrollViewportRef.current.scrollHeight, behavior: 'smooth' });
+  // Auto-scroll chat — لا نُجبر المستخدم إذا كان يقرأ أعلى
+  const maybeScrollToBottom = useCallback((smooth: boolean) => {
+    const el = scrollViewportRef.current;
+    if (!el) return;
+    const threshold = 120; // px
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    if (atBottom || smooth) {
+      el.scrollTo({ top: el.scrollHeight, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
     }
-  }, [publicChat, optimisticMessages]);
+  }, [prefersReducedMotion]);
 
-  // Clear optimistic when server pushes latest
+  useEffect(() => { maybeScrollToBottom(false); }, [publicChat, maybeScrollToBottom]);
+  useEffect(() => { maybeScrollToBottom(true); }, [optimisticMessages, maybeScrollToBottom]);
+
+  // Clear optimistic when server pushes latest (كي لا تتكرر)
   useEffect(() => { setOptimisticMessages([]); }, [publicChat]);
 
   const handleVote = async (targetId: string | null) => {
@@ -163,6 +210,14 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
       toast({ title: 'غير مسموح', description: 'يمكن التحدث فقط أثناء مرحلة النقاش (النهار).', variant: 'destructive' });
       return;
     }
+
+    // تبريد محلي بسيط لتفادي رسالة السبام من السيرفر
+    const now = Date.now();
+    if (now - lastSendAtRef.current < MS.CHAT_MIN_INTERVAL) {
+      toast({ title: 'تمهل قليلًا', description: 'الرجاء الانتظار لحظة قبل إرسال رسالة أخرى.', variant: 'default' });
+      return;
+    }
+
     const optimisticMessage: DisplayMessage = {
       senderId: self.id,
       senderName: self.name,
@@ -171,15 +226,14 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
       pending: true,
     };
     setOptimisticMessages(prev => [...prev, optimisticMessage]);
+    lastSendAtRef.current = now;
+
     try {
-      await sendPublicMessage(game.id, {
-        senderId: self.id,
-        senderName: self.name,
-        message: content,
-      });
+      await sendPublicMessage(game.id, { senderId: self.id, senderName: self.name, message: content });
     } catch (error: any) {
       toast({ title: 'فشل إرسال الرسالة', description: error?.message || 'تعذر الإرسال', variant: 'destructive' });
       setOptimisticMessages(prev => prev.filter(msg => msg !== optimisticMessage));
+      // لا نعدّل lastSendAtRef هنا حتى لا نُعاقب المستخدم على فشل الإرسال
     }
   };
 
@@ -193,6 +247,7 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
 
   const handleQuickReaction = (reaction: QuickReaction) => {
     if (self.status !== 'alive') return;
+    // نسمح بالردود السريعة حتى أثناء قرب انتهاء الوقت، مع نفس التبريد
     sendMessage(reaction);
   };
 
@@ -201,8 +256,13 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
     return acc;
   }, {} as Record<string, string>), [game.players]);
 
-  const allMessages: DisplayMessage[] = [...publicChat, ...optimisticMessages];
-  const alivePlayers = useMemo(() => game.players.filter(p => p.status === 'alive'), [game.players]);
+  const allMessages: DisplayMessage[] = useMemo(() => (
+    [...publicChat, ...optimisticMessages]
+  ), [publicChat, optimisticMessages]);
+
+  const alivePlayers = useMemo(() => (
+    game.players.filter(p => p.status === 'alive')
+  ), [game.players]);
 
   const voteCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -212,8 +272,6 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
     return counts;
   }, [votes]);
 
-  const minutesLeft = Math.floor(timeLeft / 60);
-  const secondsLeft = timeLeft % 60;
   const headerTitle = isVotingPhase ? 'مرحلة التصويت' : 'مرحلة النقاش';
 
   return (
@@ -222,20 +280,35 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
         {selectedReport && <SecretReportCard event={selectedReport} onClose={() => setSelectedReport(null)} />}
       </AnimatePresence>
 
-      <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-day-phase-bg bg-cover bg-center">
-        <header className="text-center shrink-0 mb-4 bg-black/40 p-2 rounded-xl text-white w-full max-w-7xl">
+      <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-day-phase-bg bg-cover bg-center" data-phase={phase}>
+        <header className="text-center shrink-0 mb-4 bg-black/40 p-2 rounded-xl text-white w-full max-w-7xl" aria-live="polite">
           <div className="flex items-center justify-between gap-4">
             <h1 className="text-2xl md:text-4xl font-bold">
-              {headerTitle} ({minutesLeft}:{secondsLeft.toString().padStart(2, '0')})
+              {headerTitle} ({formatTime(timeLeft)})
             </h1>
             <div className="flex items-center gap-2">
-              {isHost && isDayPhase && (
-                <Button size="sm" variant="secondary" onClick={() => transitionToVoting(game.id, self.id).catch(err => toast({ title: 'تعذر بدء التصويت', description: err?.message, variant: 'destructive' }))}>
+              {isHost && !isVotingPhase && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => transitionToVoting(game.id, self.id).catch(err => toast({ title: 'تعذر بدء التصويت', description: err?.message, variant: 'destructive' }))}
+                  disabled={hostActionPending}
+                >
                   ابدأ التصويت الآن
                 </Button>
               )}
               {isHost && isVotingPhase && (
-                <Button size="sm" onClick={() => processDay(game.id, self.id).catch(err => toast({ title: 'تعذر إنهاء اليوم', description: err?.message, variant: 'destructive' }))}>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (hostActionPending) return;
+                    setHostActionPending(true);
+                    processDay(game.id, self.id)
+                      .catch(err => toast({ title: 'تعذر إنهاء اليوم', description: err?.message, variant: 'destructive' }))
+                      .finally(() => setHostActionPending(false));
+                  }}
+                  disabled={hostActionPending}
+                >
                   إنهاء اليوم
                 </Button>
               )}
@@ -302,11 +375,14 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
                 <ScrollArea className="flex-grow h-full pr-2" viewportRef={scrollViewportRef}>
                   <div className="space-y-4">
                     {allMessages.map((msg, i) => {
-                      const isQuickReaction = ["👍", "👎", "🤔", "🤫"].includes(msg.message);
+                      const isQuickReaction = QUICK_REACTIONS.includes(msg.message as QuickReaction);
+                      const millis = isTimestamp(msg.timestamp) ? msg.timestamp.toMillis() : Number(msg.timestamp ?? 0);
+                      const key = `${msg.senderId}-${millis}-${i}`;
+                      const fromSelf = msg.senderId === self.id;
                       return (
-                        <div key={i} className={cn("flex items-start gap-3 w-full transition-opacity", msg.senderId === self.id ? "flex-row-reverse" : "", msg.pending ? "opacity-60" : "opacity-100")}> 
+                        <div key={key} className={cn("flex items-start gap-3 w-full transition-opacity", fromSelf ? "flex-row-reverse" : "", msg.pending ? "opacity-60" : "opacity-100")}> 
                           <PlayerAvatar avatarId={game.players.find(p => p.id === msg.senderId)?.avatarId || 'Avatar01.png'} className="w-10 h-10 shrink-0 mt-1"/>
-                          <div className={cn("p-3 rounded-xl max-w-[80%]", msg.senderId === self.id ? "bg-primary rounded-br-none" : "bg-slate-700 rounded-bl-none", isQuickReaction ? "bg-transparent shadow-none" : "")}> 
+                          <div className={cn("p-3 rounded-xl max-w-[80%]", fromSelf ? "bg-primary rounded-br-none" : "bg-slate-700 rounded-bl-none", isQuickReaction ? "bg-transparent shadow-none" : "")}> 
                             {!isQuickReaction && <p className={cn("font-bold text-sm mb-1", playerColors[msg.senderId])}>{msg.senderName}</p>}
                             <p className={cn("text-base text-slate-100 whitespace-pre-wrap", isQuickReaction ? "text-5xl" : "")}>{msg.message}</p>
                           </div>
@@ -318,8 +394,8 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
 
                 <div className="shrink-0 pt-4 space-y-2">
                   <div className="flex justify-center gap-2">
-                    {(["👍", "👎", "🤔", "🤫"] as QuickReaction[]).map(r => (
-                      <Button key={r} variant="outline" size="icon" onClick={() => handleQuickReaction(r)} disabled={!canVote || !isDayPhase} className="bg-slate-800 border-slate-600 hover:bg-slate-700 text-2xl">{r}</Button>
+                    {QUICK_REACTIONS.map(r => (
+                      <Button key={r} aria-label={`تفاعل ${r}`} variant="outline" size="icon" onClick={() => handleQuickReaction(r)} disabled={!canVote || !isDayPhase} className="bg-slate-800 border-slate-600 hover:bg-slate-700 text-2xl">{r}</Button>
                     ))}
                   </div>
                   <form onSubmit={handleSendMessage} className="flex gap-2">
@@ -329,8 +405,9 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
                       onChange={(e) => setMessage(e.target.value)}
                       disabled={!canVote || !isDayPhase}
                       className="bg-slate-800 border-slate-600 focus:ring-primary text-base text-white"
+                      aria-label="اكتب رسالتك"
                     />
-                    <Button type="submit" size="icon" disabled={!message.trim() || !canVote || !isDayPhase}><Send /></Button>
+                    <Button type="submit" size="icon" disabled={!message.trim() || !canVote || !isDayPhase} aria-label="إرسال"><Send /></Button>
                   </form>
                 </div>
               </TabsContent>
@@ -342,9 +419,9 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
                     {game.mafiaState?.events?.map((event, i) => {
                       if (event.type === 'death' && event.killedPlayer) {
                         return (
-                          <Card key={i} className="bg-red-900/40 border-red-500/50 text-white overflow-hidden">
+                          <Card key={`death-${i}`} className="bg-red-900/40 border-red-500/50 text-white overflow-hidden">
                             <CardHeader className='p-3'>
-                              <CardTitle className="text-red-300 flex items-center gap-2"><Skull /> تقرير عام</CardTitle>
+                              <CardTitle className="text-red-300 flex items-center gap-2">تقرير عام</CardTitle>
                             </CardHeader>
                             <CardContent className="p-3 text-center">
                               <div className="relative inline-block">
@@ -358,7 +435,7 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
                         )
                       }
                       return (
-                        <Alert key={i} className="bg-slate-800 border-slate-600 text-white">
+                        <Alert key={`evt-${i}`} className="bg-slate-800 border-slate-600 text-white">
                           <ShieldCheck className="h-4 w-4 text-blue-400" />
                           <AlertTitle>{event.type === 'protection' ? 'خبر سار' : 'حدث جديد'}</AlertTitle>
                           <AlertDescription>{event.message}</AlertDescription>
@@ -376,13 +453,13 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
                     <div className="space-y-2">
                       {privateEvents.map((event, index) => (
                         <Button
-                          key={index}
+                          key={`rep-${index}`}
                           variant="outline"
                           className="w-full justify-start gap-2 bg-slate-800 border-purple-600 hover:bg-slate-700 text-white"
                           onClick={() => setSelectedReport(event)}
                         >
                           <FileText className="w-4 h-4 text-purple-400"/>
-                          تقرير عن {event.targetPlayer?.name}
+                          تقرير عن {event.targetPlayer?.name || 'لاعب'}
                         </Button>
                       ))}
                     </div>

@@ -14,7 +14,6 @@
  * - محرّر شامل لبيانات المستخدم مع حماية تحويل الأنواع، وإدخال أرقام آمن.
  * - بريد جماعي مع عدّاد أحرف وتحقق مبكّر وحدّ للكوينز + معاينة سريعة.
  * - لوحة إعلانات مع حفظ/استرجاع + معاينة فورية.
- * - أدوات صيانة مع حوارات تأكيد واضحة وملاحظات حول التكلفة.
  *
  * يعتمد على أفعال السيرفر الموحّدة من ملف الباك-إند الذي أعددناه (lib/actions/admin).
  */
@@ -569,7 +568,7 @@ export default function SocietyTab() {
           <CardDescription>ابحث عن لاعب لتطبيق عقوبة، منحه مكافأة، تعديل بياناته، أو إرسال رسائل جماعية.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-grow">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="ابحث بالاسم أو البريد الإلكتروني..." onChange={handleSearchChange} className="pr-10" />

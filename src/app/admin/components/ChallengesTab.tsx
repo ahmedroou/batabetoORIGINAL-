@@ -796,8 +796,8 @@ export default function ChallengesTab() {
                 </div>
 
                 {/* Controls */}
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-2">
-                <div className="relative">
+                <div className="mt-4 flex flex-col md:flex-row items-stretch gap-2">
+                <div className="relative flex-grow">
                     <Input
                     placeholder="بحث بالعنوان..."
                     value={query}
@@ -806,34 +806,36 @@ export default function ChallengesTab() {
                     />
                     <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 </div>
-                <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
-                    <SelectTrigger className="w-full">
-                    <SelectValue placeholder="الحالة" />
-                    </SelectTrigger>
-                    <SelectContent>
-                    <SelectItem value="all">كل الحالات</SelectItem>
-                    <SelectItem value="active">نشطة</SelectItem>
-                    <SelectItem value="ended">منتهية (لم تُوزّع)</SelectItem>
-                    <SelectItem value="finalized">موزّعة الجوائز</SelectItem>
-                    </SelectContent>
-                </Select>
-                <div className="flex gap-2">
-                    <Select value={sortKey} onValueChange={(v: any) => setSortKey(v)}>
-                    <SelectTrigger className="w-full">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="endsAt">الفرز حسب تاريخ الانتهاء</SelectItem>
-                        <SelectItem value="createdAt">الفرز حسب تاريخ الإنشاء</SelectItem>
-                    </SelectContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:flex md:flex-grow-0">
+                    <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+                        <SelectTrigger className="w-full md:w-auto">
+                        <SelectValue placeholder="الحالة" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        <SelectItem value="all">كل الحالات</SelectItem>
+                        <SelectItem value="active">نشطة</SelectItem>
+                        <SelectItem value="ended">منتهية (لم تُوزّع)</SelectItem>
+                        <SelectItem value="finalized">موزّعة الجوائز</SelectItem>
+                        </SelectContent>
                     </Select>
-                    <Button
-                    variant="outline"
-                    onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-                    className="shrink-0"
-                    >
-                    <ArrowUpDown className="w-4 h-4" />
-                    </Button>
+                    <div className="flex gap-2">
+                        <Select value={sortKey} onValueChange={(v: any) => setSortKey(v)}>
+                        <SelectTrigger className="w-full">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="endsAt">الفرز حسب تاريخ الانتهاء</SelectItem>
+                            <SelectItem value="createdAt">الفرز حسب تاريخ الإنشاء</SelectItem>
+                        </SelectContent>
+                        </Select>
+                        <Button
+                        variant="outline"
+                        onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                        className="shrink-0"
+                        >
+                        <ArrowUpDown className="w-4 h-4" />
+                        </Button>
+                    </div>
                 </div>
                 </div>
             </CardHeader>
