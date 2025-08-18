@@ -304,12 +304,12 @@ export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
 }
 
 async function updateChallengeScores(challenge: Challenge): Promise<Record<string, number>> {
-    const eventsRef = collection(db, 'social_events');
     const participants = challenge.participantIds || [];
-
     if (participants.length === 0) {
         return challenge.scores || {};
     }
+    
+    const eventsRef = collection(db, 'social_events');
 
     const q = query(eventsRef, 
         where('type', '==', 'game_points_scored'),
@@ -343,15 +343,16 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
     return runTransaction(db, async (transaction) => {
         const challengeDoc = await transaction.get(challengeRef);
         if (!challengeDoc.exists()) throw new Error("Challenge not found.");
+        
         let challengeData = challengeDoc.data() as Challenge;
 
-        if (challengeData.winners) throw new Error("This challenge has already been finalized.");
-        
-        // Ensure scores exist before trying to sort them
-        const scores = await updateChallengeScores(challengeData);
-        challengeData.scores = scores || {};
-        
-        const sortedWinners = Object.entries(challengeData.scores)
+        if (challengeData.winners) {
+            // Already finalized, just return.
+            return { success: true, winnersCount: Object.keys(challengeData.winners).length };
+        }
+
+        const scores = challengeData.scores || {};
+        const sortedWinners = Object.entries(scores)
             .sort(([, scoreA], [, scoreB]) => scoreB - scoreA)
             .slice(0, 3);
 
@@ -360,33 +361,45 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         
         if (sortedWinners.length > 0) {
             const firstPlaceId = sortedWinners[0][0];
-            const firstPlayerDoc = await transaction.get(doc(db, 'users', firstPlaceId));
-            if(firstPlayerDoc.exists()){
-                winners.first = { id: firstPlaceId, name: firstPlayerDoc.data().name || 'Unknown' };
-                if(challengeData.firstPlacePrize?.length > 0) prizeAwardBatch.push({userId: firstPlaceId, prize: challengeData.firstPlacePrize, rank: 1});
+            winners.first = { id: firstPlaceId, name: 'Unknown' }; // Placeholder, will be updated
+            if (challengeData.firstPlacePrize?.length > 0) {
+                prizeAwardBatch.push({ userId: firstPlaceId, prize: challengeData.firstPlacePrize, rank: 1 });
             }
         }
         
         if (sortedWinners.length > 1) {
             const secondPlaceId = sortedWinners[1][0];
-            const secondPlayerDoc = await transaction.get(doc(db, 'users', secondPlaceId));
-             if(secondPlayerDoc.exists()){
-                winners.second = { id: secondPlaceId, name: secondPlayerDoc.data().name || 'Unknown' };
-                if(challengeData.secondPlacePrize?.length > 0) prizeAwardBatch.push({userId: secondPlaceId, prize: challengeData.secondPlacePrize, rank: 2});
+            winners.second = { id: secondPlaceId, name: 'Unknown' };
+            if (challengeData.secondPlacePrize?.length > 0) {
+                prizeAwardBatch.push({ userId: secondPlaceId, prize: challengeData.secondPlacePrize, rank: 2 });
             }
         }
         
         if (sortedWinners.length > 2) {
             const thirdPlaceId = sortedWinners[2][0];
-            const thirdPlayerDoc = await transaction.get(doc(db, 'users', thirdPlaceId));
-            if(thirdPlayerDoc.exists()){
-                winners.third = { id: thirdPlaceId, name: thirdPlayerDoc.data().name || 'Unknown' };
-                if(challengeData.thirdPlacePrize?.length > 0) prizeAwardBatch.push({userId: thirdPlaceId, prize: challengeData.thirdPlacePrize, rank: 3});
+            winners.third = { id: thirdPlaceId, name: 'Unknown' };
+            if (challengeData.thirdPlacePrize?.length > 0) {
+                prizeAwardBatch.push({ userId: thirdPlaceId, prize: challengeData.thirdPlacePrize, rank: 3 });
             }
         }
-        
-        transaction.update(challengeRef, { winners: winners, claimedBy: [] });
 
+        // Fetch winner user data to get names
+        const winnerIds = Object.values(winners).map(w => w.id);
+        if (winnerIds.length > 0) {
+            const usersQuery = query(collection(db, 'users'), where('__name__', 'in', winnerIds));
+            const usersSnapshot = await getDocs(usersQuery);
+            const usersData = new Map<string, UserProfile>();
+            usersSnapshot.forEach(d => usersData.set(d.id, d.data() as UserProfile));
+
+            if(winners.first && usersData.has(winners.first.id)) winners.first.name = usersData.get(winners.first.id)!.name;
+            if(winners.second && usersData.has(winners.second.id)) winners.second.name = usersData.get(winners.second.id)!.name;
+            if(winners.third && usersData.has(winners.third.id)) winners.third.name = usersData.get(winners.third.id)!.name;
+        }
+
+        // Update challenge with winner info
+        transaction.update(challengeRef, { winners: winners, claimedBy: [] });
+        
+        // Award prizes and send mail
         for (const award of prizeAwardBatch) {
             const userRef = doc(db, 'users', award.userId);
             const userUpdates: { [key: string]: any } = {};
@@ -397,7 +410,7 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
 
             transaction.update(userRef, userUpdates);
 
-            const prizeDescriptions = award.prize.map(p => `${p.value} ${p.type === 'coins' ? 'كوينز' : p.type === 'diamonds' ? 'ألماس' : 'نقاط شرف'}`).join(', ');
+            const prizeDescriptions = award.prize.map(p => `${p.value} ${p.type === 'coins' ? 'كوينز' : p.type === 'diamonds' ? 'ألماس' : 'نقاط شرف'}`).join('، ');
 
              await sendSystemMail(
                 award.userId,
@@ -416,5 +429,3 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
         return { success: false, winnersCount: 0, error: error.message };
     });
 }
-
-    
