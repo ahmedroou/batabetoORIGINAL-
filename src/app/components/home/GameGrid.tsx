@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { GAME_ICONS } from '@/data/icons';
 import type { Game } from '@/types';
-import { Star, Loader2, Heart, TrendingUp, Trophy, Coins, Brush } from 'lucide-react';
+import { Star, Loader2, Heart, TrendingUp, Trophy, Coins, Brush, HelpCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -22,6 +22,7 @@ type LoadingState =
   | 'create-prison'
   | 'create-educated-merchant'
   | 'create-draw-and-deceive'
+  | 'create-quiz-swap'
   | null;
 
 const gameCardsData: Array<{
@@ -103,6 +104,17 @@ const gameCardsData: Array<{
         { rank: 'المركز الأول', points: 4, coins: 3 },
         { rank: 'المركز الثاني', points: 2, coins: 1 },
         { rank: 'المركز الثالث', points: 1, coins: 1 },
+    ]
+  },
+  { 
+    type: 'quiz-swap', 
+    title: 'تبديل الأسئلة', 
+    description: 'تخلص من أصعب الأسئلة لديك واستبدلها بأسئلة خصمك.', 
+    accent: { from: 'from-teal-500/25', to: 'to-cyan-500/25' },
+    prizes: [
+        { rank: 'المركز الأول', points: 3, coins: 2 },
+        { rank: 'المركز الثاني', points: 2, coins: 1 },
+        { rank: 'المركز الثالث', points: 1, coins: 0 },
     ]
   },
 ];

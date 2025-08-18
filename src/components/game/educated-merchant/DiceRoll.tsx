@@ -1,17 +1,17 @@
-
-
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dices, Loader2 } from 'lucide-react';
 import type { Game, Player } from '@/types';
 import { rollDice } from '@/lib/actions/educated-merchant';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 
-/* ---------------- helpers: Dice face with pips (no external files) ---------------- */
+/* =========================================================================================
+ * Dice utilities
+ * ========================================================================================= */
 const PIP_MAP: Record<number, number[]> = {
   1: [5],
   2: [1, 9],
@@ -20,6 +20,8 @@ const PIP_MAP: Record<number, number[]> = {
   5: [1, 3, 5, 7, 9],
   6: [1, 3, 4, 6, 7, 9],
 };
+
+type OverlayPhase = 'idle' | 'rolling' | 'final' | 'error';
 
 function DiceFace({
   value,
@@ -38,13 +40,13 @@ function DiceFace({
     <div
       aria-label={title ?? `وجه النرد: ${value}`}
       className={`grid grid-cols-3 grid-rows-3 gap-1 rounded-2xl bg-slate-900/80 border border-primary/40 shadow-xl ${className}`}
-      style={{ transformStyle: 'preserve-3d' }}
+      style={{ transformStyle: 'preserve-3d' as React.CSSProperties['transformStyle'] }}
     >
       {cells.map((idx) => (
         <div key={idx} className="flex items-center justify-center">
           <span
             className={`block rounded-full w-2.5 h-2.5 ${active.includes(idx) ? 'bg-white' : 'bg-white/10'} ${pipClassName}`}
-            style={{ boxShadow: active.includes(idx) ? '0 0 6px rgba(255,255,255,0.5)' : undefined }}
+            style={{ boxShadow: active.includes(idx) ? '0 0 6px rgba(255,255,255,0.45)' : undefined }}
           />
         </div>
       ))}
@@ -52,22 +54,32 @@ function DiceFace({
   );
 }
 
-/* ---------------- component ---------------- */
-interface DiceRollProps { game: Game; self: Player }
+/* =========================================================================================
+ * Component
+ * ========================================================================================= */
+interface DiceRollProps {
+  game: Game;
+  self: Player;
+}
+
+/* Animation & timing constants (tuned) */
+const ROLLING_INTERVAL_MS = 90;     // سرعة تبديل الأرقام أثناء الدوران المحلي
+const MIN_ROLL_DURATION_MS = 1800;  // مدة الدوران الدنيا قبل تثبيت النتيجة
+const FINAL_HOLD_MS = 1400;         // مدة إظهار النتيجة في النافذة الصغيرة
+const SERVER_FALLBACK_MS = 10000;   // مهلة رد السيرفر القصوى
 
 export function DiceRoll({ game, self }: DiceRollProps) {
   const { toast } = useToast();
+  const prefersReducedMotion = useReducedMotion();
 
   // UI state
   const [isRolling, setIsRolling] = useState(false);
   const [localHistory, setLocalHistory] = useState<number[]>([]);
-
-  // overlay (small centered rolling screen)
   const [overlayVisible, setOverlayVisible] = useState(false);
   const [overlayNumber, setOverlayNumber] = useState<number | null>(null);
-  const [overlayPhase, setOverlayPhase] = useState<'idle' | 'rolling' | 'final' | 'error'>('idle');
+  const [overlayPhase, setOverlayPhase] = useState<OverlayPhase>('idle');
 
-  // refs for timers/nonce
+  // refs (always-available mutable handles)
   const handledNonceRef = useRef<number | string | null>(null);
   const serverResponseTimerRef = useRef<number | null>(null);
   const rollingIntervalRef = useRef<number | null>(null);
@@ -81,28 +93,27 @@ export function DiceRoll({ game, self }: DiceRollProps) {
   const currentTurnPlayerId = turnOrder[currentTurnIndex];
   const isMyTurn = self.id === currentTurnPlayerId;
 
-  // server "displaying" payload (يُحدَّث من السيرفر)
-  const displaying =
-    (game.educatedMerchantState as any)?.displayingRollResult as { number: number; nonce: number } | undefined;
+  const currentTurnPlayerName = useMemo(
+    () => game.players.find((p) => p.id === currentTurnPlayerId)?.name || '...',
+    [game.players, currentTurnPlayerId]
+  );
 
-  // animation timing constants (يمكن تعديلها إن رغبت)
-  const ROLLING_INTERVAL_MS = 90;     // سرعة تبديل أرقام النرد أثناء الدوران المحلي
-  const MIN_ROLL_DURATION_MS = 2000;  // مدة الدوران الدنيا قبل إعلان الرقم النهائي (عدة ثوانٍ)
-  const FINAL_HOLD_MS = 1600;         // مدة تثبيت النتيجة على الشاشة الصغيرة قبل الإغلاق
-  const SERVER_FALLBACK_MS = 10000;   // مهلة رد السيرفر
+  // يتم حقنه من السيرفر بعد نجاح الرمية
+  const displaying = (game.educatedMerchantState as any)
+    ?.displayingRollResult as { number: number; nonce: number } | undefined;
 
-  /* ---------- cleanup on unmount ---------- */
+  /* ---------------- cleanup on unmount ---------------- */
   useEffect(() => {
     return () => {
-      if (serverResponseTimerRef.current) { clearTimeout(serverResponseTimerRef.current); serverResponseTimerRef.current = null; }
-      if (rollingIntervalRef.current) { clearInterval(rollingIntervalRef.current); rollingIntervalRef.current = null; }
-      if (overlayCloseTimerRef.current) { clearTimeout(overlayCloseTimerRef.current); overlayCloseTimerRef.current = null; }
-      if (pendingFinalizeTimerRef.current) { clearTimeout(pendingFinalizeTimerRef.current); pendingFinalizeTimerRef.current = null; }
+      if (serverResponseTimerRef.current) clearTimeout(serverResponseTimerRef.current);
+      if (rollingIntervalRef.current) clearInterval(rollingIntervalRef.current);
+      if (overlayCloseTimerRef.current) clearTimeout(overlayCloseTimerRef.current);
+      if (pendingFinalizeTimerRef.current) clearTimeout(pendingFinalizeTimerRef.current);
+      serverResponseTimerRef.current = rollingIntervalRef.current = overlayCloseTimerRef.current = pendingFinalizeTimerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ---------- handle server "displayingRollResult" ---------- */
+  /* ---------------- handle server "displayingRollResult" ---------------- */
   useEffect(() => {
     if (!displaying) return;
     const { number, nonce } = displaying;
@@ -112,16 +123,16 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     if (handledNonceRef.current === nonce) return;
     handledNonceRef.current = nonce;
 
-    // حدّث السجل المحلي
+    // تحديث السجل المحلي (أحدث 5)
     setLocalHistory((prev) => [number, ...prev].slice(0, 5));
 
-    // أوقف مؤقّت مهلة السيرفر
+    // أوقف مؤقّت مهلة السيرفر (تم الاستلام بنجاح)
     if (serverResponseTimerRef.current) {
       clearTimeout(serverResponseTimerRef.current);
       serverResponseTimerRef.current = null;
     }
 
-    // انتقل إلى "النتيجة النهائية" بعد ضمان مدة الدوران الدنيا
+    // نهاء الدوران بعد ضمان مدة دنيا
     const start = rollStartRef.current ?? Date.now();
     const elapsed = Date.now() - start;
 
@@ -131,8 +142,14 @@ export function DiceRoll({ game, self }: DiceRollProps) {
         rollingIntervalRef.current = null;
       }
       setOverlayNumber(number);
-      setOverlayPhase('final');   // يفعّل أنيميشن "الاستقرار"
+      setOverlayPhase('final');
       setIsRolling(false);
+
+      // هزة لمسية بسيطة عند النتيجة (إن كانت مدعومة)
+      try {
+        // @ts-ignore
+        if (navigator?.vibrate) navigator.vibrate(12);
+      } catch {}
 
       if (overlayCloseTimerRef.current) {
         clearTimeout(overlayCloseTimerRef.current);
@@ -146,7 +163,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
       }, FINAL_HOLD_MS) as unknown as number;
     };
 
-    if (elapsed >= MIN_ROLL_DURATION_MS) {
+    if (elapsed >= MIN_ROLL_DURATION_MS || prefersReducedMotion) {
       finalize();
     } else {
       const remaining = MIN_ROLL_DURATION_MS - elapsed;
@@ -159,9 +176,9 @@ export function DiceRoll({ game, self }: DiceRollProps) {
         finalize();
       }, remaining) as unknown as number;
     }
-  }, [displaying]);
+  }, [displaying, prefersReducedMotion]);
 
-  /* ---------- handle roll action ---------- */
+  /* ---------------- handle roll action ---------------- */
   const handleRoll = useCallback(async () => {
     if (!isMyTurn || isRolling) return;
 
@@ -171,21 +188,22 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     setOverlayPhase('rolling');
     handledNonceRef.current = null;
 
-    // سجّل وقت البدء لضمان مدة دنيا للدوران
+    // وقت البدء لضمان حد أدنى لمدة الأنيميشن
     rollStartRef.current = Date.now();
 
-    // دوران محلي سريع مع تغيير الرقم (حتى وصول السيرفر)
-    setOverlayNumber(Math.floor(Math.random() * 6) + 1);
-    if (rollingIntervalRef.current) clearInterval(rollingIntervalRef.current);
-    rollingIntervalRef.current = window.setInterval(() => {
-      setOverlayNumber(Math.floor(Math.random() * 6) + 1);
-    }, ROLLING_INTERVAL_MS) as unknown as number;
+    // دوران محلي سريع حتى تصل نتيجة السيرفر
+    const initial = Math.floor(Math.random() * 6) + 1;
+    setOverlayNumber(initial);
 
-    // مهلة رد السيرفر
-    if (serverResponseTimerRef.current) {
-      clearTimeout(serverResponseTimerRef.current);
-      serverResponseTimerRef.current = null;
+    if (rollingIntervalRef.current) clearInterval(rollingIntervalRef.current);
+    if (!prefersReducedMotion) {
+      rollingIntervalRef.current = window.setInterval(() => {
+        setOverlayNumber(Math.floor(Math.random() * 6) + 1);
+      }, ROLLING_INTERVAL_MS) as unknown as number;
     }
+
+    // مهلة رد السيرفر — لا نلغيها بعد مجرد نجاح طلب HTTP (ننتظر displayingRollResult)
+    if (serverResponseTimerRef.current) clearTimeout(serverResponseTimerRef.current);
     serverResponseTimerRef.current = window.setTimeout(() => {
       serverResponseTimerRef.current = null;
       if (rollingIntervalRef.current) {
@@ -196,17 +214,17 @@ export function DiceRoll({ game, self }: DiceRollProps) {
       setOverlayVisible(false);
       setOverlayNumber(null);
       setIsRolling(false);
-      toast({ title: 'لم يرد الخادم', description: 'لم يتم استلام نتيجة النرد. حاول مرة أخرى.', variant: 'destructive' });
+      toast({
+        title: 'لم يرد الخادم',
+        description: 'لم يتم استلام نتيجة النرد. حاول مرة أخرى.',
+        variant: 'destructive',
+      });
     }, SERVER_FALLBACK_MS) as unknown as number;
 
     // استدعاء رمية النرد على السيرفر
     try {
       await rollDice(game.id, self.id);
-      // لا نغلق الدوران هنا — سننتظر بايانات السيرفر (displayingRollResult)
-      if (serverResponseTimerRef.current) {
-        clearTimeout(serverResponseTimerRef.current);
-        serverResponseTimerRef.current = null; // الطلب نجح؛ سيأتي حدث النتيجة من السيرفر
-      }
+      // لا تغييرات هنا — سنُغلق عند استقبال displayingRollResult
     } catch (err: any) {
       if (serverResponseTimerRef.current) {
         clearTimeout(serverResponseTimerRef.current);
@@ -220,52 +238,72 @@ export function DiceRoll({ game, self }: DiceRollProps) {
       setOverlayVisible(false);
       setOverlayNumber(null);
       setIsRolling(false);
-      toast({ title: 'فشل رمي النرد', description: err?.message || 'حدث خطأ أثناء الاتصال بالخادم', variant: 'destructive' });
+      toast({
+        title: 'فشل رمي النرد',
+        description: err?.message || 'حدث خطأ أثناء الاتصال بالخادم',
+        variant: 'destructive',
+      });
     }
-  }, [game.id, isMyTurn, isRolling, self.id, toast]);
+  }, [game.id, isMyTurn, isRolling, prefersReducedMotion, self.id, toast]);
 
-  const onKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if ((e.key === 'Enter' || e.key === ' ') && isMyTurn && !isRolling) {
-      e.preventDefault();
-      void handleRoll();
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if ((e.key === 'Enter' || e.key === ' ') && isMyTurn && !isRolling) {
+        e.preventDefault();
+        void handleRoll();
+      }
+    },
+    [handleRoll, isMyTurn, isRolling]
+  );
+
+  /* ---------------- overlay dice motion variants ---------------- */
+  const overlayMotion = useMemo(() => {
+    if (prefersReducedMotion) return { rotateX: 0, rotateY: 0, rotateZ: 0, scale: 1 };
+    if (overlayPhase === 'rolling') {
+      return {
+        rotateX: [0, 180, 360],
+        rotateY: [0, 270, 540],
+        rotateZ: [0, 12, -10, 6, 0],
+        scale: [1, 1.05, 0.98, 1.02, 1],
+        transition: { duration: 1, repeat: Infinity, ease: 'easeInOut' as const },
+      };
     }
-  }, [handleRoll, isMyTurn, isRolling]);
+    if (overlayPhase === 'final') {
+      return {
+        rotateX: 0,
+        rotateY: 0,
+        rotateZ: [0, -6, 3, 0],
+        scale: [1.05, 0.96, 1.02, 1],
+        transition: { duration: 0.65, ease: 'easeOut' as const },
+      };
+    }
+    return { rotateX: 0, rotateY: 0, rotateZ: 0, scale: 1 };
+  }, [overlayPhase, prefersReducedMotion]);
 
-  /* ---------- overlay dice motion variants ---------- */
-  const overlayMotion =
-    overlayPhase === 'rolling'
-      ? {
-          rotateX: [0, 180, 360],
-          rotateY: [0, 270, 540],
-          rotateZ: [0, 12, -10, 6, 0],
-          scale: [1, 1.05, 0.98, 1.02, 1],
-          transition: { duration: 1, repeat: Infinity, ease: 'easeInOut' as const },
-        }
-      : overlayPhase === 'final'
-      ? {
-          rotateX: 0,
-          rotateY: 0,
-          rotateZ: [0, -6, 3, 0],
-          scale: [1.05, 0.96, 1.02, 1],
-          transition: { duration: 0.7, ease: 'easeOut' as const },
-        }
-      : { rotateX: 0, rotateY: 0, rotateZ: 0, scale: 1 };
-
-  /* ---------- UI rendering ---------- */
+  /* ---------------- UI ---------------- */
   return (
-    <motion.div initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring' }}>
+    <motion.div
+      initial={{ scale: 0.97, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+      data-testid="dice-roll"
+    >
       <Card
-        className="w-64 text-center bg-slate-800 border-primary text-white shadow-lg relative"
+        className="relative w-72 sm:w-80 text-center bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-700/80 text-white shadow-xl rounded-2xl overflow-hidden"
         tabIndex={0}
         onKeyDown={onKeyDown}
         aria-live="polite"
         role="region"
         aria-label="لوحة رمي النرد"
+        aria-busy={isRolling}
       >
-        <CardHeader className="pb-2 flex-row items-center justify-between">
+        {/* Decorative top bar */}
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/60 via-primary to-primary/60" />
+
+        <CardHeader className="pb-1 pt-3">
           <div className="text-left">
             <CardTitle className="text-primary text-sm">
-              {isMyTurn ? 'دورك لرمي النرد' : `دور: ${game.players.find(p => p.id === currentTurnPlayerId)?.name || '...'}`}
+              {isMyTurn ? 'دورك لرمي النرد' : `دور: ${currentTurnPlayerName}`}
             </CardTitle>
             <CardDescription className="text-slate-400 text-right text-xs">
               {isMyTurn ? 'اضغط الزر أو Enter' : 'انتظر دورك'}
@@ -273,9 +311,9 @@ export function DiceRoll({ game, self }: DiceRollProps) {
           </div>
         </CardHeader>
 
-        <CardContent className="flex flex-col items-center justify-center min-h-[140px]">
+        <CardContent className="flex flex-col items-center justify-center min-h-[148px]">
           <AnimatePresence mode="wait">
-            {/* أثناء ظهور الـ overlay نُبقي المنطقة الرئيسية هادئة */}
+            {/* إبقاء المحتوى الأساسي ساكن أثناء ظهور نافذة النتيجة */}
             {!overlayVisible && (
               isRolling ? (
                 <motion.div
@@ -297,7 +335,9 @@ export function DiceRoll({ game, self }: DiceRollProps) {
                   className="flex flex-col items-center"
                 >
                   <DiceFace value={displaying.number} className="w-24 h-24" />
-                  <div className="text-sm text-slate-300 mt-2">نتيجة النرد: <span className="font-bold">{displaying.number}</span></div>
+                  <div className="text-sm text-slate-300 mt-2">
+                    نتيجة النرد: <span className="font-bold">{displaying.number}</span>
+                  </div>
                 </motion.div>
               ) : (
                 <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -308,16 +348,23 @@ export function DiceRoll({ game, self }: DiceRollProps) {
           </AnimatePresence>
         </CardContent>
 
-        <CardContent>
+        <CardContent className="pt-0">
           <Button
             onClick={handleRoll}
             disabled={!isMyTurn || isRolling}
-            className="w-full"
+            className="w-full rounded-xl"
             size="lg"
             aria-disabled={!isMyTurn || isRolling}
             aria-label={isMyTurn ? (isRolling ? 'جارٍ رمي النرد' : 'ارمِ النرد') : 'ليس دورك'}
           >
-            {isRolling ? <Loader2 className="animate-spin" /> : (isMyTurn ? 'ارمِ النرد' : 'انتظر...')}
+            {isRolling ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                جارٍ الرمي...
+              </>
+            ) : (
+              <>ارمِ النرد</>
+            )}
           </Button>
         </CardContent>
 
@@ -330,11 +377,11 @@ export function DiceRoll({ game, self }: DiceRollProps) {
               ) : (
                 localHistory.map((r, i) => (
                   <div
-                    key={i}
-                    className="w-8 h-8 rounded-lg bg-gray-900/60 flex items-center justify-center border border-primary/20"
+                    key={`${r}-${i}`}
+                    className="w-9 h-9 rounded-lg bg-gray-900/60 flex items-center justify-center border border-primary/20 shadow-inner"
                     title={`رمي ${i + 1}: ${r}`}
                   >
-                    <DiceFace value={r} className="w-7 h-7" pipClassName="w-1.5 h-1.5" />
+                    <DiceFace value={r} className="w-8 h-8" pipClassName="w-1.5 h-1.5" />
                   </div>
                 ))
               )}
@@ -342,7 +389,7 @@ export function DiceRoll({ game, self }: DiceRollProps) {
           </div>
         </CardContent>
 
-        {/* ---------- Overlay: small centered rolling screen ---------- */}
+        {/* ---------------- Overlay: result / rolling ---------------- */}
         <AnimatePresence>
           {overlayVisible && (
             <motion.div
@@ -353,14 +400,14 @@ export function DiceRoll({ game, self }: DiceRollProps) {
               className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
               aria-live="assertive"
             >
-              <div className="pointer-events-auto bg-black/60 backdrop-blur-sm rounded-xl p-3 w-40 h-40 flex items-center justify-center">
+              <div className="pointer-events-auto bg-black/60 backdrop-blur-sm rounded-2xl p-4 w-44 h-44 flex items-center justify-center border border-white/10 shadow-2xl">
                 <motion.div
                   role="status"
                   aria-atomic="true"
                   className="w-24 h-24"
                   animate={overlayMotion}
                   transition={{ type: 'spring' }}
-                  style={{ perspective: 800, transformStyle: 'preserve-3d' as any }}
+                  style={{ perspective: 900, transformStyle: 'preserve-3d' as any }}
                 >
                   <DiceFace
                     value={overlayNumber ?? 1}
@@ -377,4 +424,3 @@ export function DiceRoll({ game, self }: DiceRollProps) {
     </motion.div>
   );
 }
-
