@@ -219,17 +219,17 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
                     </div>
 
                     <CardContent className="space-y-4 pt-4 flex flex-col h-[70vh] md:h-[calc(100vh-280px)]">
-                      <div ref={canvasWrapRef} className="w-full flex-grow relative min-h-0">
-                        <DrawingCanvas
-                          width={canvasW}
-                          height={canvasH}
-                          onDrawEnd={onCanvasChange}
-                          disabled={isSubmitting || timeLeft === 0}
-                          className="mx-auto"
-                        />
-                      </div>
-                      
-                      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pb-[env(safe-area-inset-bottom)] shrink-0">
+                        <div ref={canvasWrapRef} className="w-full h-full relative min-h-0">
+                            <DrawingCanvas
+                                width={canvasW}
+                                height={canvasH}
+                                onDrawEnd={onCanvasChange}
+                                disabled={isSubmitting || timeLeft === 0}
+                                className="mx-auto"
+                            />
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pb-[env(safe-area-inset-bottom)] shrink-0">
                           <Button
                             onClick={handleSubmit}
                             disabled={isSubmitting || !drawingDataUrl}
@@ -238,7 +238,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
                           >
                             {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2" /> إرسال الرسمة</>}
                           </Button>
-                      </div>
+                        </div>
                     </CardContent>
                 </motion.div>
             )}
