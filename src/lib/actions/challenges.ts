@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -304,6 +305,12 @@ export async function getAllChallengesForAdmin(): Promise<Challenge[]> {
 
 async function updateChallengeScores(challenge: Challenge): Promise<Record<string, number>> {
     const eventsRef = collection(db, 'social_events');
+    
+    // **FIX:** Ensure participantIds exists and is not empty before querying
+    if (!challenge.participantIds || challenge.participantIds.length === 0) {
+        return challenge.scores || {};
+    }
+
     const q = query(eventsRef, 
         where('type', '==', 'game_points_scored'),
         where('timestamp', '>=', challenge.createdAt),
@@ -318,6 +325,7 @@ async function updateChallengeScores(challenge: Challenge): Promise<Record<strin
     
     snapshot.docs.forEach(doc => {
         const event = doc.data() as GamePointsScoredEvent;
+        // Check if the player is actually a participant before adding points
         if (
             challenge.participantIds.includes(event.playerId) &&
             (challenge.specificGameType === 'all' || challenge.specificGameType === event.gameType)
@@ -438,6 +446,14 @@ export async function claimChallengePrize(challengeId: string, userId: string): 
         transaction.update(challengeRef, { claimedBy: arrayUnion(userId) });
 
         const prizeDescriptions = prizesToAward.map(p => `${p.value} ${p.type === 'coins' ? 'كوينز' : p.type === 'diamonds' ? 'ألماس' : 'نقاط شرف'}`).join(', ');
+        await sendSystemMail(
+            userId,
+            {
+                subject: 'مبروك الفوز بالجائزة!',
+                body: `لقد حصلت على جائزتك من بطولة "${challengeData.title}". تمت إضافة: ${prizeDescriptions} إلى رصيدك.`,
+            },
+            transaction
+        );
         return { success: true, message: `تهانينا! لقد حصلت على: ${prizeDescriptions}.` };
 
     }).catch((error: any) => {
@@ -445,3 +461,5 @@ export async function claimChallengePrize(challengeId: string, userId: string): 
         return { success: false, error: error.message || "فشل المطالبة بالجائزة." };
     });
 }
+
+    
