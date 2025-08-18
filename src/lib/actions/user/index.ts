@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -18,11 +19,13 @@ import {
     deleteLeague, 
     kickPlayerFromLeague, 
     leaveLeague, 
-    resetAllLeagueStats, 
+    resetAllLeagueStats,
+    updateLeagueScoresForGameEnd
 } from './leagues';
 import { giveReward, applyPunishment, humiliatePlayer, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax, liftPunishment } from './social';
 import { requestAllegiance, respondToAllegianceRequest } from './allegiance';
-import { joinChallenge } from '../challenges';
+import { joinChallenge, finalizeChallenge } from '../challenges';
+import { distributeEndOfGameAwards } from '../admin/users';
 
 
 export {
@@ -74,5 +77,8 @@ export {
     respondToAllegianceRequest,
     liftPunishment,
     getKingsPageData,
-    recordMatchHistory
+    recordMatchHistory,
+    distributeEndOfGameAwards,
+    updateLeagueScoresForGameEnd,
+    finalizeChallenge,
 };

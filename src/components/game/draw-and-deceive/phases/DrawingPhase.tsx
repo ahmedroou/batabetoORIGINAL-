@@ -7,12 +7,13 @@ import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { submitDrawing } from '@/lib/actions/draw-and-deceive';
-import { Loader2, Palette, Send, Timer, Eye } from 'lucide-react';
+import { submitDrawing, submitCorrectAnswerAndStartDrawing } from '@/lib/actions/draw-and-deceive';
+import { Loader2, Palette, Send, Timer, Eye, PenLine } from 'lucide-react';
 import { DrawingCanvas } from './DrawingCanvas';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
 
 interface DrawingPhaseProps {
   game: Game;
@@ -84,6 +85,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   const isArtist = state.artistId === self.id;
   const artist = game.players.find(p => p.id === state.artistId);
 
+  const [description, setDescription] = useState('');
   const [drawingDataUrl, setDrawingDataUrl] = useState<string | null>(null);
   const [blankSig, setBlankSig] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -94,6 +96,24 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     if (!state.timerEndsAt) return totalTime;
     return Math.max(0, Math.round((state.timerEndsAt.toMillis() - Date.now()) / 1000));
   });
+  
+  const hasSubmittedDescription = !!state.correctAnswer;
+  
+  const handleDescriptionSubmit = async () => {
+      if (!isArtist || hasSubmittedDescription || isSubmitting) return;
+      if (!description.trim()) {
+        toast({ title: "الوصف مطلوب", variant: "destructive" });
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+          await submitCorrectAnswerAndStartDrawing(game.id, self.id, description.trim());
+      } catch (error: any) {
+          toast({ title: 'خطأ', description: error.message, variant: 'destructive' });
+      } finally {
+          setIsSubmitting(false);
+      }
+  };
 
   const handleSubmit = useCallback(async () => {
     if (!isArtist || submittingRef.current) return;
@@ -103,7 +123,6 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     try {
       const webp = drawingDataUrl ? await toWebPDataURL(drawingDataUrl, 0.9) : null;
       await submitDrawing(game.id, self.id, webp || undefined);
-      // No need to show toast here, server will advance phase
     } catch (error: any) {
       toast({ title: 'خطأ', description: error?.message ?? 'لم يتم الإرسال', variant: 'destructive' });
       setIsSubmitting(false); // Allow retry
@@ -112,7 +131,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   }, [isArtist, drawingDataUrl, game.id, self.id, toast]);
   
   useEffect(() => {
-    if (!isArtist) return;
+    if (!isArtist || !hasSubmittedDescription) return;
     if (timeLeft <= 0) {
         if (!submittingRef.current) {
              handleSubmit();
@@ -129,7 +148,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [isArtist, timeLeft, handleSubmit]);
+  }, [isArtist, timeLeft, handleSubmit, hasSubmittedDescription]);
 
   const onCanvasChange = useCallback((dataUrl: string) => {
     if (!blankSig) {
@@ -175,42 +194,67 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
             <Palette /> دورك في الرسم!
           </CardTitle>
           <CardDescription>
-            لديك {totalTime} ثانية لرسم لوحتك الفنية.
+            {hasSubmittedDescription ? 'لديك الآن دقيقتان لإتمام رسمتك.' : 'أولاً، اكتب وصف الرسمة (كلمة أو كلمتين).'}
           </CardDescription>
         </CardHeader>
 
-        <div className="px-3 sm:px-6">
-          <div className="flex items-center justify-center gap-2 text-lg" aria-live="polite">
-            <Timer />
-            <span>الوقت المتبقي: {timeLeft}s</span>
-          </div>
-          <div className="mt-2 h-2 w-full rounded bg-muted overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
-            <div className={cn("h-full transition-[width] duration-500", timerTone)} style={{ width: `${pct}%` }} />
-          </div>
-        </div>
+        <AnimatePresence mode="wait">
+            {!hasSubmittedDescription ? (
+                 <motion.div key="writing" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                    <CardContent className="space-y-4 max-w-lg mx-auto">
+                        <div className="space-y-2">
+                             <Label htmlFor="description-input">الوصف الصحيح</Label>
+                             <Input 
+                                id="description-input"
+                                placeholder="مثال: قطة على شجرة"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                disabled={isSubmitting}
+                                onKeyDown={(e) => { if(e.key === 'Enter') handleDescriptionSubmit()}}
+                             />
+                        </div>
+                        <Button onClick={handleDescriptionSubmit} disabled={isSubmitting || !description.trim()} className="w-full">
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : <><PenLine className="mr-2"/> ابدأ الرسم</>}
+                        </Button>
+                    </CardContent>
+                 </motion.div>
+            ) : (
+                <motion.div key="drawing" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                    <div className="px-3 sm:px-6">
+                      <div className="flex items-center justify-center gap-2 text-lg" aria-live="polite">
+                        <Timer />
+                        <span>الوقت المتبقي: {timeLeft}s</span>
+                      </div>
+                      <div className="mt-2 h-2 w-full rounded bg-muted overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+                        <div className={cn("h-full transition-[width] duration-500", timerTone)} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
 
-        <CardContent className="space-y-4 pt-4">
-          <div ref={canvasWrapRef} className="w-full">
-            <DrawingCanvas
-              width={canvasW}
-              height={canvasH}
-              onDrawEnd={onCanvasChange}
-              disabled={isSubmitting || timeLeft === 0}
-              className="mx-auto"
-            />
-          </div>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pb-[env(safe-area-inset-bottom)]">
-              <Button
-                onClick={handleSubmit}
-                disabled={isSubmitting || !drawingDataUrl}
-                className="w-full sm:w-auto"
-                size="lg"
-              >
-                {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2" /> إرسال الرسمة</>}
-              </Button>
-          </div>
-        </CardContent>
+                    <CardContent className="space-y-4 pt-4">
+                      <div ref={canvasWrapRef} className="w-full">
+                        <DrawingCanvas
+                          width={canvasW}
+                          height={canvasH}
+                          onDrawEnd={onCanvasChange}
+                          disabled={isSubmitting || timeLeft === 0}
+                          className="mx-auto"
+                        />
+                      </div>
+                      
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pb-[env(safe-area-inset-bottom)]">
+                          <Button
+                            onClick={handleSubmit}
+                            disabled={isSubmitting || !drawingDataUrl}
+                            className="w-full sm:w-auto"
+                            size="lg"
+                          >
+                            {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2" /> إرسال الرسمة</>}
+                          </Button>
+                      </div>
+                    </CardContent>
+                </motion.div>
+            )}
+        </AnimatePresence>
       </Card>
     </motion.div>
   );

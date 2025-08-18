@@ -1,5 +1,3 @@
-
-
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -630,7 +628,6 @@ export type DrawAndDeceiveRoundResult = {
 export interface DrawAndDeceiveState {
     settings: {
         drawingTime: number; 
-        writingTime: number;
         trappingTime: number; 
         guessingTime: number; 
         resultsTime: number; 
