@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { submitDrawing, submitCorrectAnswerAndStartDrawing } from '@/lib/actions/draw-and-deceive';
 import { Loader2, Palette, Send, Timer, Eye, PenLine } from 'lucide-react';
 import { DrawingCanvas } from './DrawingCanvas';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
@@ -30,27 +30,14 @@ function useResponsiveCanvasSize(containerRef: React.RefObject<HTMLDivElement>) 
 
     const compute = () => {
       const cw = Math.max(320, Math.floor(el.clientWidth));
-      const vh = window.innerHeight;
-      const vw = window.innerWidth;
-      const isPortrait = vh > vw;
-
-      const targetH = isPortrait
-        ? Math.min(Math.round(cw * 1.1), Math.round(vh * 0.5))
-        : Math.round(cw * 9 / 16);
-
-      setSize({ w: cw, h: Math.max(220, targetH) });
+      const ch = Math.max(220, Math.floor(el.clientHeight));
+      setSize({ w: cw, h: ch });
     };
 
     compute();
     const ro = new ResizeObserver(compute);
     ro.observe(el);
-    window.addEventListener('orientationchange', compute);
-    window.addEventListener('resize', compute);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('orientationchange', compute);
-      window.removeEventListener('resize', compute);
-    };
+    return () => ro.disconnect();
   }, [containerRef]);
 
   return size;
@@ -231,8 +218,8 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
                       </div>
                     </div>
 
-                    <CardContent className="space-y-4 pt-4">
-                      <div ref={canvasWrapRef} className="w-full">
+                    <CardContent className="space-y-4 pt-4 flex flex-col h-[70vh] md:h-[calc(100vh-280px)]">
+                      <div ref={canvasWrapRef} className="w-full flex-grow relative min-h-0">
                         <DrawingCanvas
                           width={canvasW}
                           height={canvasH}
@@ -242,7 +229,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
                         />
                       </div>
                       
-                      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pb-[env(safe-area-inset-bottom)]">
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pb-[env(safe-area-inset-bottom)] shrink-0">
                           <Button
                             onClick={handleSubmit}
                             disabled={isSubmitting || !drawingDataUrl}
