@@ -276,7 +276,8 @@ export function DrawingCanvas({
   };
 
   // رسم مقطع خط على backing (نقاط CSS → نحول لبكسل قبل الرسم)
-  const strokeSegmentBacking = (fromCss: { x: number; y: number }, toCss: { x: number; y: number }, pressure = 0.5) => {
+  const strokeSegmentBacking = (fromCss: { x: number; y: number } | null, toCss: { x: number; y: number }, pressure = 0.5) => {
+    if (!fromCss) return;
     const ctx = getBackingCtx();
     const f = cssToPx(fromCss);
     const t = cssToPx(toCss);
@@ -820,3 +821,5 @@ export function DrawingCanvas({
     </div>
   );
 }
+
+    

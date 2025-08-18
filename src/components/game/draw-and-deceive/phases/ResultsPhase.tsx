@@ -1,127 +1,275 @@
 'use client';
 
-import React, { useState } from 'react';
-import type { Game, Player, DrawAndDeceiveRoundResult } from '@/types';
+import React, { useCallback, useMemo, useState } from 'react';
+import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { handleTimeout } from '@/lib/actions/draw-and-deceive';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { Loader2, ArrowRight, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
 interface ResultsPhaseProps {
-    game: Game;
-    self: Player;
+  game: Game;
+  self: Player;
 }
 
 export function ResultsPhase({ game, self }: ResultsPhaseProps) {
-    const { toast } = useToast();
-    const isHost = game.hostId === self.id;
-    const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const state = game.drawAndDeceiveState!;
-    const results = state.lastRoundResults!;
-    const artist = game.players.find(p => p.id === state.artistId)!;
+  const state = game.drawAndDeceiveState;
+  const results = state?.lastRoundResults;
 
-    const handleNext = async () => {
-        setIsSubmitting(true);
-        try {
-            await handleTimeout(game.id, self.id);
-        } catch (error: any) {
-            toast({ title: "خطأ", description: error.message, variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+  // حوافظ سريعة لتقليل البحث المتكرر
+  const playerById = useMemo(() => {
+    const map = new Map<string, Player>();
+    game.players.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [game.players]);
 
+  const artist = state?.artistId ? playerById.get(state.artistId) : undefined;
+  const isHost = game.hostId === self.id;
+  const isFinalRound = !!state && state.round >= state.settings.rounds;
+
+  const handleNext = useCallback(async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await handleTimeout(game.id, self.id);
+    } catch (error: any) {
+      toast({
+        title: 'خطأ',
+        description: error?.message ?? 'حدث خطأ غير متوقع',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [game.id, self.id, isSubmitting, toast]);
+
+  // حراسة بسيطة في حال وصول الحالة بدون بيانات (سلامة فقط)
+  if (!state || !results || !artist) {
     return (
-        <Card className="w-full max-w-3xl">
-            <CardHeader className="text-center">
-                <CardTitle className="text-2xl">نتائج الجولة</CardTitle>
-                <CardDescription>
-                    الوصف الصحيح كان: <strong className="text-primary">{state.correctAnswer}</strong>
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {state.drawingDataUrl && (
-                    <div className="relative aspect-video w-full max-w-sm mx-auto rounded-lg overflow-hidden border">
-                         <Image
-                            src={state.drawingDataUrl}
-                            alt="Drawing by the artist"
-                            fill
-                            className="object-contain bg-white"
-                        />
-                    </div>
-                )}
-                <ScrollArea className="h-72">
-                    <div className="space-y-3 p-1">
-                    {results.answers.map((item, index) => (
-                        <motion.div key={index} initial={{opacity:0, y:10}} animate={{opacity:1, y:0, transition: {delay: index * 0.1}}}>
-                            <Card className={cn("p-3", item.isCorrect && "bg-green-500/10 border-green-500/50")}>
-                                <div className="flex justify-between items-center">
-                                    <p className="font-bold text-lg">{item.answer}</p>
-                                    <div className="text-xs">
-                                        {item.isCorrect ? (
-                                            <span className="font-bold text-green-600">الجواب الصحيح (بواسطة {artist.name})</span>
-                                        ) : (
-                                            <span className="text-muted-foreground">فخ بواسطة: {item.authorIds.map(id => game.players.find(p => p.id === id)?.name).join(', ')}</span>
-                                        )}
-                                    </div>
-                                </div>
-                                {item.guesserIds.length > 0 && (
-                                    <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t">
-                                        <p className="text-xs font-bold self-center">الذين صوتوا:</p>
-                                        {item.guesserIds.map(id => {
-                                            const guesser = game.players.find(p => p.id === id);
-                                            return guesser && (
-                                                <div key={id} className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded-full">
-                                                    <PlayerAvatar avatarId={guesser.avatarId} className="w-4 h-4"/>
-                                                    <span>{guesser.name}</span>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </Card>
-                        </motion.div>
-                    ))}
-                    </div>
-                </ScrollArea>
-                <Card className="p-2">
-                    <CardHeader><CardTitle className="text-base">ملخص النقاط</CardTitle></CardHeader>
-                    <CardContent className="text-xs space-y-1">
-                        {Object.entries(results.scores).map(([playerId, scoreData]) => {
-                            const player = game.players.find(p => p.id === playerId);
-                            return (
-                                <div key={playerId} className="flex justify-between">
-                                    <span>{player?.name}:</span>
-                                    <div className="flex gap-2">
-                                        {scoreData.breakdown.map((bd, i) => (
-                                            <span key={i} className={bd.points > 0 ? 'text-green-500' : 'text-red-500'}>
-                                                ({bd.points > 0 ? `+${bd.points}`: bd.points} {bd.reason})
-                                            </span>
-                                        ))}
-                                        <span className="font-bold">= {scoreData.points}</span>
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </CardContent>
-                </Card>
-            </CardContent>
-            <CardFooter>
-                 {isHost ? (
-                    <Button onClick={handleNext} disabled={isSubmitting} className="w-full">
-                        {isSubmitting ? <Loader2 className="animate-spin" /> : <><ArrowRight className="mr-2" /> {state.round >= state.settings.rounds ? "عرض النتائج النهائية" : "الجولة التالية"}</>}
-                    </Button>
-                ) : (
-                    <p className="text-center w-full text-muted-foreground animate-pulse">في انتظار المضيف...</p>
-                )}
-            </CardFooter>
-        </Card>
+      <Card className="w-full max-w-3xl">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl">نتائج الجولة</CardTitle>
+          <CardDescription>يتم تحضير النتائج…</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="animate-spin" />
+        </CardContent>
+      </Card>
     );
+  }
+
+  // حركات موحّدة
+  const itemVariants = {
+    hidden: { opacity: 0, y: 8 },
+    show: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: { delay: i * 0.06, duration: 0.25 },
+    }),
+  };
+
+  return (
+    <Card className="w-full max-w-3xl border-muted shadow-sm">
+      <CardHeader className="text-center space-y-2">
+        <CardTitle className="text-2xl tracking-tight">نتائج الجولة</CardTitle>
+        <CardDescription className="text-base">
+          الوصف الصحيح:
+          <span className="ms-2 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm">
+            <CheckCircle2 className="h-4 w-4" aria-hidden />
+            <strong className="text-primary font-semibold">{state.correctAnswer}</strong>
+          </span>
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-5">
+        {/* الرسم */}
+        {state.drawingDataUrl ? (
+          <div className="relative aspect-video w-full max-w-2xl mx-auto overflow-hidden rounded-xl border bg-background">
+            <Image
+              src={state.drawingDataUrl}
+              alt={`رسم ${artist.name}`}
+              fill
+              priority
+              className="object-contain"
+              sizes="(max-width: 768px) 100vw, 768px"
+            />
+          </div>
+        ) : (
+          <div className="w-full max-w-2xl mx-auto rounded-xl border p-6 text-center text-sm text-muted-foreground">
+            لا يوجد رسم في هذه الجولة.
+          </div>
+        )}
+
+        {/* الإجابات والاختيارات */}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="font-medium">الإجابات والتصويت</p>
+            <p className="text-xs text-muted-foreground">
+              الرسّام: <span className="font-medium">{artist.name}</span>
+            </p>
+          </div>
+          <ScrollArea className="h-72 md:h-80 lg:h-96">
+            <div className="space-y-3 p-1">
+              {results.answers.map((item, idx) => {
+                const isCorrect = item.isCorrect;
+                const authors = (item.authorIds ?? []).map((id) => playerById.get(id)?.name).filter(Boolean);
+                const guessers = (item.guesserIds ?? [])
+                  .map((id) => playerById.get(id))
+                  .filter(Boolean) as Player[];
+
+                return (
+                  <motion.div
+                    key={`${item.answer}-${idx}`}
+                    custom={idx}
+                    variants={itemVariants}
+                    initial="hidden"
+                    animate="show"
+                  >
+                    <div
+                      className={cn(
+                        'rounded-lg border p-3 md:p-4 transition-colors',
+                        isCorrect && 'bg-emerald-500/5 border-emerald-500/40'
+                      )}
+                      role="group"
+                      aria-label={isCorrect ? 'الإجابة الصحيحة' : 'إجابة فخ'}
+                    >
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="font-semibold text-base md:text-lg leading-snug break-words">
+                          {item.answer}
+                        </p>
+
+                        <div className="text-xs sm:text-[11px] text-muted-foreground flex items-center gap-1.5">
+                          {isCorrect ? (
+                            <>
+                              <CheckCircle2 className="h-4 w-4" aria-hidden />
+                              <span className="font-medium">الجواب الصحيح</span>
+                              <span className="opacity-70">•</span>
+                              <span>بواسطة {artist.name}</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle className="h-4 w-4" aria-hidden />
+                              <span className="opacity-80">فخ بواسطة:</span>
+                              <span className="font-medium truncate">
+                                {authors.length ? authors.join(', ') : '—'}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {guessers.length > 0 && (
+                        <div className="mt-3 pt-3 border-t">
+                          <div className="flex items-center gap-2 text-xs font-medium mb-2">
+                            المصوّتون:
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {guessers.map((g) => (
+                              <div
+                                key={g.id}
+                                className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1"
+                              >
+                                <PlayerAvatar avatarId={g.avatarId} className="w-4 h-4 shrink-0" />
+                                <span className="text-xs leading-none">{g.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </div>
+
+        {/* ملخص النقاط */}
+        <div className="rounded-xl border">
+          <div className="px-4 pt-4">
+            <p className="text-sm font-semibold">ملخص النقاط</p>
+          </div>
+          <div className="p-2 sm:p-3">
+            <ul className="divide-y">
+              {Object.entries(results.scores).map(([playerId, scoreData]) => {
+                const p = playerById.get(playerId);
+                if (!p) return null;
+                const total = scoreData.points ?? 0;
+
+                return (
+                  <li key={playerId} className="py-2.5 sm:py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium leading-tight truncate">{p.name}</p>
+                          {/* تفاصيل تفصيلية بنص صغير ومتدرّج */}
+                          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] leading-relaxed">
+                            {scoreData.breakdown.map((bd, i) => (
+                              <span
+                                key={i}
+                                className={cn(
+                                  'rounded-md border px-1.5 py-0.5',
+                                  bd.points > 0 ? 'border-emerald-500/40' : 'border-red-500/40'
+                                )}
+                              >
+                                {bd.points > 0 ? `+${bd.points}` : bd.points} {bd.reason}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-base sm:text-lg font-bold tabular-nums">{total}</div>
+                        <div className="text-[10px] text-muted-foreground">نقاط</div>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+      </CardContent>
+
+      <CardFooter className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
+        {isHost ? (
+          <Button onClick={handleNext} disabled={isSubmitting} className="w-full sm:w-auto">
+            {isSubmitting ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <>
+                <ArrowRight className="me-2" />
+                {isFinalRound ? 'عرض النتائج النهائية' : 'الجولة التالية'}
+              </>
+            )}
+          </Button>
+        ) : (
+          <p
+            className="text-center w-full text-muted-foreground animate-pulse"
+            role="status"
+            aria-live="polite"
+          >
+            في انتظار المضيف…
+          </p>
+        )}
+      </CardFooter>
+    </Card>
+  );
 }
