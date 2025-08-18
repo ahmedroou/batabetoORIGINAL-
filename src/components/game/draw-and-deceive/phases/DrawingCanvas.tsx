@@ -9,8 +9,10 @@ import { Input } from '@/components/ui/input';
 import {
   Undo2, Redo2, Eraser, Pencil, Highlighter, Type, Droplet,
   Image as ImageIcon, Download, Maximize2, Minimize2, Square, Circle,
-  Minus, Grid, Trash2, Hand, PaintBucket, Copy as CopyIcon, RefreshCcw
+  Minus, Grid, Trash2, Hand, PaintBucket, Copy as CopyIcon, RefreshCcw, HelpCircle, Keyboard
 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+
 
 type Tool =
   | 'pen'
@@ -971,13 +973,27 @@ export function DrawingCanvas({
         <canvas ref={overlayRef} className="pointer-events-none absolute inset-0" />
       </div>
 
-      {/* تلميحات */}
-      <div className="mt-2 text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
-        <span>اختصارات: ⌘/Ctrl+Z تراجع، ⇧+⌘/Ctrl+Z إعادة</span>
-        <span>التكبير: عجلة الماوس مع ⌘/Ctrl (حول المؤشر)</span>
-        <span>السحب: أداة التحريك أو Space/Alt أو زر الوسط</span>
-        <span>Shift: قيد الأشكال/الخطوط</span>
-        <span>دبل-كليك: إعادة التعيين</span>
+      <div className="mt-2 text-xs text-muted-foreground flex items-center gap-2">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full">
+              <HelpCircle className="w-4 h-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-3 text-sm" dir="rtl">
+            <div className="space-y-1.5 font-sans">
+              <p><strong>⌘/Ctrl+Z</strong>: تراجع</p>
+              <p><strong>⇧+⌘/Ctrl+Z</strong>: إعادة</p>
+              <p><strong>عجلة الماوس + ⌘/Ctrl</strong>: تكبير/تصغير</p>
+              <p><strong>زر الوسط / Alt</strong>: تحريك اللوحة</p>
+              <p><strong>Shift</strong>: رسم خطوط مستقيمة/أشكال منتظمة</p>
+              <p><strong>نقرة مزدوجة</strong>: إعادة ضبط العرض</p>
+            </div>
+          </PopoverContent>
+        </Popover>
+        <span>
+            اختصارات لوحة المفاتيح
+        </span>
       </div>
     </div>
   );
