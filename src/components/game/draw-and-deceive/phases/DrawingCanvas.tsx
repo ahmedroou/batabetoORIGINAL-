@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
@@ -56,6 +57,9 @@ export function DrawingCanvas({
 
   // Backing canvas (offscreen) يخزّن الرسم الحقيقي بدقّة عالية
   const backingRef = useRef<HTMLCanvasElement | null>(null);
+  
+  const historyIndexRef = useRef<number>(-1);
+
 
   // مقاسات منطقية (CSS pixels)
   const [size, setSize] = useState<{ w: number; h: number }>({
@@ -816,4 +820,3 @@ export function DrawingCanvas({
     </div>
   );
 }
-اعطني كود المرحلة اللي بعدها اللي هي التخمين واصلح فيه الاخطاء مثل هذا الملف
