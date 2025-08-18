@@ -21,28 +21,6 @@ interface DrawingPhaseProps {
   self: Player;
 }
 
-function useResponsiveCanvasSize(containerRef: React.RefObject<HTMLDivElement>) {
-  const [size, setSize] = useState<{ w: number; h: number }>({ w: 800, h: 450 });
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const compute = () => {
-      const cw = Math.max(320, Math.floor(el.clientWidth));
-      const ch = Math.max(220, Math.floor(el.clientHeight));
-      setSize({ w: cw, h: ch });
-    };
-
-    compute();
-    const ro = new ResizeObserver(compute);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [containerRef]);
-
-  return size;
-}
-
 async function toWebPDataURL(dataUrl: string, quality = 0.92): Promise<string> {
   if (typeof window === 'undefined' || !dataUrl.startsWith('data:image/')) return dataUrl;
   const img = new Image();
@@ -164,9 +142,6 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     );
   }
 
-  const canvasWrapRef = useRef<HTMLDivElement>(null);
-  const { w: canvasW, h: canvasH } = useResponsiveCanvasSize(canvasWrapRef);
-
   const pct = Math.max(0, Math.min(100, Math.round((timeLeft / totalTime) * 100)));
   const timerTone = timeLeft <= 10 ? '[&>*]:bg-red-500' : timeLeft <= 30 ? '[&>*]:bg-yellow-500' : '[&>*]:bg-primary';
 
@@ -218,27 +193,24 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
                       </div>
                     </div>
 
-                    <CardContent className="space-y-4 pt-4 flex flex-col h-[70vh] md:h-[calc(100vh-280px)]">
-                        <div ref={canvasWrapRef} className="w-full h-full relative min-h-0">
-                            <DrawingCanvas
-                                width={canvasW}
-                                height={canvasH}
-                                onDrawEnd={onCanvasChange}
-                                disabled={isSubmitting || timeLeft === 0}
-                                className="mx-auto"
-                            />
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pb-[env(safe-area-inset-bottom)] shrink-0">
-                          <Button
-                            onClick={handleSubmit}
-                            disabled={isSubmitting || !drawingDataUrl}
-                            className="w-full sm:w-auto"
-                            size="lg"
-                          >
-                            {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2" /> إرسال الرسمة</>}
-                          </Button>
-                        </div>
+                    <CardContent className="space-y-4 pt-4 flex flex-col h-[calc(100vh-25rem)] min-h-[500px]">
+                      <div className="w-full flex-grow relative min-h-0">
+                          <DrawingCanvas
+                              onDrawEnd={onCanvasChange}
+                              disabled={isSubmitting || timeLeft === 0}
+                              className="mx-auto"
+                          />
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pb-[env(safe-area-inset-bottom)] shrink-0">
+                        <Button
+                          onClick={handleSubmit}
+                          disabled={isSubmitting || !drawingDataUrl}
+                          className="w-full sm:w-auto"
+                          size="lg"
+                        >
+                          {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2" /> إرسال الرسمة</>}
+                        </Button>
+                      </div>
                     </CardContent>
                 </motion.div>
             )}
