@@ -11,6 +11,7 @@ import {
   uploadTrapAnswerQuestionsFromJson,
   uploadPrisonQuestionsFromJson,
   uploadWordWarWordsFromJson,
+  uploadQuizSwapQuestionsFromJson,
   countQuestions,
   deleteQuestions,
   deleteDuplicateWords,
@@ -59,6 +60,7 @@ export {
   uploadTrapAnswerQuestionsFromJson,
   uploadPrisonQuestionsFromJson,
   uploadWordWarWordsFromJson,
+  uploadQuizSwapQuestionsFromJson,
   countQuestions,
   deleteQuestions,
   deleteDuplicateWords,
@@ -94,3 +96,5 @@ export {
   recalculateGameKings,
   distributeEndOfGameAwards,
 };
+
+    

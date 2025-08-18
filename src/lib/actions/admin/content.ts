@@ -16,7 +16,7 @@ import {
     getCountFromServer,
     serverTimestamp,
 } from 'firebase/firestore';
-import type { TrapQuestion } from '@/types';
+import type { QuizSwapQuestionCard, TrapQuestion } from '@/types';
 import { isFirebaseError, getSimilaritySignature } from '@/lib/actions/helpers';
 
 const BATCH_LIMIT_SAFE = 450;
@@ -55,6 +55,43 @@ function dedupeLocal<T>(arr: T[], keyer: (t: T) => string) {
 
 type QAJson = { question: string; answer: string; dummyAnswers?: string[], type?: 'text' | 'image', imageUrl?: string };
 type PrisonJson = { text: string };
+type QuizSwapJson = Omit<QuizSwapQuestionCard, 'id' | 'kind'>;
+
+
+export async function uploadQuizSwapQuestionsFromJson(questions: QuizSwapJson[]) {
+    if (!Array.isArray(questions) || questions.length === 0) return { error: 'ملف JSON غير صالح أو فارغ.' };
+
+    try {
+        const questionsCol = collection(db, 'quiz_swap_questions');
+        let valid = 0;
+        const cleaned = dedupeLocal(questions.filter(q => stringNonEmpty(q.question) && stringNonEmpty(q.answer)), q => getSimilaritySignature(normalize(q.question)));
+        const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = [];
+        
+        for (const q of cleaned) {
+            const id = `Q${String(Math.random()).slice(2, 8)}${String(Date.now()).slice(-4)}`;
+            const docRef = doc(questionsCol, id);
+            const data: QuizSwapQuestionCard = {
+                id,
+                kind: 'question',
+                name: q.name || 'سؤال',
+                question: normalize(q.question),
+                answer: normalize(q.answer),
+                difficulty: q.difficulty || 'medium',
+            };
+            ops.push(b => b.set(docRef, data));
+            valid++;
+        }
+
+        await commitChunks(ops);
+        if (valid === 0) return { error: 'لم يتم العثور على أسئلة صالحة.' };
+        return { success: true, count: valid };
+
+    } catch (e) {
+        console.error("Error uploading Quiz Swap questions:", e);
+        return { error: 'حدث خطأ أثناء رفع أسئلة تبديل الأسئلة.' };
+    }
+}
+
 
 export async function uploadEducatedMerchantQuestionsFromJson(questions: QAJson[], category: string) {
     if (!Array.isArray(questions) || questions.length === 0) return { error: 'ملف JSON غير صالح أو فارغ.' };
@@ -180,7 +217,7 @@ export async function uploadWordWarWordsFromJson(words: string[]) {
 
 // ... rest of the content-related functions ...
 type CountCriteria = {
-  game: 'trap-answer' | 'prison' | 'word_war' | 'educated-merchant';
+  game: 'trap-answer' | 'prison' | 'word_war' | 'educated-merchant' | 'quiz-swap';
   category?: string;
   searchTerm?: string;
   answerSearchTerm?: string;
@@ -196,6 +233,7 @@ export async function countQuestions(criteria: CountCriteria) {
       case 'educated-merchant': return { name: 'educated_merchant_questions', field: 'question' as const };
       case 'prison': return { name: 'prison_questions', field: 'text' as const };
       case 'word_war': return { name: 'word_war_words', field: 'text' as const };
+      case 'quiz-swap': return { name: 'quiz_swap_questions', field: 'question' as const };
       default: throw new Error('نوع لعبة غير مدعوم.');
     }
   };
@@ -226,7 +264,7 @@ export async function countQuestions(criteria: CountCriteria) {
 }
 
 type DeleteCriteria = {
-  game: 'trap-answer' | 'prison' | 'word_war' | 'educated-merchant';
+  game: 'trap-answer' | 'prison' | 'word_war' | 'educated-merchant' | 'quiz-swap';
   category?: string;
   searchTerm?: string;
   answerSearchTerm?: string;
@@ -242,6 +280,7 @@ export async function deleteQuestions(criteria: DeleteCriteria) {
           case 'educated-merchant': return { name: 'educated_merchant_questions', field: 'question' as const };
           case 'prison': return { name: 'prison_questions', field: 'text' as const };
           case 'word_war': return { name: 'word_war_words', field: 'text' as const };
+          case 'quiz-swap': return { name: 'quiz_swap_questions', field: 'question' as const };
           default: throw new Error('نوع لعبة غير مدعوم.');
         }
     };
@@ -372,3 +411,5 @@ export async function deleteSimilarQuestions(
         return { error: 'حدث خطأ غير متوقع أثناء حذف الأسئلة المكررة.' };
     }
 }
+
+    
