@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -24,7 +25,7 @@ const DEFAULT_SETTINGS = {
 
 const MAX_ROUNDS = 10;
 const MIN_ROUNDS = 1;
-const MAX_ANSWER_LEN = 20;
+const MAX_ANSWER_LEN = 30; // Increased limit slightly for flexibility
 
 /* ------------------------------ Utilities ---------------------------- */
 const inSec = (s: number) => Timestamp.fromMillis(Date.now() + s * 1000);
@@ -55,6 +56,7 @@ const nextActiveArtist = (
       return { nextIndex: idx, artistId: candidate };
     }
   }
+  // Fallback, should not happen if there's at least one active player.
   return { nextIndex: currentTurnIndex, artistId: turnOrder[currentTurnIndex]! };
 };
 
@@ -121,7 +123,7 @@ const calculateRoundResults = (
     } else {
       guesserIds.forEach(guesserId => {
         if (authorIds.includes(guesserId)) {
-          addScore(guesserId, -3, 'صوّت لنفسه');
+          addScore(guesserId, -3, 'صوّت لفخه');
         } else {
           authorIds.forEach(authorId => {
             addScore(authorId, 2, `خدع ${getPlayer(guesserId)?.name || 'لاعب'}`);
@@ -233,15 +235,10 @@ export async function submitTrap(gameId: string, playerId: string, trap: string)
       }
 
       const updatedTraps = { ...state.playerTraps, [playerId]: normalizedTrap };
+      tx.update(gameRef, { 'drawAndDeceiveState.playerTraps': updatedTraps });
 
-      tx.update(gameRef, {
-        'drawAndDeceiveState.playerTraps': updatedTraps,
-      });
-
-      const activePlayers = game.players.filter(p => p.status !== 'left');
-      const nonArtists = activePlayers.filter(p => p.id !== state.artistId);
-
-      if (Object.keys(updatedTraps).length === nonArtists.length) {
+      const activePlayers = game.players.filter(p => p.status !== 'left' && p.id !== state.artistId);
+      if (Object.keys(updatedTraps).length === activePlayers.length) {
         const correct = state.correctAnswer;
         ensure(correct, 'Correct answer is missing.');
         const allAnswers = [correct, ...Object.values(updatedTraps)].filter((a): a is string => !!a);
@@ -279,9 +276,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
     ensure((state.shuffledAnswers || []).includes(normalizedGuess), 'Invalid answer choice.');
 
     const updatedGuesses = { ...state.playerGuesses, [playerId]: normalizedGuess };
-    tx.update(gameRef, {
-      'drawAndDeceiveState.playerGuesses': updatedGuesses,
-    });
+    tx.update(gameRef, { 'drawAndDeceiveState.playerGuesses': updatedGuesses });
 
     const activePlayers = game.players.filter(p => p.status !== 'left' && p.id !== state.artistId);
     if (Object.keys(updatedGuesses).length === activePlayers.length) {
@@ -307,65 +302,90 @@ export async function handleTimeout(gameId: string, hostId: string) {
     ensure(gameSnap.exists(), 'Game not found.');
     const game = gameSnap.data() as Game;
     const state = game.drawAndDeceiveState;
-
-    ensure(game.hostId === hostId, 'Only host can advance the game.');
-    ensure(state && state.timerEndsAt && state.timerEndsAt.toMillis() <= Date.now(), 'Timer has not expired yet.');
+    ensure(state, 'Game state not initialized.');
     
-    if (state.phase === 'results') {
-      const nextRound = (state.round || 0) + 1;
-      if (nextRound > state.settings.rounds) {
-        const entries = Object.entries(game.playerScores || {});
-        const winnerId = entries.sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] || 'none';
-        const gameResult = { winner: winnerId, message: `The winner is determined!` };
+    // Only host can trigger timeout-based transitions
+    ensure(game.hostId === hostId, 'Only host can advance the game on timeout.');
+    ensure(state.timerEndsAt && state.timerEndsAt.toMillis() <= Date.now(), 'Timer has not expired yet.');
+    
+    if (state.phase === 'drawing') {
+        const randomWord = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)];
+        const normalizedAnswer = normalizeAnswer(randomWord);
+        const trappingTime = state.settings.trappingTime;
+        tx.update(gameRef, {
+            'drawAndDeceiveState.phase': 'trapping',
+            'drawAndDeceiveState.correctAnswer': normalizedAnswer,
+            'drawAndDeceiveState.timerEndsAt': inSec(trappingTime),
+        });
+    } else if (state.phase === 'trapping') {
+        const activePlayers = game.players.filter(p => p.status !== 'left' && p.id !== state.artistId);
+        const submittedTraps = state.playerTraps;
+        activePlayers.forEach(p => {
+            if (!submittedTraps[p.id]) {
+                submittedTraps[p.id] = null; // Mark as timed out
+            }
+        });
+
+        const correct = state.correctAnswer;
+        ensure(correct, 'Correct answer is missing.');
+        const allAnswers = [correct, ...Object.values(submittedTraps)].filter((a): a is string => !!a);
+        const shuffledAnswers = shuffle(allAnswers);
+        const guessingTime = state.settings.guessingTime;
 
         tx.update(gameRef, {
-          gameState: 'final_results',
-          'drawAndDeceiveState.phase': 'final_results',
-          gameResult,
+            'drawAndDeceiveState.phase': 'guessing',
+            'drawAndDeceiveState.shuffledAnswers': shuffledAnswers,
+            'drawAndDeceiveState.playerTraps': submittedTraps,
+            'drawAndDeceiveState.timerEndsAt': inSec(guessingTime),
         });
-        isGameOver = true;
-      } else {
-        const { nextIndex, artistId } = nextActiveArtist(state.turnOrder, state.currentTurnIndex, game.players);
-        tx.update(gameRef, {
-          gameState: 'drawing',
-          'drawAndDeceiveState.phase': 'drawing',
-          'drawAndDeceiveState.round': nextRound,
-          'drawAndDeceiveState.currentTurnIndex': nextIndex,
-          'drawAndDeceiveState.artistId': artistId,
-          'drawAndDeceiveState.drawingDataUrl': null,
-          'drawAndDeceiveState.correctAnswer': null,
-          'drawAndDeceiveState.playerTraps': {},
-          'drawAndDeceiveState.playerGuesses': {},
-          'drawAndDeceiveState.shuffledAnswers': [],
-          'drawAndDeceiveState.lastRoundResults': null,
-          'drawAndDeceiveState.timerEndsAt': inSec(state.settings.drawingTime),
-        });
-      }
-    } else if (state.phase === 'drawing') {
-      const randomWord = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)];
-      tx.update(gameRef, {
-        'drawAndDeceiveState.phase': 'trapping',
-        'drawAndDeceiveState.correctAnswer': randomWord,
-        'drawAndDeceiveState.timerEndsAt': inSec(state.settings.trappingTime),
-      });
-    } else if (state.phase === 'trapping') {
-      const correct = state.correctAnswer;
-      ensure(correct, 'Correct answer is missing for timeout.');
-      const allAnswers = [correct, ...Object.values(state.playerTraps)].filter((a): a is string => !!a);
-      const shuffledAnswers = shuffle(allAnswers);
-      tx.update(gameRef, {
-        'drawAndDeceiveState.phase': 'guessing',
-        'drawAndDeceiveState.shuffledAnswers': shuffledAnswers,
-        'drawAndDeceiveState.timerEndsAt': inSec(state.settings.guessingTime),
-      });
     } else if (state.phase === 'guessing') {
-      const { resultsState, updatedPlayerScores } = calculateRoundResults(game, state.playerGuesses);
-      tx.update(gameRef, {
-        'drawAndDeceiveState.phase': 'results',
-        'drawAndDeceiveState.lastRoundResults': resultsState,
-        playerScores: updatedPlayerScores,
-        'drawAndDeceiveState.timerEndsAt': inSec(state.settings.resultsTime),
-      });
+        const activePlayers = game.players.filter(p => p.status !== 'left' && p.id !== state.artistId);
+        const submittedGuesses = state.playerGuesses;
+        activePlayers.forEach(p => {
+            if (!submittedGuesses[p.id]) {
+                submittedGuesses[p.id] = '__TIMEOUT__'; // Mark as timed out
+            }
+        });
+        const { resultsState, updatedPlayerScores } = calculateRoundResults(game, submittedGuesses);
+        const resultsTime = state.settings.resultsTime;
+        tx.update(gameRef, {
+            'drawAndDeceiveState.phase': 'results',
+            'drawAndDeceiveState.lastRoundResults': resultsState,
+            playerScores: updatedPlayerScores,
+            'drawAndDeceiveState.timerEndsAt': inSec(resultsTime),
+        });
+    } else if (state.phase === 'results') {
+        const nextRound = (state.round || 0) + 1;
+        if (nextRound > state.settings.rounds) {
+            const entries = Object.entries(game.playerScores || {});
+            const winnerId = entries.sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0]?.[0] || 'none';
+            const gameResult = { winner: winnerId, message: `The winner is determined!` };
+
+            tx.update(gameRef, {
+                gameState: 'final_results',
+                'drawAndDeceiveState.phase': 'final_results',
+                gameResult,
+                'drawAndDeceiveState.timerEndsAt': undefined,
+            });
+            isGameOver = true;
+        } else {
+            const { nextIndex, artistId } = nextActiveArtist(state.turnOrder, state.currentTurnIndex, game.players);
+            const drawingTime = state.settings.drawingTime;
+            tx.update(gameRef, {
+                gameState: 'drawing',
+                'drawAndDeceiveState.phase': 'drawing',
+                'drawAndDeceiveState.round': nextRound,
+                'drawAndDeceiveState.currentTurnIndex': nextIndex,
+                'drawAndDeceiveState.artistId': artistId,
+                'drawAndDeceiveState.drawingDataUrl': null,
+                'drawAndDeceiveState.correctAnswer': null,
+                'drawAndDeceiveState.playerTraps': {},
+                'drawAndDeceiveState.playerGuesses': {},
+                'drawAndDeceiveState.shuffledAnswers': [],
+                'drawAndDeceiveState.lastRoundResults': null,
+                'drawAndDeceiveState.timerEndsAt': inSec(drawingTime),
+            });
+        }
     }
   });
 

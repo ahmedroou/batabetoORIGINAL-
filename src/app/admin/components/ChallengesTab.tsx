@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -6,30 +5,77 @@ import { Timestamp } from "firebase/firestore";
 import { format, formatDistanceToNowStrict, addHours, isBefore } from "date-fns";
 import { ar } from "date-fns/locale";
 
-// UI
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+// UI components
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 // Icons
-import { PlusCircle, Loader2, Trash2, Edit, Award, Search, Filter, ArrowUpDown, Sparkles, Shield, Gem, CircleDollarSign, CalendarClock, Copy, Download, CheckCircle2 } from "lucide-react";
+import {
+  PlusCircle,
+  Loader2,
+  Trash2,
+  Edit,
+  Award,
+  Search,
+  ArrowUpDown,
+  Sparkles,
+  Shield,
+  Gem,
+  CircleDollarSign,
+  CalendarClock,
+  Copy,
+  Download,
+  CheckCircle2,
+} from "lucide-react";
 
 // Types & actions
 import type { Game, ChallengePrize, Challenge, EntryFee } from "@/types";
-import { GAME_TYPE_NAMES } from "@/types";
-import { createChallenge, updateChallenge, deleteChallenge, getAllChallengesForAdmin, finalizeChallenge } from "@/lib/actions/challenges";
+import { GAME_TYPE_NAMES } from "@/data/icons"; // fixed: correct source for names
+import {
+  createChallenge,
+  updateChallenge,
+  deleteChallenge,
+  getAllChallengesForAdmin,
+  finalizeChallenge,
+} from "@/lib/actions/challenges";
 
-// -------------------------------
+// ---------------------------------
 // Utilities
-// -------------------------------
-const isTimestamp = (v: any): v is Timestamp => v?.toDate && typeof v.toDate === "function";
-const toDate = (v: Date | string | Timestamp | null | undefined) => (v ? (isTimestamp(v) ? v.toDate() : new Date(v)) : new Date());
+// ---------------------------------
+const isTimestamp = (v: unknown): v is Timestamp =>
+  !!(v as Timestamp)?.toDate && typeof (v as Timestamp).toDate === "function";
+
+const toDate = (v: Date | string | Timestamp | null | undefined) =>
+  v ? (isTimestamp(v) ? v.toDate() : new Date(v)) : new Date();
 
 const numberOnly = (raw: string) => raw.replace(/[^0-9]/g, "");
 
@@ -46,92 +92,146 @@ const currencyIcon = (t: ChallengePrize["type"]) => {
   }
 };
 
-// -------------------------------
-// PrizeInput (Improved Version)
-// -------------------------------
-const PrizeInput = ({ prize, onUpdate, onRemove }: { prize: ChallengePrize; onUpdate: (p: ChallengePrize) => void; onRemove: () => void }) => {
-  return (
-    <div className="flex gap-2 items-center bg-muted/70 p-2 rounded-lg border border-border/50">
-      <Select value={prize.type} onValueChange={(v) => onUpdate({ ...prize, type: v as any })}>
-        <SelectTrigger className="w-[140px] bg-background">
-          <SelectValue placeholder="نوع الجائزة" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="coins">
-            <div className="flex items-center gap-2">
-              <CircleDollarSign className="w-4 h-4 text-yellow-500" />
-              كوينز
-            </div>
-          </SelectItem>
-          <SelectItem value="diamonds">
-            <div className="flex items-center gap-2">
-              <Gem className="w-4 h-4 text-sky-500" />
-              ألماس
-            </div>
-          </SelectItem>
-          <SelectItem value="honorPoints">
-            <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-emerald-500" />
-              نقاط شرف
-            </div>
-          </SelectItem>
-        </SelectContent>
-      </Select>
+// ---------------------------------
+// PrizeInput
+// ---------------------------------
+const PrizeInput = ({
+  prize,
+  onUpdate,
+  onRemove,
+}: {
+  prize: ChallengePrize;
+  onUpdate: (p: ChallengePrize) => void;
+  onRemove: () => void;
+}) => (
+  <div className="flex gap-2 items-center bg-muted/70 p-2 rounded-lg border border-border/50">
+    <Select
+      value={prize.type}
+      onValueChange={(v) => onUpdate({ ...prize, type: v as ChallengePrize["type"] })}
+    >
+      <SelectTrigger className="w-[140px] bg-background">
+        <SelectValue placeholder="نوع الجائزة" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="coins">
+          <div className="flex items-center gap-2">
+            <CircleDollarSign className="w-4 h-4 text-yellow-500" />
+            كوينز
+          </div>
+        </SelectItem>
+        <SelectItem value="diamonds">
+          <div className="flex items-center gap-2">
+            <Gem className="w-4 h-4 text-sky-500" />
+            ألماس
+          </div>
+        </SelectItem>
+        <SelectItem value="honorPoints">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-emerald-500" />
+            نقاط شرف
+          </div>
+        </SelectItem>
+      </SelectContent>
+    </Select>
 
-      <div className="relative flex-1">
-        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none opacity-80">
-            {currencyIcon(prize.type)}
-        </div>
-        <Input
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={String(prize.value)}
-          onChange={(e) => onUpdate({ ...prize, value: Number(numberOnly(e.target.value)) || 0 })}
-          placeholder="القيمة"
-          aria-label="قيمة الجائزة"
-          className="pl-9 bg-background"
-        />
+    <div className="relative flex-1">
+      <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none opacity-80">
+        {currencyIcon(prize.type)}
       </div>
-
-      <Button size="icon" variant="ghost" className="text-destructive shrink-0" onClick={onRemove} aria-label="حذف الجائزة">
-        <Trash2 className="w-4 h-4" />
-      </Button>
+      <Input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={String(prize.value)}
+        onChange={(e) =>
+          onUpdate({ ...prize, value: Number(numberOnly(e.target.value)) || 0 })
+        }
+        placeholder="القيمة"
+        aria-label="قيمة الجائزة"
+        className="pl-9 bg-background"
+      />
     </div>
-  );
+
+    <Button
+      size="icon"
+      variant="ghost"
+      className="text-destructive shrink-0"
+      onClick={onRemove}
+      aria-label="حذف الجائزة"
+    >
+      <Trash2 className="w-4 h-4" />
+    </Button>
+  </div>
+);
+
+// ---------------------------------
+// ChallengeForm
+// ---------------------------------
+const DEFAULT_FORM: Required<Pick<
+  Challenge,
+  "title" | "targetPoints" | "specificGameType" | "firstPlacePrize" | "secondPlacePrize" | "thirdPlacePrize"
+>> & { entryFee: EntryFee; durationInHours: number } = {
+  title: "",
+  targetPoints: 100,
+  specificGameType: "all" as Game["gameType"] | "all",
+  firstPlacePrize: [{ type: "coins", value: 5 }],
+  secondPlacePrize: [{ type: "coins", value: 50 }],
+  thirdPlacePrize: [{ type: "coins", value: 25 }],
+  entryFee: { type: "coins", value: 0 },
+  durationInHours: 168,
 };
 
-
-// -------------------------------
-// ChallengeForm
-// -------------------------------
 const ChallengeForm = ({
   initialData,
   onSubmit,
   isSubmitting,
 }: {
-  initialData: Partial<Omit<Challenge, "id" | "createdAt" | "participantIds" | "endsAt">> & { durationInHours?: number | string };
+  initialData: Partial<Omit<Challenge, "id" | "createdAt" | "participantIds" | "endsAt">> & {
+    durationInHours?: number | string;
+  };
   onSubmit: (data: any) => void;
   isSubmitting: boolean;
 }) => {
-  const [title, setTitle] = useState(initialData.title || "");
-  const [durationHours, setDurationHours] = useState(String(initialData.durationInHours || "168"));
-  const [targetPoints, setTargetPoints] = useState(String(initialData.targetPoints || "100"));
-  const [specificGameType, setSpecificGameType] = useState<Game["gameType"] | "all">(initialData.specificGameType || "all");
-  const [entryFee, setEntryFee] = useState<EntryFee>(initialData.entryFee || { type: "coins", value: 0 });
-  const [firstPlacePrizes, setFirstPlacePrizes] = useState<ChallengePrize[]>(initialData.firstPlacePrize || [{ type: "coins", value: 5 }]);
-  const [secondPlacePrizes, setSecondPlacePrizes] = useState<ChallengePrize[]>(initialData.secondPlacePrize || [{ type: "coins", value: 50 }]);
-  const [thirdPlacePrizes, setThirdPlacePrizes] = useState<ChallengePrize[]>(initialData.thirdPlacePrize || [{ type: "coins", value: 25 }]);
+  const { toast } = useToast();
+
+  const [title, setTitle] = useState(initialData.title ?? DEFAULT_FORM.title);
+  const [durationHours, setDurationHours] = useState(
+    String(initialData.durationInHours ?? DEFAULT_FORM.durationInHours)
+  );
+  const [targetPoints, setTargetPoints] = useState(
+    String(initialData.targetPoints ?? DEFAULT_FORM.targetPoints)
+  );
+  const [specificGameType, setSpecificGameType] = useState<
+    Game["gameType"] | "all"
+  >((initialData.specificGameType as any) ?? DEFAULT_FORM.specificGameType);
+  const [entryFee, setEntryFee] = useState<EntryFee>(
+    (initialData.entryFee as EntryFee) ?? DEFAULT_FORM.entryFee
+  );
+  const [firstPlacePrizes, setFirstPlacePrizes] = useState<ChallengePrize[]>(
+    initialData.firstPlacePrize ?? DEFAULT_FORM.firstPlacePrize
+  );
+  const [secondPlacePrizes, setSecondPlacePrizes] = useState<ChallengePrize[]>(
+    initialData.secondPlacePrize ?? DEFAULT_FORM.secondPlacePrize
+  );
+  const [thirdPlacePrizes, setThirdPlacePrizes] = useState<ChallengePrize[]>(
+    initialData.thirdPlacePrize ?? DEFAULT_FORM.thirdPlacePrize
+  );
 
   useEffect(() => {
-    setTitle(initialData.title || "");
-    setDurationHours(String(initialData.durationInHours || "168"));
-    setTargetPoints(String(initialData.targetPoints || "100"));
-    setSpecificGameType(initialData.specificGameType || "all");
-    setEntryFee(initialData.entryFee || { type: "coins", value: 0 });
-    setFirstPlacePrizes(initialData.firstPlacePrize || [{ type: "coins", value: 5 }]);
-    setSecondPlacePrizes(initialData.secondPlacePrize || [{ type: "coins", value: 50 }]);
-    setThirdPlacePrizes(initialData.thirdPlacePrize || [{ type: "coins", value: 25 }]);
+    setTitle(initialData.title ?? DEFAULT_FORM.title);
+    setDurationHours(String(initialData.durationInHours ?? DEFAULT_FORM.durationInHours));
+    setTargetPoints(String(initialData.targetPoints ?? DEFAULT_FORM.targetPoints));
+    setSpecificGameType(
+      (initialData.specificGameType as any) ?? DEFAULT_FORM.specificGameType
+    );
+    setEntryFee((initialData.entryFee as EntryFee) ?? DEFAULT_FORM.entryFee);
+    setFirstPlacePrizes(
+      initialData.firstPlacePrize ?? DEFAULT_FORM.firstPlacePrize
+    );
+    setSecondPlacePrizes(
+      initialData.secondPlacePrize ?? DEFAULT_FORM.secondPlacePrize
+    );
+    setThirdPlacePrizes(initialData.thirdPlacePrize ?? DEFAULT_FORM.thirdPlacePrize);
   }, [initialData]);
 
   const endsAtPreview = useMemo(() => {
@@ -147,27 +247,43 @@ const ChallengeForm = ({
     return agg;
   }, [firstPlacePrizes, secondPlacePrizes, thirdPlacePrizes]);
 
-  const handlePrizeChange = (setter: React.Dispatch<React.SetStateAction<ChallengePrize[]>>, index: number, updatedPrize: ChallengePrize) => {
-    setter((prev) => prev.map((p, i) => (i === index ? updatedPrize : p)));
-  };
+  const handlePrizeChange = (
+    setter: React.Dispatch<React.SetStateAction<ChallengePrize[]>>,
+    index: number,
+    updatedPrize: ChallengePrize
+  ) => setter((prev) => prev.map((p, i) => (i === index ? updatedPrize : p)));
 
-  const addPrize = (setter: React.Dispatch<React.SetStateAction<ChallengePrize[]>>) => setter((prev) => [...prev, { type: "coins", value: 0 }]);
-  const removePrize = (setter: React.Dispatch<React.SetStateAction<ChallengePrize[]>>, index: number) => setter((prev) => prev.filter((_, i) => i !== index));
+  const addPrize = (setter: React.Dispatch<React.SetStateAction<ChallengePrize[]>>) =>
+    setter((prev) => [...prev, { type: "coins", value: 0 }]);
+  const removePrize = (
+    setter: React.Dispatch<React.SetStateAction<ChallengePrize[]>>,
+    index: number
+  ) => setter((prev) => prev.filter((_, i) => i !== index));
 
   const validate = () => {
     const t = title.trim();
     const dh = Number(numberOnly(String(durationHours)));
     const tp = Number(numberOnly(String(targetPoints)));
     if (t.length < 3) return { ok: false, msg: "العنوان قصير جدًا." };
-    if (!dh || dh <= 0) return { ok: false, msg: "المدة بالساعات يجب أن تكون أكبر من 0." };
-    if (!tp || tp <= 0) return { ok: false, msg: "نقاط الصدارة المستهدفة يجب أن تكون أكبر من 0." };
-    if (firstPlacePrizes.filter((p) => p.value > 0).length === 0) return { ok: false, msg: "أضف جائزة واحدة على الأقل للمركز الأول." };
-    return { ok: true };
+    if (!dh || dh <= 0)
+      return { ok: false, msg: "المدة بالساعات يجب أن تكون أكبر من 0." };
+    if (!tp || tp <= 0)
+      return {
+        ok: false,
+        msg: "نقاط الصدارة المستهدفة يجب أن تكون أكبر من 0.",
+      };
+    if (firstPlacePrizes.filter((p) => p.value > 0).length === 0)
+      return { ok: false, msg: "أضف جائزة واحدة على الأقل للمركز الأول." };
+    return { ok: true } as const;
   };
 
   const handleSubmit = () => {
     const v = validate();
-    if (!v.ok) return alert(v.msg);
+    if (!v.ok) {
+      // use toast for UX instead of alert
+      toast({ title: "تحقق من الحقول", description: v.msg, variant: "destructive" });
+      return;
+    }
     onSubmit({
       title: title.trim(),
       durationInHours: Number(numberOnly(String(durationHours))),
@@ -185,7 +301,12 @@ const ChallengeForm = ({
       {/* Title */}
       <div className="space-y-2">
         <Label htmlFor="challenge-title">عنوان البطولة</Label>
-        <Input id="challenge-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثال: بطولة العيد الكبرى" />
+        <Input
+          id="challenge-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="مثال: بطولة العيد الكبرى"
+        />
       </div>
 
       {/* Numbers */}
@@ -214,7 +335,11 @@ const ChallengeForm = ({
             placeholder="168"
           />
           <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-            <CalendarClock className="w-3.5 h-3.5" /> ينتهي تقريبًا: {format(endsAtPreview, "d MMM yyyy, h:mm a", { locale: ar })} — {formatDistanceToNowStrict(endsAtPreview, { locale: ar })}
+            <CalendarClock className="w-3.5 h-3.5" /> ينتهي تقريبًا: {format(
+              endsAtPreview,
+              "d MMM yyyy, h:mm a",
+              { locale: ar }
+            )} — {formatDistanceToNowStrict(endsAtPreview, { locale: ar })}
           </p>
         </div>
       </div>
@@ -222,7 +347,10 @@ const ChallengeForm = ({
       {/* Game type */}
       <div className="space-y-2">
         <Label htmlFor="game-type">نوع البطولة</Label>
-        <Select value={specificGameType} onValueChange={(v) => setSpecificGameType(v as any)}>
+        <Select
+          value={specificGameType}
+          onValueChange={(v) => setSpecificGameType(v as any)}
+        >
           <SelectTrigger id="game-type">
             <SelectValue placeholder="اختر نوع البطولة..." />
           </SelectTrigger>
@@ -243,7 +371,10 @@ const ChallengeForm = ({
           <Sparkles className="w-4 h-4" /> رسوم الدخول (اختياري)
         </Label>
         <div className="flex gap-2 items-center">
-          <Select value={entryFee.type} onValueChange={(v) => setEntryFee({ ...entryFee, type: v as any })}>
+          <Select
+            value={entryFee.type}
+            onValueChange={(v) => setEntryFee({ ...entryFee, type: v as any })}
+          >
             <SelectTrigger className="w-[160px]"><SelectValue placeholder="العملة" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="coins">كوينز</SelectItem>
@@ -255,7 +386,9 @@ const ChallengeForm = ({
             inputMode="numeric"
             pattern="[0-9]*"
             value={String(entryFee.value)}
-            onChange={(e) => setEntryFee({ ...entryFee, value: Number(numberOnly(e.target.value)) || 0 })}
+            onChange={(e) =>
+              setEntryFee({ ...entryFee, value: Number(numberOnly(e.target.value)) || 0 })
+            }
             placeholder="القيمة (0 = مجاني)"
           />
         </div>
@@ -266,9 +399,15 @@ const ChallengeForm = ({
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <h4 className="font-bold text-lg">جوائز المراكز</h4>
           <div className="text-xs text-muted-foreground flex items-center gap-3">
-            <span className="flex items-center gap-1">{currencyIcon("coins")} <b>{totals.coins}</b></span>
-            <span className="flex items-center gap-1">{currencyIcon("diamonds")} <b>{totals.diamonds}</b></span>
-            <span className="flex items-center gap-1">{currencyIcon("honorPoints")} <b>{totals.honorPoints}</b></span>
+            <span className="flex items-center gap-1">
+              {currencyIcon("coins")} <b>{totals.coins}</b>
+            </span>
+            <span className="flex items-center gap-1">
+              {currencyIcon("diamonds")} <b>{totals.diamonds}</b>
+            </span>
+            <span className="flex items-center gap-1">
+              {currencyIcon("honorPoints")} <b>{totals.honorPoints}</b>
+            </span>
           </div>
         </div>
 
@@ -281,7 +420,12 @@ const ChallengeForm = ({
             <Label className="font-semibold">{title}</Label>
             <div className="space-y-2">
               {prizes.map((prize, index) => (
-                <PrizeInput key={index} prize={prize} onUpdate={(p) => handlePrizeChange(setter, index, p)} onRemove={() => removePrize(setter, index)} />
+                <PrizeInput
+                  key={`${title}-${index}`}
+                  prize={prize}
+                  onUpdate={(p) => handlePrizeChange(setter, index, p)}
+                  onRemove={() => removePrize(setter, index)}
+                />
               ))}
             </div>
             <Button variant="outline" size="sm" onClick={() => addPrize(setter)}>
@@ -299,22 +443,25 @@ const ChallengeForm = ({
   );
 };
 
-// -------------------------------
-// Main Tab
-// -------------------------------
+// ---------------------------------
+// Main Tab (Admin)
+// ---------------------------------
 export default function ChallengesTab() {
   const { toast } = useToast();
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [isFetching, setIsFetching] = useState(true);
+
   const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
   const [challengeToDelete, setChallengeToDelete] = useState<Challenge | null>(null);
   const [challengeToFinalize, setChallengeToFinalize] = useState<Challenge | null>(null);
 
   // UX: filters & sorting
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "ended" | "finalized">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "ended" | "finalized"
+  >("all");
   const [sortKey, setSortKey] = useState<"endsAt" | "createdAt">("endsAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -324,7 +471,11 @@ export default function ChallengesTab() {
       const fetched = await getAllChallengesForAdmin();
       setChallenges(fetched);
     } catch (error: any) {
-      toast({ title: "خطأ", description: `فشل جلب البطولات: ${error.message}`, variant: "destructive" });
+      toast({
+        title: "خطأ",
+        description: `فشل جلب البطولات: ${error.message}`,
+        variant: "destructive",
+      });
     } finally {
       setIsFetching(false);
     }
@@ -410,10 +561,11 @@ export default function ChallengesTab() {
   const handleDeleteChallenge = async () => {
     if (!challengeToDelete) return;
     setIsSubmitting(true);
-    const result = await deleteChallenge(challengeToDelete.id);
+    const id = challengeToDelete.id; // avoid state race
+    const result = await deleteChallenge(id);
     if (result.success) {
       toast({ title: "تم حذف البطولة بنجاح" });
-      setChallenges((prev) => prev.filter((c) => c.id !== challengeToDelete.id));
+      setChallenges((prev) => prev.filter((c) => c.id !== id));
     } else {
       toast({ title: "خطأ", description: result.error, variant: "destructive" });
     }
@@ -426,7 +578,10 @@ export default function ChallengesTab() {
     setIsSubmitting(true);
     const result = await finalizeChallenge(challengeToFinalize.id);
     if (result.success) {
-      toast({ title: "تم إنهاء البطولة بنجاح", description: `تم توزيع الجوائز على ${result.winnersCount} فائز.` });
+      toast({
+        title: "تم إنهاء البطولة بنجاح",
+        description: `تم توزيع الجوائز على ${result.winnersCount} فائز.`,
+      });
       fetchChallenges();
     } else {
       toast({ title: "خطأ", description: result.error, variant: "destructive" });
@@ -437,10 +592,11 @@ export default function ChallengesTab() {
 
   // Helpers
   const getDurationInHours = (challenge: Challenge) => {
-    if (!challenge.createdAt || !challenge.endsAt) return 168;
+    if (!challenge.createdAt || !challenge.endsAt) return DEFAULT_FORM.durationInHours;
     const createdAtMs = toDate(challenge.createdAt).getTime();
     const endsAtMs = toDate(challenge.endsAt).getTime();
-    return Math.max(1, Math.round((endsAtMs - createdAtMs) / (1000 * 60 * 60)));
+    const diff = Math.max(1, Math.round((endsAtMs - createdAtMs) / (1000 * 60 * 60)));
+    return diff;
   };
 
   const duplicateChallenge = async (c: Challenge) => {
@@ -466,14 +622,7 @@ export default function ChallengesTab() {
   };
 
   const exportCSV = () => {
-    const headers = [
-      "id",
-      "title",
-      "createdAt",
-      "endsAt",
-      "targetPoints",
-      "status",
-    ];
+    const headers = ["id", "title", "createdAt", "endsAt", "targetPoints", "status"];
     const rows = challenges.map((c) => {
       const created = toDate(c.createdAt).toISOString();
       const ends = toDate(c.endsAt).toISOString();
@@ -481,7 +630,10 @@ export default function ChallengesTab() {
       const status = c.winners ? "finalized" : ended ? "ended" : "active";
       return [c.id, c.title, created, ends, String(c.targetPoints ?? ""), status];
     });
-    const csv = [headers.join(","), ...rows.map((r) => r.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const csv = [
+      headers.join(","),
+      ...rows.map((r) => r.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -491,21 +643,33 @@ export default function ChallengesTab() {
     URL.revokeObjectURL(url);
   };
 
-  // List item UI helpers
+  // List item UI
   const ChallengeItem = ({ c }: { c: Challenge }) => {
     const endsAtDate = toDate(c.endsAt);
     const createdAtDate = toDate(c.createdAt);
     const isEnded = isBefore(endsAtDate, new Date());
     const isFinalized = !!c.winners;
 
-    const totalDurationHrs = Math.max(1, Math.round((+endsAtDate - +createdAtDate) / (1000 * 60 * 60)));
+    const totalDurationHrs = Math.max(
+      1,
+      Math.round((+endsAtDate - +createdAtDate) / (1000 * 60 * 60))
+    );
     const elapsedHrs = Math.max(0, Math.round((+new Date() - +createdAtDate) / (1000 * 60 * 60)));
     const progress = Math.max(0, Math.min(100, Math.round((elapsedHrs / totalDurationHrs) * 100)));
 
-    const statusColor = isFinalized ? "bg-emerald-600/20 text-emerald-300 border-emerald-700/30" : isEnded ? "bg-amber-600/20 text-amber-300 border-amber-700/30" : "bg-blue-600/20 text-blue-300 border-blue-700/30";
+    const statusColor = isFinalized
+      ? "bg-emerald-600/20 text-emerald-300 border-emerald-700/30"
+      : isEnded
+      ? "bg-amber-600/20 text-amber-300 border-amber-700/30"
+      : "bg-blue-600/20 text-blue-300 border-blue-700/30";
 
     return (
-      <div className={cn("rounded-lg p-3 border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3", isFinalized ? "bg-background" : isEnded ? "bg-muted/50" : "bg-muted")}>        
+      <div
+        className={cn(
+          "rounded-lg p-3 border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3",
+          isFinalized ? "bg-background" : isEnded ? "bg-muted/50" : "bg-muted"
+        )}
+      >
         <div className="space-y-1 flex-grow">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={cn("text-[11px] px-2 py-0.5 rounded-full border", statusColor)}>
@@ -514,7 +678,9 @@ export default function ChallengesTab() {
             <p className="font-bold text-sm sm:text-base">{c.title}</p>
           </div>
           <p className="text-[12px] text-muted-foreground">
-            تنتهي: {format(endsAtDate, "d MMMM, h:mm a", { locale: ar })} — {formatDistanceToNowStrict(endsAtDate, { locale: ar })}
+            تنتهي: {format(endsAtDate, "d MMMM, h:mm a", { locale: ar })} —
+            {" "}
+            {formatDistanceToNowStrict(endsAtDate, { locale: ar })}
           </p>
           <div className="h-1.5 bg-background/60 rounded-full overflow-hidden">
             <div className="h-full bg-primary/70" style={{ width: `${progress}%` }} />
@@ -527,42 +693,26 @@ export default function ChallengesTab() {
               <Edit className="w-4 h-4" />
             </Button>
           )}
+
           <Button size="icon" variant="ghost" onClick={() => duplicateChallenge(c)} aria-label="نسخ">
             <Copy className="w-4 h-4" />
           </Button>
 
           {isEnded && !isFinalized && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button size="sm" variant="default" className="gap-1" onClick={() => setChallengeToFinalize(c)}>
-                  <Award className="w-4 h-4 ml-1" /> توزيع الجوائز
-                </Button>
-              </AlertDialogTrigger>
-            </AlertDialog>
+            <Button size="sm" variant="default" className="gap-1" onClick={() => setChallengeToFinalize(c)}>
+              <Award className="w-4 h-4 ml-1" /> توزيع الجوائز
+            </Button>
           )}
 
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button size="icon" variant="ghost" className="text-destructive" aria-label="حذف">
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </AlertDialogTrigger>
-            {/* The shared dialog below actually executes the deletion */}
-             <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
-                    <AlertDialogDescription>
-                    هل تريد حقًا حذف بطولة "{c.title}"؟ لا يمكن التراجع عن هذا الإجراء.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => setChallengeToDelete(null)}>إلغاء</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => { setChallengeToDelete(c); handleDeleteChallenge() }} disabled={isSubmitting} className="bg-destructive hover:bg-destructive/90">
-                    {isSubmitting ? "جاري الحذف..." : "نعم، قم بالحذف"}
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="text-destructive"
+            aria-label="حذف"
+            onClick={() => setChallengeToDelete(c)}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
         </div>
       </div>
     );
@@ -594,7 +744,7 @@ export default function ChallengesTab() {
               initialData={
                 editingChallenge
                   ? { ...editingChallenge, durationInHours: getDurationInHours(editingChallenge) }
-                  : ({ title: "", durationInHours: "168", targetPoints: "100", specificGameType: "all", firstPlacePrize: [{ type: "coins", value: 5 }], secondPlacePrize: [{ type: "coins", value: 50 }], thirdPlacePrize: [{ type: "coins", value: 25 }], entryFee: { type: "coins", value: 0 } } as any)
+                  : (DEFAULT_FORM as any)
               }
               onSubmit={editingChallenge ? handleUpdateChallenge : handleCreateChallenge}
               isSubmitting={isSubmitting}
@@ -620,7 +770,12 @@ export default function ChallengesTab() {
 
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-              {[{ k: "total", label: "إجمالي", color: "" }, { k: "active", label: "نشطة", color: "text-blue-500" }, { k: "ended", label: "انتهت", color: "text-amber-500" }, { k: "finalized", label: "موزّعة", color: "text-emerald-500" }].map((s) => (
+              {[
+                { k: "total", label: "إجمالي", color: "" },
+                { k: "active", label: "نشطة", color: "text-blue-500" },
+                { k: "ended", label: "انتهت", color: "text-amber-500" },
+                { k: "finalized", label: "موزّعة", color: "text-emerald-500" },
+              ].map((s) => (
                 <div key={s.k} className="rounded-lg border p-3 bg-muted/40">
                   <p className="text-xs text-muted-foreground">{s.label}</p>
                   <p className={cn("font-extrabold text-xl", s.color)}>{(stats as any)[s.k]}</p>
@@ -631,7 +786,12 @@ export default function ChallengesTab() {
             {/* Controls */}
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-2">
               <div className="relative">
-                <Input placeholder="بحث بالعنوان..." value={query} onChange={(e) => setQuery(e.target.value)} className="pr-9" />
+                <Input
+                  placeholder="بحث بالعنوان..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="pr-9"
+                />
                 <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
               </div>
               <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
@@ -655,7 +815,11 @@ export default function ChallengesTab() {
                     <SelectItem value="createdAt">الفرز حسب تاريخ الإنشاء</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button variant="outline" onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))} className="shrink-0">
+                <Button
+                  variant="outline"
+                  onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                  className="shrink-0"
+                >
                   <ArrowUpDown className="w-4 h-4" />
                 </Button>
               </div>
@@ -671,7 +835,9 @@ export default function ChallengesTab() {
             ) : filteredSorted.length === 0 ? (
               <div className="text-center py-10">
                 <CheckCircle2 className="w-10 h-10 mx-auto opacity-50" />
-                <p className="text-sm text-muted-foreground mt-2">لا توجد بطولات مطابقة لخيارات البحث والتصفية.</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  لا توجد بطولات مطابقة لخيارات البحث والتصفية.
+                </p>
               </div>
             ) : (
               <ScrollArea className="h-[60vh] pr-2">
@@ -685,8 +851,9 @@ export default function ChallengesTab() {
           </CardContent>
         </Card>
 
-        {/* Finalize Dialog */}
-         {challengeToFinalize && <AlertDialog open={!!challengeToFinalize} onOpenChange={() => setChallengeToFinalize(null)}>
+        {/* Finalize Dialog (controlled) */}
+        {challengeToFinalize && (
+          <AlertDialog open={!!challengeToFinalize} onOpenChange={(open) => !open && setChallengeToFinalize(null)}>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>تأكيد توزيع الجوائز</AlertDialogTitle>
@@ -695,13 +862,42 @@ export default function ChallengesTab() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                <AlertDialogCancel disabled={isSubmitting}>إلغاء</AlertDialogCancel>
                 <AlertDialogAction onClick={handleFinalize} disabled={isSubmitting}>
-                   {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "تنفيذ التوزيع"}
+                  {isSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    "تنفيذ التوزيع"
+                  )}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
-         </AlertDialog>}
+          </AlertDialog>
+        )}
+
+        {/* Delete Dialog (controlled) */}
+        {challengeToDelete && (
+          <AlertDialog open={!!challengeToDelete} onOpenChange={(open) => !open && setChallengeToDelete(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>هل أنت متأكد؟</AlertDialogTitle>
+                <AlertDialogDescription>
+                  هل تريد حقًا حذف بطولة "{challengeToDelete.title}"؟ لا يمكن التراجع عن هذا الإجراء.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isSubmitting}>إلغاء</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteChallenge}
+                  disabled={isSubmitting}
+                  className="bg-destructive hover:bg-destructive/90"
+                >
+                  {isSubmitting ? "جاري الحذف..." : "نعم، قم بالحذف"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
     </div>
   );

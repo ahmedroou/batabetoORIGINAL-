@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
@@ -177,8 +178,8 @@ export interface Challenge {
     thirdPlacePrize: ChallengePrize[];
     entryFee?: EntryFee;
     
-    endsAt: Date;
-    createdAt: Timestamp;
+    endsAt: Date | Timestamp;
+    createdAt: Date | Timestamp;
     participantIds: string[];
     participantCount: number;
     scores: Record<string, number>;
@@ -187,6 +188,7 @@ export interface Challenge {
         second?: { id: string, name: string };
         third?: { id: string, name: string };
     };
+    claimedBy?: string[];
     topParticipants?: UserProfile[]; 
     participants?: UserProfile[];
 }
@@ -794,6 +796,7 @@ export interface Game {
     turnResult?: 'hit' | 'miss' | 'neutral' | 'assassin';
     timerEndsAt?: Timestamp | null;
     suspicions?: Record<string, string[]>; // { [cardText]: [playerId1, playerId2, ...] }
+    hintHistory?: { word: string; count: number; team: 'red' | 'blue' }[];
   };
     
   // "The Prison" specific state
@@ -829,6 +832,8 @@ export interface Game {
       activeRejudgeRequest?: { playerId: string; name: string; reason: string };
       judgeExplanation?: string;
       isRejectionJustified?: boolean;
+      judgeRunId?: string;
+      judgingExpected?: number;
   };
 
   // "Educated Merchant" specific state
