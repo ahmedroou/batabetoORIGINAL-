@@ -191,6 +191,7 @@ export interface Challenge {
         second?: { id: string, name: string };
         third?: { id: string, name: string };
     };
+    claimedBy?: string[]; // Array of user IDs who have claimed their prize
     topParticipants?: UserProfile[]; 
     participants?: UserProfile[];
 }

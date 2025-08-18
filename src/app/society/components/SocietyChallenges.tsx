@@ -4,7 +4,7 @@
 import * as React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Challenge, ChallengePrize, UserProfile, EntryFee, GameKing, SocialRank, Game } from '@/types';
-import { getChallenges, joinChallenge, getChallengeDetails, getAllChallengesForAdmin } from '@/lib/actions/challenges';
+import { getChallenges, joinChallenge, getChallengeDetails, getAllChallengesForAdmin, claimChallengePrize } from '@/lib/actions/challenges';
 import { getGameKings, getKingOfGames } from '@/lib/actions/user';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -168,17 +168,20 @@ const EntryFeeDisplay = ({ entryFee }: { entryFee?: EntryFee }) => {
     );
 };
 
-const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; index: number; isEnded: boolean; }) => {
+const ChallengeCard = ({ challenge, index, isEnded, onChallengeUpdate }: { challenge: Challenge; index: number; isEnded: boolean; onChallengeUpdate: (updated: Challenge) => void }) => {
     const { user, userProfile, refreshUserProfile } = useAuth();
     const { toast } = useToast();
     const [isJoining, setIsJoining] = useState(false);
     const [isConfirmingJoin, setIsConfirmingJoin] = useState(false);
+    const [isClaiming, setIsClaiming] = useState(false);
+
     const [progress, setProgress] = useState(0);
     const [endsInLabel, setEndsInLabel] = useState('...');
     
     const topThree = challenge.topParticipants || [];
 
     const isParticipant = userProfile && challenge.participantIds?.includes(userProfile.uid);
+    const hasClaimed = isParticipant && challenge.claimedBy?.includes(userProfile.uid);
     
     useEffect(() => {
         if (isEnded) {
@@ -215,11 +218,29 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
         if (result.success) {
             toast({ title: "لقد انضممت إلى البطولة بنجاح!" });
             if (refreshUserProfile) refreshUserProfile();
+            // Optimistically update the local state
+            const updatedChallenge = { ...challenge, participantIds: [...challenge.participantIds, user.uid], participantCount: challenge.participantCount + 1 };
+            onChallengeUpdate(updatedChallenge);
         } else {
             toast({ title: "خطأ في الانضمام", description: result.error, variant: 'destructive' });
         }
         setIsJoining(false);
         setIsConfirmingJoin(false);
+    };
+    
+    const handleClaim = async () => {
+        if (!user || !isParticipant) return;
+        setIsClaiming(true);
+        const result = await claimChallengePrize(challenge.id, user.uid);
+        if (result.success) {
+            toast({ title: "تم استلام الجائزة!", description: result.message });
+            if (refreshUserProfile) refreshUserProfile();
+            const updatedChallenge = { ...challenge, claimedBy: [...(challenge.claimedBy || []), user.uid] };
+            onChallengeUpdate(updatedChallenge);
+        } else {
+            toast({ title: "خطأ", description: result.error, variant: 'destructive' });
+        }
+        setIsClaiming(false);
     };
 
     const cardVariants = {
@@ -310,9 +331,20 @@ const ChallengeCard = ({ challenge, index, isEnded }: { challenge: Challenge; in
                             </Button>
                         }/>
                     </div>
-                     <Button onClick={() => setIsConfirmingJoin(true)} disabled={isJoining || isParticipant || isEnded} className="w-full bg-purple-600 hover:bg-purple-700 mt-2">
-                         {isJoining ? <Loader2 className="animate-spin" /> : isParticipant ? 'أنت مشارك' : isEnded ? 'انتهت البطولة' : 'انضم للبطولة'}
-                     </Button>
+                     
+                     {isEnded && isParticipant && challenge.winners && !hasClaimed && (
+                        <Button onClick={handleClaim} disabled={isClaiming} className="w-full bg-green-600 hover:bg-green-700 mt-2">
+                             {isClaiming ? <Loader2 className="animate-spin" /> : <><Trophy className="ml-2 w-4 h-4" /> احصل على جائزتك</>}
+                        </Button>
+                     )}
+                     {isEnded && isParticipant && hasClaimed && (
+                         <Button disabled className="w-full mt-2"><Check className="ml-2 w-4 h-4"/> تم استلام الجائزة</Button>
+                     )}
+                     {!isEnded && (
+                        <Button onClick={() => setIsConfirmingJoin(true)} disabled={isJoining || isParticipant} className="w-full bg-purple-600 hover:bg-purple-700 mt-2">
+                             {isJoining ? <Loader2 className="animate-spin" /> : isParticipant ? 'أنت مشارك' : 'انضم للبطولة'}
+                         </Button>
+                     )}
                 </CardFooter>
                  <AlertDialog open={isConfirmingJoin} onOpenChange={setIsConfirmingJoin}>
                     <AlertDialogContentAlt>
@@ -351,15 +383,20 @@ export default function SocietyChallenges({ filter = 'active', query = '', sort 
     const [challenges, setChallenges] = useState<Challenge[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchChallenges = async () => {
-            setIsLoading(true);
-            const fetchedChallenges = await getChallenges();
-            setChallenges(fetchedChallenges);
-            setIsLoading(false);
-        };
-        fetchChallenges();
+    const fetchAndSetChallenges = useCallback(async () => {
+        setIsLoading(true);
+        const fetchedChallenges = await getChallenges();
+        setChallenges(fetchedChallenges);
+        setIsLoading(false);
     }, []);
+
+    useEffect(() => {
+        fetchAndSetChallenges();
+    }, [fetchAndSetChallenges]);
+    
+    const handleChallengeUpdate = (updatedChallenge: Challenge) => {
+        setChallenges(prev => prev.map(c => c.id === updatedChallenge.id ? updatedChallenge : c));
+    };
 
     const filteredAndSortedChallenges = useMemo(() => {
         const now = Date.now();
@@ -415,7 +452,7 @@ export default function SocietyChallenges({ filter = 'active', query = '', sort 
                     ))
                 ) : filteredAndSortedChallenges.length > 0 ? (
                     filteredAndSortedChallenges.map((challenge, index) => (
-                       <ChallengeCard key={challenge.id} challenge={challenge} index={index} isEnded={filter === 'ended'} />
+                       <ChallengeCard key={challenge.id} challenge={challenge} index={index} isEnded={filter === 'ended'} onChallengeUpdate={handleChallengeUpdate} />
                     ))
                 ) : (
                     <div className="col-span-full text-center py-16">

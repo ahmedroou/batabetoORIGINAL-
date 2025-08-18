@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -47,6 +48,7 @@ export async function createChallenge(challengeData: CreateChallengeInput): Prom
             participantIds: [],
             participantCount: 0,
             scores: {},
+            claimedBy: [],
         };
 
         await addDoc(challengesCollectionRef, newChallenge);
@@ -347,58 +349,98 @@ export async function finalizeChallenge(challengeId: string): Promise<{ success:
             .slice(0, 3);
 
         const winners: Challenge['winners'] = {};
-        let winnersCount = 0;
-        
-        const applyPrizes = async (userId: string, prizes: ChallengePrize[]) => {
-            const userRef = doc(db, 'users', userId);
-            const updates: { [key: string]: any } = {};
-            let mailBody = `تهانينا! لقد فزت بالجوائز التالية في بطولة: ${challengeData.title}\n\n`;
-
-            for (const prize of prizes) {
-                updates[prize.type] = increment(prize.value);
-                mailBody += `- ${prize.value} ${prize.type === 'coins' ? 'كوينز' : prize.type === 'diamonds' ? 'ألماس' : 'نقاط شرف'}\n`;
-            }
-            
-            transaction.update(userRef, updates);
-            await sendSystemMail(userId, { subject: `🎉 لقد فزت في البطولة!`, body: mailBody }, transaction);
-        };
         
         if (sortedWinners.length > 0) {
-            const firstPlace = sortedWinners[0];
-            const firstPlayerDoc = await getDoc(doc(db, 'users', firstPlace[0]));
+            const firstPlaceId = sortedWinners[0][0];
+            const firstPlayerDoc = await getDoc(doc(db, 'users', firstPlaceId));
             if (firstPlayerDoc.exists()) {
-                winners.first = { id: firstPlace[0], name: firstPlayerDoc.data().name };
-                await applyPrizes(firstPlace[0], challengeData.firstPlacePrize);
-                winnersCount++;
+                winners.first = { id: firstPlaceId, name: firstPlayerDoc.data().name };
             }
         }
         
         if (sortedWinners.length > 1) {
-            const secondPlace = sortedWinners[1];
-             const secondPlayerDoc = await getDoc(doc(db, 'users', secondPlace[0]));
+            const secondPlaceId = sortedWinners[1][0];
+            const secondPlayerDoc = await getDoc(doc(db, 'users', secondPlaceId));
              if (secondPlayerDoc.exists()) {
-                winners.second = { id: secondPlace[0], name: secondPlayerDoc.data().name };
-                await applyPrizes(secondPlace[0], challengeData.secondPlacePrize);
-                winnersCount++;
+                winners.second = { id: secondPlaceId, name: secondPlayerDoc.data().name };
              }
         }
         
         if (sortedWinners.length > 2) {
-            const thirdPlace = sortedWinners[2];
-            const thirdPlayerDoc = await getDoc(doc(db, 'users', thirdPlace[0]));
+            const thirdPlaceId = sortedWinners[2][0];
+            const thirdPlayerDoc = await getDoc(doc(db, 'users', thirdPlaceId));
             if (thirdPlayerDoc.exists()) {
-                winners.third = { id: thirdPlace[0], name: thirdPlayerDoc.data().name };
-                await applyPrizes(thirdPlace[0], challengeData.thirdPlacePrize);
-                winnersCount++;
+                winners.third = { id: thirdPlaceId, name: thirdPlayerDoc.data().name };
             }
         }
         
-        transaction.update(challengeRef, { winners: winners });
+        transaction.update(challengeRef, { winners: winners, claimedBy: [] });
 
-        return { success: true, winnersCount };
+        return { success: true, winnersCount: Object.keys(winners).length };
 
     }).catch((error: any) => {
         console.error("Error finalizing challenge:", error);
         return { success: false, winnersCount: 0, error: error.message };
+    });
+}
+
+/**
+ * Allows a player to claim their prize for a completed challenge.
+ * @param {string} challengeId - The ID of the challenge.
+ * @param {string} userId - The ID of the user claiming the prize.
+ * @returns {Promise<{ success: boolean; error?: string; message?: string }>}
+ */
+export async function claimChallengePrize(challengeId: string, userId: string): Promise<{ success: boolean; error?: string; message?: string }> {
+    const challengeRef = doc(db, 'challenges', challengeId);
+    const userRef = doc(db, 'users', userId);
+
+    return runTransaction(db, async (transaction) => {
+        const [challengeDoc, userDoc] = await Promise.all([
+            transaction.get(challengeRef),
+            transaction.get(userRef)
+        ]);
+
+        if (!challengeDoc.exists()) throw new Error("البطولة غير موجودة.");
+        if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
+
+        const challengeData = challengeDoc.data() as Challenge;
+        
+        if (!challengeData.winners) throw new Error("لم يتم تحديد الفائزين في هذه البطولة بعد.");
+        if (challengeData.claimedBy?.includes(userId)) throw new Error("لقد طالبت بجائزتك بالفعل.");
+        
+        let rank: 'first' | 'second' | 'third' | null = null;
+        if (challengeData.winners.first?.id === userId) rank = 'first';
+        else if (challengeData.winners.second?.id === userId) rank = 'second';
+        else if (challengeData.winners.third?.id === userId) rank = 'third';
+
+        if (!rank) throw new Error("أنت لست من الفائزين في هذه البطولة.");
+
+        const prizeMap = {
+            first: challengeData.firstPlacePrize,
+            second: challengeData.secondPlacePrize,
+            third: challengeData.thirdPlacePrize,
+        };
+
+        const prizesToAward = prizeMap[rank];
+        if (!prizesToAward || prizesToAward.length === 0) {
+            // Mark as claimed even if no prize to prevent re-claims
+            transaction.update(challengeRef, { claimedBy: arrayUnion(userId) });
+            return { success: true, message: "لا توجد جوائز محددة لمركزك، ولكن تم تسجيل مطالبتك." };
+        }
+        
+        const updates: { [key: string]: any } = {};
+        prizesToAward.forEach(prize => {
+            updates[prize.type] = increment(prize.value);
+        });
+
+        transaction.update(userRef, updates);
+        transaction.update(challengeRef, { claimedBy: arrayUnion(userId) });
+
+        const prizeDescriptions = prizesToAward.map(p => `${p.value} ${p.type === 'coins' ? 'كوينز' : p.type === 'diamonds' ? 'ألماس' : 'نقاط شرف'}`).join(', ');
+        return { success: true, message: `تهانينا! لقد حصلت على: ${prizeDescriptions}.` };
+
+    }).catch((error: any) => {
+        console.error("Error claiming challenge prize:", error);
+        return { success: false, error: error.message || "فشل المطالبة بالجائزة." };
     });
 }
