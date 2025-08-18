@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -414,6 +415,7 @@ export async function endTurn(gameId: string, playerId: string, opts?: { expecte
 
 export async function handleTimeout(gameId: string, actorId: string, opts?: { expectedTurnId?: number; clientSentAtMs?: number }) {
   const gameRef = doc(db, 'games', gameId);
+  let finalGameData: Game | null = null;
   await runTransaction(db, async (t) => {
     const gameDoc = await t.get(gameRef);
     if (!gameDoc.exists()) return;
@@ -449,11 +451,19 @@ export async function handleTimeout(gameId: string, actorId: string, opts?: { ex
       bumpTurnId(t, gameRef, game.wordWarState.turnId);
       setTimer(t, gameRef, 'guide', getTurnTime(game));
     } else if (game.gameState === 'board_reveal') {
-      // In this version, we no longer transition directly to final_results from here.
-      // We just clear the timer. The host will trigger the next step.
-      clearTimer(t, gameRef);
+        const gameAfterBoardReveal: Game = { ...game, gameState: 'final_results' };
+        t.update(gameRef, { 
+            gameState: 'final_results',
+            'wordWarState.timer': deleteField() 
+        });
+        finalGameData = gameAfterBoardReveal;
     }
   });
+
+   if (finalGameData) {
+      await distributeEndOfGameAwards(finalGameData);
+      await updateLeagueScoresForGameEnd(finalGameData);
+  }
 }
 
 export async function toggleSuspicion(gameId: string, playerId: string, cardText: string, opts?: { expectedTurnId?: number; clientSentAtMs?: number }) {
@@ -514,7 +524,7 @@ export async function proceedToFinalResults(gameId: string, hostId: string): Pro
     });
 
     if (gameDataForLeagueUpdate) {
-        await distributeEndOfGameAwards(gameDataForLeagueUpdate);
+        await distributeEndOfGameAwards(gameId);
         await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
     }
 }
