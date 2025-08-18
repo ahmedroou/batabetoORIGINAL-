@@ -21,10 +21,10 @@ const DEFAULT_SETTINGS = {
   guessingTime: 35,
   resultsTime: 20,
   rounds: 3,
-  writingTime: 20, // New: dedicated time for writing after drawing time is up
+  writingTime: 20, 
+  kickVoteTime: 30, // Time players have to vote
 };
 
-const KICK_VOTE_TIME = 30;
 const KICK_VOTE_THRESHOLD = 2; // 2 votes needed to kick
 
 const MAX_ROUNDS = 10;
@@ -261,6 +261,7 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
             'drawAndDeceiveState.phase': 'trapping',
             'drawAndDeceiveState.drawingDataUrl': drawingDataUrl || null,
             'drawAndDeceiveState.timerEndsAt': inSec(trappingTime),
+            'drawAndDeceiveState.kickVote': null, // Cancel any active kick vote
         });
     });
 }
@@ -388,72 +389,60 @@ export async function voteToKickArtist(gameId: string, voterId: string, vote: 'k
     ensure(gameSnap.exists(), 'Game not found.');
     const game = gameSnap.data() as Game;
     const state = game.drawAndDeceiveState;
-    ensure(state?.phase === 'kick_vote', 'Not in kick vote phase.');
+
+    ensure(state, 'Game state not initialized.');
+    ensure(state.kickVote?.active, 'Kick vote is not active.');
     ensure(state.artistId !== voterId, 'The artist cannot vote on themselves.');
     
-    const kickVote = state.kickVote || { votes: {}, voterIds: [] };
+    const kickVote = state.kickVote || { active: true, votes: {}, voterIds: [] };
     ensure(!kickVote.voterIds.includes(voterId), 'You have already voted.');
 
     const updatedVotes = { ...kickVote.votes, [voterId]: vote };
     const updatedVoterIds = [...kickVote.voterIds, voterId];
-    tx.update(gameRef, {
-      'drawAndDeceiveState.kickVote': { votes: updatedVotes, voterIds: updatedVoterIds }
-    });
-
-    const activeVoters = game.players.filter(p => p.status !== 'left' && p.id !== state.artistId);
-    if (updatedVoterIds.length >= activeVoters.length) {
-      // All votes are in, process the result immediately
-      await processKickVote(gameId, tx);
+    
+    const kickVotesCount = Object.values(updatedVotes).filter(v => v === 'kick').length;
+    
+    if (kickVotesCount >= KICK_VOTE_THRESHOLD) {
+      await processKickVote(gameId, tx, game);
+    } else {
+        tx.update(gameRef, {
+          'drawAndDeceiveState.kickVote': { active: true, votes: updatedVotes, voterIds: updatedVoterIds }
+        });
     }
   });
 }
 
-async function processKickVote(gameId: string, tx: Transaction) {
-    const gameRef = doc(db, 'games', gameId);
-    const snap = await tx.get(gameRef);
-    const game = snap.data() as Game;
+async function processKickVote(gameId: string, tx: Transaction, game: Game) {
     const state = game.drawAndDeceiveState!;
     const artistId = state.artistId!;
     
-    const kickVotes = Object.values(state.kickVote?.votes ?? {}).filter(v => v === 'kick').length;
+    const newTurnOrder = state.turnOrder.filter(id => id !== artistId);
     
-    if (kickVotes >= KICK_VOTE_THRESHOLD) {
-        // Kick the player
-        const newTurnOrder = state.turnOrder.filter(id => id !== artistId);
-        if (newTurnOrder.length < 2) {
-             const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) => ((game.playerScores![a] || 0) > (game.playerScores![b] || 0) ? a : b), '');
-             tx.update(gameRef, {
-                 gameState: 'final_results',
-                 'drawAndDeceiveState.phase': 'final_results',
-                 gameResult: { winner: winnerId, message: 'انتهت اللعبة لعدم وجود لاعبين كافيين.'}
-             });
-             return;
-        }
-        
-        const { nextIndex, artistId: newArtistId } = nextActiveArtist(newTurnOrder, state.currentTurnIndex - 1, game.players);
-        
-        tx.update(gameRef, {
-            'drawAndDeceiveState.turnOrder': newTurnOrder,
-            'drawAndDeceiveState.phase': 'drawing',
-            'drawAndDeceiveState.artistId': newArtistId,
-            'drawAndDeceiveState.currentTurnIndex': nextIndex,
-            'drawAndDeceiveState.drawingDataUrl': null,
-            'drawAndDeceiveState.correctAnswer': null,
-            'drawAndDeceiveState.playerTraps': {},
-            'drawAndDeceiveState.playerGuesses': {},
-            'drawAndDeceiveState.shuffledAnswers': [],
-            'drawAndDeceiveState.kickVote': null,
-            'drawAndDeceiveState.timerEndsAt': null, // Wait for new artist to write
-        });
-    } else {
-        // Spare the player, restart their drawing turn
-         tx.update(gameRef, {
-            'drawAndDeceiveState.phase': 'drawing',
-            'drawAndDeceiveState.kickVote': null,
-            'drawAndDeceiveState.correctAnswer': null, // Let them retry writing
-            'drawAndDeceiveState.timerEndsAt': null, // Wait for new description
+    if (newTurnOrder.length < 2) {
+         const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) => ((game.playerScores![a] || 0) > (game.playerScores![b] || 0) ? a : b), '');
+         tx.update(doc(db, 'games', gameId), {
+             gameState: 'final_results',
+             'drawAndDeceiveState.phase': 'final_results',
+             gameResult: { winner: winnerId, message: 'انتهت اللعبة لعدم وجود لاعبين كافيين.'}
          });
+         return;
     }
+    
+    const { nextIndex, artistId: newArtistId } = nextActiveArtist(newTurnOrder, state.currentTurnIndex - 1, game.players);
+    
+    tx.update(doc(db, 'games', gameId), {
+        'drawAndDeceiveState.turnOrder': newTurnOrder,
+        'drawAndDeceiveState.phase': 'drawing',
+        'drawAndDeceiveState.artistId': newArtistId,
+        'drawAndDeceiveState.currentTurnIndex': nextIndex,
+        'drawAndDeceiveState.drawingDataUrl': null,
+        'drawAndDeceiveState.correctAnswer': null,
+        'drawAndDeceiveState.playerTraps': {},
+        'drawAndDeceiveState.playerGuesses': {},
+        'drawAndDeceiveState.shuffledAnswers': [],
+        'drawAndDeceiveState.kickVote': null,
+        'drawAndDeceiveState.timerEndsAt': null, // Wait for new artist to write
+    });
 }
 
 
@@ -471,31 +460,14 @@ export async function handleTimeout(gameId: string, hostId: string) {
       return; 
     }
     
-    // Time is up for the current phase
-    if (state.phase === 'drawing') {
+    if (state.phase === 'drawing' && !state.kickVote?.active) {
         tx.update(gameRef, {
-            'drawAndDeceiveState.phase': 'kick_vote',
-            'drawAndDeceiveState.timerEndsAt': inSec(KICK_VOTE_TIME),
+            'drawAndDeceiveState.kickVote': { active: true, votes: {}, voterIds: [] },
+            'drawAndDeceiveState.timerEndsAt': inSec(state.settings.kickVoteTime ?? 30),
         });
-    } else if (state.phase === 'kick_vote') {
-        await processKickVote(gameId, tx);
-    } else if (state.phase === 'trapping') {
-      const playerAnswers = { ...(state.playerTraps || {}) };
-      getActivePlayers(game).forEach(p => { if (p.id !== state.artistId && !playerAnswers[p.id]) playerAnswers[p.id] = null; });
-      const { updates } = _getGuessingPhaseUpdates(game, playerAnswers);
-      tx.update(gameRef, updates);
-    } else if (state.phase === 'guessing') {
-      const playerGuesses = { ...(state.playerGuesses || {}) };
-      getActivePlayers(game).forEach(p => { if (p.id !== state.artistId && !playerGuesses[p.id]) playerGuesses[p.id] = null; });
-      const { updates } = _getResultsPhaseUpdates(game, playerGuesses);
-      tx.update(gameRef, updates);
-    } else if (state.phase === 'results') {
-      const { updates, isGameOver } = _getNextRoundUpdates(game);
-      tx.update(gameRef, updates);
-      if (isGameOver) {
-          // Note: distributeEndOfGameAwards is now called from the client component for safety.
-          // This transaction simply sets the final state.
-      }
+    } else if (state.kickVote?.active && state.phase === 'drawing') {
+        // Kick vote time ran out, process with current votes
+        await processKickVote(gameId, tx, game);
     }
   });
 }
@@ -505,16 +477,20 @@ function _getGuessingPhaseUpdates(game: Game, playerAnswers: Record<string, stri
   const guessingTime = state.settings?.guessingTime ?? DEFAULT_SETTINGS.guessingTime;
   const endsAt = inSec(guessingTime);
   ensure(state.correctAnswer, 'Correct answer is missing.');
+  
+  const allAnswers = [
+    state.correctAnswer,
+    ...Object.values(playerAnswers).filter((a): a is string => !!a),
+  ];
+  const shuffled = shuffle(allAnswers);
 
   return {
     updates: {
       gameState: 'guessing' as GameState,
+      'drawAndDeceiveState.phase': 'guessing',
       'drawAndDeceiveState.playerAnswers': playerAnswers,
       'drawAndDeceiveState.timerEndsAt': endsAt,
-      'drawAndDeceiveState.shuffledAnswers': buildShuffledAnswers(
-        { answer: state.correctAnswer } as TrapQuestion, // This is a bit of a hack
-        playerAnswers
-      ),
+      'drawAndDeceiveState.shuffledAnswers': shuffled,
     },
   };
 }
@@ -526,7 +502,8 @@ function _getResultsPhaseUpdates(game: Game, playerGuesses: Record<string, strin
     playerGuesses as Record<string, string>
   );
 
-  const resultsTime = state.settings?.resultsTime ?? DEFAULT_SETTINGS.resultsTime;
+  const resultsTime =
+    state.settings?.resultsTime ?? DEFAULT_SETTINGS.resultsTime;
   const endsAt = inSec(resultsTime);
 
   return {
@@ -539,43 +516,38 @@ function _getResultsPhaseUpdates(game: Game, playerGuesses: Record<string, strin
   };
 }
 
-function _getNextRoundUpdates(game: Game): { updates: any; isGameOver: boolean } {
-  const state = game.drawAndDeceiveState!;
-  const nextRoundNumber = state.round + 1;
 
-  if (nextRoundNumber > state.settings.rounds) {
-    const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) =>
-      (game.playerScores![a] || 0) > (game.playerScores![b] || 0) ? a : b,
-      ''
-    );
-    return {
-      updates: {
-        gameState: 'final_results',
-        'drawAndDeceiveState.phase': 'final_results',
-        gameResult: { winner: winnerId, message: 'انتهت اللعبة!' },
-        'drawAndDeceiveState.timerEndsAt': null,
-      },
-      isGameOver: true,
-    };
+async function _startNextRound(tx: any, gameRef: any, game: Game): Promise<{ isGameOver: boolean }> {
+  const state = game.drawAndDeceiveState!;
+  const settings = state.settings;
+  const currentRound = game.round || 0;
+  
+  if (currentRound >= settings.rounds) {
+    const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) => ((game.playerScores?.[a] || 0) > (game.playerScores?.[b] || 0) ? a : b), '');
+    tx.update(gameRef, {
+      gameState: 'final_results',
+      'drawAndDeceiveState.phase': 'final_results',
+      gameResult: { winner: winnerId, message: 'انتهت اللعبة!' }
+    });
+    return { isGameOver: true };
   }
   
   const { nextIndex, artistId } = nextActiveArtist(state.turnOrder, state.currentTurnIndex, game.players);
 
-  return {
-    updates: {
-      gameState: 'drawing',
-      'drawAndDeceiveState.phase': 'drawing',
-      'drawAndDeceiveState.round': nextRoundNumber,
-      'drawAndDeceiveState.currentTurnIndex': nextIndex,
-      'drawAndDeceiveState.artistId': artistId,
-      'drawAndDeceiveState.drawingDataUrl': null,
-      'drawAndDeceiveState.correctAnswer': null,
-      'drawAndDeceiveState.playerTraps': {},
-      'drawAndDeceiveState.playerGuesses': {},
-      'drawAndDeceiveState.shuffledAnswers': [],
-      'drawAndDeceiveState.lastRoundResults': null,
-      'drawAndDeceiveState.timerEndsAt': null,
-    },
-    isGameOver: false,
-  };
+  tx.update(gameRef, {
+    gameState: 'drawing',
+    'drawAndDeceiveState.phase': 'drawing',
+    'drawAndDeceiveState.round': currentRound + 1,
+    'drawAndDeceiveState.currentTurnIndex': nextIndex,
+    'drawAndDeceiveState.artistId': artistId,
+    'drawAndDeceiveState.drawingDataUrl': null,
+    'drawAndDeceiveState.correctAnswer': null,
+    'drawAndDeceiveState.playerTraps': {},
+    'drawAndDeceiveState.playerGuesses': {},
+    'drawAndDeceiveState.shuffledAnswers': [],
+    'drawAndDeceiveState.kickVote': null,
+    'drawAndDeceiveState.timerEndsAt': null, // Wait for new artist to write
+  });
+
+  return { isGameOver: false };
 }
