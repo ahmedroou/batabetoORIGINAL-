@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Timestamp } from "firebase/firestore";
 import { format, formatDistanceToNowStrict, addHours, isBefore } from "date-fns";
 import { ar } from "date-fns/locale";
+import { motion, AnimatePresence } from "framer-motion";
+
 
 // UI components
 import {
@@ -56,11 +58,12 @@ import {
   Copy,
   Download,
   CheckCircle2,
+  ArrowRight
 } from "lucide-react";
 
 // Types & actions
 import type { Game, ChallengePrize, Challenge, EntryFee } from "@/types";
-import { GAME_TYPE_NAMES } from "@/data/icons"; // fixed: correct source for names
+import { GAME_TYPE_NAMES } from "@/data/icons";
 import {
   createChallenge,
   updateChallenge,
@@ -186,53 +189,55 @@ const ChallengeForm = ({
   initialData,
   onSubmit,
   isSubmitting,
+  onCancel,
 }: {
-  initialData: Partial<Omit<Challenge, "id" | "createdAt" | "participantIds" | "endsAt">> & {
+  initialData?: Partial<Omit<Challenge, "id" | "createdAt" | "participantIds" | "endsAt">> & {
     durationInHours?: number | string;
-  };
+  } | null;
   onSubmit: (data: any) => void;
   isSubmitting: boolean;
+  onCancel: () => void;
 }) => {
   const { toast } = useToast();
 
-  const [title, setTitle] = useState(initialData.title ?? DEFAULT_FORM.title);
+  const [title, setTitle] = useState(initialData?.title ?? DEFAULT_FORM.title);
   const [durationHours, setDurationHours] = useState(
-    String(initialData.durationInHours ?? DEFAULT_FORM.durationInHours)
+    String(initialData?.durationInHours ?? DEFAULT_FORM.durationInHours)
   );
   const [targetPoints, setTargetPoints] = useState(
-    String(initialData.targetPoints ?? DEFAULT_FORM.targetPoints)
+    String(initialData?.targetPoints ?? DEFAULT_FORM.targetPoints)
   );
   const [specificGameType, setSpecificGameType] = useState<
     Game["gameType"] | "all"
-  >((initialData.specificGameType as any) ?? DEFAULT_FORM.specificGameType);
+  >((initialData?.specificGameType as any) ?? DEFAULT_FORM.specificGameType);
   const [entryFee, setEntryFee] = useState<EntryFee>(
-    (initialData.entryFee as EntryFee) ?? DEFAULT_FORM.entryFee
+    (initialData?.entryFee as EntryFee) ?? DEFAULT_FORM.entryFee
   );
   const [firstPlacePrizes, setFirstPlacePrizes] = useState<ChallengePrize[]>(
-    initialData.firstPlacePrize ?? DEFAULT_FORM.firstPlacePrize
+    initialData?.firstPlacePrize ?? DEFAULT_FORM.firstPlacePrize
   );
   const [secondPlacePrizes, setSecondPlacePrizes] = useState<ChallengePrize[]>(
-    initialData.secondPlacePrize ?? DEFAULT_FORM.secondPlacePrize
+    initialData?.secondPlacePrize ?? DEFAULT_FORM.secondPlacePrize
   );
   const [thirdPlacePrizes, setThirdPlacePrizes] = useState<ChallengePrize[]>(
-    initialData.thirdPlacePrize ?? DEFAULT_FORM.thirdPlacePrize
+    initialData?.thirdPlacePrize ?? DEFAULT_FORM.thirdPlacePrize
   );
 
   useEffect(() => {
-    setTitle(initialData.title ?? DEFAULT_FORM.title);
-    setDurationHours(String(initialData.durationInHours ?? DEFAULT_FORM.durationInHours));
-    setTargetPoints(String(initialData.targetPoints ?? DEFAULT_FORM.targetPoints));
+    setTitle(initialData?.title ?? DEFAULT_FORM.title);
+    setDurationHours(String(initialData?.durationInHours ?? DEFAULT_FORM.durationInHours));
+    setTargetPoints(String(initialData?.targetPoints ?? DEFAULT_FORM.targetPoints));
     setSpecificGameType(
-      (initialData.specificGameType as any) ?? DEFAULT_FORM.specificGameType
+      (initialData?.specificGameType as any) ?? DEFAULT_FORM.specificGameType
     );
-    setEntryFee((initialData.entryFee as EntryFee) ?? DEFAULT_FORM.entryFee);
+    setEntryFee((initialData?.entryFee as EntryFee) ?? DEFAULT_FORM.entryFee);
     setFirstPlacePrizes(
-      initialData.firstPlacePrize ?? DEFAULT_FORM.firstPlacePrize
+      initialData?.firstPlacePrize ?? DEFAULT_FORM.firstPlacePrize
     );
     setSecondPlacePrizes(
-      initialData.secondPlacePrize ?? DEFAULT_FORM.secondPlacePrize
+      initialData?.secondPlacePrize ?? DEFAULT_FORM.secondPlacePrize
     );
-    setThirdPlacePrizes(initialData.thirdPlacePrize ?? DEFAULT_FORM.thirdPlacePrize);
+    setThirdPlacePrizes(initialData?.thirdPlacePrize ?? DEFAULT_FORM.thirdPlacePrize);
   }, [initialData]);
 
   const endsAtPreview = useMemo(() => {
@@ -281,7 +286,6 @@ const ChallengeForm = ({
   const handleSubmit = () => {
     const v = validate();
     if (!v.ok) {
-      // use toast for UX instead of alert
       toast({ title: "تحقق من الحقول", description: v.msg, variant: "destructive" });
       return;
     }
@@ -298,7 +302,22 @@ const ChallengeForm = ({
   };
 
   return (
-    <div className="space-y-6">
+    <Card className="relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(168,85,247,0.06),transparent_60%)]" />
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>{initialData ? "تعديل البطولة" : "إنشاء بطولة جديدة"}</CardTitle>
+            <CardDescription>
+              {initialData ? "عدّل بيانات البطولة الحالية." : "قم بإعداد بطولة تجميع نقاط بواجهة متقدمة وجذابة."}
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={onCancel}>
+             <ArrowRight className="w-4 h-4 ml-2" /> العودة للقائمة
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
       {/* Title */}
       <div className="space-y-2">
         <Label htmlFor="challenge-title">عنوان البطولة</Label>
@@ -435,12 +454,18 @@ const ChallengeForm = ({
           </div>
         ))}
       </div>
-
+      </CardContent>
+      <CardFooter className="flex-col gap-2">
       <Button onClick={handleSubmit} disabled={isSubmitting} className="w-full">
         {isSubmitting ? <Loader2 className="animate-spin" /> : <PlusCircle />}
-        {initialData.title ? "حفظ التعديلات" : "إنشاء البطولة"}
+        {initialData ? "حفظ التعديلات" : "إنشاء البطولة"}
       </Button>
-    </div>
+      <Button variant="ghost" onClick={onCancel} className="w-full">إلغاء</Button>
+       <p className="text-[11px] text-muted-foreground mt-2">
+            نصيحة: اجعل الجوائز ذات معنى وتوازن بين العملات لمنع التضخم داخل اللعبة.
+        </p>
+      </CardFooter>
+    </Card>
   );
 };
 
@@ -453,6 +478,7 @@ export default function ChallengesTab() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [isFetching, setIsFetching] = useState(true);
+  const [view, setView] = useState<'list' | 'form'>('list');
 
   const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
   const [challengeToDelete, setChallengeToDelete] = useState<Challenge | null>(null);
@@ -530,15 +556,12 @@ export default function ChallengesTab() {
 
   // CRUD handlers
   const handleCreateChallenge = async (data: any) => {
-    if (!data.title || !data.durationInHours || !data.targetPoints) {
-      toast({ title: "الرجاء ملء جميع الحقول المطلوبة", variant: "destructive" });
-      return;
-    }
     setIsSubmitting(true);
     const result = await createChallenge(data);
     if (result.success) {
       toast({ title: "تم إنشاء البطولة بنجاح!" });
       fetchChallenges();
+      setView('list');
     } else {
       toast({ title: "خطأ", description: result.error, variant: "destructive" });
     }
@@ -553,6 +576,7 @@ export default function ChallengesTab() {
       toast({ title: "تم تحديث البطولة بنجاح!" });
       setEditingChallenge(null);
       fetchChallenges();
+      setView('list');
     } else {
       toast({ title: "خطأ", description: result.error, variant: "destructive" });
     }
@@ -643,6 +667,21 @@ export default function ChallengesTab() {
     a.click();
     URL.revokeObjectURL(url);
   };
+  
+  const handleEditClick = (c: Challenge) => {
+      setEditingChallenge(c);
+      setView('form');
+  }
+
+  const handleCreateClick = () => {
+      setEditingChallenge(null);
+      setView('form');
+  }
+  
+  const handleCancelForm = () => {
+      setEditingChallenge(null);
+      setView('list');
+  }
 
   // List item UI
   const ChallengeItem = ({ c }: { c: Challenge }) => {
@@ -690,7 +729,7 @@ export default function ChallengesTab() {
 
         <div className="flex items-center gap-1 self-end sm:self-center">
           {!isFinalized && (
-            <Button size="icon" variant="ghost" onClick={() => setEditingChallenge(c)} aria-label="تعديل">
+            <Button size="icon" variant="ghost" onClick={() => handleEditClick(c)} aria-label="تعديل">
               <Edit className="w-4 h-4" />
             </Button>
           )}
@@ -721,136 +760,124 @@ export default function ChallengesTab() {
 
   return (
     <div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Creator / Editor */}
-        <Card className="relative overflow-hidden">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(168,85,247,0.06),transparent_60%)]" />
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>{editingChallenge ? "تعديل البطولة" : "إنشاء بطولة جديدة"}</CardTitle>
-                <CardDescription>
-                  {editingChallenge ? "عدّل بيانات البطولة الحالية." : "قم بإعداد بطولة تجميع نقاط بواجهة متقدمة وجذابة."}
-                </CardDescription>
-              </div>
-              {editingChallenge && (
-                <Button variant="outline" size="sm" onClick={() => setEditingChallenge(null)} className="gap-1">
-                  إلغاء التعديل
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ChallengeForm
-              initialData={
-                editingChallenge
-                  ? { ...editingChallenge, durationInHours: getDurationInHours(editingChallenge) }
-                  : (DEFAULT_FORM as any)
-              }
-              onSubmit={editingChallenge ? handleUpdateChallenge : handleCreateChallenge}
-              isSubmitting={isSubmitting}
-            />
-          </CardContent>
-          <CardFooter className="text-[11px] text-muted-foreground">
-            نصيحة: اجعل الجوائز ذات معنى وتوازن بين العملات لمنع التضخم داخل اللعبة.
-          </CardFooter>
-        </Card>
-
-        {/* List & Controls */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>البطولات الحالية</CardTitle>
-                <CardDescription>إدارة، تصفية، فرز وتصدير البطولات بسهولة.</CardDescription>
-              </div>
-              <Button variant="outline" size="sm" onClick={exportCSV} className="gap-1">
-                <Download className="w-4 h-4" /> تصدير CSV
-              </Button>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-              {[
-                { k: "total", label: "إجمالي", color: "" },
-                { k: "active", label: "نشطة", color: "text-blue-500" },
-                { k: "ended", label: "انتهت", color: "text-amber-500" },
-                { k: "finalized", label: "موزّعة", color: "text-emerald-500" },
-              ].map((s) => (
-                <div key={s.k} className="rounded-lg border p-3 bg-muted/40">
-                  <p className="text-xs text-muted-foreground">{s.label}</p>
-                  <p className={cn("font-extrabold text-xl", s.color)}>{(stats as any)[s.k]}</p>
+      <AnimatePresence mode="wait">
+        {view === 'list' ? (
+        <motion.div key="list" initial={{opacity: 0, x: -20}} animate={{opacity: 1, x: 0}} exit={{opacity: 0, x: 20}}>
+            <Card>
+            <CardHeader>
+                <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-3">
+                <div>
+                    <CardTitle>البطولات الحالية</CardTitle>
+                    <CardDescription>إدارة، تصفية، فرز وتصدير البطولات بسهولة.</CardDescription>
                 </div>
-              ))}
-            </div>
+                <div className="flex items-center gap-2">
+                     <Button variant="outline" size="sm" onClick={exportCSV} className="gap-1">
+                        <Download className="w-4 h-4" /> تصدير CSV
+                      </Button>
+                    <Button onClick={handleCreateClick} className="gap-1">
+                        <PlusCircle className="w-4 h-4"/> بطولة جديدة
+                    </Button>
+                </div>
+                </div>
 
-            {/* Controls */}
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-2">
-              <div className="relative">
-                <Input
-                  placeholder="بحث بالعنوان..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="pr-9"
-                />
-                <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              </div>
-              <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="الحالة" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الحالات</SelectItem>
-                  <SelectItem value="active">نشطة</SelectItem>
-                  <SelectItem value="ended">منتهية (لم تُوزّع)</SelectItem>
-                  <SelectItem value="finalized">موزّعة الجوائز</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="flex gap-2">
-                <Select value={sortKey} onValueChange={(v: any) => setSortKey(v)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="endsAt">الفرز حسب تاريخ الانتهاء</SelectItem>
-                    <SelectItem value="createdAt">الفرز حسب تاريخ الإنشاء</SelectItem>
-                  </SelectContent>
+                {/* Stats */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                {[
+                    { k: "total", label: "إجمالي", color: "" },
+                    { k: "active", label: "نشطة", color: "text-blue-500" },
+                    { k: "ended", label: "انتهت", color: "text-amber-500" },
+                    { k: "finalized", label: "موزّعة", color: "text-emerald-500" },
+                ].map((s) => (
+                    <div key={s.k} className="rounded-lg border p-3 bg-muted/40">
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                    <p className={cn("font-extrabold text-xl", s.color)}>{(stats as any)[s.k]}</p>
+                    </div>
+                ))}
+                </div>
+
+                {/* Controls */}
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div className="relative">
+                    <Input
+                    placeholder="بحث بالعنوان..."
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    className="pr-9"
+                    />
+                    <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                </div>
+                <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+                    <SelectTrigger className="w-full">
+                    <SelectValue placeholder="الحالة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                    <SelectItem value="all">كل الحالات</SelectItem>
+                    <SelectItem value="active">نشطة</SelectItem>
+                    <SelectItem value="ended">منتهية (لم تُوزّع)</SelectItem>
+                    <SelectItem value="finalized">موزّعة الجوائز</SelectItem>
+                    </SelectContent>
                 </Select>
-                <Button
-                  variant="outline"
-                  onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-                  className="shrink-0"
-                >
-                  <ArrowUpDown className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent>
-            {isFetching ? (
-              <div className="text-center py-10">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto" />
-                <p className="text-sm text-muted-foreground mt-2">جاري تحميل البطولات...</p>
-              </div>
-            ) : filteredSorted.length === 0 ? (
-              <div className="text-center py-10">
-                <CheckCircle2 className="w-10 h-10 mx-auto opacity-50" />
-                <p className="text-sm text-muted-foreground mt-2">
-                  لا توجد بطولات مطابقة لخيارات البحث والتصفية.
-                </p>
-              </div>
-            ) : (
-              <ScrollArea className="h-[60vh] pr-2">
-                <div className="space-y-2">
-                  {filteredSorted.map((c) => (
-                    <ChallengeItem key={c.id} c={c} />
-                  ))}
+                <div className="flex gap-2">
+                    <Select value={sortKey} onValueChange={(v: any) => setSortKey(v)}>
+                    <SelectTrigger className="w-full">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="endsAt">الفرز حسب تاريخ الانتهاء</SelectItem>
+                        <SelectItem value="createdAt">الفرز حسب تاريخ الإنشاء</SelectItem>
+                    </SelectContent>
+                    </Select>
+                    <Button
+                    variant="outline"
+                    onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                    className="shrink-0"
+                    >
+                    <ArrowUpDown className="w-4 h-4" />
+                    </Button>
                 </div>
-              </ScrollArea>
-            )}
-          </CardContent>
-        </Card>
+                </div>
+            </CardHeader>
+
+            <CardContent>
+                {isFetching ? (
+                <div className="text-center py-10">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto" />
+                    <p className="text-sm text-muted-foreground mt-2">جاري تحميل البطولات...</p>
+                </div>
+                ) : filteredSorted.length === 0 ? (
+                <div className="text-center py-10">
+                    <CheckCircle2 className="w-10 h-10 mx-auto opacity-50" />
+                    <p className="text-sm text-muted-foreground mt-2">
+                    لا توجد بطولات مطابقة لخيارات البحث والتصفية.
+                    </p>
+                </div>
+                ) : (
+                <ScrollArea className="h-[60vh] pr-2">
+                    <div className="space-y-2">
+                    {filteredSorted.map((c) => (
+                        <ChallengeItem key={c.id} c={c} />
+                    ))}
+                    </div>
+                </ScrollArea>
+                )}
+            </CardContent>
+            </Card>
+        </motion.div>
+        ) : (
+             <motion.div key="form" initial={{opacity: 0, x: 20}} animate={{opacity: 1, x: 0}} exit={{opacity: 0, x: -20}}>
+                <ChallengeForm
+                    initialData={
+                        editingChallenge
+                        ? { ...editingChallenge, durationInHours: getDurationInHours(editingChallenge) }
+                        : null
+                    }
+                    onSubmit={editingChallenge ? handleUpdateChallenge : handleCreateChallenge}
+                    isSubmitting={isSubmitting}
+                    onCancel={handleCancelForm}
+                />
+            </motion.div>
+        )}
+        </AnimatePresence>
 
         {/* Finalize Dialog (controlled) */}
         {challengeToFinalize && (
@@ -899,7 +926,6 @@ export default function ChallengesTab() {
             </AlertDialogContent>
           </AlertDialog>
         )}
-      </div>
     </div>
   );
 }
