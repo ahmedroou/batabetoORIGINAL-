@@ -8,12 +8,86 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { GAME_TYPE_NAMES, GAME_ICONS } from "@/data/icons";
-import { Crown, Star, Trophy, Shield, Handshake, Angry } from "lucide-react";
+import { Crown, Star, Trophy, Shield, Handshake, Angry, Timer } from "lucide-react";
 import { motion } from "framer-motion";
 import { getKingsPageData } from "@/lib/actions/user/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
+// --- Countdown Timer Logic ---
+
+/**
+ * Calculates the time remaining until the next Thursday at 10:00 AM UTC.
+ * @returns An object with days, hours, minutes, and seconds remaining.
+ */
+function getNextUpdateCountdown() {
+  const now = new Date();
+  const nextUpdate = new Date(now);
+
+  // Set to UTC
+  nextUpdate.setUTCHours(10, 0, 0, 0);
+
+  // Find next Thursday
+  const currentDay = now.getUTCDay(); // Sunday = 0, Thursday = 4
+  const daysUntilThursday = (4 - currentDay + 7) % 7;
+  
+  if (daysUntilThursday === 0 && now.getUTCHours() >= 10) {
+      // It's Thursday but past 10 AM UTC, so schedule for next week
+      nextUpdate.setUTCDate(now.getUTCDate() + 7);
+  } else {
+      nextUpdate.setUTCDate(now.getUTCDate() + daysUntilThursday);
+  }
+  
+  const diff = nextUpdate.getTime() - now.getTime();
+
+  return {
+    days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+    hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
+    minutes: Math.floor((diff / 1000 / 60) % 60),
+    seconds: Math.floor((diff / 1000) % 60),
+    total: diff,
+  };
+}
+
+
+const CountdownUnit = ({ value, label }: { value: number; label: string }) => (
+    <div className="flex flex-col items-center">
+        <span className="text-2xl md:text-3xl font-mono font-bold tracking-tighter">{String(value).padStart(2, '0')}</span>
+        <span className="text-[10px] md:text-xs text-gray-400">{label}</span>
+    </div>
+);
+
+const KingsCountdown = () => {
+    const [timeLeft, setTimeLeft] = useState(getNextUpdateCountdown());
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setTimeLeft(getNextUpdateCountdown());
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    if (timeLeft.total <= 0) {
+        return <div className="text-lg text-green-400 animate-pulse">جاري تحديث الملوك الآن...</div>;
+    }
+
+    return (
+        <div className="bg-gray-900/60 border border-purple-500/30 rounded-2xl p-4 w-full max-w-sm mx-auto backdrop-blur-sm">
+            <div className="flex justify-around items-center">
+                <CountdownUnit value={timeLeft.days} label="أيام" />
+                <span className="text-2xl font-bold">:</span>
+                <CountdownUnit value={timeLeft.hours} label="ساعات" />
+                <span className="text-2xl font-bold">:</span>
+                <CountdownUnit value={timeLeft.minutes} label="دقائق" />
+                <span className="text-2xl font-bold">:</span>
+                <CountdownUnit value={timeLeft.seconds} label="ثواني" />
+            </div>
+        </div>
+    );
+};
+
+
+// --- Main Component ---
 export default function KingsClient() {
   const [kings, setKings] = useState<Record<string, GameKing>>({});
   const [kingOfGames, setKingOfGames] = useState<UserProfile | null>(null);
@@ -103,7 +177,7 @@ export default function KingsClient() {
       </div>
 
       <div className="relative z-10 container mx-auto px-4 py-8">
-        <header className="text-center mb-12">
+        <header className="text-center mb-6">
           <motion.div
             initial={{ scale: 0.6, rotate: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1, rotate: [0, -10, 10, -4, 0] }}
@@ -129,6 +203,16 @@ export default function KingsClient() {
             الأبطال الذين يتربعون على عرش كل لعبة. هل يمكنك هزيمتهم؟
           </motion.p>
         </header>
+
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
+            <div className="text-center mb-8 space-y-2">
+                <h2 className="text-lg font-semibold text-purple-200 flex items-center justify-center gap-2">
+                    <Timer className="w-5 h-5"/>
+                    الوقت المتبقي لتحديث الملوك
+                </h2>
+                <KingsCountdown />
+            </div>
+        </motion.div>
 
         {!isLoading && errorMsg && (
           <motion.div

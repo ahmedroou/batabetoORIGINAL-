@@ -277,12 +277,6 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
             }
         });
         
-        // This is redundant with the logic inside the loop, so it's removed.
-        // if (winUpdate) {
-        //     const winnerRef = doc(db, 'users', winUpdate.userId);
-        //     batch.set(winnerRef, { winCounts: { [winUpdate.gameType]: increment(1) } }, { merge: true });
-        // }
-
         const finalUpdate: any = {
             'gameResult.winner': winUpdate?.userId || game.gameResult?.winner || 'none',
         };
@@ -308,50 +302,11 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
 }
 
 /**
- * Recalculates and updates the "Game King" for each game type based on win counts.
- * This is an expensive operation and should be run manually by an admin.
- * @returns {Promise<{success: boolean, updatedCount?: number, error?: string}>} The result of the operation.
+ * This function is now deprecated and will be handled by a scheduled cloud function.
+ * It remains in the code to avoid breaking existing calls but will do nothing.
+ * @returns {Promise<{success: boolean, updatedCount?: number, error?: string}>}
  */
 export async function recalculateGameKings(): Promise<{ success: boolean; updatedCount?: number; error?: string }> {
-  try {
-    const allUsersSnapshot = await getDocs(collection(db, 'users'));
-    if (allUsersSnapshot.empty) {
-      return { success: true, updatedCount: 0 };
-    }
-
-    const users = allUsersSnapshot.docs.map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile));
-
-    const gameTypes = Object.values(users.reduce((acc, user) => {
-        Object.keys(user.winCounts || {}).forEach(gameType => acc.add(gameType));
-        return acc;
-    }, new Set<string>()));
-
-    const batch = writeBatch(db);
-    let updatedCount = 0;
-
-    for (const gameType of gameTypes) {
-      const topPlayer = users
-        .filter((u) => u.winCounts && u.winCounts[gameType as keyof Game['winCounts']] > 0)
-        .sort((a, b) => (b.winCounts![gameType as keyof Game['winCounts']] || 0) - (a.winCounts![gameType as keyof Game['winCounts']] || 0))[0];
-
-      if (topPlayer) {
-        const kingRef = doc(db, 'game_kings', gameType);
-        const kingData: GameKing = {
-          kingId: topPlayer.uid,
-          name: topPlayer.name,
-          avatarId: topPlayer.avatarId,
-          winCount: topPlayer.winCounts![gameType as keyof Game['winCounts']] || 0,
-          totalLeaderboardPoints: topPlayer.leaderboardPoints || 0
-        };
-        batch.set(kingRef, kingData, { merge: true });
-        updatedCount++;
-      }
-    }
-
-    await batch.commit();
-    return { success: true, updatedCount };
-  } catch (error: any) {
-    console.error('Error recalculating game kings:', error);
-    return { success: false, error: error.message || 'فشل إعادة حساب ملوك الألعاب.' };
-  }
+  console.warn('recalculateGameKings is deprecated and will be removed. This is now an automated weekly process.');
+  return { success: true, updatedCount: 0 };
 }

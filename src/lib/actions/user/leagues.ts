@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -318,8 +317,7 @@ export async function updateLeagueScoresForGameEnd(game: Game) {
     
     if (leaguesSnapshot.empty) return;
     
-    const allRanks = await getRanks();
-    const { data } = calculateEndOfGameAwards(game, allRanks);
+    const { data } = await distributeEndOfGameAwards(game.id);
     if (!data) return;
 
     const { updates } = data;
@@ -345,4 +343,3 @@ export async function updateLeagueScoresForGameEnd(game: Game) {
 
     await batch.commit();
 }
-

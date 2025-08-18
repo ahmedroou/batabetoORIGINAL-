@@ -15,7 +15,6 @@
  * - بريد جماعي مع عدّاد أحرف وتحقق مبكّر وحدّ للكوينز + معاينة سريعة.
  * - لوحة إعلانات مع حفظ/استرجاع + معاينة فورية.
  * - أدوات صيانة مع حوارات تأكيد واضحة وملاحظات حول التكلفة.
- * - تحسينات DX/UX: دوال مساعدة، توحيد Toasts، مكوّنات فرعية مقسّمة، قراءة أسهل.
  *
  * يعتمد على أفعال السيرفر الموحّدة من ملف الباك-إند الذي أعددناه (lib/actions/admin).
  * -------------------------------------------------------------
@@ -107,8 +106,7 @@ export default function SocietyTab() {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [actionType, setActionType] = useState<ActionType | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRecalculating, setIsRecalculating] = useState(false);
-
+  
   // بيانات التحرير/الإجراءات
   const [editData, setEditData] = useState<Partial<UserProfile> & { reason?: string }>({});
 
@@ -198,17 +196,6 @@ export default function SocietyTab() {
     setSelectedUser(null);
     setActionType(null);
     setEditData({});
-  };
-
-  const handleRecalculateKings = async () => {
-    setIsRecalculating(true);
-    const result = await recalculateGameKings();
-    if (result?.success) {
-      toast({ title: "نجاح!", description: `تم تحديث ملوك الألعاب بنجاح. (${result.updatedCount} ملوك).` });
-    } else {
-      toast({ title: "خطأ", description: result?.error || "تعذر إعادة الحساب.", variant: "destructive" });
-    }
-    setIsRecalculating(false);
   };
 
   const handleBackfill = async () => {
@@ -358,7 +345,7 @@ export default function SocietyTab() {
       return;
     }
     setIsSendingMail(true);
-    const result = await adminSendMail(adminProfile.uid, Array.from(selectedUserIds), mailSubject.trim(), mailBody.trim(), coinsToSend);
+    const result = await adminSendMail(Array.from(selectedUserIds), mailSubject.trim(), mailBody.trim(), coinsToSend);
     if (result?.success) {
       toast({ title: "تم الإرسال", description: `تم إرسال الرسالة إلى ${selectedUserIds.size} مستخدم.` });
       setIsMailDialogOpen(false);
@@ -625,10 +612,7 @@ export default function SocietyTab() {
             </div>
           </div>
         </CardContent>
-        <CardFooter className="justify-between">
-          <Button onClick={handleRecalculateKings} disabled={isRecalculating}>
-            <Crown className="ml-2" /> {isRecalculating ? "جاري الحساب..." : "إعادة حساب ملوك الألعاب"}
-          </Button>
+        <CardFooter className="justify-end">
           <Button variant="destructive" disabled>
             <TowerControl className="ml-2" /> قريبًا: بدء حرب الطبقات
           </Button>
