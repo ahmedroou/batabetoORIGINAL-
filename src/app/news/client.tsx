@@ -265,11 +265,7 @@ export default function NewsClient() {
     setIsLoading(true);
     const result = await getPublishedArticles(userProfile?.uid);
     if (result.success && result.data) {
-      const fetchedArticles = result.data.articles;
-       if (fetchedArticles.length > 0 && fetchedArticles[0].createdAt.getTime() !== latestArticleDate?.getTime()) {
-        if (setLatestArticleDate) setLatestArticleDate(fetchedArticles[0].createdAt);
-       }
-       setArticles(fetchedArticles);
+       setArticles(result.data.articles);
     }
     setIsLoading(false);
   };
