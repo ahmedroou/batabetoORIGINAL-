@@ -699,6 +699,7 @@ export interface Game {
     message: string;
     ranking?: any[];
     finalAwards?: any;
+    error?: string;
   };
   
   // king-of-genius specific fields
