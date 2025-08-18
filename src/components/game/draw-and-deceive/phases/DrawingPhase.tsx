@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -85,9 +86,9 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   const state = game.drawAndDeceiveState!;
   const isArtist = state.artistId === self.id;
   const artist = game.players.find(p => p.id === state.artistId);
-  const isHost = game.hostId === self.id;
 
   const [drawingDataUrl, setDrawingDataUrl] = useState<string | null>(null);
+  const [correctAnswer, setCorrectAnswer] = useState('');
   const [blankSig, setBlankSig] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
@@ -99,24 +100,31 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   });
 
   const handleSubmit = useCallback(async () => {
-    if (!isArtist || submittingRef.current) return;
+    if (!isArtist || submittingRef.current || !correctAnswer.trim()) {
+      if(!correctAnswer.trim()){
+        toast({title: "الوصف مطلوب", description: "يجب كتابة وصف للرسمة.", variant: "destructive"});
+      }
+      return;
+    }
+
     submittingRef.current = true;
     setIsSubmitting(true);
     try {
       const webp = drawingDataUrl ? await toWebPDataURL(drawingDataUrl, 0.9) : null;
-      // The `correctAnswer` is no longer needed here as it's handled in the writing phase
-      await submitDrawing(game.id, self.id, webp || undefined);
+      await submitDrawing(game.id, self.id, webp || undefined, correctAnswer);
     } catch (error: any) {
       toast({ title: 'خطأ', description: error?.message ?? 'لم يتم الإرسال', variant: 'destructive' });
       setIsSubmitting(false); // Allow retry
       submittingRef.current = false;
     }
-  }, [isArtist, drawingDataUrl, game.id, self.id, toast]);
+  }, [isArtist, drawingDataUrl, correctAnswer, game.id, self.id, toast]);
   
   useEffect(() => {
     if (!isArtist) return;
     if (timeLeft <= 0) {
-        handleSubmit();
+        if (!submittingRef.current) {
+             handleSubmit();
+        }
         return;
     }
     const timer = setInterval(() => {
@@ -199,15 +207,25 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
               className="mx-auto"
             />
           </div>
+          
+           <div className="max-w-xl mx-auto space-y-2">
+                <Input 
+                    placeholder="اكتب الوصف الصحيح لرسمتك هنا..."
+                    value={correctAnswer}
+                    onChange={(e) => setCorrectAnswer(e.target.value)}
+                    disabled={isSubmitting || timeLeft === 0}
+                    className="text-center"
+                />
+            </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pb-[env(safe-area-inset-bottom)]">
               <Button
                 onClick={handleSubmit}
-                disabled={isSubmitting || !drawingDataUrl || timeLeft === 0}
+                disabled={isSubmitting || !drawingDataUrl || timeLeft === 0 || !correctAnswer.trim()}
                 className="w-full sm:w-auto"
                 size="lg"
               >
-                {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2" /> إرسال الرسمة</>}
+                {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2" /> إرسال الرسمة والوصف</>}
               </Button>
           </div>
         </CardContent>

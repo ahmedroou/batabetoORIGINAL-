@@ -194,7 +194,7 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
     
     let finalAnswer = correctAnswer;
     if (!finalAnswer) {
-      finalAnswer = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)];
+      throw new Error("الوصف الصحيح للرسمة مطلوب.");
     }
 
     const normalizedAnswer = normalizeAnswer(finalAnswer);
@@ -309,12 +309,14 @@ export async function handleTimeout(gameId: string, hostId: string) {
     ensure(state.timerEndsAt && state.timerEndsAt.toMillis() <= Date.now(), 'Timer has not expired yet.');
     
     if (state.phase === 'drawing') {
+        // Artist ran out of time, assign a random word and move on.
         const randomWord = WORD_WAR_WORDS[Math.floor(Math.random() * WORD_WAR_WORDS.length)];
-        const normalizedAnswer = normalizeAnswer(randomWord);
+        const normalizedAnswer = normalizeAnswer(randomWord!);
         const trappingTime = state.settings.trappingTime;
         tx.update(gameRef, {
             'drawAndDeceiveState.phase': 'trapping',
             'drawAndDeceiveState.correctAnswer': normalizedAnswer,
+            // Keep drawing as is, or set to null if you prefer
             'drawAndDeceiveState.timerEndsAt': inSec(trappingTime),
         });
     } else if (state.phase === 'trapping') {
