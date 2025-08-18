@@ -26,7 +26,6 @@ import {
   startAfter,
 } from 'firebase/firestore';
 import type { Article, AudienceGroup, UserProfile, SocialEvent, Challenge, Game } from '@/types';
-import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
 import { getAllUsers, getTopPunisher, getTopUsers } from './user/queries';
 import { getChallenges } from './challenges';
 
@@ -409,99 +408,6 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
     return { success: true };
   } catch (err) {
     return { success: false, error: handleError(err, 'فشل إزالة اللاعب من المجموعة') };
-  }
-}
-
-// -----------------------------
-// Journalist (AI) flow helpers
-// -----------------------------
-async function getRecentFinishedGames(count: number): Promise<Game[]> {
-  try {
-    const gamesCol = collection(db, GAMES_COLLECTION);
-    const q = query(gamesCol, orderBy('createdAt', 'desc'), where('gameState', '==', 'final_results'), limit(count));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => d.data() as Game);
-  } catch (err) {
-    console.error('getRecentFinishedGames error', err);
-    return [];
-  }
-}
-
-async function getJournalistSourceMaterial(directive?: string) {
-  const oneDayAgo = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
-  const eventsQuery = query(collection(db, SOCIAL_EVENTS_COLLECTION), where('timestamp', '>=', oneDayAgo), orderBy('timestamp', 'desc'));
-  const sevenDaysAgo = Timestamp.fromMillis(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const articlesQuery = query(collection(db, ARTICLES_COLLECTION), where('createdAt', '>=', sevenDaysAgo), orderBy('createdAt', 'desc'));
-
-  const [eventsSnapshot, articlesSnapshot, leaderboard, punished_players, top_punisher, active_challenges, recent_games] = await Promise.all([
-    getDocs(eventsQuery),
-    getDocs(articlesQuery),
-    getTopUsers('leaderboardPoints', 5),
-    getAllUsers('punished'),
-    getTopPunisher(),
-    getChallenges(),
-    getRecentFinishedGames(10),
-  ]);
-
-  const events: SocialEvent[] = eventsSnapshot.docs.map(d => {
-    const data = d.data();
-    return { ...data, timestamp: parseTimestampToDate(data.timestamp) } as SocialEvent;
-  });
-
-  const previous_articles: Article[] = articlesSnapshot.docs.map(d => toArticleDoc(d as any));
-
-  return {
-    events,
-    previous_articles,
-    leaderboard,
-    punished_players,
-    top_punisher,
-    active_challenges,
-    recent_games,
-    directive,
-    date: new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
-  };
-}
-
-/**
- * Run AI journalist to generate and publish an article.
- * Uses generateNewsArticle(sourceMaterial) — ensure the flow returns { headline, body, category }.
- */
-export async function runAiJournalist(directive?: string): Promise<ServiceResult<{ headline: string }>> {
-  try {
-    const sourceMaterial = await getJournalistSourceMaterial(directive);
-
-    // Basic safety checks before calling AI flow
-    if (!sourceMaterial.events?.length && !sourceMaterial.previous_articles?.length) {
-      return { success: false, error: 'المواد المصدرية غير كافية لتوليد مقال مفيد.' };
-    }
-
-    const generated = await generateNewsArticle(sourceMaterial);
-    if (!generated || !isNonEmptyString(generated.headline) || !isNonEmptyString(generated.body)) {
-      return { success: false, error: 'الذكاء الاصطناعي لم يولد مقالاً صالحاً.' };
-    }
-
-    // length check to avoid degenerate results
-    if (generated.body.length < 200) {
-      return { success: false, error: 'النص الناتج قصير جداً.' };
-    }
-
-    await addDoc(collection(db, ARTICLES_COLLECTION), {
-      title: generated.headline,
-      content: generated.body,
-      category: generated.category || 'أخبار',
-      imageUrl: generated.imageUrl || '',
-      authorName: 'المراسل الذكي',
-      authorId: 'ai_journalist',
-      isPublished: true,
-      audience: ['public'],
-      createdAt: serverTimestamp(),
-      views: 0,
-    });
-
-    return { success: true, data: { headline: generated.headline } };
-  } catch (err) {
-    return { success: false, error: handleError(err, 'فشل تشغيل المراسل الذكي') };
   }
 }
 
