@@ -130,7 +130,7 @@ export function FinalResultsPhase({ game, self }: FinalResultsPhaseProps) {
         <div className="p-[2px] rounded-3xl bg-gradient-to-tr from-amber-400/60 via-rose-400/50 to-indigo-400/60">
           <Card className="rounded-[22px] shadow-xl border-muted/50 bg-background/80 backdrop-blur">
             {/* Winner header */}
-            <CardHeader className="relative overflow-hidden rounded-t-[22px]">
+            <CardHeader className="relative overflow-hidden rounded-t-[22px] text-center">
               <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(251,191,36,0.15),transparent_60%),
                                                    radial-gradient(ellipse_at_bottom_right,rgba(244,63,94,0.12),transparent_60%)]"/>
               <div className="flex flex-col items-center gap-2">
@@ -228,22 +228,22 @@ export function FinalResultsPhase({ game, self }: FinalResultsPhaseProps) {
 
             {/* Actions */}
             <CardFooter className="flex flex-col sm:flex-row gap-2">
-              <Button onClick={() => router.push('/')} className="flex-1">
+              <Button onClick={() => router.push('/')} className="flex-1 h-11 text-base font-bold">
                 <RotateCcw className="w-4 h-4 ml-1" />
                 العب مرة أخرى
               </Button>
 
-              <Button variant="secondary" onClick={handleShare} className="flex-1">
+              <Button variant="secondary" onClick={handleShare} className="flex-1 h-11">
                 <Share2 className="w-4 h-4 ml-1" />
                 مشاركة
               </Button>
 
-              <Button variant="outline" onClick={handleCopyLink} className="flex-1">
+              <Button variant="outline" onClick={handleCopyLink} className="flex-1 h-11">
                 <Copy className="w-4 h-4 ml-1" />
                 نسخ الرابط
               </Button>
 
-              <Button variant="outline" onClick={handleExportPNG} disabled={exporting} className="flex-1">
+              <Button variant="outline" onClick={handleExportPNG} disabled={exporting} className="flex-1 h-11">
                 <Download className="w-4 h-4 ml-1" />
                 {exporting ? 'جارٍ الحفظ…' : 'حفظ كصورة'}
               </Button>

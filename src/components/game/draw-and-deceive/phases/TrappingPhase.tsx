@@ -13,6 +13,7 @@ import {
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { PlayerAvatar } from '../../PlayerAvatar';
 
 interface TrappingPhaseProps {
   game: Game;
@@ -82,7 +83,7 @@ export function TrappingPhase({ game, self }: TrappingPhaseProps) {
     isLockedRef.current = true;
     setIsSubmitting(true);
     try {
-      await submitTrap(game.id, self.id, normalizeArabic(trap).trim());
+      await submitTrap(game.id, self.id, trap.trim());
       setOptimisticSubmitted(true); // انتقال فوري لحالة الانتظار
       toast({ title: 'تم إرسال فخك بنجاح!' });
     } catch (error: any) {
@@ -96,14 +97,14 @@ export function TrappingPhase({ game, self }: TrappingPhaseProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (hasSubmitted || isSubmitting || isArtist) return;
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && trap.trim()) {
         e.preventDefault();
         void handleSubmit();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [hasSubmitted, isSubmitting, isArtist, trap]);
+  }, [hasSubmitted, isSubmitting, isArtist, trap, handleSubmit]);
 
   // لايتبوكس
   useEffect(() => {
@@ -126,42 +127,35 @@ export function TrappingPhase({ game, self }: TrappingPhaseProps) {
   const [suggestions, setSuggestions] = useState<string[]>(genSuggestions());
 
   // حالات الفنان/تم الإرسال
+  const WaitingView = ({ title, description }: { title: string; description: string }) => (
+    <Card className="w-full max-w-lg text-center">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="animate-pulse text-lg">{description}</p>
+        <div className="w-24 h-24 mx-auto mt-4">
+          <Brain className="w-full h-full text-muted-foreground animate-pulse" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   if (isArtist) {
     return (
-      <Card className="w-full max-w-lg text-center">
-        <CardHeader>
-          <CardTitle>مرحلة وضع الفخاخ</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="animate-pulse text-lg">
-            اللاعبون الآخرون يكتبون أوصافًا مخادعة لرسمتك. انتظر من فضلك...
-          </p>
-          <div className="w-24 h-24 mx-auto mt-4">
-            <Brain className="w-full h-full text-muted-foreground animate-pulse" />
-          </div>
-        </CardContent>
-      </Card>
+      <WaitingView
+        title="اللاعبون يكتبون الفخاخ"
+        description="شاهد اللاعبين وهم يكتبون أوصافًا مخادعة لرسمتك!"
+      />
     );
   }
 
   if (hasSubmitted) {
     return (
-      <Card className="w-full max-w-lg text-center">
-        <CardHeader>
-          <CardTitle>تم استلام فخك!</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="animate-pulse text-lg">في انتظار بقية اللاعبين...</p>
-          <div className="mt-4 w-full max-w-md mx-auto">
-            <div className="h-2 w-full bg-muted rounded">
-              <div className="h-full bg-primary rounded" style={{ width: `${progress}%` }} aria-hidden />
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground">
-              {submittedCount} من {totalTrappers} قدّموا الفخاخ
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <WaitingView
+        title="تم استلام فخك!"
+        description="في انتظار بقية اللاعبين..."
+      />
     );
   }
 

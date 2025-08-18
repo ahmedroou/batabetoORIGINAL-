@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -8,9 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { submitDrawing } from '@/lib/actions/draw-and-deceive';
-import { Loader2, Palette, Send, Timer, Eye } from 'lucide-react';
+import { Loader2, Palette, Send, Timer, Eye, ZoomIn } from 'lucide-react';
 import { DrawingCanvas } from './DrawingCanvas';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 
@@ -33,8 +32,9 @@ function useResponsiveCanvasSize(containerRef: React.RefObject<HTMLDivElement>) 
       const vw = window.innerWidth;
       const isPortrait = vh > vw;
 
+      // Make height more responsive on portrait mode
       const targetH = isPortrait
-        ? Math.min(Math.round(cw * 0.9), Math.round(vh * 0.7))
+        ? Math.min(Math.round(cw * 1.1), Math.round(vh * 0.5))
         : Math.round(cw * 9 / 16);
 
       setSize({ w: cw, h: Math.max(220, targetH) });
@@ -57,6 +57,7 @@ function useResponsiveCanvasSize(containerRef: React.RefObject<HTMLDivElement>) 
 
 /** حوّل DataURL إلى WebP لتخفيف الحجم */
 async function toWebPDataURL(dataUrl: string, quality = 0.92): Promise<string> {
+  if (typeof window === 'undefined' || !dataUrl.startsWith('data:image/')) return dataUrl;
   const img = new Image();
   img.crossOrigin = 'anonymous';
   const done = new Promise<string>((resolve, reject) => {
@@ -88,7 +89,6 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
 
   const [drawingDataUrl, setDrawingDataUrl] = useState<string | null>(null);
   const [blankSig, setBlankSig] = useState<string | null>(null);
-  const [correctAnswer, setCorrectAnswer] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
@@ -104,13 +104,14 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     setIsSubmitting(true);
     try {
       const webp = drawingDataUrl ? await toWebPDataURL(drawingDataUrl, 0.9) : null;
-      await submitDrawing(game.id, self.id, webp || undefined, correctAnswer.trim() || undefined);
+      // The `correctAnswer` is no longer needed here as it's handled in the writing phase
+      await submitDrawing(game.id, self.id, webp || undefined);
     } catch (error: any) {
       toast({ title: 'خطأ', description: error?.message ?? 'لم يتم الإرسال', variant: 'destructive' });
       setIsSubmitting(false); // Allow retry
       submittingRef.current = false;
     }
-  }, [isArtist, drawingDataUrl, correctAnswer, game.id, self.id, toast]);
+  }, [isArtist, drawingDataUrl, game.id, self.id, toast]);
   
   useEffect(() => {
     if (!isArtist) return;
@@ -156,9 +157,6 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     );
   }
 
-  const charsLeft = 30 - correctAnswer.length;
-  const charsLeftClass = charsLeft < 0 ? 'text-red-500' : charsLeft <= 3 ? 'text-amber-600' : 'text-muted-foreground';
-
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const { w: canvasW, h: canvasH } = useResponsiveCanvasSize(canvasWrapRef);
 
@@ -173,15 +171,15 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     >
       <Card>
         <CardHeader className="text-center">
-          <CardTitle className="flex items-center justify-center gap-2 text-2xl">
+          <CardTitle className="flex flex-col sm:flex-row items-center justify-center gap-2 text-2xl md:text-3xl">
             <Palette /> دورك في الرسم!
           </CardTitle>
           <CardDescription>
-            ارسم ما يخطر في بالك! ثم اكتب وصفًا دقيقًا له من كلمة أو كلمتين.
+            ارسم ما يخطر في بالك! سيتم سؤالك عن وصف الرسمة في المرحلة التالية.
           </CardDescription>
         </CardHeader>
 
-        <div className="px-6">
+        <div className="px-3 sm:px-6">
           <div className="flex items-center justify-center gap-2 text-lg" aria-live="polite">
             <Timer />
             <span>الوقت المتبقي: {timeLeft}s</span>
@@ -202,28 +200,15 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
             />
           </div>
 
-          <div className="space-y-2 pb-[env(safe-area-inset-bottom)]">
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Input
-                placeholder="اكتب هنا الوصف الصحيح للرسمة (اختياري)..."
-                value={correctAnswer}
-                onChange={(e) => setCorrectAnswer(e.target.value)}
-                className="flex-grow"
-                disabled={isSubmitting || timeLeft === 0}
-                maxLength={30}
-                aria-label="الوصف الصحيح للرسمة"
-              />
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pb-[env(safe-area-inset-bottom)]">
               <Button
                 onClick={handleSubmit}
                 disabled={isSubmitting || !drawingDataUrl || timeLeft === 0}
-                className="sm:w-auto w-full"
+                className="w-full sm:w-auto"
+                size="lg"
               >
                 {isSubmitting ? <Loader2 className="animate-spin" /> : <><Send className="mr-2" /> إرسال الرسمة</>}
               </Button>
-            </div>
-            <p className={`text-xs text-left pr-2 ${charsLeftClass}`}>
-              الأحرف المتبقية: {Math.max(0, charsLeft)}
-            </p>
           </div>
         </CardContent>
       </Card>

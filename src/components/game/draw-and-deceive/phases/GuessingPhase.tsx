@@ -98,6 +98,9 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
       </CardHeader>
       <CardContent>
         <p className="animate-pulse text-lg">{description}</p>
+        <div className="w-24 h-24 mx-auto mt-4">
+          <Eye className="w-full h-full text-muted-foreground animate-pulse" />
+        </div>
         <div className="mt-4 w-full max-w-md mx-auto">
           <div className="h-2 w-full bg-muted rounded">
             <div
@@ -135,7 +138,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
   return (
     <Card className="w-full max-w-3xl">
       <CardHeader className="text-center">
-        <CardTitle className="flex items-center justify-center gap-2 text-2xl">
+        <CardTitle className="flex items-center justify-center gap-2 text-2xl md:text-3xl">
           <HelpCircle /> ما هو الوصف الصحيح؟
         </CardTitle>
         <CardDescription>
