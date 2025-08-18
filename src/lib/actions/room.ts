@@ -208,13 +208,42 @@ export async function createGameRoom(
         currentTurnIndex: 0,
         activityLog: [],
       };
+    } else if (gameType === 'quiz-swap') {
+        newGame.quizSwapState = {
+            players: [],
+            drawPile: [],
+            discardPile: [],
+            round: 1,
+            turnIndex: 0,
+            phase: 'peek',
+            settings: {
+                turnSeconds: 30,
+                peekPhaseSeconds: 20,
+                answerSeconds: 20,
+                endAfterRounds: 5,
+                penalty: { easy: 3, medium: 2, hard: 1 },
+            },
+            log: [],
+        }
+    } else if (gameType === 'draw-and-deceive') {
+        newGame.drawAndDeceiveState = {
+            settings: { drawingTime: 120, trappingTime: 45, guessingTime: 35, resultsTime: 20, rounds: 3 },
+            turnOrder: [],
+            currentTurnIndex: 0,
+            round: 1,
+            phase: 'lobby',
+            playerTraps: {},
+            playerGuesses: {},
+            shuffledAnswers: [],
+        }
     }
+
 
     // Ensure the creator is not in any other lobby
     await removePlayerFromPreviousLobbies(userId, gameId);
 
     // Create game + increment popularity in a single transaction
-    const statsRef = doc(db, 'game_stats', 'popularity');
+    const statsRef = doc(db, 'game_settings', 'popularity');
     await runTransaction(db, async (tx) => {
       tx.set(statsRef, { [gameType]: increment(1) }, { merge: true });
       tx.set(gameRef, newGame);
