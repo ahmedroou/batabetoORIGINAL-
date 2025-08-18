@@ -20,4 +20,3 @@
 // This allows for cleaner imports, e.g., `import { searchUsers } from '@/lib/actions/admin';`
 
 export {};
-

@@ -9,7 +9,7 @@ import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, Timestamp, orderBy, addDoc, serverTimestamp, limit } from 'firebase/firestore';
 import type { Article, SocialEvent, Game } from '@/types';
 import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
-import { getTopUsers, getTopPunisher, getAllUsers } from './users';
+import { getTopUsers, getTopPunisher, getAllUsers } from '../user/queries';
 import { getChallenges } from '../challenges';
 
 

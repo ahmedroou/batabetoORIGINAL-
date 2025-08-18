@@ -1,6 +1,5 @@
 
 
-
 'use server';
 
 /**
@@ -84,4 +83,3 @@ export {
     distributeEndOfGameAwards,
     updateLeagueScoresForGameEnd
 };
-

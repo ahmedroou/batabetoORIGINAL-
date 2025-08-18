@@ -17,7 +17,6 @@
  * - أدوات صيانة مع حوارات تأكيد واضحة وملاحظات حول التكلفة.
  *
  * يعتمد على أفعال السيرفر الموحّدة من ملف الباك-إند الذي أعددناه (lib/actions/admin).
- * -------------------------------------------------------------
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -44,11 +43,12 @@ import { Separator } from "@/components/ui/separator";
 // Server Actions
 import {
   adminUpdateUser,
-  giveReward as adminGiveReward,
-  applyPunishment as adminApplyPunishment,
+  giveReward,
+  applyPunishment,
   adminSearchUsers,
   recalculateGameKings,
-} from "@/lib/actions/admin/users";
+  adminSendMail,
+} from "@/lib/actions/admin";
 import {
   setAnnouncement,
   getAnnouncement,
@@ -57,7 +57,6 @@ import {
   backfillPunishmentStatus,
   backfillUserPermissions,
 } from "@/lib/actions/admin/maintenance";
-import { adminSendMail } from "@/lib/actions/news";
 
 
 import { GAME_TYPE_NAMES } from "@/types";
@@ -281,8 +280,13 @@ export default function SocietyTab() {
         return;
       }
 
-      const action = actionType === "reward" ? adminGiveReward : adminApplyPunishment;
-      const result = await action(selectedUser.uid, { points: actionPoints, coins: actionCoins }, reason);
+      const action = actionType === "reward" ? giveReward : applyPunishment;
+      if (!adminProfile?.uid) {
+        toast({title: "Error", description: "Admin user not found.", variant: "destructive"});
+        setIsSubmitting(false);
+        return;
+      }
+      const result = await action(adminProfile.uid, selectedUser.uid, { points: actionPoints, coins: actionCoins }, reason);
       if (result?.success) {
         toast({ title: "تم", description: `تم تنفيذ الإجراء وإشعار ${selectedUser.name}.` });
         handleSearch(searchTerm);
@@ -335,7 +339,7 @@ export default function SocietyTab() {
   };
 
   const handleSendMail = async () => {
-    if (!adminProfile || selectedUserIds.size === 0 || !mailSubject.trim() || !mailBody.trim()) {
+    if (selectedUserIds.size === 0 || !mailSubject.trim() || !mailBody.trim()) {
       toast({ title: "حقول ناقصة", description: "املأ الموضوع والنص والمستلمين.", variant: "destructive" });
       return;
     }
