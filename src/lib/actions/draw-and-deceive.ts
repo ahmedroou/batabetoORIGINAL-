@@ -30,6 +30,7 @@ import { db } from '@/lib/firebase';
 import { doc, runTransaction, Timestamp, type Transaction } from 'firebase/firestore';
 import type { Game, Player, DrawAndDeceiveState, DrawAndDeceiveRoundResult } from '@/types';
 import { shuffle, safeCompareStrings } from './helpers';
+import { distributeEndOfGameAwards } from './admin/users';
 
 /* ----------------------------- Constants ----------------------------- */
 const DEFAULT_SETTINGS = {
@@ -216,13 +217,16 @@ const computeAndEnterResults = (
   });
 };
 
-const endGame = (tx: Transaction, gameRef: ReturnType<typeof doc>, scores: Record<string, number>, message: string) => {
+const endGame = (tx: Transaction, gameRef: ReturnType<typeof doc>, scores: Record<string, number>, message: string): Game => {
   const winnerId = pickWinnerId(scores || {});
+  const gameResult = { winner: winnerId, message };
   tx.update(gameRef, {
     [F.gameState]: 'final_results',
     [F.s_phase]: 'final_results',
-    [F.result]: { winner: winnerId, message },
+    [F.result]: gameResult,
   });
+  // Return the game state that should be used for final award calculation
+  return { ...doc, gameResult } as Game;
 };
 
 const activeCount = (game: Game) => getActivePlayerIds(game.players).length;
@@ -301,7 +305,8 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
     const state = game.drawAndDeceiveState;
 
     ensure(state, 'Game state not initialized for Draw and Deceive.');
-    ensure(state.phase === 'drawing' || state.kickVote?.active, 'Not in the drawing phase or kick vote.');
+    // Allow submitting even if a kick vote is active
+    ensure(state.phase === 'drawing' || state.kickVote?.active, 'Cannot submit drawing now.');
     ensure(state.artistId === playerId, 'Only the artist can submit a drawing.');
     ensure(state.correctAnswer, 'The correct answer must be submitted before the drawing.');
 
@@ -311,7 +316,7 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
       [F.s_phase]: 'trapping',
       [F.s_drawing]: drawingDataUrl || null,
       [F.s_timer]: inSec(trappingTime),
-      [F.s_kickVote]: null, // cancel any active kick vote
+      [F.s_kickVote]: null, // Cancel any active kick vote upon successful submission
     });
   });
 }
@@ -451,7 +456,8 @@ async function processKickVote(gameId: string, tx: Transaction, game: Game) {
 
   // If fewer than 2 players remain, end the game
   if (newTurnOrder.length < 2) {
-    endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة لعدم وجود لاعبين كافيين.');
+    const finalGame = endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة لعدم وجود لاعبين كافيين.');
+    await distributeEndOfGameAwards(game.id);
     return;
   }
 
@@ -476,6 +482,7 @@ async function processKickVote(gameId: string, tx: Transaction, game: Game) {
 // Note: hostId is intentionally ignored so that *any* player/client ping can advance timeouts.
 export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
+  let finalGameData: Game | null = null;
   await runTransaction(db, async (tx) => {
     const gameSnap = await tx.get(gameRef);
     ensure(gameSnap.exists(), 'Game not found.');
@@ -485,37 +492,22 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
     // Auto finalize if too few players remain
     if (activeCount(game) < 2) {
-      endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة لعدم وجود لاعبين كافيين.');
+      finalGameData = endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة لعدم وجود لاعبين كافيين.');
       return;
     }
 
     // If timer hasn't ended yet, do nothing
     if (!state.timerEndsAt || state.timerEndsAt.toMillis() > nowMs()) return;
 
-    // 1) Drawing: if no vote active, open vote. If vote expired (active), resolve it fairly.
+    // Caller doesn't have to be host, but we only run logic if timer is actually expired.
+
     if (state.phase === 'drawing') {
-        const hasSubmittedDrawing = state.drawingDataUrl;
-        // If the artist has submitted their drawing, but the timer ran out (e.g. while they were writing a trap),
-        // we can assume the timeout is for the drawing phase itself being over.
-        // In the new flow, the artist submits the description first. If the timer runs out *before* that,
-        // it means they were AFK. Let's start a kick vote.
-        if (!state.correctAnswer) {
-            // Kick vote time for AFK artist.
-            const voteTime = state.settings?.kickVoteTime ?? DEFAULT_SETTINGS.kickVoteTime;
-            tx.update(gameRef, {
-                [F.s_kickVote]: { active: true, votes: {}, voterIds: [] as string[] },
-                [F.s_timer]: inSec(voteTime),
-            });
-        } else {
-            // They wrote the description but didn't submit the drawing in time.
-            // Force submit an empty drawing and proceed.
-            tx.update(gameRef, {
-                [F.s_phase]: 'trapping',
-                [F.s_drawing]: null,
-                [F.s_timer]: inSec(state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime),
-                [F.s_kickVote]: null,
-            });
-        }
+        // Artist was AFK and didn't provide a description. Open kick vote.
+        const voteTime = state.settings?.kickVoteTime ?? DEFAULT_SETTINGS.kickVoteTime;
+        tx.update(gameRef, {
+            [F.s_kickVote]: { active: true, votes: {}, voterIds: [] as string[] },
+            [F.s_timer]: inSec(voteTime),
+        });
         return;
     }
     
@@ -540,10 +532,15 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
     // 4) Results: advance to next round or end the game
     if (state.phase === 'results') {
-      await startNextRound(tx, gameRef, game);
+      const { isGameOver, finalGame } = await _startNextRound(tx, gameRef, game);
+      if (isGameOver) finalGameData = finalGame;
       return;
     }
   });
+
+  if (finalGameData) {
+    await distributeEndOfGameAwards(gameId);
+  }
 }
 
 /* ------------------------- Next Round / Finish ----------------------- */
@@ -556,14 +553,14 @@ function pickWinnerId(scores: Record<string, number>): string {
     [0]![0];
 }
 
-async function startNextRound(tx: Transaction, gameRef: ReturnType<typeof doc>, game: Game): Promise<{ isGameOver: boolean }> {
+async function _startNextRound(tx: Transaction, gameRef: ReturnType<typeof doc>, game: Game): Promise<{ isGameOver: boolean, finalGame: Game | null }> {
   const state = game.drawAndDeceiveState!;
   const settings = state.settings;
   const currentRound = state.round || 1; // state.round starts at 1
 
   if (currentRound >= settings.rounds) {
-    endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة!');
-    return { isGameOver: true };
+    const finalGame = endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة!');
+    return { isGameOver: true, finalGame };
   }
 
   const { nextIndex, artistId } = nextActiveArtist(state.turnOrder, state.currentTurnIndex, game.players);
@@ -583,5 +580,5 @@ async function startNextRound(tx: Transaction, gameRef: ReturnType<typeof doc>, 
     [F.s_timer]: null, // wait for new artist to write
   });
 
-  return { isGameOver: false };
+  return { isGameOver: false, finalGame: null };
 }
