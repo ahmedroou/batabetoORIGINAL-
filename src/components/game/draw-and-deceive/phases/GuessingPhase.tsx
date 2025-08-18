@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -33,7 +34,6 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
   const artist = game.players.find((p) => p.id === state.artistId);
 
   const answers = state.shuffledAnswers ?? [];
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   
   const totalGuessers = useMemo(() => game.players.filter(p => p.id !== state.artistId).length, [game.players, state.artistId]);
   
@@ -223,7 +223,7 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
           {answers.map((answer, i) => {
             const id = `answer-${i}`;
             const isSelected = selectedAnswer === answer;
-            const letter = letters[i] ?? '';
+            
             return (
               <motion.div
                 key={id}
