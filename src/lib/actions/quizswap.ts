@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -9,7 +10,7 @@
  */
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, type Transaction } from 'firebase/firestore';
 import type { Game, Player, QuizSwapCard, QuizSwapState, QuizSwapPlayerState, QuizSwapQuestionCard, QuizSwapSpecialCard } from '@/types';
 import { shuffle, safeCompareStrings } from './helpers';
 import { QUIZ_SWAP_DECK_MAP, QUIZ_SWAP_DECK } from '@/data/quiz-swap-cards';
@@ -61,7 +62,7 @@ const reshuffleIfNeeded = (state: QuizSwapState) => {
   const rest = state.discardPile.slice(0, -1);
   const shuffled = shuffle([...rest]);
   state.drawPile = shuffled;
-  state.discardPile = [keepTop];
+  state.discardPile = [keepTop!];
 };
 
 const ensurePhase = (state: QuizSwapState, phases: QuizSwapState['phase'] | QuizSwapState['phase'][]) => {
@@ -643,3 +644,4 @@ function finishGame(state: QuizSwapState, game: Game) {
   const winner = sorted[0];
   game.gameResult = { winner: winner?.id, message: `${winner?.name || 'Player'} is the winner!` } as any;
 }
+

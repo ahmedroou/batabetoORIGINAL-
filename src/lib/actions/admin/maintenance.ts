@@ -1,236 +1,182 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, type Transaction } from 'firebase/firestore';
-import type { Game } from '@/types';
-import {
-  _getInitialGameState,
-  _rollDice,
-  _purchaseProperty,
-  _answerQuestion,
-  _endTurn,
-  _handleTimeout,
-} from './helpers/educated-merchant-helpers';
-import { fetchRandomQuestionForCategory } from './helpers/question-helpers';
-import { updateLeagueScoresForGameEnd } from './user';
+import { collection, getDocs, writeBatch, Timestamp } from 'firebase/firestore';
+import type { UserProfile } from '@/types';
+import { getRanks } from '../user/queries';
 
-/* ------------------------------------------------------------------ *
- * Types & Utilities
- * ------------------------------------------------------------------ */
+/** نوع لعملية تضاف إلى batch بدون كسر التسمية والمنطق الأصلي */
+type BatchOp = (b: ReturnType<typeof writeBatch>) => void;
 
-/**
- * Small alias to make intent clear when helpers request a question fetch.
- */
-type QuestionRequest = { category: string; token: string };
+/** حد آمن لكل batch (أقل من 500 حد فايرستور) */
+const BATCH_LIMIT_SAFE = 450;
 
-/**
- * Simple guard for required string arguments.
- */
-function assertNonEmpty(value: string, name: string): void {
-  if (!value || typeof value !== 'string') {
-    throw new Error(`Invalid argument: "${name}".`);
+/** أداة عامة لتجزئة وكتابة العمليات على دفعات */
+async function commitChunks(ops: BatchOp[]) {
+  if (!ops || ops.length === 0) return;
+
+  const commits: Promise<void>[] = [];
+  for (let i = 0; i < ops.length; i += BATCH_LIMIT_SAFE) {
+    const batch = writeBatch(db);
+    for (const op of ops.slice(i, i + BATCH_LIMIT_SAFE)) op(batch);
+    commits.push(batch.commit());
   }
+  await Promise.all(commits);
 }
 
-/**
- * Fetches a Game document within a transaction or throws if missing.
- */
-async function getGameInTx(tx: Transaction, gameId: string): Promise<{ gameRef: ReturnType<typeof doc>; game: Game }> {
-  const gameRef = doc(db, 'games', gameId);
-  const snap = await tx.get(gameRef);
-  if (!snap.exists()) throw new Error('Game not found.');
-  const game = snap.data() as Game;
-  return { gameRef, game };
-}
+/* ============================== */
+/*     أدوات مساعدة Utilities     */
+/* ============================== */
 
-/**
- * Ensures the caller is the host (used where host-only actions are allowed).
- */
-function requireHost(game: Game, hostId: string): void {
-  if (game.hostId !== hostId) {
-    throw new Error('Only the host can perform this action.');
+/** يحوّل أي قيمة تاريخية (Timestamp/Date/number/string) إلى millis أو null */
+function toMillis(value: unknown): number | null {
+  if (value == null) return null;
+
+  // Firestore Timestamp
+  if (value instanceof Timestamp) return value.toMillis();
+
+  // Date
+  if (value instanceof Date) return value.getTime();
+
+  // number (millis)
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+
+  // string (ISO أو أي parse-able)
+  if (typeof value === 'string') {
+    const d = new Date(value);
+    const t = d.getTime();
+    return Number.isNaN(t) ? null : t;
   }
+
+  // كائن يملك toDate() (بعض أنواع السيريالايز)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const maybe = value as any;
+  if (maybe && typeof maybe.toDate === 'function') {
+    const d = maybe.toDate();
+    if (d instanceof Date) return d.getTime();
+  }
+
+  return null;
 }
 
-/* ------------------------------------------------------------------ *
- * Question Fetching (race-safe)
- * ------------------------------------------------------------------ */
+/** هل until مستقبلية (مازالت فعالة) مقارنةً بالآن؟ */
+function isActiveUntil(until: unknown, nowMs: number): boolean {
+  const t = toMillis(until);
+  return t != null && t > nowMs;
+}
+
+/** مقارنة مجموعتين بدون اعتبار الترتيب */
+function setsEqual<T>(a: Iterable<T>, b: Iterable<T>): boolean {
+  const sa = new Set(a);
+  const sb = new Set(b);
+  if (sa.size !== sb.size) return false;
+  for (const v of sa) if (!sb.has(v)) return false;
+  return true;
+}
+
+/* ================================================= */
+/*    1) Backfill لعَلم العقوبة isPunished          */
+/* ================================================= */
 
 /**
- * Fetch a question and commit it only if the game is still expecting
- * the same question token and hasn't moved on. Extracted to avoid repetition
- * and reduce race-condition risk.
+ * Iterates through all users to fix the isPunished status.
+ * Expensive: reads all users. Use only for maintenance.
  */
-async function fetchAndSetQuestion(
-  gameId: string,
-  req: QuestionRequest,
-): Promise<void> {
-  const gameRef = doc(db, 'games', gameId);
-
+export async function backfillPunishmentStatus(): Promise<{
+  success: boolean;
+  error?: string;
+  count?: number;
+}> {
   try {
-    const question = await fetchRandomQuestionForCategory('educated-merchant', req.category);
+    const usersRef = collection(db, 'users');
+    const snapshot = await getDocs(usersRef);
+    if (snapshot.empty) return { success: true, count: 0 };
 
-    // Double-check state under a transaction before committing the question.
-    await runTransaction(db, async (tx) => {
-      const gameSnap = await tx.get(gameRef);
-      if (!gameSnap.exists()) return; // Game deleted or missing — no-op
+    const ops: BatchOp[] = [];
+    let updatedCount = 0;
+    const nowMs = Date.now();
 
-      const game = gameSnap.data() as Game;
-      const em = game.educatedMerchantState;
+    snapshot.forEach((docSnap) => {
+      const user = docSnap.data() as UserProfile;
 
-      // Ensure we're still on a question step for the same token and that
-      // no question has already been set by a competing fetch.
-      if (
-        game.gameState === 'question' &&
-        em?.questionToken === req.token &&
-        !em?.currentQuestion
-      ) {
-        tx.update(gameRef, { 'educatedMerchantState.currentQuestion': question });
+      const humiliationActive = isActiveUntil(user?.humiliation?.until, nowMs);
+      const avatarActive = isActiveUntil(user?.originalAvatarToRevert?.until, nowMs);
+      const decreesActive = Array.isArray(user?.decrees)
+        ? user.decrees.some((d) => isActiveUntil(d?.until, nowMs))
+        : false;
+
+      const shouldBePunished = Boolean(humiliationActive || avatarActive || decreesActive);
+      const current = Boolean(user.isPunished ?? false);
+
+      if (current !== shouldBePunished) {
+        ops.push((b) => b.update(docSnap.ref, { isPunished: shouldBePunished }));
+        updatedCount++;
       }
     });
-  } catch (err) {
-    // Fail soft: leave state as-is so caller can retry or host can timeout.
-    // eslint-disable-next-line no-console
-    console.error('[fetchAndSetQuestion] failed', err);
+
+    await commitChunks(ops);
+    return { success: true, count: updatedCount };
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('Error in backfillPunishmentStatus:', e);
+    return { success: false, error: message || 'فشل تحديث حالات العقوبة.' };
   }
 }
 
-/* ------------------------------------------------------------------ *
- * Public API
- * ------------------------------------------------------------------ */
+/* ================================================= */
+/*  2) Backfill لصلاحيات المستخدم بناءً على الرتبة   */
+/* ================================================= */
 
 /**
- * Starts the "Educated Merchant" game. Only the host can perform this action.
- * Prepares the initial game state, generates the board, and sets the first turn.
+ * Iterates through all users and updates their `permissions` field based on their current rank.
+ * Expensive: reads all users. Use only for one-time maintenance or after rank changes.
  */
-export async function startGame(gameId: string, hostId: string): Promise<void> {
-  assertNonEmpty(gameId, 'gameId');
-  assertNonEmpty(hostId, 'hostId');
-
-  await runTransaction(db, async (tx) => {
-    const { gameRef, game } = await getGameInTx(tx, gameId);
-
-    requireHost(game, hostId);
-
-    if (!Array.isArray(game.players) || game.players.length < 2) {
-      throw new Error('The game requires at least 2 players.');
+export async function backfillUserPermissions(): Promise<{
+  success: boolean;
+  error?: string;
+  count?: number;
+}> {
+  try {
+    const allRanks = await getRanks();
+    if (!allRanks || allRanks.length === 0) {
+      return { success: false, error: 'لم يتم العثور على أي ألقاب.' };
     }
 
-    // Idempotency: if already started, do nothing.
-    if (game.gameState !== 'lobby') return;
+    // الأعلى threshold أولًا
+    const sortedRanks = [...allRanks].sort((a, b) => b.threshold - a.threshold);
 
-    const { updates } = await _getInitialGameState(game.players);
-    tx.update(gameRef, updates);
-  });
+    const usersRef = collection(db, 'users');
+    const snapshot = await getDocs(usersRef);
+    if (snapshot.empty) return { success: true, count: 0 };
+
+    const ops: BatchOp[] = [];
+    let updatedCount = 0;
+
+    snapshot.forEach((docSnap) => {
+      const user = docSnap.data() as UserProfile;
+      const points = Number(user.leaderboardPoints ?? 0);
+
+      // أقرب رتبة مناسبة لنقاط المستخدم (أعلى threshold لا يتجاوزه)
+      const currentRank =
+        sortedRanks.find((r) => points >= r.threshold) ??
+        sortedRanks[sortedRanks.length - 1];
+
+      const correctPermissions = Array.isArray(currentRank?.permissions)
+        ? currentRank.permissions
+        : [];
+
+      const currentPermissions = Array.isArray(user.permissions) ? user.permissions : [];
+      if (!setsEqual(currentPermissions, correctPermissions)) {
+        ops.push((b) => b.update(docSnap.ref, { permissions: correctPermissions }));
+        updatedCount++;
+      }
+    });
+
+    await commitChunks(ops);
+    return { success: true, count: updatedCount };
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('Error in backfillUserPermissions:', e);
+    return { success: false, error: message || 'فشل تحديث صلاحيات المستخدمين.' };
+  }
 }
-
-/**
- * Handles a player's dice roll and any subsequent automatic events.
- */
-export async function rollDice(gameId: string, playerId: string): Promise<void> {
-  assertNonEmpty(gameId, 'gameId');
-  assertNonEmpty(playerId, 'playerId');
-
-  let needsQuestion: QuestionRequest | null = null;
-  let finalGameData: Game | null = null;
-
-  await runTransaction(db, async (tx) => {
-    const { gameRef, game } = await getGameInTx(tx, gameId);
-
-    const { updates, needsQuestion: qReq, isGameOver, finalGame } = _rollDice(game, playerId);
-    tx.update(gameRef, updates);
-
-    if (qReq) needsQuestion = qReq;
-    if (isGameOver && finalGame) finalGameData = finalGame;
-  });
-
-  if (needsQuestion) await fetchAndSetQuestion(gameId, needsQuestion);
-  if (finalGameData) await updateLeagueScoresForGameEnd(finalGameData);
-}
-
-/**
- * Initiates a property purchase and transitions to a question state if required.
- */
-export async function purchaseProperty(gameId: string, playerId: string): Promise<void> {
-  assertNonEmpty(gameId, 'gameId');
-  assertNonEmpty(playerId, 'playerId');
-
-  let needsQuestion: QuestionRequest | null = null;
-
-  await runTransaction(db, async (tx) => {
-    const { gameRef, game } = await getGameInTx(tx, gameId);
-
-    const { updates, needsQuestion: qReq } = _purchaseProperty(game, playerId);
-    tx.update(gameRef, updates);
-
-    if (qReq) needsQuestion = qReq;
-  });
-
-  if (needsQuestion) await fetchAndSetQuestion(gameId, needsQuestion);
-}
-
-/**
- * Submits a player's answer and resolves the question, potentially ending the game.
- */
-export async function answerQuestion(gameId: string, playerId: string, answer: string): Promise<void> {
-  assertNonEmpty(gameId, 'gameId');
-  assertNonEmpty(playerId, 'playerId');
-  // NOTE: we pass `answer` as-is to preserve exact game logic in helpers.
-
-  let finalGameData: Game | null = null;
-
-  await runTransaction(db, async (tx) => {
-    const { gameRef, game } = await getGameInTx(tx, gameId);
-
-    const { updates, isGameOver, finalGame } = _answerQuestion(game, playerId, answer);
-    tx.update(gameRef, updates);
-
-    if (isGameOver && finalGame) finalGameData = finalGame;
-  });
-
-  if (finalGameData) await updateLeagueScoresForGameEnd(finalGameData);
-}
-
-/**
- * Ends a player's turn (e.g., skip purchase).
- */
-export async function endTurn(gameId: string, playerId: string): Promise<void> {
-  assertNonEmpty(gameId, 'gameId');
-  assertNonEmpty(playerId, 'playerId');
-
-  await runTransaction(db, async (tx) => {
-    const { gameRef, game } = await getGameInTx(tx, gameId);
-
-    const { updates } = _endTurn(game, playerId);
-    tx.update(gameRef, updates);
-  });
-}
-
-/**
- * Handles a turn timeout. Only the host may trigger it.
- */
-export async function handleTimeout(gameId: string, hostId: string): Promise<void> {
-  assertNonEmpty(gameId, 'gameId');
-  assertNonEmpty(hostId, 'hostId');
-
-  let needsQuestion: QuestionRequest | null = null;
-  let finalGameData: Game | null = null;
-
-  await runTransaction(db, async (tx) => {
-    const { gameRef, game } = await getGameInTx(tx, gameId);
-
-    // Only host can trigger timeout
-    requireHost(game, hostId);
-
-    const { updates, needsQuestion: qReq, isGameOver, finalGame } = _handleTimeout(game);
-    tx.update(gameRef, updates);
-
-    if (qReq) needsQuestion = qReq;
-    if (isGameOver && finalGame) finalGameData = finalGame;
-  });
-
-  if (needsQuestion) await fetchAndSetQuestion(gameId, needsQuestion);
-  if (finalGameData) await updateLeagueScoresForGameEnd(finalGameData);
-}
-
-export type { QuestionRequest };
