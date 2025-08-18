@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { submitDrawing, submitCorrectAnswerAndStartDrawing } from '@/lib/actions/draw-and-deceive';
 import { Loader2, Palette, Send, Timer, Eye, PenLine } from 'lucide-react';
 import { DrawingCanvas } from './DrawingCanvas';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
