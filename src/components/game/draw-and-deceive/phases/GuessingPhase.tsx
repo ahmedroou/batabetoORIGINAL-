@@ -13,6 +13,7 @@ import { Loader2, HelpCircle, ZoomIn, Check, Users } from 'lucide-react';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { DrawingCanvas } from './DrawingCanvas';
 
 interface GuessingPhaseProps {
   game: Game;
