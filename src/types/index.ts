@@ -1,9 +1,8 @@
 
 import type { Timestamp } from 'firebase/firestore';
-import type { LucideIcon } from 'lucide-react';
 import { z } from 'zod';
-import type { ALL_PERMISSIONS } from '@/data/permissions';
-import type { DEFAULT_SOCIAL_RANKS, DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES } from '@/data/social-ranks';
+import type { ALL_PERMISSIONS } from '../data/permissions';
+import type { DEFAULT_SOCIAL_RANKS, DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES } from '../data/social-ranks';
 
 
 // -------------------------------------------------------------
@@ -428,6 +427,7 @@ export interface GameKing {
     winCount: number;
     kingId: string;
     totalLeaderboardPoints?: number;
+    updatedAt?: Timestamp;
 }
 
 // -------------------------------------------------------------
