@@ -121,11 +121,14 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     }
   };
 
-  const handleDrawEnd = useCallback((dataUrl: string) => {
+  const handleDrawEnd = useCallback((dataUrl: string, historyState: { canUndo: boolean; canRedo: boolean }) => {
     setDrawingDataUrl(dataUrl);
-    if(autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    setCanUndo(historyState.canUndo);
+    setCanRedo(historyState.canRedo);
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
-        saveDrawingProgress(game.id, self.id, dataUrl).catch(() => {});
+      saveDrawingProgress(game.id, self.id, dataUrl).catch(() => {});
     }, 2000);
   }, [game.id, self.id]);
   
@@ -188,6 +191,3 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     </div>
   );
 }
-```
-,
-    <file>src/components/game/draw-and

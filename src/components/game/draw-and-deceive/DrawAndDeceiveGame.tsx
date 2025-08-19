@@ -118,17 +118,16 @@ export function DrawAndDeceiveGame({ game, self }: DrawAndDeceiveGameProps) {
   const isArtist = game.drawAndDeceiveState?.artistId === self.id;
   
   const Content = useMemo(() => {
-    // If you are not the artist and are in drawing/trapping phase, show waiting screen.
-    if (!isArtist) {
-        if (effectivePhase === 'drawing' || effectivePhase === 'trapping') {
-            return WaitingPhase;
-        }
-    }
-    // If you are the artist, show the drawing phase component.
-    if(isArtist && effectivePhase === 'drawing') {
+    const isArtistDrawingOrTrapping = isArtist && (effectivePhase === 'drawing' || effectivePhase === 'trapping');
+    const isPlayerWaiting = !isArtist && (effectivePhase === 'drawing' || effectivePhase === 'trapping');
+    
+    if (isArtistDrawingOrTrapping) {
         return DrawingPhase;
     }
-
+    if (isPlayerWaiting) {
+        return WaitingPhase;
+    }
+    
     return (PHASE_COMPONENTS as Record<string, React.ComponentType<{ game: Game; self: Player }>>)[effectivePhase] ?? null;
   }, [effectivePhase, isArtist]);
 
