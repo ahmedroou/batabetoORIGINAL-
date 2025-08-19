@@ -3,56 +3,63 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper Functions
-    function isRateLimited(actionType, duration) {
-      // Check if the user has a rate limit document
-      let lastActionTime = get(/databases/$(database)/documents/rate_limits/$(request.auth.uid)).data[actionType];
-      // If there's no record, they are not rate-limited.
-      if (lastActionTime == null) {
-        return false;
-      }
-      // If there is a record, check if enough time has passed.
-      return request.time < lastActionTime + duration;
+    // -----------------------------
+    // Helpers
+    // -----------------------------
+    function isSignedIn() { return request.auth != null }
+    function uid() { return request.auth.uid }
+    function userDoc(u) { return get(/databases/$(database)/documents/users/$(u)) }
+    function isAdmin() { return isSignedIn() && userDoc(uid()).data.isAdmin == true }
+
+    // Safe empty fallbacks
+    function m(v) { return v == null ? {} : v }   // map or empty map
+    function l(v) { return v == null ? [] : v }   // list or empty list
+
+    // Rate limit utilities (expects stored timestamps)
+    function rlPath() {
+      return /databases/$(database)/documents/rate_limits/$(uid())
+    }
+    function rlDoc() { return get(rlPath()) }
+
+    // Returns true if now < (lastAction + duration)
+    function isRateLimited(actionType, dur) {
+      return isSignedIn()
+             && exists(rlPath())
+             && (rlDoc().data[actionType] is timestamp)
+             && request.time < (rlDoc().data[actionType] + dur);
     }
 
+    // Diff helpers
+    function topLevelOnlyChanged(keys) {
+      return resource.data.diff(request.resource.data).changedKeys().hasOnly(keys)
+          && resource.data.diff(request.resource.data).addedKeys().hasOnly(keys)
+          && resource.data.diff(request.resource.data).removedKeys().hasOnly(keys);
+    }
+
+    function onlySelfMapKeyChanged(before, after, k) {
+      return m(before).diff(m(after)).changedKeys().hasOnly([k])
+          && m(before).diff(m(after)).addedKeys().hasOnly([k])
+          && m(before).diff(m(after)).removedKeys().hasOnly([k]);
+    }
+
+    function nestedOnlyChanged(parentBefore, parentAfter, keys) {
+      return m(parentBefore).diff(m(parentAfter)).changedKeys().hasOnly(keys)
+          && m(parentBefore).diff(m(parentAfter)).addedKeys().hasOnly(keys)
+          && m(parentBefore).diff(m(parentAfter)).removedKeys().hasOnly(keys);
+    }
+
+    // -----------------------------
+    // USERS
+    // -----------------------------
     match /users/{userId} {
-      // Users can only read/write their own profile
-      allow read, update: if request.auth.uid == userId;
-      // Allow create only for new users
-      allow create: if request.auth != null;
-    }
+      // قراءة: صاحب الحساب أو الأدمن
+      allow read: if isSignedIn() && (uid() == userId || isAdmin());
 
-    match /games/{gameId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null; 
-      allow update, delete: if request.auth.uid in resource.data.playerUids;
-    }
-    
-    match /complaints/{complaintId} {
-      allow create: if request.auth != null && !isRateLimited('submit_complaint', duration.value(43200, 's'));
-    }
-    
-    // Allow admins to read complaints
-    match /complaints/{complaintId} {
-        allow read, update, delete: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-    }
+      // إنشاء: المستخدم نفسه فقط، ولا يسمح بضبط isAdmin
+      allow create: if isSignedIn()
+                    && uid() == userId
+                    && (request.resource.data.isAdmin == null || request.resource.data.isAdmin == false);
 
-    match /game_settings/{settingId} {
-        // Anyone can read settings
-        allow read: if true;
-        // Admins can write to any setting EXCEPT popularity
-        allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true 
-                     && settingId != 'popularity';
-    }
-    
-    match /game_settings/popularity {
-        // Let any authenticated user update popularity counts
-        allow write: if request.auth != null;
-    }
-    
-    // Rate limit documents can be created/updated by the user for themselves
-    match /rate_limits/{userId} {
-      allow write: if request.auth.uid == userId;
-    }
-  }
-}
+      // تحديث: المالك أو الأدمن، مع منع تغيير isAdmin لغير الأدمن
+      allow update: if isSignedIn()
+                    && (uid() == userId || isAdmin())

@@ -1,6 +1,7 @@
 
-import type { SocialRank } from '@/types';
-import { Award, Crown, Diamond, Gem, Shield, ShieldCheck, Star } from 'lucide-react';
+
+import type { SocialRank } from '../types';
+import { Award, Crown, Gem, Shield, ShieldCheck } from 'lucide-react';
 
 export const DEFAULT_SOCIAL_RANKS: SocialRank[] = [
     { threshold: 0, name: 'عامل وضيع', icon: Shield, permissions: [] },

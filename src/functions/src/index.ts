@@ -64,7 +64,7 @@ export const updateGameKings = onSchedule(
             name: kingData.name,
             avatarId: kingData.avatarId,
             winCount: winCount,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp() as any,
           };
 
           batch.set(gameKingRef, newKingData, { merge: true });

@@ -427,7 +427,7 @@ export interface GameKing {
     winCount: number;
     kingId: string;
     totalLeaderboardPoints?: number;
-    updatedAt?: Timestamp;
+    updatedAt?: Timestamp | admin.firestore.FieldValue;
 }
 
 // -------------------------------------------------------------
