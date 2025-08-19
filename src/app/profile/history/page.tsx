@@ -119,10 +119,12 @@ const ScoreboardDialog = ({
   match,
   trigger,
   currentUserId,
+  kingOfGamesId,
 }: {
   match: MatchHistoryItem;
   trigger: React.ReactNode;
   currentUserId?: string;
+  kingOfGamesId: string | null;
 }) => {
   const sortedPlayers = [...match.players].sort(
     (a, b) => (match.finalScores?.[b.id] || 0) - (match.finalScores?.[a.id] || 0)
@@ -187,6 +189,7 @@ const ScoreboardDialog = ({
               {sortedPlayers.map((player, index) => {
                 const score = match.finalScores?.[player.id] || 0;
                 const isMe = currentUserId && player.id === currentUserId;
+                const isKing = player.id === kingOfGamesId;
                 return (
                   <TableRow key={player.id} className={cn(isMe && "bg-violet-50/70 dark:bg-violet-900/10")}
                     id={index === 0 ? `match-${match.id}` : undefined}
@@ -196,7 +199,7 @@ const ScoreboardDialog = ({
                     </TableCell>
                     <TableCell className="flex items-center gap-2">
                       <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8" />
-                      <span className={cn("truncate", isMe && "font-bold text-violet-900 dark:text-violet-100")}>{player.name}</span>
+                      <span className={cn("truncate", isMe && "font-bold text-violet-900 dark:text-violet-100", isKing && "king-of-games-name")}>{player.name}</span>
                       {isMe && (
                         <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-900 border border-violet-300 dark:bg-violet-900/30 dark:text-violet-100 dark:border-violet-700/40">
                           أنا
@@ -222,7 +225,7 @@ const ScoreboardDialog = ({
 
 // ===== Main Page =====
 export default function MatchHistoryPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, kingOfGamesId } = useAuth();
   const router = useRouter();
 
   const [history, setHistory] = useState<MatchHistoryItem[]>([]);
@@ -484,6 +487,7 @@ export default function MatchHistoryPage() {
                 >
                   <ScoreboardDialog
                     currentUserId={user?.uid}
+                    kingOfGamesId={kingOfGamesId}
                     match={match}
                     trigger={
                       <button className="w-full text-right">

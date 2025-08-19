@@ -33,6 +33,7 @@ import type {
   AllegianceRequest,
 } from "@/types";
 import { DEFAULT_SOCIAL_RANKS } from "@/data/social-ranks";
+import { getKingOfGames as fetchKingOfGames } from '@/lib/actions/user/queries';
 
 /** حساب الرتبة الاجتماعية محليًا (بدون نداءات خادمية) */
 function getSocialRankForUser(
@@ -60,6 +61,7 @@ interface AuthContextType {
   activeChallenges: Challenge[];
   newChallengeAvailable: boolean;
   markChallengeAsSeen: (challengeDate: Date | Timestamp) => void;
+  kingOfGamesId: string | null; // Add this
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -73,6 +75,7 @@ const AuthContext = createContext<AuthContextType>({
   activeChallenges: [],
   newChallengeAvailable: false,
   markChallengeAsSeen: () => {},
+  kingOfGamesId: null, // Add this
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -84,6 +87,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [newArticlesAvailable, setNewArticlesAvailable] = useState(false);
   const [activeChallenges, setActiveChallenges] = useState<Challenge[]>([]);
   const [newChallengeAvailable, setNewChallengeAvailable] = useState(false);
+  const [kingOfGamesId, setKingOfGamesId] = useState<string | null>(null); // Add this
 
   // مراجع داخليّة (قد تنفع لاحقًا للتنبيهات)
   const mountedRef = useRef<boolean>(false);
@@ -166,6 +170,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     },
     [memoizedGetSocialRankForUser, socialRanks]
   );
+  
+  // Fetch King of Games ID periodically or on a specific trigger
+    useEffect(() => {
+        const fetchKing = async () => {
+            const king = await fetchKingOfGames();
+            if (king) {
+                setKingOfGamesId(king.uid);
+            }
+        };
+
+        fetchKing();
+        const interval = setInterval(fetchKing, 5 * 60 * 1000); // Check every 5 minutes
+        return () => clearInterval(interval);
+    }, []);
 
   /** تحميل رتب المجتمع من Firestore مع fallback افتراضي */
   useEffect(() => {
@@ -362,6 +380,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         activeChallenges,
         newChallengeAvailable,
         markChallengeAsSeen,
+        kingOfGamesId,
       }}
     >
       {children}

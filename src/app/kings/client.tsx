@@ -96,7 +96,7 @@ export default function KingsClient() {
   const [kingOfGames, setKingOfGames] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const { socialRanks, getSocialRankForUser } = useAuth();
+  const { socialRanks, getSocialRankForUser, kingOfGamesId } = useAuth();
 
   const gameEntries = useMemo(() => Object.entries(GAME_TYPE_NAMES), []);
 
@@ -270,12 +270,11 @@ export default function KingsClient() {
                         <h2 className="text-2xl font-bold">ملك بطابيطو</h2>
                       </div>
                       <h3
-                        className="text-4xl md:text-5xl font-extrabold mt-1"
-                        style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.25)' }}
+                        className="text-4xl md:text-5xl font-extrabold mt-1 king-of-games-name"
                       >
                         {kingOfGames.name}
                       </h3>
-                       <div className="flex flex-col md:flex-row items-center justify-center md:justify-start gap-x-4 gap-y-1 mt-2 text-xl font-semibold text-yellow-100/90">
+                       <div className="flex flex-col md:flex-row items-center justify-center md:justify-start gap-x-4 gap-y-1 mt-2 text-xl font-semibold text-yellow-100/90" style={{textShadow: '1px 1px 2px rgba(0,0,0,0.3)'}}>
                         <div className="flex items-center gap-2">
                           <Trophy className="w-5 h-5" />
                           {kingOfGames.leaderboardPoints || 0} نقطة صدارة
@@ -287,7 +286,7 @@ export default function KingsClient() {
                           </div>
                         )}
                       </div>
-                       <div className="flex justify-center md:justify-start gap-x-3 gap-y-1 mt-2 text-sm font-semibold text-yellow-800/90">
+                       <div className="flex justify-center md:justify-start gap-x-3 gap-y-1 mt-2 text-sm font-semibold text-yellow-800/90" style={{textShadow: '1px 1px 2px rgba(0,0,0,0.2)'}}>
                         <span className="flex items-center gap-1.5"><Shield className="w-4 h-4"/>{kingOfGames.honorPoints || 0} شرف</span>
                         <span className="flex items-center gap-1.5"><Handshake className="w-4 h-4"/>{kingOfGames.loyaltyPoints || 0} ولاء</span>
                         <span className="flex items-center gap-1.5"><Angry className="w-4 h-4"/>{kingOfGames.rebellionPoints || 0} تمرد</span>
@@ -343,7 +342,7 @@ export default function KingsClient() {
                               />
                             </motion.div>
 
-                            <p className="font-semibold text-xl text-amber-300">{king.name}</p>
+                            <p className={cn("font-semibold text-xl", king.kingId === kingOfGamesId && "king-of-games-name")}>{king.name}</p>
 
                             {kingRank && (
                               <div className="flex items-center justify-center gap-1.5 text-sm text-gray-300">

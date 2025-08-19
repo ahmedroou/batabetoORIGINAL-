@@ -36,7 +36,7 @@ const fmtMin = (sec: number) => {
 export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
   const { toast } = useToast();
   const router = useRouter();
-  const { getSocialRankForUser } = useAuth();
+  const { getSocialRankForUser, kingOfGamesId } = useAuth();
   const isHost = game.hostId === self.id;
 
   const [busyLeavingOrKicking, setBusyLeavingOrKicking] = useState(false);
@@ -432,13 +432,14 @@ export function TrapAnswerLobby({ game, self }: LobbyPhaseProps) {
                 const rank = getSocialRankForUser(p.leaderboardPoints);
                 const RankIcon = rank?.icon as React.ElementType | undefined;
                 const isHostRow = p.id === game.hostId;
+                const isKing = p.id === kingOfGamesId;
                 return (
                   <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
                     <div className="flex items-center gap-3">
                       <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
                       <div>
                         <div className="flex items-center gap-2">
-                          <p className="font-bold text-lg">{p.name}</p>
+                          <p className={cn("font-bold text-lg", isKing && "king-of-games-name")}>{p.name}</p>
                           {isHostRow && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 border border-primary text-primary">المضيف</span>}
                         </div>
                         <div className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">

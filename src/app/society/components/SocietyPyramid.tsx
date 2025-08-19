@@ -381,7 +381,7 @@ const InteractionModal = ({
 };
 
 // —— Player card ——
-const PlayerCard = ({ player, rank, onPlayerClick, colorClass }: { player: UserProfile; rank: SocialRank | null; onPlayerClick: (player: UserProfile) => void; colorClass: string }) => {
+const PlayerCard = ({ player, rank, onPlayerClick, colorClass, isKingOfGames }: { player: UserProfile; rank: SocialRank | null; onPlayerClick: (player: UserProfile) => void; colorClass: string; isKingOfGames: boolean; }) => {
   const isHumiliated = !!(player.humiliation?.until && new Date(player.humiliation.until) > new Date());
   const hasPunishmentAvatar = !!(player.originalAvatarToRevert?.until && new Date(player.originalAvatarToRevert.until) > new Date());
   const currentDecree = (player.decrees || []).find((d) => d.until && new Date(d.until) > new Date());
@@ -419,7 +419,7 @@ const PlayerCard = ({ player, rank, onPlayerClick, colorClass }: { player: UserP
 
       <PlayerAvatar avatarId={player.avatarId} className="w-20 h-20 rounded-full border-2 border-purple-400/50 shadow" />
 
-      <h4 className="font-bold mt-2 truncate w-full flex items-center justify-center gap-1">
+      <h4 className={cn("font-bold mt-2 truncate w-full flex items-center justify-center gap-1", isKingOfGames && "king-of-games-name")}>
         {player.name}
       </h4>
 
@@ -461,7 +461,7 @@ const PlayerCard = ({ player, rank, onPlayerClick, colorClass }: { player: UserP
 
 // —— Main ——
 export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
-  const { userProfile, socialRanks, refreshUserProfile, getSocialRankForUser } = useAuth();
+  const { userProfile, socialRanks, refreshUserProfile, getSocialRankForUser, kingOfGamesId } = useAuth();
   const { toast } = useToast();
   const [playersByRank, setPlayersByRank] = useState<Record<string, UserProfile[]>>({});
   const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
@@ -612,7 +612,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                   className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
                 >
                   {searchedPlayers.map((p) => (
-                    <PlayerCard key={p.uid} player={p} rank={getSocialRankForUser(p.leaderboardPoints)} onPlayerClick={handlePlayerClick} colorClass="from-purple-500"/>
+                    <PlayerCard key={p.uid} player={p} rank={getSocialRankForUser(p.leaderboardPoints)} onPlayerClick={handlePlayerClick} colorClass="from-purple-500" isKingOfGames={p.uid === kingOfGamesId} />
                   ))}
                 </motion.div>
               ) : (
@@ -674,7 +674,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
                         className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
                       >
                         {playersInRank.map((p) => (
-                          <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} colorClass={colorClass} />
+                          <PlayerCard key={p.uid} player={p} rank={rank} onPlayerClick={handlePlayerClick} colorClass={colorClass} isKingOfGames={p.uid === kingOfGamesId} />
                         ))}
                       </motion.div>
                     ) : (

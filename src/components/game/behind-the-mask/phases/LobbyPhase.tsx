@@ -38,7 +38,7 @@ function clampNum(v: number, min: number, max: number) {
 export function LobbyPhase({ game, self }: LobbyPhaseProps) {
   const { toast } = useToast();
   const router = useRouter();
-  const { getSocialRankForUser } = useAuth();
+  const { getSocialRankForUser, kingOfGamesId } = useAuth();
   const isHost = game.hostId === self.id;
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -267,12 +267,13 @@ export function LobbyPhase({ game, self }: LobbyPhaseProps) {
               {activePlayers.map((p) => {
                 const rank = getSocialRankForUser(p.leaderboardPoints);
                 const RankIcon = rank?.icon;
+                const isKing = p.id === kingOfGamesId;
                 return (
                   <div key={p.id} className="font-medium flex items-center justify-between gap-3 animate-fade-in">
                     <div className="flex items-center gap-3">
                       <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10 rounded-full shadow-md" temporaryTitle={p.temporaryTitle} />
                       <div>
-                        <p className="font-bold text-lg">{p.name}</p>
+                        <p className={cn("font-bold text-lg", isKing && "king-of-games-name")}>{p.name}</p>
                         {rank && RankIcon && (
                           <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
                             <RankIcon className="w-3 h-3 text-amber-500" />
