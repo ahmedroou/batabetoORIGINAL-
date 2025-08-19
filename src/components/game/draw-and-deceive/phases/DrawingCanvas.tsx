@@ -516,6 +516,7 @@ export function DrawingCanvas({
 
   // Flood Fill
   const floodFill = (startPx: { x: number; y: number }, rgba: { r: number; g: number; b: number; a: number }, tolerance: number) => {
+    if (!backingRef.current) return;
     const ctx = getBackingCtx();
     const { width, height } = backingRef.current!;
     const image = ctx.getImageData(0, 0, width, height);
