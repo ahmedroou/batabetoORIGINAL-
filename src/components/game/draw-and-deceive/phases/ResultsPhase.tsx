@@ -14,11 +14,19 @@ import {
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { nextRound } from '@/lib/actions/draw-and-deceive';
-import { Loader2, ArrowRight, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
+
+// ====================================================================================
+// Types derived from backend contract (keep in sync with actions)
+// ====================================================================================
+interface RoundBreakdownItem { reason: string; points: number }
+interface RoundBucket { points: number; breakdown: RoundBreakdownItem[] }
+interface AnswerResult { answer: string; isCorrect: boolean; authorIds: string[]; guesserIds: string[] }
+interface LastRoundResults { scores: Record<string, RoundBucket>; answers: AnswerResult[] }
 
 interface ResultsPhaseProps {
   game: Game;
@@ -30,24 +38,25 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const state = game.drawAndDeceiveState;
-  const results = state?.lastRoundResults;
+  const results = (state?.lastRoundResults ?? null) as LastRoundResults | null;
 
-  // حوافظ سريعة لتقليل البحث المتكرر
+  // Quick maps to avoid repeated scans
   const playerById = useMemo(() => {
-    const map = new Map<string, Player>();
-    game.players.forEach((p) => map.set(p.id, p));
-    return map;
+    const m = new Map<string, Player>();
+    game.players.forEach((p) => m.set(p.id, p));
+    return m;
   }, [game.players]);
 
   const artist = state?.artistId ? playerById.get(state.artistId) : undefined;
   const isHost = game.hostId === self.id;
-  const isFinalRound = !!state && state.round >= state.settings.rounds;
+  const roundsTotal = state?.settings?.rounds ?? 1;
+  const roundNumber = state?.round ?? 1;
+  const isFinalRound = roundNumber >= roundsTotal;
 
   const handleNextRound = useCallback(async () => {
     if (isSubmitting || !isHost) return;
     setIsSubmitting(true);
     try {
-      // Use the new dedicated action for advancing the round
       await nextRound(game.id, self.id);
     } catch (error: any) {
       toast({
@@ -60,7 +69,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
     }
   }, [game.id, self.id, isHost, isSubmitting, toast]);
 
-  // حراسة بسيطة في حال وصول الحالة بدون بيانات (سلامة فقط)
+  // Defensive UI if data not yet available
   if (!state || !results || !artist) {
     return (
       <Card className="w-full max-w-3xl">
@@ -75,23 +84,39 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
     );
   }
 
-  // حركات موحّدة
   const itemVariants = {
     hidden: { opacity: 0, y: 8 },
-    show: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      transition: { delay: i * 0.06, duration: 0.25 },
-    }),
+    show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.25 } }),
+  } as const;
+
+  const sortedScores = useMemo(() => {
+    const entries = Object.entries(results.scores);
+    return entries
+      .map(([pid, bucket]) => ({ pid, total: bucket.points || 0, breakdown: bucket.breakdown }))
+      .sort((a, b) => b.total - a.total);
+  }, [results.scores]);
+
+  const downloadImage = () => {
+    const url = state.drawingDataUrl;
+    if (!url) return;
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `drawing_round_${roundNumber}.png`;
+      a.click();
+    } catch (e) {
+      // Fallback toast only
+      toast({ title: 'تعذّر التحميل', description: 'جرّب الضغط المطوّل/حفظ الصورة.', variant: 'destructive' });
+    }
   };
 
   return (
     <Card className="w-full max-w-3xl border-muted shadow-sm">
       <CardHeader className="text-center space-y-2">
-        <CardTitle className="text-2xl tracking-tight">نتائج الجولة</CardTitle>
-        <CardDescription className="text-base">
-          الوصف الصحيح:
-          <span className="ms-2 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm">
+        <CardTitle className="text-2xl tracking-tight">نتائج الجولة {roundNumber} / {roundsTotal}</CardTitle>
+        <CardDescription className="text-base flex flex-wrap items-center justify-center gap-2">
+          <span>الوصف الصحيح:</span>
+          <span className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm">
             <CheckCircle2 className="h-4 w-4" aria-hidden />
             <strong className="text-primary font-semibold">{state.correctAnswer}</strong>
           </span>
@@ -110,6 +135,12 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
               className="object-contain"
               sizes="(max-width: 768px) 100vw, 768px"
             />
+            <div className="absolute bottom-2 right-2 flex gap-2">
+              <Button size="sm" variant="secondary" className="gap-2" onClick={downloadImage}>
+                <Download className="h-4 w-4" />
+                حفظ الرسم
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="w-full max-w-2xl mx-auto rounded-xl border p-6 text-center text-sm text-muted-foreground">
@@ -127,21 +158,17 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
           </div>
           <ScrollArea className="h-72 md:h-80 lg:h-96">
             <div className="space-y-3 p-1">
-              {results.answers.map((item, idx) => {
-                const isCorrect = item.isCorrect;
-                const authors = (item.authorIds ?? []).map((id) => playerById.get(id)?.name).filter(Boolean);
+              {(results.answers || []).map((item, idx) => {
+                const isCorrect = !!item.isCorrect;
+                const authors = (item.authorIds ?? [])
+                  .map((id) => playerById.get(id)?.name)
+                  .filter(Boolean) as string[];
                 const guessers = (item.guesserIds ?? [])
                   .map((id) => playerById.get(id))
                   .filter((p): p is Player => !!p);
 
                 return (
-                  <motion.div
-                    key={`${item.answer}-${idx}`}
-                    custom={idx}
-                    variants={itemVariants}
-                    initial="hidden"
-                    animate="show"
-                  >
+                  <motion.div key={`${item.answer}-${idx}`} custom={idx} variants={itemVariants} initial="hidden" animate="show">
                     <div
                       className={cn(
                         'rounded-lg border p-3 md:p-4 transition-colors',
@@ -151,9 +178,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
                       aria-label={isCorrect ? 'الإجابة الصحيحة' : 'إجابة فخ'}
                     >
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="font-semibold text-base md:text-lg leading-snug break-words">
-                          {item.answer}
-                        </p>
+                        <p className="font-semibold text-base md:text-lg leading-snug break-words">{item.answer}</p>
 
                         <div className="text-xs sm:text-[11px] text-muted-foreground flex items-center gap-1.5">
                           {isCorrect ? (
@@ -167,9 +192,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
                             <>
                               <AlertTriangle className="h-4 w-4" aria-hidden />
                               <span className="opacity-80">فخ بواسطة:</span>
-                              <span className="font-medium truncate">
-                                {authors.length ? authors.join(', ') : '—'}
-                              </span>
+                              <span className="font-medium truncate">{authors.length ? authors.join(', ') : '—'}</span>
                             </>
                           )}
                         </div>
@@ -177,15 +200,10 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
 
                       {guessers.length > 0 && (
                         <div className="mt-3 pt-3 border-t">
-                          <div className="flex items-center gap-2 text-xs font-medium mb-2">
-                            المصوّتون:
-                          </div>
+                          <div className="flex items-center gap-2 text-xs font-medium mb-2">المصوّتون:</div>
                           <div className="flex flex-wrap gap-2">
                             {guessers.map((g) => (
-                              <div
-                                key={g.id}
-                                className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1"
-                              >
+                              <div key={g.id} className="flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1">
                                 <PlayerAvatar avatarId={g.avatarId} className="w-4 h-4 shrink-0" />
                                 <span className="text-xs leading-none">{g.name}</span>
                               </div>
@@ -208,27 +226,21 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
           </div>
           <div className="p-2 sm:p-3">
             <ul className="divide-y">
-              {Object.entries(results.scores).map(([playerId, scoreData]) => {
-                const p = playerById.get(playerId);
+              {sortedScores.map(({ pid, total, breakdown }) => {
+                const p = playerById.get(pid);
                 if (!p) return null;
-                const total = scoreData.points ?? 0;
-
                 return (
-                  <li key={playerId} className="py-2.5 sm:py-3">
+                  <li key={pid} className="py-2.5 sm:py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <PlayerAvatar avatarId={p.avatarId} className="w-8 h-8" />
                         <div className="min-w-0">
                           <p className="text-sm font-medium leading-tight truncate">{p.name}</p>
-                          {/* تفاصيل تفصيلية بنص صغير ومتدرّج */}
                           <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] leading-relaxed">
-                            {scoreData.breakdown.map((bd, i) => (
+                            {breakdown.map((bd, i) => (
                               <span
                                 key={i}
-                                className={cn(
-                                  'rounded-md border px-1.5 py-0.5',
-                                  bd.points > 0 ? 'border-emerald-500/40' : 'border-red-500/40'
-                                )}
+                                className={cn('rounded-md border px-1.5 py-0.5', bd.points > 0 ? 'border-emerald-500/40' : 'border-red-500/40')}
                               >
                                 {bd.points > 0 ? `+${bd.points}` : bd.points} {bd.reason}
                               </span>
@@ -262,11 +274,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
             )}
           </Button>
         ) : (
-          <p
-            className="text-center w-full text-muted-foreground animate-pulse"
-            role="status"
-            aria-live="polite"
-          >
+          <p className="text-center w-full text-muted-foreground animate-pulse" role="status" aria-live="polite">
             في انتظار المضيف…
           </p>
         )}
@@ -274,3 +282,5 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
     </Card>
   );
 }
+
+export default ResultsPhase;
