@@ -11,7 +11,6 @@ import { submitCorrectAnswerAndStartDrawing, endArtistTurn, saveDrawingProgress 
 import { Loader2, Send, Timer, Undo2, Redo2, Eraser, Pencil, Highlighter, Type, Droplet, Image as ImageIcon, Download, Square, Circle, Minus, Grid, Trash2, Hand, PaintBucket, Copy as CopyIcon, RefreshCcw, HelpCircle, ZoomIn, ZoomOut, Triangle, Ellipse } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -1067,130 +1066,72 @@ export function DrawingCanvas({
   return (
     <div ref={containerRef} className={cn('w-full h-full select-none flex flex-col gap-2', className)}>
       {/* شريط الأدوات */}
-      <div className="p-2 rounded-2xl bg-white/75 dark:bg-slate-900/50 backdrop-blur shadow border border-border/50">
-        {/* Desktop */}
-        <div className="hidden md:flex md:flex-col md:gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <BrushesGroup />
-            <ShapesGroup />
-            <FillGroup />
-            <TextGroup />
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs">لون</span>
-              <Input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-8 p-1 bg-transparent" aria-label="لون الفرشاة" />
-            </div>
-
-            <Button size="icon" aria-label="تحريك" variant={tool === 'pan' ? 'default' : 'secondary'} onClick={() => setTool('pan')} title="تحريك"><Hand className="w-4 h-4" /></Button>
-            <Button size="icon" aria-label="قطّارة" variant={tool === 'eyedropper' ? 'default' : 'secondary'} onClick={() => setTool('eyedropper')} title="قطّارة"><Droplet className="w-4 h-4" /></Button>
-            <Button size="icon" aria-label="شبكة" variant={showGrid ? 'default' : 'secondary'} onClick={() => setShowGrid(s => !s)} title="شبكة"><Grid className="w-4 h-4" /></Button>
-
-            <div className="flex items-center gap-1">
-              <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.max(0.25, z / 1.1))} title="تصغير"><ZoomOut className="w-4 h-4" /></Button>
-              <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.min(6, z * 1.1))} title="تكبير"><ZoomIn className="w-4 h-4" /></Button>
-              <Button size="icon" variant="secondary" onClick={resetView} title="إعادة ضبط"><RefreshCcw className="w-4 h-4" /></Button>
-            </div>
-
-            <Button size="icon" variant="secondary" onClick={undo} disabled={historyIndex <= 0} title="تراجع (Ctrl+Z)"><Undo2 className="w-4 h-4" /></Button>
-            <Button size="icon" variant="secondary" onClick={redo} disabled={historyIndex >= history.length - 1} title="إعادة (Ctrl+Y)"><Redo2 className="w-4 h-4" /></Button>
-            <Button size="icon" variant="secondary" onClick={clearAll} title="مسح الكل"><Trash2 className="w-4 h-4" /></Button>
-
-            <input ref={inputFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files && importImage(e.target.files[0])} />
-            <Button size="icon" variant="secondary" title="استيراد صورة" onClick={() => inputFileRef.current?.click()}><ImageIcon className="w-4 h-4" /></Button>
-
-            <Button size="icon" variant="secondary" onClick={copyToClipboard} title="نسخ للصق"><CopyIcon className="w-4 h-4" /></Button>
-            <Button size="icon" variant="secondary" onClick={downloadPng} title="حفظ كصورة"><Download className="w-4 h-4" /></Button>
-
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button size="icon" variant="ghost" title="مساعدة"><HelpCircle className="w-4 h-4" /></Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-72 text-xs space-y-1">
-                <p className="font-semibold">اختصارات سريعة</p>
-                <ul className="list-disc pl-4 space-y-1">
-                  <li>Ctrl/Cmd + عجلة: تكبير/تصغير حول المؤشر</li>
-                  <li>مسطرة (Space): تحريك مؤقت</li>
-                  <li>Shift: قيود للأشكال/الخط</li>
-                  <li>Ctrl/Cmd + Z / Shift+Z / Y: تراجع/إعادة</li>
-                  <li>دبل-كليك على اللوحة: إعادة الضبط</li>
-                </ul>
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          {/* تحكم السماكة/الشفافية */}
-          <div className="flex flex-wrap items-center gap-3 pt-2 border-t mt-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs">السماكة</span>
-              <div className="w-28">
-                <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0]!)} />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs">الشفافية</span>
-              <div className="w-28">
-                <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0]!)} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile: collapsible */}
-        <div className="md:hidden">
-          <Collapsible>
-            <div className="flex justify-between items-center">
-              <p className="text-sm font-semibold">الأدوات</p>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm">إظهار/إخفاء</Button>
-              </CollapsibleTrigger>
-            </div>
-            <CollapsibleContent className="mt-2 pt-2 border-t">
-              <div className="flex flex-col gap-3">
-                {/* نعيد استخدام نفس المجموعات في الموبايل */}
-                <div className="flex flex-wrap items-center gap-2">
+      <div className="p-2 rounded-2xl bg-white/75 dark:bg-slate-900/50 backdrop-blur shadow border border-border/50 shrink-0">
+          <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                   <BrushesGroup />
                   <ShapesGroup />
                   <FillGroup />
                   <TextGroup />
+
                   <div className="flex items-center gap-2">
-                    <span className="text-xs">لون</span>
-                    <Input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-8 p-1 bg-transparent" aria-label="لون الفرشاة" />
+                  <span className="text-xs">لون</span>
+                  <Input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-8 p-1 bg-transparent" aria-label="لون الفرشاة" />
                   </div>
+
                   <Button size="icon" aria-label="تحريك" variant={tool === 'pan' ? 'default' : 'secondary'} onClick={() => setTool('pan')} title="تحريك"><Hand className="w-4 h-4" /></Button>
                   <Button size="icon" aria-label="قطّارة" variant={tool === 'eyedropper' ? 'default' : 'secondary'} onClick={() => setTool('eyedropper')} title="قطّارة"><Droplet className="w-4 h-4" /></Button>
                   <Button size="icon" aria-label="شبكة" variant={showGrid ? 'default' : 'secondary'} onClick={() => setShowGrid(s => !s)} title="شبكة"><Grid className="w-4 h-4" /></Button>
+
                   <div className="flex items-center gap-1">
-                    <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.max(0.25, z / 1.1))} title="تصغير"><ZoomOut className="w-4 h-4" /></Button>
-                    <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.min(6, z * 1.1))} title="تكبير"><ZoomIn className="w-4 h-4" /></Button>
-                    <Button size="icon" variant="secondary" onClick={resetView} title="إعادة ضبط"><RefreshCcw className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.max(0.25, z / 1.1))} title="تصغير"><ZoomOut className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.min(6, z * 1.1))} title="تكبير"><ZoomIn className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="secondary" onClick={resetView} title="إعادة ضبط"><RefreshCcw className="w-4 h-4" /></Button>
                   </div>
+
                   <Button size="icon" variant="secondary" onClick={undo} disabled={historyIndex <= 0} title="تراجع (Ctrl+Z)"><Undo2 className="w-4 h-4" /></Button>
                   <Button size="icon" variant="secondary" onClick={redo} disabled={historyIndex >= history.length - 1} title="إعادة (Ctrl+Y)"><Redo2 className="w-4 h-4" /></Button>
                   <Button size="icon" variant="secondary" onClick={clearAll} title="مسح الكل"><Trash2 className="w-4 h-4" /></Button>
+
                   <input ref={inputFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files && importImage(e.target.files[0])} />
                   <Button size="icon" variant="secondary" title="استيراد صورة" onClick={() => inputFileRef.current?.click()}><ImageIcon className="w-4 h-4" /></Button>
+
                   <Button size="icon" variant="secondary" onClick={copyToClipboard} title="نسخ للصق"><CopyIcon className="w-4 h-4" /></Button>
                   <Button size="icon" variant="secondary" onClick={downloadPng} title="حفظ كصورة"><Download className="w-4 h-4" /></Button>
-                </div>
 
-                <div className="flex items-center gap-3 pt-2 border-t mt-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs">السماكة</span>
-                    <div className="w-28">
-                      <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0]!)} />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs">الشفافية</span>
-                    <div className="w-28">
-                      <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0]!)} />
-                    </div>
-                  </div>
-                </div>
+                  <Popover>
+                      <PopoverTrigger asChild>
+                      <Button size="icon" variant="ghost" title="مساعدة"><HelpCircle className="w-4 h-4" /></Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 text-xs space-y-1">
+                      <p className="font-semibold">اختصارات سريعة</p>
+                      <ul className="list-disc pl-4 space-y-1">
+                          <li>Ctrl/Cmd + عجلة: تكبير/تصغير حول المؤشر</li>
+                          <li>مسطرة (Space): تحريك مؤقت</li>
+                          <li>Shift: قيود للأشكال/الخط</li>
+                          <li>Ctrl/Cmd + Z / Shift+Z / Y: تراجع/إعادة</li>
+                          <li>دبل-كليك على اللوحة: إعادة الضبط</li>
+                      </ul>
+                      </PopoverContent>
+                  </Popover>
               </div>
-            </CollapsibleContent>
-          </Collapsible>
-        </div>
+
+              {/* تحكم السماكة/الشفافية */}
+              <div className="flex flex-wrap items-center gap-3 pt-2 border-t mt-2">
+                  <div className="flex items-center gap-2">
+                  <span className="text-xs">السماكة</span>
+                  <div className="w-28">
+                      <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0]!)} />
+                  </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                  <span className="text-xs">الشفافية</span>
+                  <div className="w-28">
+                      <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0]!)} />
+                  </div>
+                  </div>
+              </div>
+          </div>
       </div>
 
       {/* سطح الرسم + الشبكة */}
@@ -1350,4 +1291,3 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     </div>
   );
 }
-
