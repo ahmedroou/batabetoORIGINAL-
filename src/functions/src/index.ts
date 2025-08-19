@@ -13,6 +13,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import type { GameKing, UserProfile } from "../../types";
+import { FieldValue } from "firebase-admin/firestore";
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
@@ -64,7 +65,7 @@ export const updateGameKings = onSchedule(
             name: kingData.name,
             avatarId: kingData.avatarId,
             winCount: winCount,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp() as any,
+            updatedAt: FieldValue.serverTimestamp(),
           };
 
           batch.set(gameKingRef, newKingData, { merge: true });

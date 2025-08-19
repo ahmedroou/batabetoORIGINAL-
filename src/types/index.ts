@@ -1,5 +1,6 @@
 
 import type { Timestamp } from 'firebase/firestore';
+import type { admin } from 'firebase-admin';
 import { z } from 'zod';
 import type { ALL_PERMISSIONS } from '../data/permissions';
 import type { DEFAULT_SOCIAL_RANKS, DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES } from '../data/social-ranks';
@@ -105,7 +106,7 @@ export interface Complaint {
   createdAt: Timestamp;
 }
 
-export type PermissionId = typeof ALL_PERMISSIONS[number]['id'];
+export type PermissionId = (typeof ALL_PERMISSIONS)[number]['id'];
 
 export interface Permission {
     id: PermissionId;

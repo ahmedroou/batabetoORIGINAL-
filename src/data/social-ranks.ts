@@ -1,5 +1,6 @@
 
 
+
 import type { SocialRank } from '../types';
 import { Award, Crown, Gem, Shield, ShieldCheck } from 'lucide-react';
 
