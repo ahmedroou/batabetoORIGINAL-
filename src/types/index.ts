@@ -1,7 +1,7 @@
 
 import type { Timestamp } from 'firebase/firestore';
 import { z } from 'zod';
-import { ALL_PERMISSIONS } from '../data/permissions';
+import { ALL_PERMISSIONS_RAW } from '../data/permissions';
 import type { DEFAULT_SOCIAL_RANKS, DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES } from '../data/social-ranks';
 
 
@@ -106,7 +106,7 @@ export interface Complaint {
 }
 
 // Correctly define PermissionId first as a simple string type.
-export type PermissionId = (typeof ALL_PERMISSIONS)[number]['id'];
+export type PermissionId = (typeof ALL_PERMISSIONS_RAW)[number]['id'];
 
 // Then define Permission using the simple type.
 export interface Permission {
