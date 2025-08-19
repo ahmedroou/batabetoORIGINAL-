@@ -262,7 +262,7 @@ export async function issueDecree(actorId: string, targetId: string, title: stri
 }
 
 
-export async function begForMercy(actorId: string, targetId: string, cost: number): Promise<{ success: boolean, error?: string }> {
+export async function begForMercy(actorId: string, targetId: string, cost: number): Promise<{ success: boolean; error?: string }> {
      return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
@@ -449,7 +449,7 @@ export async function issueDuelChallenge(actorId: string, targetId: string, betA
      });
 }
 
-export async function respondToDuelChallenge(actorId: string, challenge: DuelChallenge, response: 'accepted' | 'rejected'): Promise<{ success: boolean, error?: string, gameId?: string }> {
+export async function respondToDuelChallenge(actorId: string, challenge: DuelChallenge, response: 'accepted' | 'rejected'): Promise<{ success: boolean; error?: string, gameId?: string }> {
     const actorRef = doc(db, "users", actorId);
     
      return runTransaction(db, async (transaction) => {
