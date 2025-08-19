@@ -1,12 +1,12 @@
+
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import type { Game, Player } from '@/types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Brain, Timer, UserX, PenSquare, HelpCircle } from 'lucide-react';
+import { Brain, Timer, PenSquare, HelpCircle, Loader2 } from 'lucide-react';
 import { handleTimeout } from '@/lib/actions/draw-and-deceive';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
 
 interface WaitingPhaseProps {
     game: Game;
@@ -20,7 +20,6 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
         return ends ? Math.max(0, Math.round((ends - Date.now()) / 1000)) : 0;
     });
 
-    const isHost = game.hostId === self.id;
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
@@ -34,7 +33,7 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
     }, [state.timerEndsAt]);
     
     const handleEndTurnByVote = async () => {
-        if (!isHost || isSubmitting) return;
+        if (isSubmitting) return;
         setIsSubmitting(true);
         try {
             await handleTimeout(game.id, self.id);
@@ -51,19 +50,23 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
                 const artist = game.players.find(p => p.id === state.artistId);
                 return {
                     title: `في انتظار ${artist?.name || 'الفنان'}...`,
-                    description: 'يقوم بكتابة وصف الرسمة...',
+                    description: state.correctAnswer ? 'يقوم بالرسم الآن...' : 'يقوم بكتابة وصف الرسمة...',
                     icon: <Brain className="w-16 h-16 text-primary" />
                 };
             case 'trapping':
+                 const activePlayers = game.players.filter(p => p.status !== 'left');
+                 const waitingCount = activePlayers.length - 1 - Object.keys(state.playerTraps || {}).length;
                  return {
                     title: 'في انتظار اللاعبين...',
-                    description: 'يقوم اللاعبون الآخرون بوضع فخاخهم.',
+                    description: `يقوم ${waitingCount} لاعبين بوضع فخاخهم.`,
                     icon: <PenSquare className="w-16 h-16 text-primary" />
                 };
             case 'guessing':
+                const totalGuessers = game.players.filter(p => p.id !== state.artistId).length;
+                const guessedCount = Object.keys(state.playerGuesses || {}).length;
                  return {
                     title: 'في انتظار التخمينات...',
-                    description: 'يقوم اللاعبون باختيار تخميناتهم.',
+                    description: `خمن ${guessedCount} من ${totalGuessers} لاعبين.`,
                     icon: <HelpCircle className="w-16 h-16 text-primary" />
                 };
             default:
@@ -73,7 +76,7 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
                     icon: <Loader2 className="w-16 h-16 text-primary animate-spin" />
                 };
         }
-    }, [state.phase, state.artistId, game.players]);
+    }, [state.phase, state.artistId, game.players, state.correctAnswer, state.playerTraps, state.playerGuesses]);
     
 
     return (
@@ -85,14 +88,14 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="flex items-center justify-center gap-2 font-mono text-xl">
-                    <Timer /> {timeLeft}s
+                    <Timer /> {timeLeft > 0 ? `${timeLeft}s` : "انتهى الوقت"}
                 </div>
-                {isHost && timeLeft === 0 && (
+                {timeLeft === 0 && (
                     <div className="p-4 border-t space-y-3">
-                        <p className="text-sm text-muted-foreground">انتهى وقت اللاعب الحالي!</p>
+                        <p className="text-sm text-muted-foreground">انتهى الوقت المخصص لهذه المرحلة!</p>
                         <div className="flex justify-center gap-2">
                            <Button onClick={handleEndTurnByVote} disabled={isSubmitting}>
-                            {isSubmitting ? <Loader2 className="animate-spin"/> : 'إنهاء دوره'}
+                            {isSubmitting ? <Loader2 className="animate-spin"/> : 'تجاوز المرحلة'}
                            </Button>
                         </div>
                     </div>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useMemo } from 'react';
@@ -58,7 +59,7 @@ const isPhaseKey = (v: unknown): v is PhaseKey =>
 
 /** نشتق المرحلة الفعلية للعرض. */
 function resolveEffectivePhase(game: Game): PhaseKey | string {
-  return game.drawAndDeceiveState?.phase ?? 'lobby';
+  return game.drawAndDeceiveState?.phase ?? game.gameState ?? 'lobby';
 }
 
 /* --------------------------------- Boundary -------------------------------- */
@@ -114,24 +115,22 @@ export function DrawAndDeceiveGame({ game, self }: DrawAndDeceiveGameProps) {
 
   const effectivePhase = resolveEffectivePhase(game);
   
-  const isWaiting = useMemo(() => {
-      if (game.gameState === 'drawing') {
-          const artistId = game.drawAndDeceiveState?.artistId;
-          const hasAnswer = !!game.drawAndDeceiveState?.correctAnswer;
-          // You are waiting if the answer is set, but you are not the artist
-          return hasAnswer && self.id !== artistId;
-      }
-      return false;
-  }, [game, self.id]);
-
+  const isArtist = game.drawAndDeceiveState?.artistId === self.id;
+  
   const Content = useMemo(() => {
-    // The artist is never in a "waiting" state during the drawing phase.
-    if (game.gameState === 'drawing' && self.id !== game.drawAndDeceiveState?.artistId) {
-        return WaitingPhase;
+    // If you are not the artist and are in drawing/trapping phase, show waiting screen.
+    if (!isArtist) {
+        if (effectivePhase === 'drawing' || effectivePhase === 'trapping') {
+            return WaitingPhase;
+        }
     }
-    return (PHASE_COMPONENTS as Record<string, React.ComponentType<{ game: Game; self: Player }>>)[effectivePhase] ?? null;
-  }, [effectivePhase, game.gameState, game.drawAndDeceiveState?.artistId, self.id]);
+    // If you are the artist, show the drawing phase component.
+    if(isArtist && effectivePhase === 'drawing') {
+        return DrawingPhase;
+    }
 
+    return (PHASE_COMPONENTS as Record<string, React.ComponentType<{ game: Game; self: Player }>>)[effectivePhase] ?? null;
+  }, [effectivePhase, isArtist]);
 
   // تمرير المستخدم لأعلى الصفحة عند تغير المرحلة
   useEffect(() => {

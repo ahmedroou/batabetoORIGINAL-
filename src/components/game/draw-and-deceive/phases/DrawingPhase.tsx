@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
@@ -7,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { submitCorrectAnswerAndStartDrawing, submitDrawing } from '@/lib/actions/draw-and-deceive';
-import { Loader2, Send, Wand2, Eye, Brain, Timer } from 'lucide-react';
+import { Loader2, Send, Timer } from 'lucide-react';
 import { DrawingCanvas } from './DrawingCanvas';
 
 interface DrawingPhaseProps {
