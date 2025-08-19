@@ -1,71 +1,58 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check for rate limiting
-    function isRateLimited(userId, action, duration) {
-      // Path to the user's rate limit document for the specific action
-      let limitPath = /databases/$(database)/documents/rate_limits/$(userId);
-      // Check if the document exists and get the timestamp of the last action
-      let lastActionTime = get(limitPath).data[action];
-      // Allow if there's no record of the action or if enough time has passed
-      return request.time > lastActionTime + duration;
+    // Helper function to check rate limits
+    function isRateLimited(userId, action, durationSeconds) {
+      // Allow if the user has never performed this action before
+      // or if enough time has passed since the last action.
+      let lastActionTime = get(/databases/$(database)/documents/rate_limits/$(userId)).data[action];
+      return lastActionTime == null || request.time.toMillis() - lastActionTime.toMillis() > (durationSeconds * 1000);
     }
 
-    // Allow users to read their own profile and for others to read public profiles
-    match /users/{userId} {
-      allow read: if true;
-      allow write: if request.auth.uid == userId;
-    }
+    // -- Collections --
 
-    // Secure the complaints collection
-    match /complaints/{complaintId} {
-      // Allow creation only if the user is authenticated and not rate-limited (12 hours)
-      allow create: if request.auth != null &&
-                       request.auth.uid == request.resource.data.userId &&
-                       isRateLimited(request.auth.uid, 'submit_complaint', durtion.time(12, 'h', 0, 0, 0));
-      // Only admins can read, update, or delete complaints
-      allow read, update, delete: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-    }
-    
-    // Secure the game creation process
+    // Games: can be read by anyone, but writes are restricted
     match /games/{gameId} {
-        // Allow creating a game if the user is authenticated and not rate-limited (60 seconds)
-        allow create: if request.auth != null && 
-                       request.auth.uid == request.resource.data.hostId &&
-                       isRateLimited(request.auth.uid, 'create_game_room', durtion.time(0, 'm', 60, 0));
-                       
-        // Allow read/write access based on game logic (e.g., player in game)
-        // These rules need to be defined based on your game's requirements.
-        allow read: if request.auth != null; // Example: any authenticated user can read
-        allow update: if request.auth != null && (
-            // Host can update
-            request.auth.uid == resource.data.hostId ||
-            // Players in the game can update
-            request.auth.uid in resource.data.playerUids
-        );
-    }
-    
-    // Rate limit tracking collection
-    match /rate_limits/{userId} {
-      // Only the user themselves can create/update their rate limit document
-      allow write: if request.auth.uid == userId;
-      // Generally, no one needs to read this directly from the client
-      allow read: if false; 
+      allow read;
+      allow create: if request.auth != null && isRateLimited(request.auth.uid, 'create_game_room', 60);
+      allow update: if request.auth != null; // Game logic is handled by server actions
+      allow delete: if request.auth != null && resource.data.hostId == request.auth.uid; // Only host can delete lobby
     }
 
-    // Secure other collections as needed
-    // Example: Read-only for game settings
-    match /game_settings/{settingId} {
-      allow read: if true;
-      allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    // game_settings/popularity: allow authenticated users to increment game popularity
+    match /game_settings/popularity {
+      allow read;
+      allow write: if request.auth != null;
     }
-    
-    // Public collections (example)
-    match /public_data/{docId} {
-      allow read: if true;
-      allow write: if false; // Read-only
+
+    // rate_limits: users can only update their own rate limit documents
+    match /rate_limits/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // complaints: allow creating documents under the same rate limit rules
+    match /complaints/{complaintId} {
+        allow read: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+        allow create: if request.auth != null && isRateLimited(request.auth.uid, 'submit_complaint', 43200);
+        allow update, delete: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // users: users can read their own data, and other authed users can read some public parts
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      // No delete rule for users for safety.
+    }
+
+    // All other collections default to no access.
+    // Explicitly add rules for other collections like 'game_kings', 'leagues', etc. if needed.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
