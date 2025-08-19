@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { submitGuess } from '@/lib/actions/draw-and-deceive';
-import { Loader2, HelpCircle, ZoomIn, Check, Users, Eye } from 'lucide-react';
+import { Loader2, HelpCircle, ZoomIn, Check, Users, Eye, Brain } from 'lucide-react';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -43,6 +43,20 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
   );
   
   const progress = totalGuessers > 0 ? Math.min(100, Math.round((guessedCount / totalGuessers) * 100)) : 100;
+  
+  const guessesByAnswer = useMemo(() => {
+    const map = new Map<string, Player[]>();
+    for (const [playerId, guess] of Object.entries(state.playerGuesses)) {
+        if (!guess) continue;
+        const player = game.players.find(p => p.id === playerId);
+        if (player) {
+            if (!map.has(guess)) map.set(guess, []);
+            map.get(guess)!.push(player);
+        }
+    }
+    return map;
+  }, [state.playerGuesses, game.players]);
+
 
   // تنقّل بلوحة المفاتيح بين الخيارات + Enter للإرسال
   useEffect(() => {
@@ -116,13 +130,63 @@ export function GuessingPhase({ game, self }: GuessingPhaseProps) {
       </CardContent>
     </Card>
   );
-
+  
   if (isArtist) {
     return (
-      <WaitingView
-        title="اللاعبون يخمنون"
-        description="أنت الفنان، شاهد اللاعبين وهم يقعون في فخاخ بعضهم البعض!"
-      />
+        <Card className="w-full max-w-3xl">
+            <CardHeader className="text-center">
+                <CardTitle className="flex items-center justify-center gap-2 text-2xl md:text-3xl">
+                    <Brain /> مرحلة التخمين (أنت الرسام)
+                </CardTitle>
+                <CardDescription>
+                    شاهد تخمينات اللاعبين بشكل مباشر!
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                {state.drawingDataUrl && (
+                     <div className="relative aspect-video w-full max-w-xl mx-auto rounded-lg overflow-hidden border bg-white">
+                        {!imgLoaded && (
+                            <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden />
+                        )}
+                        <Image
+                            src={state.drawingDataUrl}
+                            alt="لوحة الرسم"
+                            fill
+                            sizes="(max-width: 768px) 100vw, 640px"
+                            className="object-contain"
+                            onLoadingComplete={() => setImgLoaded(true)}
+                            priority
+                        />
+                    </div>
+                )}
+                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <Users className="w-4 h-4" />
+                    <span>{guessedCount} من {totalGuessers} قاموا بالتخمين</span>
+                </div>
+                <div className="h-2 w-full bg-muted rounded">
+                    <div className="h-full bg-primary rounded" style={{ width: `${progress}%` }} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {answers.map((answer, i) => {
+                        const guessers = guessesByAnswer.get(answer) || [];
+                        return (
+                            <div key={`artist-view-${i}`} className="p-4 border rounded-lg bg-background">
+                                <p className="font-semibold text-base">{answer}</p>
+                                <div className="flex flex-wrap gap-2 mt-2 min-h-[36px]">
+                                    {guessers.map(player => (
+                                        <PlayerAvatar 
+                                            key={player.id} 
+                                            player={player} 
+                                            className="w-8 h-8"
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </CardContent>
+        </Card>
     );
   }
 
