@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Brain, Timer, PenSquare, HelpCircle, Loader2 } from 'lucide-react';
 import { handleTimeout } from '@/lib/actions/draw-and-deceive';
 import { Button } from '@/components/ui/button';
-import { PlayerAvatar } from '../../PlayerAvatar'; // Corrected: PlayerAvatar needs to be imported if used as a component.
+import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 
 interface WaitingPhaseProps {
     game: Game;
