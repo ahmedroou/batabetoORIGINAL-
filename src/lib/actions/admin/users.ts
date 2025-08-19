@@ -22,6 +22,7 @@ import {
   increment,
   runTransaction,
   Timestamp,
+  DocumentData,
 } from 'firebase/firestore';
 import type { UserProfile, Mail, Game, MatchHistoryItem, GameKing } from '@/types';
 import { sendSystemMail } from '../user/mail';
@@ -32,14 +33,84 @@ import { GAME_TYPE_NAMES } from '@/types';
 const normalize = (s: any) => (typeof s === 'string' ? s : String(s ?? '')).trim().replace(/\s+/g, ' ');
 const stringNonEmpty = (s: any) => typeof s === 'string' && normalize(s).length > 0;
 
+function docToUserProfile(docSnap: DocumentData, uid: string): UserProfile {
+    const data = docSnap.data();
+    if (!data) throw new Error("Document data is empty.");
+
+    const tsToDate = (v: any): Date | null => {
+        if (!v) return null;
+        if (v instanceof Date) return v;
+        if (v instanceof Timestamp) return v.toDate();
+        if (typeof v === 'number') return new Date(v);
+        if (typeof v?.toDate === 'function') return v.toDate();
+        if (typeof v === 'string') {
+          const d = new Date(v);
+          return isNaN(d.getTime()) ? null : d;
+        }
+        return null;
+    };
+
+    const decrees = (data.decrees || []).map((d: any) => ({
+      ...d,
+      at: tsToDate(d.at),
+      until: tsToDate(d.until),
+    }));
+
+    const humiliation = data.humiliation
+      ? { ...data.humiliation, at: tsToDate(data.humiliation.at), until: tsToDate(data.humiliation.until) }
+      : null;
+
+    const originalAvatarToRevert = data.originalAvatarToRevert
+      ? { ...data.originalAvatarToRevert, until: tsToDate(data.originalAvatarToRevert.until) }
+      : null;
+
+    const lastPunishmentTimestamp = { ...(data.lastPunishmentTimestamp || {}) };
+    for (const key in lastPunishmentTimestamp) {
+        lastPunishmentTimestamp[key] = tsToDate(lastPunishmentTimestamp[key]);
+    }
+     const allegiance = data.allegiance ? { ...data.allegiance, until: tsToDate(data.allegiance.until) } : null;
+
+    return {
+        uid,
+        name: data.name || 'لاعب غير معروف',
+        email: data.email || null,
+        gender: data.gender,
+        isAdmin: !!data.isAdmin,
+        isEditor: !!data.isEditor,
+        coins: data.coins ?? 0,
+        diamonds: data.diamonds ?? 0,
+        avatarId: data.avatarId || 'Avatar00.png',
+        unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
+        leaderboardPoints: data.leaderboardPoints || 0,
+        honorPoints: data.honorPoints || 0,
+        loyaltyPoints: data.loyaltyPoints || 0,
+        rebellionPoints: data.rebellionPoints || 0,
+        trophies: data.trophies || 0,
+        gamesPlayed: data.gamesPlayed || {},
+        hasChangedName: !!data.hasChangedName,
+        leagues: data.leagues || [],
+        winCounts: data.winCounts || {},
+        clan: data.clan || null,
+        clanRole: data.clanRole,
+        audienceGroups: data.audienceGroups || [],
+        humiliation,
+        allegiance,
+        taxDemands: data.taxDemands || [],
+        alliances: data.alliances || [],
+        decrees,
+        duelChallenges: data.duelChallenges || [],
+        lastPunishmentTimestamp,
+        originalAvatarToRevert,
+        unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
+        isPunished: !!data.isPunished,
+    } as UserProfile;
+}
+
 export async function adminSearchUsers(searchTerm: string): Promise<UserProfile[]> {
   if (!stringNonEmpty(searchTerm)) return [];
   const term = normalize(searchTerm);
   const usersRef = collection(db, 'users');
 
-  // Firestore doesn't support case-insensitive queries directly.
-  // A common strategy is to query for a range, which works for "starts-with" searches.
-  // We query for both name and email and merge the results.
   const nameQuery = query(usersRef, where('name', '>=', term), where('name', '<=', term + '\uf8ff'));
   const emailQuery = query(usersRef, where('email', '>=', term.toLowerCase()), where('email', '<=', term.toLowerCase() + '\uf8ff'));
 
@@ -48,32 +119,27 @@ export async function adminSearchUsers(searchTerm: string): Promise<UserProfile[
 
     const usersMap = new Map<string, UserProfile>();
 
-    // Add users from name query
     nameSnapshot.forEach(doc => {
       if (!usersMap.has(doc.id)) {
-        usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
+        usersMap.set(doc.id, docToUserProfile(doc, doc.id));
       }
     });
 
-    // Add users from email query
     emailSnapshot.forEach(doc => {
       if (!usersMap.has(doc.id)) {
-        usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
+        usersMap.set(doc.id, docToUserProfile(doc, doc.id));
       }
     });
     
-    // Return a combined, unique list of users, limited to 50 results for performance.
     return Array.from(usersMap.values()).slice(0, 50);
 
   } catch (error) {
-    // This fallback is a safety net in case the above queries fail (e.g., missing index).
-    // It's less efficient but prevents the app from breaking.
     console.warn('Falling back to client-side filtering for user search due to error:', error);
     try {
         const fullSnapshot = await getDocs(usersRef);
         const lowerCaseSearchTerm = term.toLowerCase();
         return fullSnapshot.docs
-            .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
+            .map((docSnap) => docToUserProfile(docSnap, docSnap.id))
             .filter((user) => 
                 user.name?.toLowerCase().includes(lowerCaseSearchTerm) || 
                 user.email?.toLowerCase().includes(lowerCaseSearchTerm)
@@ -89,7 +155,6 @@ export async function adminSearchUsers(searchTerm: string): Promise<UserProfile[
 export async function adminUpdateUser(userId: string, data: Partial<UserProfile>) {
   if (!stringNonEmpty(userId)) return { success: false, error: 'User ID is required.' };
   
-  // Sanitize data to prevent updating protected fields
   const sanitized: Partial<UserProfile> & Record<string, any> = { ...data };
   delete sanitized.isAdmin;
   delete sanitized.isEditor;
@@ -138,7 +203,7 @@ export async function getTopUsers(field: 'coins' | 'leaderboardPoints', count: n
         const usersRef = collection(db, 'users');
         const q = query(usersRef, orderBy(field, 'desc'), limit(count));
         const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+        return querySnapshot.docs.map(docSnap => docToUserProfile(docSnap, docSnap.id));
     } catch (error) {
         console.error(`Error getting top users by ${field}:`, error);
         return [];
@@ -152,7 +217,7 @@ export async function adminSendMail(recipientIds: string[], subject: string, bod
 
   const batch = writeBatch(db);
   const senderName = 'Admin';
-  const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // Expires in 3 days
+  const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
   
   recipientIds.forEach(recipientId => {
     const mailRef = doc(collection(db, `users/${recipientId}/mail`));
@@ -378,5 +443,3 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
         return { success: false, error: e.message || 'فشل تحديث ملوك الألعاب.' };
     }
 }
-
-    

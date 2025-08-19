@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -21,6 +22,7 @@ import {
   serverTimestamp,
   deleteField,
   startAfter,
+  DocumentData,
 } from 'firebase/firestore';
 import type {
   UserProfile,
@@ -47,7 +49,79 @@ function chunk<T>(arr: T[], size: number): T[][] {
     return out;
 }
 
-const tsToDate = (v: any) => (v?.toDate ? v.toDate() : v ?? null);
+const tsToDate = (v: any): Date | null => {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  if (v instanceof Timestamp) return v.toDate();
+  if (typeof v === 'number') return new Date(v);
+  if (typeof v?.toDate === 'function') return v.toDate();
+  if (typeof v === 'string') {
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+};
+
+function docToUserProfile(docSnap: DocumentData, uid: string): UserProfile {
+    const data = docSnap.data();
+    if (!data) throw new Error("Document data is empty.");
+
+    const decrees = (data.decrees || []).map((d: any) => ({
+      ...d,
+      at: tsToDate(d.at),
+      until: tsToDate(d.until),
+    }));
+
+    const humiliation = data.humiliation
+      ? { ...data.humiliation, at: tsToDate(data.humiliation.at), until: tsToDate(data.humiliation.until) }
+      : null;
+
+    const originalAvatarToRevert = data.originalAvatarToRevert
+      ? { ...data.originalAvatarToRevert, until: tsToDate(data.originalAvatarToRevert.until) }
+      : null;
+
+    const lastPunishmentTimestamp = { ...(data.lastPunishmentTimestamp || {}) };
+    for (const key in lastPunishmentTimestamp) {
+        lastPunishmentTimestamp[key] = tsToDate(lastPunishmentTimestamp[key]);
+    }
+     const allegiance = data.allegiance ? { ...data.allegiance, until: tsToDate(data.allegiance.until) } : null;
+
+    return {
+        uid,
+        name: data.name || 'لاعب غير معروف',
+        email: data.email || null,
+        gender: data.gender,
+        isAdmin: !!data.isAdmin,
+        isEditor: !!data.isEditor,
+        coins: data.coins ?? 0,
+        diamonds: data.diamonds ?? 0,
+        avatarId: data.avatarId || 'Avatar00.png',
+        unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
+        leaderboardPoints: data.leaderboardPoints || 0,
+        honorPoints: data.honorPoints || 0,
+        loyaltyPoints: data.loyaltyPoints || 0,
+        rebellionPoints: data.rebellionPoints || 0,
+        trophies: data.trophies || 0,
+        gamesPlayed: data.gamesPlayed || {},
+        hasChangedName: !!data.hasChangedName,
+        leagues: data.leagues || [],
+        winCounts: data.winCounts || {},
+        clan: data.clan || null,
+        clanRole: data.clanRole,
+        audienceGroups: data.audienceGroups || [],
+        humiliation,
+        allegiance,
+        taxDemands: data.taxDemands || [],
+        alliances: data.alliances || [],
+        decrees,
+        duelChallenges: data.duelChallenges || [],
+        lastPunishmentTimestamp,
+        originalAvatarToRevert,
+        unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
+        isPunished: !!data.isPunished,
+    } as UserProfile;
+}
+
 
 // -------------------------------------------------------------
 // Ranks
@@ -97,60 +171,7 @@ export async function getPlayerFromUserId(userId: string): Promise<UserProfile> 
     );
   }
 
-  const data: any = userDoc.data();
-
-  const decrees = (data.decrees || []).map((d: any) => ({
-    ...d,
-    until: tsToDate(d.until),
-  }));
-
-  const humiliation = data.humiliation
-    ? { ...data.humiliation, at: tsToDate(data.humiliation.at), until: tsToDate(data.humiliation.until) }
-    : null;
-
-  const originalAvatarToRevert = data.originalAvatarToRevert
-    ? { ...data.originalAvatarToRevert, until: tsToDate(data.originalAvatarToRevert.until) }
-    : null;
-
-  const lastPunishmentTimestamp = { ...(data.lastPunishmentTimestamp || {}) };
-  for (const key in lastPunishmentTimestamp) {
-    lastPunishmentTimestamp[key] = tsToDate(lastPunishmentTimestamp[key]);
-  }
-
-  return {
-    uid: userId,
-    name: data.name || 'لاعب غير معروف',
-    email: data.email || null,
-    gender: data.gender,
-    isAdmin: !!data.isAdmin,
-    isEditor: !!data.isEditor,
-    coins: data.coins ?? 0,
-    diamonds: data.diamonds ?? 0,
-    avatarId: data.avatarId || 'Avatar00.png',
-    unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
-    leaderboardPoints: data.leaderboardPoints || 0,
-    honorPoints: data.honorPoints || 0,
-    loyaltyPoints: data.loyaltyPoints || 0,
-    rebellionPoints: data.rebellionPoints || 0,
-    trophies: data.trophies || 0,
-    gamesPlayed: data.gamesPlayed || {}, // fix type (was 0)
-    hasChangedName: !!data.hasChangedName,
-    leagues: data.leagues || [],
-    winCounts: data.winCounts || {},
-    clan: data.clan || null,
-    clanRole: data.clanRole,
-    audienceGroups: data.audienceGroups || [],
-    humiliation,
-    allegiance: data.allegiance || null,
-    taxDemands: data.taxDemands || [],
-    alliances: data.alliances || [],
-    decrees,
-    duelChallenges: data.duelChallenges || [],
-    lastPunishmentTimestamp,
-    originalAvatarToRevert,
-    unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
-    isPunished: !!data.isPunished,
-  } as UserProfile;
+  return docToUserProfile(userDoc, userId);
 }
 
 // -------------------------------------------------------------
@@ -205,7 +226,7 @@ export async function getKingOfGames(): Promise<UserProfile | null> {
     const snapshot = await getDocs(qy);
     if (snapshot.empty) return null;
     const userDoc = snapshot.docs[0];
-    return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+    return docToUserProfile(userDoc, userDoc.id);
   } catch (error) {
     console.error('Error fetching king of games:', error);
     return null;
@@ -235,60 +256,7 @@ export async function getAllUsers(filter?: 'punished', queryLimit?: number): Pro
     const usersQuery = queryLimit ? query(baseQuery, limit(queryLimit)) : baseQuery;
 
     const snapshot = await getDocs(usersQuery);
-    const users = snapshot.docs.map((docSnap) => {
-      const data: any = docSnap.data();
-
-      const decrees = (data.decrees || []).map((d: any) => ({ ...d, until: tsToDate(d.until) }));
-      const humiliation = data.humiliation
-        ? { ...data.humiliation, at: tsToDate(data.humiliation.at), until: tsToDate(data.humiliation.until) }
-        : null;
-      const originalAvatarToRevert = data.originalAvatarToRevert
-        ? { ...data.originalAvatarToRevert, until: tsToDate(data.originalAvatarToRevert.until) }
-        : null;
-
-      const lastPunishmentTimestamp = { ...(data.lastPunishmentTimestamp || {}) };
-      for (const key in lastPunishmentTimestamp) {
-        lastPunishmentTimestamp[key] = tsToDate(lastPunishmentTimestamp[key]);
-      }
-
-      const user: UserProfile = {
-        uid: docSnap.id,
-        name: data.name || 'Unknown',
-        email: data.email || null,
-        gender: data.gender,
-        isAdmin: !!data.isAdmin,
-        isEditor: !!data.isEditor,
-        coins: data.coins ?? 0,
-        diamonds: data.diamonds ?? 0,
-        avatarId: data.avatarId || 'Avatar00.png',
-        unlockedAvatars: data.unlockedAvatars || ['Avatar00.png'],
-        leaderboardPoints: data.leaderboardPoints || 0,
-        honorPoints: data.honorPoints || 0,
-        loyaltyPoints: data.loyaltyPoints || 0,
-        rebellionPoints: data.rebellionPoints || 0,
-        trophies: data.trophies || 0,
-        gamesPlayed: data.gamesPlayed || {}, // fix type (was 0)
-        hasChangedName: !!data.hasChangedName,
-        leagues: data.leagues || [],
-        winCounts: data.winCounts || {},
-        clan: data.clan || null,
-        clanRole: data.clanRole,
-        audienceGroups: data.audienceGroups || [],
-        humiliation,
-        allegiance: data.allegiance || null,
-        taxDemands: data.taxDemands || [],
-        alliances: data.alliances || [],
-        decrees,
-        duelChallenges: data.duelChallenges || [],
-        lastPunishmentTimestamp,
-        originalAvatarToRevert,
-        unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
-        isPunished: !!data.isPunished,
-      } as UserProfile;
-
-      return user;
-    });
-
+    const users = snapshot.docs.map((docSnap) => docToUserProfile(docSnap, docSnap.id));
     return users;
   } catch (error) {
     console.error('Error fetching all users:', error);
@@ -329,7 +297,7 @@ export async function getTopUsers(
         const usersRef = collection(db, 'users');
         const q = query(usersRef, orderBy(field, 'desc'), limit(count));
         const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+        return querySnapshot.docs.map(docSnap => docToUserProfile(docSnap, docSnap.id));
     } catch (error) {
         console.error(`Error getting top users by ${field}:`, error);
         return [];
@@ -347,7 +315,7 @@ export async function getTopPunisher(): Promise<UserProfile | null> {
     const snapshot = await getDocs(qy);
     if (snapshot.empty) return null;
     const userDoc = snapshot.docs[0];
-    return { uid: userDoc.id, ...userDoc.data() } as UserProfile;
+    return docToUserProfile(userDoc, userDoc.id);
   } catch (error) {
     console.warn('Could not fetch top punisher, likely due to a missing index:', error);
     return null;
@@ -378,7 +346,7 @@ export async function getUsersByRank(
           );
 
     const querySnapshot = await getDocs(qy);
-    return querySnapshot.docs.map((d) => ({ uid: d.id, ...d.data() } as UserProfile));
+    return querySnapshot.docs.map((d) => docToUserProfile(d, d.id));
   } catch (error) {
     console.error('Error getting users by rank:', error);
     return [];

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -26,7 +27,8 @@ import {
   where,
   writeBatch,
   limit,
-  startAfter
+  startAfter,
+  DocumentData,
 } from 'firebase/firestore';
 import type {
   Clan,
@@ -59,7 +61,7 @@ const normalize = (s: string) =>
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '') // accents
     .replace(/[\u064B-\u065F\u0670]/g, '') // Arabic diacritics
-    .replace(/[أإآ]/g, 'ا')
+    .replace(/[أإآا]/g, 'ا')
     .replace(/[يى]/g, 'ي')
     .replace(/[ة]/g, 'ه')
     .replace(/[^a-z0-9\u0600-\u06FF]+/gi, '-')
@@ -74,7 +76,7 @@ interface PaginationOpts {
   limit?: number;
   cursor?: string; // doc id to startAfter
   sortBy?: 'totalPoints' | 'totalHonorPoints' | 'elo' | 'createdAt';
-  order?: 'asc' | 'desc';
+  order?: 'desc' | 'asc';
 }
 
 /**
@@ -157,6 +159,18 @@ function canManage(actingRole: ClanRole) {
 function ensureMemberRole(member?: ClanMember): asserts member is ClanMember {
   if (!member) throw new Error('عضو غير موجود.');
 }
+
+function docToClan(docSnap: DocumentData): Clan {
+    const data = docSnap.data();
+    if (!data) throw new Error("Clan document data is empty.");
+    return {
+        id: docSnap.id,
+        ...data,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(),
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(),
+    } as Clan;
+}
+
 
 /** ----------------------------------------------------------------------
  * Core actions
@@ -260,7 +274,7 @@ export async function getClans(opts: PaginationOpts = {}): Promise<Clan[]> {
         }
         
         const snap = await getDocs(q);
-        const clans: Clan[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const clans: Clan[] = snap.docs.map(docToClan);
         return clans;
     } catch (e) {
         console.error('Error fetching clans:', e);
