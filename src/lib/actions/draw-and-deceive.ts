@@ -295,8 +295,13 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
     ensure(state.phase === 'drawing', 'Cannot submit drawing now.');
     ensure(state.artistId === playerId, 'Only the artist can submit a drawing.');
     
+    // Logic to move to the next phase after submitting the drawing
+    const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
     tx.update(gameRef, {
-      [F.s_drawing]: drawingDataUrl || null,
+        [F.s_drawing]: drawingDataUrl || null,
+        [F.s_phase]: 'trapping',
+        [F.s_timer]: inSec(trappingTime),
+        [F.s_kickVote]: null,
     });
   });
 }
