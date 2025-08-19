@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -18,6 +19,7 @@ import {
   getDocs,
   writeBatch,
   increment,
+  setDoc,
 } from 'firebase/firestore';
 import type {
   Player,
@@ -26,7 +28,7 @@ import type {
   ChallengeResult,
   Game as GameTypeAlias, // helpful aliasing for string literal types, if needed later
 } from '@/types';
-import { generateGameId, checkRateLimit } from '@/lib/actions/helpers';
+import { generateGameId } from '@/lib/actions/helpers';
 import { getTrapAnswerCategories, getEducatedMerchantCategories } from './admin/settings';
 import { getPlayerFromUserId } from './user/queries';
 import { getGamePopularityStats } from './stats';
@@ -125,7 +127,6 @@ export async function createGameRoom(
   try {
     const gameId = generateGameId();
     const gameRef = doc(db, 'games', gameId);
-    const userRef = doc(db, 'users', userId);
     const rateLimitRef = doc(db, 'rate_limits', userId);
 
     // Fetch player details before any write ops (keeps future transaction lean)
@@ -245,12 +246,12 @@ export async function createGameRoom(
     // Ensure the creator is not in any other lobby
     await removePlayerFromPreviousLobbies(userId, gameId);
 
-    // Create game + increment popularity in a single transaction
+    // Create game, increment popularity, and update rate limit atomically.
     const statsRef = doc(db, 'game_settings', 'popularity');
     await runTransaction(db, async (tx) => {
-      // Check rate limit before creating the game
-      await checkRateLimit(tx, userRef, 'create_game_room', CREATE_GAME_RATE_LIMIT_SECONDS);
-      
+      // The security rule will enforce the rate limit.
+      // We just need to update the timestamp here.
+      tx.set(rateLimitRef, { 'create_game_room': serverTimestamp() }, { merge: true });
       tx.set(statsRef, { [gameType]: increment(1) }, { merge: true });
       tx.set(gameRef, newGame);
     });
@@ -259,7 +260,11 @@ export async function createGameRoom(
   } catch (error) {
     const typed = error as Error;
     console.error('Error in createGameRoom:', typed);
-    return { error: typed.message || 'حدث خطأ غير متوقع عند إنشاء الغرفة.' };
+    let errorMessage = 'حدث خطأ غير متوقع عند إنشاء الغرفة.';
+    if (typed.message.includes('permission-denied')) {
+        errorMessage = `لا يمكنك إنشاء غرفة جديدة الآن. الرجاء الانتظار ${CREATE_GAME_RATE_LIMIT_SECONDS} ثانية.`
+    }
+    return { error: errorMessage };
   }
 }
 
