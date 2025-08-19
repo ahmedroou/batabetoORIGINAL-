@@ -385,6 +385,7 @@ const PlayerCard = ({ player, rank, onPlayerClick, colorClass }: { player: UserP
   const titleToShow = currentDecree ? currentDecree.title : rank?.name;
   const isUnderProtection = !!player.allegiance?.to;
   const isPunished = isHumiliated || hasPunishmentAvatar;
+  const RankIcon = rank?.icon as React.ComponentType<{ className?: string }> | undefined;
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -420,9 +421,10 @@ const PlayerCard = ({ player, rank, onPlayerClick, colorClass }: { player: UserP
       </h4>
 
       {titleToShow && (
-        <Badge variant={currentDecree ? 'destructive' : 'secondary'} className="mt-1">
-          {titleToShow}
-        </Badge>
+          <Badge variant={currentDecree ? 'destructive' : 'secondary'} className="mt-1 inline-flex items-center gap-1.5">
+              {RankIcon && !currentDecree && <RankIcon className="w-3 h-3"/>}
+              {titleToShow}
+          </Badge>
       )}
 
       <div className="flex items-center gap-2 mt-1">
