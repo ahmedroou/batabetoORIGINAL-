@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -7,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Brain, Timer, PenSquare, HelpCircle, Loader2 } from 'lucide-react';
 import { handleTimeout } from '@/lib/actions/draw-and-deceive';
 import { Button } from '@/components/ui/button';
+import { PlayerAvatar } from '../../PlayerAvatar'; // Corrected: PlayerAvatar needs to be imported if used as a component.
 
 interface WaitingPhaseProps {
     game: Game;
@@ -45,17 +45,17 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
     }
 
     const phaseDetails = useMemo(() => {
+        const artist = game.players.find(p => p.id === state.artistId);
         switch(state.phase) {
             case 'drawing':
-                const artist = game.players.find(p => p.id === state.artistId);
                 return {
                     title: `في انتظار ${artist?.name || 'الفنان'}...`,
                     description: state.correctAnswer ? 'يقوم بالرسم الآن...' : 'يقوم بكتابة وصف الرسمة...',
                     icon: <Brain className="w-16 h-16 text-primary" />
                 };
             case 'trapping':
-                 const activePlayers = game.players.filter(p => p.status !== 'left');
-                 const waitingCount = activePlayers.length - 1 - Object.keys(state.playerTraps || {}).length;
+                 const activePlayers = game.players.filter(p => p.status !== 'left' && p.id !== state.artistId);
+                 const waitingCount = activePlayers.length - Object.keys(state.playerTraps || {}).length;
                  return {
                     title: 'في انتظار اللاعبين...',
                     description: `يقوم ${waitingCount} لاعبين بوضع فخاخهم.`,
