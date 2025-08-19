@@ -977,7 +977,7 @@ export function DrawingCanvas({
     </>
   );
 
-  // نمط المؤشر حسب الأداة
+  // نمط المؤشر حسب الأداة 
   const cursorClass = useMemo(() => {
     if (disabled) return 'cursor-not-allowed';
     if (tool === 'pan' || forcedPanRef.current) return 'cursor-grab';
