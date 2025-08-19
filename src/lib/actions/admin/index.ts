@@ -96,5 +96,3 @@ export {
   recalculateGameKings,
   distributeEndOfGameAwards,
 };
-
-    
