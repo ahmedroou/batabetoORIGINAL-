@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
-import { nextRound, handleTimeout } from '@/lib/actions/draw-and-deceive';
+import { nextRound } from '@/lib/actions/draw-and-deceive';
 import { Loader2, ArrowRight, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -43,7 +43,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
   const isHost = game.hostId === self.id;
   const isFinalRound = !!state && state.round >= state.settings.rounds;
 
-  const handleNext = useCallback(async () => {
+  const handleNextRound = useCallback(async () => {
     if (isSubmitting || !isHost) return;
     setIsSubmitting(true);
     try {
@@ -251,7 +251,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
 
       <CardFooter className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
         {isHost ? (
-          <Button onClick={handleNext} disabled={isSubmitting} className="w-full sm:w-auto">
+          <Button onClick={handleNextRound} disabled={isSubmitting} className="w-full sm:w-auto">
             {isSubmitting ? (
               <Loader2 className="animate-spin" />
             ) : (

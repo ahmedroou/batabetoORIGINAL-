@@ -6,7 +6,7 @@ import { db } from '@/lib/firebase';
 import { doc, runTransaction, Timestamp, type Transaction, updateDoc, increment, arrayUnion, arrayRemove, deleteField } from 'firebase/firestore';
 import type { Game, Player, DrawAndDeceiveState, DrawAndDeceiveRoundResult } from '@/types';
 import { shuffle, safeCompareStrings } from './helpers';
-import { distributeEndOfGameAwards } from './admin/users';
+import { distributeEndOfGameAwards } from '../actions/admin/users';
 
 
 /* ----------------------------- Constants ----------------------------- */
@@ -444,53 +444,38 @@ export async function handleTimeout(gameId: string, callerId: string) {
         const snap = await tx.get(gameRef);
         if (!snap.exists()) return;
         const game = snap.data() as Game;
-        const state = game.drawAndDeceiveState;
+        const state = (game as any)[FIELD_TRAP_STATE] || {};
+        const timerEndsAt = state.roundEndTime as Timestamp | undefined;
 
-        if (!state?.timerEndsAt || state.timerEndsAt.toMillis() > nowMs()) {
-            return;
-        }
-        
-        // Caller doesn't have to be host, timeout is authoritative
-        tx.update(gameRef, { [`${F.s_timer}`]: deleteField() });
-        
-        switch (game.gameState) {
-            case 'drawing':
-                tx.update(gameRef, { 
-                    [F.s_phase]: 'trapping', 
-                    [F.s_timer]: inSec(state.settings.trappingTime),
-                    [F.s_kickVote]: null,
-                });
-                break;
-            case 'trapping':
-                 const nonArtists = getActiveNonArtistPlayers(game, state.artistId!);
-                 const playerTraps = {...state.playerTraps};
-                 nonArtists.forEach(p => {
-                     if(!playerTraps[p.id]) playerTraps[p.id] = null;
-                 });
-                 beginGuessingPhase(tx, gameRef, {...state, playerTraps});
-                 break;
-            case 'guessing':
-                 const playerGuesses = {...state.playerGuesses};
-                 getActiveNonArtistPlayers(game, state.artistId!).forEach(p => {
-                     if(!playerGuesses[p.id]) playerGuesses[p.id] = TIMEOUT_TOKEN;
-                 });
-                 computeAndEnterResults(tx, gameRef, {...game, drawAndDeceiveState: {...state, playerGuesses}});
-                break;
-            case 'results':
-                const result = await _startNextRound(tx, gameRef, game);
-                isGameOver = result.isGameOver;
-                break;
+        if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
+
+        // Caller doesn't have to be host, but we only run logic if timer is actually expired.
+
+        tx.update(gameRef, { [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField() });
+
+        if (game.gameState === 'answer-submission') {
+          await _advanceToGuessing(tx, gameRef, game, true);
+        } else if (game.gameState === 'guessing') {
+          await _advanceToResults(tx, gameRef, game, true);
+        } else if (game.gameState === 'round-results') {
+          const result = await _startNextRound(tx, gameRef, game);
+          isGameOver = result.isGameOver;
         }
     });
 
     if (isGameOver) {
-        await distributeEndOfGameAwards(gameId);
+        const res = await distributeEndOfGameAwards(gameId);
+        if (!res.success) {
+            console.error(`Failed to distribute awards for game ${gameId}:`, res.error);
+            await updateDoc(gameRef, { 'gameResult.error': res.error });
+        }
     }
 }
 
-export async function nextRound(gameId: string, hostId: string) {
+export async function nextRound(gameId: string, hostId: string): Promise<void> {
     const gameRef = doc(db, 'games', gameId);
     let isGameOver = false;
+
     await runTransaction(db, async (tx) => {
         const snap = await tx.get(gameRef);
         ensure(snap.exists(), 'اللعبة غير موجودة.');
@@ -502,46 +487,129 @@ export async function nextRound(gameId: string, hostId: string) {
     });
 
     if(isGameOver) {
-        await distributeEndOfGameAwards(gameId);
+        const res = await distributeEndOfGameAwards(gameId);
+        if (!res.success) {
+            console.error(`Failed to distribute awards for game ${gameId}:`, res.error);
+            await updateDoc(gameRef, { 'gameResult.error': res.error });
+        }
     }
 }
 
 
+async function _advanceToGuessing(tx: any, gameRef: any, game: Game, isTimeout = false) {
+  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const playerAnswers = { ...(state.playerAnswers || {}) };
+  if (isTimeout) {
+    getActivePlayers(game).forEach(p => { if (!Object.prototype.hasOwnProperty.call(playerAnswers, p.id)) playerAnswers[p.id] = null; });
+  }
+  const { updates } = _getGuessingPhaseUpdates(game, playerAnswers);
+  tx.update(gameRef, updates);
+}
+
+async function _advanceToResults(tx: any, gameRef: any, game: Game, isTimeout = false) {
+  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const playerGuesses = { ...(state.playerGuesses || {}) };
+  if (isTimeout) {
+    getActivePlayers(game).forEach(p => { if (!Object.prototype.hasOwnProperty.call(playerGuesses, p.id)) playerGuesses[p.id] = TIMEOUT_TOKEN; });
+  }
+  const { updates } = _getResultsPhaseUpdates(game, playerGuesses);
+  tx.update(gameRef, updates);
+}
+
 async function _startNextRound(tx: any, gameRef: any, game: Game): Promise<{ isGameOver: boolean }> {
-  const state = game.drawAndDeceiveState!;
-  const settings = state.settings;
+  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const settings = sanitizeSettings(state.settings, []);
   const currentRound = game.round || 0;
   
   if (currentRound >= settings.rounds) {
-    const winnerId = pickWinnerId(game.playerScores || {});
+    const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) => ((game.playerScores?.[a] || 0) > (game.playerScores?.[b] || 0) ? a : b), '');
     tx.update(gameRef, {
       gameState: 'final_results',
-      [F.s_phase]: 'final_results',
-      [F.s_timer]: deleteField(),
+      [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
       gameResult: { winner: winnerId, message: 'انتهت اللعبة!' }
     });
     return { isGameOver: true };
   }
 
-  const { nextIndex, artistId } = nextActiveArtist(state.turnOrder, state.currentTurnIndex, game.players);
-  const writingTime = settings.writingTime ?? DEFAULT_SETTINGS.writingTime;
+  const nextTurnIndex = ((state.currentTurnIndex || 0) + 1) % game.players.length;
+  const writingTime = state.settings?.writingTime ?? DEFAULT_SETTINGS.writingTime;
+  const endsAt = tsFromNowS(writingTime);
 
   tx.update(gameRef, {
     gameState: 'drawing',
     round: currentRound + 1,
-    [F.s_phase]: 'drawing',
-    [F.s_currentTurnIndex]: nextIndex,
-    [F.s_artistId]: artistId,
-    [F.s_drawing]: null,
-    [F.s_correct]: null,
-    [F.s_traps]: {},
-    [F.s_guesses]: {},
-    [F.s_answers]: [],
-    [F.s_lastResults]: deleteField(),
-    [F.s_timer]: inSec(writingTime),
+    [`${FIELD_TRAP_STATE}.phase`]: 'drawing',
+    [`${FIELD_TRAP_STATE}.currentTurnIndex`]: nextTurnIndex,
+    [`${FIELD_TRAP_STATE}.artistId`]: state.turnOrder[nextTurnIndex],
+    [`${FIELD_TRAP_STATE}.drawingDataUrl`]: null,
+    [`${FIELD_TRAP_STATE}.correctAnswer`]: null,
+    [`${FIELD_TRAP_STATE}.playerTraps`]: {},
+    [`${FIELD_TRAP_STATE}.playerGuesses`]: {},
+    [`${FIELD_TRAP_STATE}.shuffledAnswers`]: [],
+    [`${FIELD_TRAP_STATE}.lastRoundResults`]: deleteField(),
+    [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt,
   });
 
   return { isGameOver: false };
+}
+
+
+function _getGuessingPhaseUpdates(game: Game, playerAnswers: Record<string, string | null>) {
+  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const guessingTime = state.settings?.guessingTime ?? DEFAULT_GUESSING_TIME_S;
+  const endsAt = tsFromNowS(guessingTime);
+  ensure(state.currentQuestion, 'Question data missing.');
+
+  return {
+    updates: {
+      gameState: 'guessing',
+      [`${FIELD_TRAP_STATE}.phase`]: 'guessing',
+      [`${FIELD_TRAP_STATE}.playerAnswers`]: playerAnswers,
+      [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt,
+      [`${FIELD_TRAP_STATE}.shuffledAnswers`]: buildShuffledAnswers(state.currentQuestion, playerAnswers),
+      [`${FIELD_TRAP_STATE}.awayPlayerIdsInAnsweringPhase`]: state.awayPlayerIds || [],
+      [`${FIELD_TRAP_STATE}.awayPlayerIds`]: [],
+    },
+  };
+}
+
+function _getResultsPhaseUpdates(game: Game, playerGuesses: Record<string, string | null>) {
+  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const { roundScores, resultsByAnswer, newTrickStats, timedOutGuesserIds } = calculateTrapAnswerScores(
+    getActivePlayers(game),
+    state.currentQuestion,
+    state.playerAnswers,
+    playerGuesses,
+    state.awayPlayerIdsInAnsweringPhase || [],
+    state.shuffledAnswers || []
+  );
+
+  const finalScores: Record<string, number> = { ...(game.playerScores || {}) };
+  Object.entries(roundScores).forEach(([pid, data]) => {
+    if ((data as any)?.points) finalScores[pid] = (finalScores[pid] || 0) + (data as any).points;
+  });
+
+  const resultsTime = state.settings?.resultsTime ?? DEFAULT_RESULTS_TIME_S;
+  const endsAt = tsFromNowS(resultsTime);
+  
+  const currentHistory = state.history || [];
+  const newHistoryEntry = { 
+      round: game.round || 1, 
+      results: { scores: roundScores, answers: resultsByAnswer, timedOutGuesserIds },
+      awayPlayerIdsDuringRound: state.awayPlayerIds || [],
+  };
+
+  return {
+    updates: {
+      gameState: 'round-results',
+      playerScores: finalScores,
+      [`${FIELD_TRAP_STATE}.phase`]: 'results',
+      [`${FIELD_TRAP_STATE}.lastRoundResults`]: { scores: roundScores, answers: resultsByAnswer, timedOutGuesserIds, awayPlayerIdsDuringRound: state.awayPlayerIds },
+      [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt,
+      [`${FIELD_TRAP_STATE}.trickStats`]: mergeTrickStats(state.trickStats, newTrickStats),
+      [`${FIELD_TRAP_STATE}.history`]: [...currentHistory, newHistoryEntry],
+    },
+  };
 }
 
 function pickWinnerId(scores: Record<string, number>): string {
@@ -549,4 +617,3 @@ function pickWinnerId(scores: Record<string, number>): string {
     if (!entries.length) return '';
     return entries.sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))[0]![0];
 }
-const TIMEOUT_TOKEN = '__TIMEOUT__';
