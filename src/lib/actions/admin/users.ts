@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -36,23 +37,47 @@ export async function adminSearchUsers(searchTerm: string): Promise<UserProfile[
   const term = normalize(searchTerm);
   const usersRef = collection(db, 'users');
 
+  // Firestore doesn't support case-insensitive queries directly.
+  // A common strategy is to query for a range, which works for "starts-with" searches.
+  // We query for both name and email and merge the results.
   const nameQuery = query(usersRef, where('name', '>=', term), where('name', '<=', term + '\uf8ff'));
   const emailQuery = query(usersRef, where('email', '>=', term.toLowerCase()), where('email', '<=', term.toLowerCase() + '\uf8ff'));
 
   try {
     const [nameSnapshot, emailSnapshot] = await Promise.all([ getDocs(nameQuery), getDocs(emailQuery) ]);
+
     const usersMap = new Map<string, UserProfile>();
-    nameSnapshot.forEach(doc => { if (!usersMap.has(doc.id)) usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile) });
-    emailSnapshot.forEach(doc => { if (!usersMap.has(doc.id)) usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile) });
+
+    // Add users from name query
+    nameSnapshot.forEach(doc => {
+      if (!usersMap.has(doc.id)) {
+        usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
+      }
+    });
+
+    // Add users from email query
+    emailSnapshot.forEach(doc => {
+      if (!usersMap.has(doc.id)) {
+        usersMap.set(doc.id, { uid: doc.id, ...doc.data() } as UserProfile);
+      }
+    });
+    
+    // Return a combined, unique list of users, limited to 50 results for performance.
     return Array.from(usersMap.values()).slice(0, 50);
+
   } catch (error) {
+    // This fallback is a safety net in case the above queries fail (e.g., missing index).
+    // It's less efficient but prevents the app from breaking.
     console.warn('Falling back to client-side filtering for user search due to error:', error);
     try {
         const fullSnapshot = await getDocs(usersRef);
         const lowerCaseSearchTerm = term.toLowerCase();
         return fullSnapshot.docs
             .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
-            .filter((user) => user.name?.toLowerCase().includes(lowerCaseSearchTerm) || user.email?.toLowerCase().includes(lowerCaseSearchTerm))
+            .filter((user) => 
+                user.name?.toLowerCase().includes(lowerCaseSearchTerm) || 
+                user.email?.toLowerCase().includes(lowerCaseSearchTerm)
+            )
             .slice(0, 50);
     } catch(fallbackError) {
         console.error('Fallback user search also failed:', fallbackError);
@@ -63,9 +88,12 @@ export async function adminSearchUsers(searchTerm: string): Promise<UserProfile[
 
 export async function adminUpdateUser(userId: string, data: Partial<UserProfile>) {
   if (!stringNonEmpty(userId)) return { success: false, error: 'User ID is required.' };
+  
+  // Sanitize data to prevent updating protected fields
   const sanitized: Partial<UserProfile> & Record<string, any> = { ...data };
   delete sanitized.isAdmin;
   delete sanitized.isEditor;
+
   try {
     const ref = doc(db, 'users', userId);
     await updateDoc(ref, sanitized);
@@ -81,7 +109,9 @@ export async function resetAllUserAvatars(): Promise<{ success: boolean; error?:
         const usersRef = collection(db, 'users');
         const querySnapshot = await getDocs(usersRef);
         
-        if (querySnapshot.empty) return { success: true, count: 0, message: "لم يتم العثور على مستخدمين." };
+        if (querySnapshot.empty) {
+            return { success: true, count: 0, message: "لم يتم العثور على مستخدمين لإعادة تعيينهم." };
+        }
 
         const batch = writeBatch(db);
         const defaultAvatarDoc = await getDoc(doc(db, 'game_settings', 'default_avatar'));
@@ -95,7 +125,8 @@ export async function resetAllUserAvatars(): Promise<{ success: boolean; error?:
         });
 
         await batch.commit();
-        return { success: true, count: querySnapshot.size, message: `تمت إعادة تعيين شخصيات ${querySnapshot.size} مستخدم.` };
+        
+        return { success: true, count: querySnapshot.size, message: `تمت إعادة تعيين شخصيات ${querySnapshot.size} مستخدم بنجاح.` };
     } catch (error) {
         console.error("Error resetting all user avatars:", error);
         return { success: false, error: 'فشل إعادة ضبط شخصيات المستخدمين.' };
@@ -121,7 +152,7 @@ export async function adminSendMail(recipientIds: string[], subject: string, bod
 
   const batch = writeBatch(db);
   const senderName = 'Admin';
-  const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // Expires in 3 days
   
   recipientIds.forEach(recipientId => {
     const mailRef = doc(collection(db, `users/${recipientId}/mail`));
@@ -232,11 +263,13 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
             return { success: true }; // Already finalized or errored
         }
 
+        // Try to record history but don't let it block awards.
         try {
             await recordMatchHistory(game, gameId);
         } catch(histError) {
             const errorMsg = histError instanceof Error ? histError.message : String(histError);
             console.error(`Failed to record match history for game ${gameId}, but proceeding to awards.`, errorMsg);
+            // Log this non-critical error to the game document itself for debugging.
             await updateDoc(gameRef, { 'gameResult.error': `Failed to record match history: ${errorMsg}` });
         }
 
@@ -277,6 +310,7 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
             }
         });
         
+        // Finalize the game document
         const finalUpdate: any = {
             'gameResult.winner': winUpdate?.userId || game.gameResult?.winner || 'none',
         };
@@ -291,6 +325,7 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
     } catch (error: any) {
         console.error(`Error in distributeEndOfGameAwards for game ${gameId}:`, error);
         try {
+            // Attempt to log the critical error to the game doc for diagnosis
             await updateDoc(doc(db, 'games', gameId), {
                 'gameResult.error': `Award distribution failed: ${error.message}`,
             });
@@ -310,6 +345,7 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
         let updatedCount = 0;
 
         for (const gameType of gameTypes) {
+            // Find the user with the highest win count for the current game type
             const winCountsQuery = query(
                 usersCollection,
                 where(`winCounts.${gameType}`, '>', 0),
@@ -342,3 +378,5 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
         return { success: false, error: e.message || 'فشل تحديث ملوك الألعاب.' };
     }
 }
+
+    
