@@ -12,6 +12,8 @@ import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
 import * as React from "react";
+import { RANK_ICON_MAP } from '@/data/social-ranks';
+
 
 interface UserProfileCardProps {
   userProfile: UserProfile;
@@ -71,7 +73,7 @@ export default function UserProfileCard({ userProfile, currentRank, socialRanks 
 
   // دعم أيقونة الرتبة المخصّصة إن وُجدت
   const RankIcon =
-    (effectiveCurrentRank?.icon as React.ComponentType<{ className?: string }>) ?? Trophy;
+    (effectiveCurrentRank?.icon && RANK_ICON_MAP[effectiveCurrentRank.icon as string]) || Trophy;
 
   // IDs للوصولية
   const progressId = useId();

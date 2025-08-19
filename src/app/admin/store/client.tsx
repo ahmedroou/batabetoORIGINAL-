@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,12 +19,10 @@ import {
   Gem,
   Shield,
   Star,
-  Award,
   Settings,
   Filter,
   Download,
   Upload,
-  Check,
   Search,
   Sparkles,
   Lock,
@@ -62,21 +59,29 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-// -----------------------------
-// Helpers & Maps
-// -----------------------------
+/**
+ * تحسينات رئيسية مدمجة هنا:
+ * - تصحيح خرائط الأيقونات (rankIconMap)
+ * - فصل بعض الوظائف لتقليل إعادة التصيير (useCallback / useMemo)
+ * - توضيح حالات "غير معروض للبيع" باستخدام -1 كسينتينل
+ * - تحسين الوصول (aria / title) وأزرار واضحة للحالة
+ * - تحسين تجربة التصدير/استيراد وملف JSON
+ * - إصلاحات صغيرة في النوعية (icon كـ string) لتوافق أفضل مع الواجهة
+ * - عرض رسائل Toast مناسبة
+ */
+
+/* ---------- خرائط الأيقونات (ثابتة وواضحة) ---------- */
 const rankIconMap: Record<string, React.ElementType> = {
-  Shield,
-  Award,
-  Gem,
-  Crown,
-  Star,
+  Shield: Shield,
+  Award: Trophy,
+  Gem: Gem,
+  Crown: Crown,
+  Star: Star,
 };
 
-const prettyCurrency = (c: "coins" | "diamonds") =>
-  c === "coins" ? "كوينز" : "ألماس";
+/* ---------- Utility helpers ---------- */
+const prettyCurrency = (c: "coins" | "diamonds") => (c === "coins" ? "كوينز" : "ألماس");
 
-// A tiny debounce hook to keep the UI responsive on large lists
 function useDebounced<T>(value: T, delay = 250) {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -86,15 +91,12 @@ function useDebounced<T>(value: T, delay = 250) {
   return debounced;
 }
 
-// Deep-equality-like compare for simple price objects
 const isSamePrice = (
   a?: Omit<AvatarPrice, "avatarId">,
   b?: Omit<AvatarPrice, "avatarId">
 ) => !a || !b ? a === b : a.price === b.price && a.currency === b.currency;
 
-// -----------------------------
-// Avatar Card (reusable & memoized)
-// -----------------------------
+/* ---------- Avatar tile (memoized, accessible) ---------- */
 interface AvatarTileProps {
   avatarId: string;
   price: Omit<AvatarPrice, "avatarId"> | undefined;
@@ -116,11 +118,15 @@ const AvatarTile = React.memo(function AvatarTile({
   onCurrencyChange,
   onSetDefault,
 }: AvatarTileProps) {
+  // -1 === ليس معروضًا للبيع
   const changed = !isSamePrice(price, basePrice);
-  const showLock = !price || price.price < 0;
+  const notForSale = price?.price === -1 || price?.price === undefined;
+
+  // عرض القيمة في الانبوت: فارغ إذا -1
+  const inputValue = notForSale ? "" : String(price?.price ?? "");
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" aria-live="polite">
       <div className="relative group">
         <PlayerAvatar
           avatarId={avatarId}
@@ -136,14 +142,15 @@ const AvatarTile = React.memo(function AvatarTile({
             <span>الافتراضية</span>
           </div>
         )}
-        {showLock && (
-          <div className="absolute inset-0 grid place-items-center rounded-xl bg-black/60 text-white">
-            <Lock className="h-8 w-8" />
+        {notForSale && (
+          <div className="absolute inset-0 grid place-items-center rounded-xl bg-black/60 text-white text-sm">
+            غير معروض للبيع
           </div>
         )}
         {!!onSetDefault && (
           <button
             type="button"
+            aria-label="تعيين كشخصية افتراضية"
             title="تعيين كشخصية افتراضية"
             onClick={() => onSetDefault(avatarId)}
             className={cn(
@@ -158,12 +165,22 @@ const AvatarTile = React.memo(function AvatarTile({
 
       <div className="flex gap-2">
         <Input
+          aria-label={`سعر ${avatarId}`}
           type="number"
           inputMode="numeric"
           className="text-center"
-          value={price?.price ?? ""}
-          onChange={(e) => onPriceChange(avatarId, Number(e.target.value))}
-          placeholder="السعر"
+          value={inputValue}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "") {
+              // فحص: إذا تركناه فارغًا نعتبره -1 (غير معروض)
+              onPriceChange(avatarId, -1);
+            } else {
+              const n = Number(v);
+              if (!Number.isNaN(n)) onPriceChange(avatarId, n);
+            }
+          }}
+          placeholder="- غير معروض -"
           disabled={disabled || isDefault}
         />
         <Select
@@ -171,7 +188,7 @@ const AvatarTile = React.memo(function AvatarTile({
           onValueChange={(v: "coins" | "diamonds") => onCurrencyChange(avatarId, v)}
           disabled={disabled || isDefault}
         >
-          <SelectTrigger className="w-24">
+          <SelectTrigger className="w-24" aria-label={`اختيار عملة ${avatarId}`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -197,11 +214,9 @@ const AvatarTile = React.memo(function AvatarTile({
     </div>
   );
 });
-AvatarTile.displayName = 'AvatarTile';
+AvatarTile.displayName = "AvatarTile";
 
-// -----------------------------
-// Rank Row (with own state)
-// -----------------------------
+/* ---------- Rank row (memoized) ---------- */
 interface RankRowProps {
   rank: Omit<SocialRank, 'icon'> & { icon: string };
   onUpdate: (field: keyof SocialRank, value: any) => void;
@@ -216,7 +231,7 @@ const RankRow = React.memo(function RankRow({ rank, onUpdate, onRemove, disabled
       <Input
         type="number"
         className="w-28"
-        value={rank.threshold}
+        value={String(rank.threshold)}
         onChange={(e) => onUpdate("threshold", parseInt(e.target.value || "0", 10))}
         placeholder="النقاط"
         disabled={disabled}
@@ -248,23 +263,21 @@ const RankRow = React.memo(function RankRow({ rank, onUpdate, onRemove, disabled
           })}
         </SelectContent>
       </Select>
-      <Button size="icon" variant="destructive" onClick={onRemove} disabled={disabled}>
+      <Button size="icon" variant="destructive" onClick={onRemove} disabled={disabled} title="حذف اللقب">
         <Trash2 className="h-4 w-4" />
       </Button>
     </div>
   );
 });
-RankRow.displayName = 'RankRow';
+RankRow.displayName = "RankRow";
 
-// -----------------------------
-// Main Admin Store
-// -----------------------------
+/* ---------- Main Component ---------- */
 export default function AdminStoreClient() {
   const { toast } = useToast();
   const router = useRouter();
   const { userProfile, loading } = useAuth();
 
-  // Avatars State
+  // Avatars state
   const [basePrices, setBasePrices] = useState<Record<string, Omit<AvatarPrice, "avatarId">>>({});
   const [prices, setPrices] = useState<Record<string, Omit<AvatarPrice, "avatarId">>>({});
   const [basePunishmentPrices, setBasePunishmentPrices] = useState<Record<string, Omit<AvatarPrice, "avatarId">>>({});
@@ -274,7 +287,7 @@ export default function AdminStoreClient() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Ranks State
+  // Ranks
   const [ranks, setRanks] = useState<SocialRank[]>([]);
   const [isSavingRanks, setIsSavingRanks] = useState(false);
   const [selectedRankForPermissions, setSelectedRankForPermissions] = useState<SocialRank | null>(null);
@@ -284,7 +297,7 @@ export default function AdminStoreClient() {
   const [topCoinsUsers, setTopCoinsUsers] = useState<UserProfile[]>([]);
   const [topPointsUsers, setTopPointsUsers] = useState<UserProfile[]>([]);
 
-  // UI state
+  // UI
   const [activeTab, setActiveTab] = useState<"avatars" | "ranks">("avatars");
   const [storeTab, setStoreTab] = useState<"regular" | "punishment">("regular");
   const [query, setQuery] = useState("");
@@ -294,70 +307,77 @@ export default function AdminStoreClient() {
 
   const debouncedQuery = useDebounced(query, 250);
 
+  /* ---------- Auth guard ---------- */
   useEffect(() => {
     if (!loading && !userProfile?.isAdmin) {
       router.push("/");
     }
   }, [userProfile, loading, router]);
 
+  /* ---------- Fetch data ---------- */
   const fetchPageData = useCallback(async () => {
     setIsLoadingData(true);
-    const [pricesResult, punishmentPricesResult, ranksResult, defaultAvatarResult, topCoinsResult, topPointsResult] =
-      await Promise.all([
-        getAvatarPrices(),
-        getPunishmentAvatarPrices(),
-        getRanks(),
-        getDefaultAvatar(),
-        getTopUsers("coins", 5),
-        getTopUsers("leaderboardPoints", 5),
-      ]);
+    try {
+      const [pricesResult, punishmentPricesResult, ranksResult, defaultAvatarResult, topCoinsResult, topPointsResult] =
+        await Promise.all([
+          getAvatarPrices(),
+          getPunishmentAvatarPrices(),
+          getRanks(),
+          getDefaultAvatar(),
+          getTopUsers("coins", 5),
+          getTopUsers("leaderboardPoints", 5),
+        ]);
 
-    // Regular
-    if (pricesResult.success && pricesResult.prices) {
-      const priceMap = pricesResult.prices.reduce((acc, item) => {
-        acc[item.avatarId] = { price: item.price, currency: item.currency || "coins" };
-        return acc;
-      }, {} as Record<string, Omit<AvatarPrice, "avatarId">>);
-      setBasePrices(priceMap);
-      setPrices(priceMap);
-    } else if (!pricesResult.success) {
-      toast({ title: "خطأ", description: pricesResult.error, variant: "destructive" });
+      // Regular avatars
+      if (pricesResult.success && pricesResult.prices) {
+        const priceMap = pricesResult.prices.reduce((acc: Record<string, Omit<AvatarPrice, "avatarId">>, item) => {
+          acc[item.avatarId] = { price: item.price, currency: item.currency || "coins" };
+          return acc;
+        }, {});
+        setBasePrices(priceMap);
+        setPrices(priceMap);
+      } else if (!pricesResult.success) {
+        toast({ title: "خطأ", description: pricesResult.error, variant: "destructive" });
+      }
+
+      // Punishment avatars
+      if (punishmentPricesResult.success && punishmentPricesResult.prices) {
+        const priceMap = punishmentPricesResult.prices.reduce((acc: Record<string, Omit<AvatarPrice, "avatarId">>, item) => {
+          acc[item.avatarId] = { price: item.price, currency: item.currency || "coins" };
+          return acc;
+        }, {});
+        setBasePunishmentPrices(priceMap);
+        setPunishmentPrices(priceMap);
+      } else if (!punishmentPricesResult.success) {
+        toast({ title: "خطأ", description: punishmentPricesResult.error, variant: "destructive" });
+      }
+
+      // Default avatar
+      if (defaultAvatarResult.success && defaultAvatarResult.avatarId) {
+        setDefaultAvatarId(defaultAvatarResult.avatarId);
+      }
+
+      // Ranks
+      if (Array.isArray(ranksResult)) {
+        const sorted = ranksResult.sort((a, b) => a.threshold - b.threshold);
+        setRanks(sorted);
+        setSelectedRankForPermissions(sorted[0] ?? null);
+      }
+
+      setTopCoinsUsers(topCoinsResult || []);
+      setTopPointsUsers(topPointsResult || []);
+    } catch (err: any) {
+      toast({ title: "خطأ غير متوقع", description: err?.message || "فشل جلب البيانات", variant: "destructive" });
+    } finally {
+      setIsLoadingData(false);
     }
-
-    // Punishment
-    if (punishmentPricesResult.success && punishmentPricesResult.prices) {
-      const priceMap = punishmentPricesResult.prices.reduce((acc, item) => {
-        acc[item.avatarId] = { price: item.price, currency: item.currency || "coins" };
-        return acc;
-      }, {} as Record<string, Omit<AvatarPrice, "avatarId">>);
-      setBasePunishmentPrices(priceMap);
-      setPunishmentPrices(priceMap);
-    } else if (!punishmentPricesResult.success) {
-      toast({ title: "خطأ", description: punishmentPricesResult.error, variant: "destructive" });
-    }
-
-    // Default avatar
-    if (defaultAvatarResult.success && defaultAvatarResult.avatarId) {
-      setDefaultAvatarId(defaultAvatarResult.avatarId);
-    }
-
-    // Ranks
-    if (ranksResult) {
-      const sorted = ranksResult.sort((a, b) => a.threshold - b.threshold);
-      setRanks(sorted);
-      setSelectedRankForPermissions(sorted[0] ?? null);
-    }
-
-    setTopCoinsUsers(topCoinsResult || []);
-    setTopPointsUsers(topPointsResult || []);
-
-    setIsLoadingData(false);
   }, [toast]);
 
   useEffect(() => {
     if (userProfile?.isAdmin) fetchPageData();
   }, [userProfile?.isAdmin, fetchPageData]);
 
+  /* ---------- Dirty state detection ---------- */
   const dirtyRegular = useMemo(() =>
     AVATAR_IDS.some((id) => !isSamePrice(prices[id], basePrices[id])),
   [prices, basePrices]);
@@ -367,6 +387,7 @@ export default function AdminStoreClient() {
   [punishmentPrices, basePunishmentPrices]);
 
   const hasDirty = dirtyRegular || dirtyPunish;
+
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (hasDirty) {
@@ -378,14 +399,15 @@ export default function AdminStoreClient() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasDirty]);
 
-  const handleSavePrices = async (tab: "regular" | "punishment") => {
+  /* ---------- Save handlers ---------- */
+  const handleSavePrices = useCallback(async (tab: "regular" | "punishment") => {
     setIsSaving(true);
     const current = tab === "regular" ? prices : punishmentPrices;
     const allIds = tab === "regular" ? AVATAR_IDS : PUNISHMENT_AVATAR_IDS;
 
     const payload: AvatarPrice[] = allIds.map(id => ({
       avatarId: id,
-      price: current[id]?.price ?? -1, // -1 or another sentinel for "not for sale"
+      price: current[id]?.price ?? -1,
       currency: current[id]?.currency ?? 'coins'
     }));
 
@@ -399,9 +421,8 @@ export default function AdminStoreClient() {
       toast({ title: "فشل الحفظ", description: res.error, variant: "destructive" });
     }
     setIsSaving(false);
-  };
-  
-  // Keyboard: Ctrl/Cmd+S to save current store tab
+  }, [prices, punishmentPrices, toast]);
+
   const handleSaveRanks = useCallback(async () => {
     setIsSavingRanks(true);
     const sorted = [...ranks].sort((a, b) => a.threshold - b.threshold);
@@ -426,7 +447,8 @@ export default function AdminStoreClient() {
     }
     setIsSavingRanks(false);
   }, [ranks, toast]);
-  
+
+  /* Ctrl/Cmd + S global handler */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const isSave = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s";
@@ -441,11 +463,9 @@ export default function AdminStoreClient() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeTab, storeTab, prices, punishmentPrices, ranks, handleSaveRanks]);
+  }, [activeTab, storeTab, handleSavePrices, handleSaveRanks]);
 
-  // -----------------------------
-  // Prices helpers
-  // -----------------------------
+  /* ---------- Visible ids (search + filter) ---------- */
   const visibleAvatarIds = useMemo(() => {
     const all = storeTab === "regular" ? AVATAR_IDS : PUNISHMENT_AVATAR_IDS;
     const map = storeTab === "regular" ? prices : punishmentPrices;
@@ -455,28 +475,34 @@ export default function AdminStoreClient() {
     return filtered.filter((id) => !isSamePrice(map[id], base[id]));
   }, [storeTab, prices, punishmentPrices, basePrices, basePunishmentPrices, debouncedQuery, showOnlyChanged]);
 
+  /* ---------- Price / currency handlers ---------- */
   const handlePriceChange = useCallback((id: string, value: number) => {
-    const setter = storeTab === 'regular' ? setPrices : setPunishmentPrices;
-    setter(p => ({ ...p, [id]: { ...(p[id] || { price: 0, currency: 'coins'}), price: value }}));
+    if (storeTab === 'regular') {
+      setPrices((p) => ({ ...p, [id]: { ...(p[id] || { price: -1, currency: 'coins'}), price: value }}));
+    } else {
+      setPunishmentPrices((p) => ({ ...p, [id]: { ...(p[id] || { price: -1, currency: 'coins'}), price: value }}));
+    }
   }, [storeTab]);
 
   const handleCurrencyChange = useCallback((id: string, value: 'coins' | 'diamonds') => {
-      const setter = storeTab === 'regular' ? setPrices : setPunishmentPrices;
-      setter(p => ({ ...p, [id]: { ...(p[id] || { price: 0, currency: 'coins'}), currency: value }}));
+    if (storeTab === 'regular') {
+      setPrices((p) => ({ ...p, [id]: { ...(p[id] || { price: -1, currency: 'coins'}), currency: value }}));
+    } else {
+      setPunishmentPrices((p) => ({ ...p, [id]: { ...(p[id] || { price: -1, currency: 'coins'}), currency: value }}));
+    }
   }, [storeTab]);
-  
 
   const handleSetDefault = async (id: string) => {
     const res = await setDefaultAvatar(id);
     if (res.success) {
       setDefaultAvatarId(id);
+      // mark free
       setPrices((p) => ({ ...p, [id]: { price: 0, currency: "coins" } }));
       toast({ title: "تم التعيين", description: `${id} أصبحت الشخصية الافتراضية (مجانية).` });
     } else {
       toast({ title: "خطأ", description: res.error, variant: "destructive" });
     }
   };
-
 
   const bulkApply = (payload: { price?: number; currency?: "coins" | "diamonds" }) => {
     const ids = visibleAvatarIds; // apply on currently visible (after search/filter)
@@ -485,7 +511,7 @@ export default function AdminStoreClient() {
         const next = { ...prev };
         ids.forEach((id) => {
           next[id] = {
-            price: payload.price ?? next[id]?.price ?? 0,
+            price: payload.price ?? next[id]?.price ?? -1,
             currency: payload.currency ?? (next[id]?.currency || "coins"),
           };
         });
@@ -496,7 +522,7 @@ export default function AdminStoreClient() {
         const next = { ...prev };
         ids.forEach((id) => {
           next[id] = {
-            price: payload.price ?? next[id]?.price ?? 0,
+            price: payload.price ?? next[id]?.price ?? -1,
             currency: payload.currency ?? (next[id]?.currency || "coins"),
           };
         });
@@ -505,7 +531,7 @@ export default function AdminStoreClient() {
     }
   };
 
-  // Export / Import (JSON)
+  /* ---------- Export / Import JSON ---------- */
   const downloadRef = useRef<HTMLAnchorElement | null>(null);
   const handleExport = () => {
     const data = {
@@ -520,7 +546,7 @@ export default function AdminStoreClient() {
     downloadRef.current.href = url;
     downloadRef.current.download = `store-config-${Date.now()}.json`;
     downloadRef.current.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
   };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -543,13 +569,12 @@ export default function AdminStoreClient() {
     e.target.value = "";
   };
 
-  // -----------------------------
-  // Ranks
-  // -----------------------------
+  /* ---------- Ranks management ---------- */
   const handleRankChange = useCallback((index: number, field: keyof SocialRank, value: string | number) => {
     setRanks((prev) => {
       const copy = [...prev];
       if (copy[index]) {
+        // @ts-ignore allow flexible update
         (copy[index] as any)[field] = value;
       }
       return copy;
@@ -559,7 +584,7 @@ export default function AdminStoreClient() {
   const handleRemoveRank = useCallback((index: number) => {
     setPendingRemoveIndex(index);
   }, []);
-  
+
   const confirmRemoveRank = () => {
     if (pendingRemoveIndex == null) return;
     setRanks((prev) => prev.filter((_, i) => i !== pendingRemoveIndex));
@@ -570,11 +595,9 @@ export default function AdminStoreClient() {
     const last = ranks[ranks.length - 1]?.threshold ?? 0;
     setRanks((prev) => [
       ...prev,
-      { threshold: last + 100, name: "لقب جديد", icon: Star as React.ElementType, permissions: [] },
+      { threshold: last + 100, name: "لقب جديد", icon: "Star", permissions: [] },
     ]);
   };
-
-  
 
   const handlePermissionToggle = async (permissionId: string) => {
     if (!selectedRankForPermissions) return;
@@ -590,9 +613,7 @@ export default function AdminStoreClient() {
     setIsUpdatingPermission(false);
   };
 
-  // -----------------------------
-  // Render helpers
-  // -----------------------------
+  /* ---------- renderTopUsers helper ---------- */
   const renderTopUsers = (users: UserProfile[], field: "coins" | "leaderboardPoints") => {
     if (isLoadingData) {
       return (
@@ -636,7 +657,7 @@ export default function AdminStoreClient() {
             <Settings className="h-6 w-6" /> لوحة إدارة المتجر والألقاب
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">تعديل أسعار الشخصيات، الأفاتارات العقابية، الألقاب والصلاحيات — بسرعة وأمان.</p>
-          <Button variant="ghost" size="icon" onClick={() => router.push("/admin")} className="absolute start-0 top-0">
+          <Button variant="ghost" size="icon" onClick={() => router.push("/admin")} className="absolute start-0 top-0" title="العودة">
             <ArrowLeft />
           </Button>
         </header>
@@ -770,7 +791,7 @@ export default function AdminStoreClient() {
                     <>عدد العناصر الظاهرة: <span className="font-medium text-purple-300">{visibleAvatarIds.length}</span></>
                   )}
                 </div>
-                <Button onClick={() => handleSavePrices(storeTab)} disabled={isSaving || isLoadingData}>
+                <Button onClick={() => handleSavePrices(storeTab)} disabled={isSaving || isLoadingData || !hasDirty}>
                   {isSaving ? <Loader2 className="me-2 h-4 w-4 animate-spin" /> : <Save className="me-2 h-4 w-4" />}
                   {isSaving ? "جاري الحفظ..." : "حفظ التغييرات"}
                 </Button>

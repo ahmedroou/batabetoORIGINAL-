@@ -8,7 +8,12 @@ import { Loader2 } from 'lucide-react';
 
 /* --------------------------------- Skeleton -------------------------------- */
 const PhaseSkeleton = () => (
-  <div className="w-full h-full flex items-center justify-center" role="status" aria-live="polite">
+  <div
+    className="w-full h-full flex items-center justify-center"
+    role="status"
+    aria-live="polite"
+    aria-busy="true"
+  >
     <div className="flex items-center gap-2 text-muted-foreground">
       <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
       <span className="text-sm">يجري التحميل…</span>
@@ -17,14 +22,14 @@ const PhaseSkeleton = () => (
 );
 
 /* ------------------------------- Phase Imports ------------------------------ */
-/** مهم: ssr=false لتثبيت الهوية كـ client components وعدم تبديل الحدود مع كل re-render */
-const LobbyPhase        = dynamic(() => import('./phases/LobbyPhase').then(m => m.LobbyPhase),             { ssr: false, loading: () => <PhaseSkeleton /> });
-const DrawingPhase      = dynamic(() => import('./phases/DrawingPhase').then(m => m.DrawingPhase),         { ssr: false, loading: () => <PhaseSkeleton /> });
-const TrappingPhase     = dynamic(() => import('./phases/TrappingPhase').then(m => m.TrappingPhase),       { ssr: false, loading: () => <PhaseSkeleton /> });
-const GuessingPhase     = dynamic(() => import('./phases/GuessingPhase').then(m => m.GuessingPhase),       { ssr: false, loading: () => <PhaseSkeleton /> });
-const ResultsPhase      = dynamic(() => import('./phases/ResultsPhase').then(m => m.ResultsPhase),         { ssr: false, loading: () => <PhaseSkeleton /> });
+/** مهم: ssr=false لتثبيت الهوية كعميل ومنع تبديل الحدود مع كل re-render */
+const LobbyPhase        = dynamic(() => import('./phases/LobbyPhase').then(m => m.LobbyPhase),              { ssr: false, loading: () => <PhaseSkeleton /> });
+const DrawingPhase      = dynamic(() => import('./phases/DrawingPhase').then(m => m.DrawingPhase),          { ssr: false, loading: () => <PhaseSkeleton /> });
+const TrappingPhase     = dynamic(() => import('./phases/TrappingPhase').then(m => m.TrappingPhase),        { ssr: false, loading: () => <PhaseSkeleton /> });
+const GuessingPhase     = dynamic(() => import('./phases/GuessingPhase').then(m => m.GuessingPhase),        { ssr: false, loading: () => <PhaseSkeleton /> });
+const ResultsPhase      = dynamic(() => import('./phases/ResultsPhase').then(m => m.ResultsPhase),          { ssr: false, loading: () => <PhaseSkeleton /> });
 const FinalResultsPhase = dynamic(() => import('./phases/FinalResultsPhase').then(m => m.FinalResultsPhase),{ ssr: false, loading: () => <PhaseSkeleton /> });
-const KickVotePhase     = dynamic(() => import('./phases/KickVotePhase').then(m => m.KickVotePhase),       { ssr: false, loading: () => <PhaseSkeleton /> });
+const KickVotePhase     = dynamic(() => import('./phases/KickVotePhase').then(m => m.KickVotePhase),        { ssr: false, loading: () => <PhaseSkeleton /> });
 
 /* ---------------------------------- Types ---------------------------------- */
 type PhaseKey =
@@ -38,14 +43,28 @@ type PhaseKey =
 
 /* ------------------------------- Phase Mapping ------------------------------ */
 const PHASE_COMPONENTS: Record<PhaseKey, React.ComponentType<{ game: Game; self: Player }>> = {
-  lobby:        LobbyPhase,
-  drawing:      DrawingPhase,
-  trapping:     TrappingPhase,
-  guessing:     GuessingPhase,
-  results:      ResultsPhase,
-  kick_vote:    KickVotePhase,
+  lobby:         LobbyPhase,
+  drawing:       DrawingPhase,
+  trapping:      TrappingPhase,
+  guessing:      GuessingPhase,
+  results:       ResultsPhase,
+  kick_vote:     KickVotePhase,
   final_results: FinalResultsPhase,
 };
+
+/* --------------------------------- Helpers --------------------------------- */
+const isPhaseKey = (v: unknown): v is PhaseKey =>
+  typeof v === 'string' &&
+  ['lobby','drawing','trapping','guessing','results','kick_vote','final_results'].includes(v);
+
+/** نشتق المرحلة الفعلية للعرض. يعطي أولوية لـ kick_vote عندما تكون فعّالة. */
+function resolveEffectivePhase(game: Game): PhaseKey | string {
+  const raw = game.drawAndDeceiveState?.phase ?? 'lobby';
+  const kickVoteActive = !!game.drawAndDeceiveState?.kickVote?.active;
+
+  if (kickVoteActive && raw !== 'final_results') return 'kick_vote';
+  return raw;
+}
 
 /* --------------------------------- Boundary -------------------------------- */
 function UnknownPhase({ phase }: { phase: string }) {
@@ -68,7 +87,6 @@ class PhaseBoundary extends React.Component<
     return { hasError: true };
   }
   componentDidCatch(error: unknown) {
-    // لا تؤثر على الأداء/الهوية، مجرد لوج
     console.error('[DrawAndDeceive] Phase error:', error);
   }
   handleRetry = () => this.setState({ hasError: false });
@@ -98,19 +116,21 @@ interface DrawAndDeceiveGameProps {
 
 export function DrawAndDeceiveGame({ game, self }: DrawAndDeceiveGameProps) {
   const prefersReducedMotion = useReducedMotion();
-  const phase = (game.drawAndDeceiveState?.phase ?? 'lobby') as PhaseKey | string;
 
-  // تمرير المكوّن المناسب بثبات الهوية طالما phase لم تتغير
+  // المرحلة الفعلية (تأخذ kickVote.active في الاعتبار)
+  const effectivePhase = resolveEffectivePhase(game);
+
+  // اختيار مكوّن المرحلة بثبات
   const Content = useMemo(() => {
-    return (PHASE_COMPONENTS as Record<string, React.ComponentType<{ game: Game; self: Player }>>)[phase] ?? null;
-  }, [phase]);
+    return (PHASE_COMPONENTS as Record<string, React.ComponentType<{ game: Game; self: Player }>>)[effectivePhase] ?? null;
+  }, [effectivePhase]);
 
-  // تمرير المستخدم لأعلى الصفحة عند تغير المرحلة فقط
+  // تمرير المستخدم لأعلى الصفحة عند تغير المرحلة
   useEffect(() => {
     try {
       window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
     } catch {}
-  }, [phase, prefersReducedMotion]);
+  }, [effectivePhase, prefersReducedMotion]);
 
   return (
     <main
@@ -119,15 +139,20 @@ export function DrawAndDeceiveGame({ game, self }: DrawAndDeceiveGameProps) {
     >
       <AnimatePresence initial={false} mode="wait">
         <motion.div
-          key={typeof phase === 'string' ? `phase-${phase}` : 'phase-unknown'}
+          key={isPhaseKey(effectivePhase) ? `phase-${effectivePhase}` : 'phase-unknown'}
           initial={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.975 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.975 }}
           transition={{ duration: prefersReducedMotion ? 0 : 0.35, ease: 'easeOut' }}
           className="w-full h-full flex items-center justify-center"
+          aria-live="polite"
         >
           <PhaseBoundary>
-            {Content ? <Content game={game} self={self} /> : <UnknownPhase phase={String(phase)} />}
+            {Content ? (
+              <Content game={game} self={self} />
+            ) : (
+              <UnknownPhase phase={String(effectivePhase)} />
+            )}
           </PhaseBoundary>
         </motion.div>
       </AnimatePresence>
