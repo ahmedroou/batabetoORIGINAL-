@@ -1,7 +1,7 @@
 
 import type { Timestamp } from 'firebase/firestore';
 import { z } from 'zod';
-import type { ALL_PERMISSIONS } from '../data/permissions';
+import { ALL_PERMISSIONS } from '../data/permissions';
 import type { DEFAULT_SOCIAL_RANKS, DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES } from '../data/social-ranks';
 
 
@@ -105,14 +105,17 @@ export interface Complaint {
   createdAt: Timestamp;
 }
 
+// Correctly define PermissionId first as a simple string type.
 export type PermissionId = string;
 
+// Then define Permission using the simple type.
 export interface Permission {
     id: PermissionId;
     name: string;
     description: string;
     category: 'economic' | 'social' | 'gameplay' | 'meta';
 }
+
 
 export interface BlackMarketListing {
     id: string;

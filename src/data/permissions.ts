@@ -1,5 +1,4 @@
 
-
 import type { Permission } from '../types';
 
 export const ALL_PERMISSIONS: Permission[] = [

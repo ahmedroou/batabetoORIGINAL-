@@ -8,11 +8,11 @@
  * See a full list of supported triggers at https://firebase.google.com/docs/functions
  */
 
-import {setGlobalOptions} from "firebase-functions/v2";
-import {onSchedule} from "firebase-functions/v2/scheduler";
+import { setGlobalOptions } from "firebase-functions/v2";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import type {GameKing, UserProfile} from "../../src/types";
+import type { GameKing, UserProfile } from "../../src/types";
 import { FieldValue } from "firebase-admin/firestore";
 
 // Initialize Firebase Admin SDK
@@ -20,16 +20,17 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // Global options
-setGlobalOptions({maxInstances: 10, memory: "256MiB"});
+setGlobalOptions({ maxInstances: 10, memory: "256MiB" });
 
 /**
  * A scheduled function that runs every Thursday at 10:00 AM UTC to
  * recalculate and update the "Game Kings". This function is robust and
  * crucial for keeping the leaderboards up-to-date automatically.
  */
-export const updateGameKings = onSchedule("every thursday 10:00",
+export const updateGameKings = onSchedule(
+  "every thursday 10:00",
   async (event): Promise<void> => {
-    logger.info("Starting weekly recalculation of Game Kings...", {event});
+    logger.info("Starting weekly recalculation of Game Kings...", { event });
 
     try {
       const gameTypesSnapshot = await db.collection("game_types").get();
@@ -57,7 +58,7 @@ export const updateGameKings = onSchedule("every thursday 10:00",
 
           const winCounts = kingData.winCounts;
           const winCount =
-            (winCounts?.[gameType as keyof typeof winCounts] || 0);
+            (winCounts?.[gameType as keyof typeof winCounts] || 0) as number;
 
           const newKingData: GameKing = {
             kingId: kingDoc.id,
@@ -67,7 +68,7 @@ export const updateGameKings = onSchedule("every thursday 10:00",
             updatedAt: FieldValue.serverTimestamp(),
           };
 
-          batch.set(gameKingRef, newKingData, {merge: true});
+          batch.set(gameKingRef, newKingData, { merge: true });
           updatedCount++;
           const logMessage =
             `New king for ${gameType}: ${kingData.name} ` +
@@ -78,12 +79,10 @@ export const updateGameKings = onSchedule("every thursday 10:00",
 
       await batch.commit();
       logger.log(`Successfully updated ${updatedCount} game kings.`);
-      return;
     } catch (error) {
       logger.error("Error recalculating game kings:", error);
-      // Optionally, re-throw the error to have the function execution
-      // marked as a failure
+      // Re-throw the error to have the function execution marked as a failure
       throw new Error("Failed to update game kings.");
     }
-  });
-
+  }
+);
