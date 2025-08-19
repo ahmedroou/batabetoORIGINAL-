@@ -1,7 +1,13 @@
-
 'use client';
 
-import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -22,7 +28,7 @@ import {
   ZoomIn,
   ZoomOut,
   Triangle,
-  MousePointerSquare,
+  SquareDashed,
   ArrowRight,
 } from 'lucide-react';
 
@@ -70,7 +76,7 @@ const BASE_TOOLS: { tool: Tool; icon: React.ElementType; label: string }[] = [
   { tool: 'eraser', icon: Eraser, label: 'ممحاة' },
   { tool: 'line', icon: Minus, label: 'خط' },
   { tool: 'rect', icon: Square, label: 'مستطيل' },
-  { tool: 'roundedRect', icon: MousePointerSquare, label: 'مستطيل مستدير' },
+  { tool: 'roundedRect', icon: SquareDashed, label: 'مستطيل مستدير' },
   { tool: 'circle', icon: Circle, label: 'دائرة' },
   { tool: 'ellipse', icon: Circle, label: 'بيضاوي' },
   { tool: 'triangle', icon: Triangle, label: 'مثلث' },
@@ -294,17 +300,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
           img.src = oldDataUrl;
           img.onload = () => {
             bctx.clearRect(0, 0, cssSizeRef.current.w, cssSizeRef.current.h);
-            bctx.drawImage(
-              img,
-              0,
-              0,
-              img.width / dpr,
-              img.height / dpr,
-              0,
-              0,
-              cssSizeRef.current.w,
-              cssSizeRef.current.h
-            );
+            bctx.drawImage(img, 0, 0, cssSizeRef.current.w, cssSizeRef.current.h);
             renderAll();
           };
         } else {
@@ -651,8 +647,8 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         const factor = clamp(dist / Math.max(1, lastDist), 0.5, 2);
         // Zoom around center
         const centerWorld = screenToWorld(center);
-        const pre = worldToScreen(centerWorld);
         const newScale = clamp(scale * factor, 0.25, 8);
+        const pre = worldToScreen(centerWorld);
         const newOffset = { x: center.x - (pre.x - offset.x) * (newScale / scale), y: center.y - (pre.y - offset.y) * (newScale / scale) };
         setScale(newScale);
         setOffset(newOffset);
@@ -805,7 +801,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         const bctx = getBackingCtx();
         if (!bctx) return;
         bctx.clearRect(0, 0, cssSizeRef.current.w, cssSizeRef.current.h);
-        bctx.drawImage(img, 0, 0, img.width / dprRef.current, img.height / dprRef.current, 0, 0, cssSizeRef.current.w, cssSizeRef.current.h);
+        bctx.drawImage(img, 0, 0, cssSizeRef.current.w, cssSizeRef.current.h);
         renderAll();
         historyIndexRef.current = newIndex;
         setCanUndo(historyIndexRef.current > 0);
@@ -823,7 +819,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         const bctx = getBackingCtx();
         if (!bctx) return;
         bctx.clearRect(0, 0, cssSizeRef.current.w, cssSizeRef.current.h);
-        bctx.drawImage(img, 0, 0, img.width / dprRef.current, img.height / dprRef.current, 0, 0, cssSizeRef.current.w, cssSizeRef.current.h);
+        bctx.drawImage(img, 0, 0, cssSizeRef.current.w, cssSizeRef.current.h);
         renderAll();
         historyIndexRef.current = newIndex;
         setCanUndo(true);
@@ -862,63 +858,116 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     // Render
     // --------------------------------------------------------------------------------
     return (
-        <div ref={wrapperRef} className={cn('flex h-full min-h-0 w-full flex-col gap-2', className)}>
-            {/* Canvas Area */}
-            <div className="relative flex-1 min-h-0 w-full overflow-hidden rounded-lg border bg-white">
-                <canvas
-                    ref={displayRef}
-                    className={cn('absolute inset-0 block h-full w-full touch-none', disabled && 'pointer-events-none opacity-60')}
-                    onPointerDown={handlePointerDown}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
-                    onPointerLeave={handlePointerUp}
-                    onPointerCancel={handlePointerUp}
-                    onWheel={handleWheel}
-                />
+      <div ref={wrapperRef} className={cn('flex h-[70vh] min-h-[360px] w-full flex-col gap-2', className)}>
+        {/* Canvas Area */}
+        <div className="relative flex-1 min-h-0 w-full overflow-hidden rounded-lg border bg-white">
+          <canvas
+            ref={displayRef}
+            className={cn('absolute inset-0 block h-full w-full touch-none', disabled && 'pointer-events-none opacity-60')}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onWheel={handleWheel}
+          />
 
-                {/* Image placement controls */}
-                {placingImage && (
-                    <div className="pointer-events-auto absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 gap-2 rounded-xl bg-background/90 p-2 shadow">
-                        <Button size="sm" variant="secondary" onClick={commitPlacedImage}>تثبيت الصورة</Button>
-                        <Button size="sm" variant="outline" onClick={cancelPlacedImage}>إلغاء</Button>
-                    </div>
-                )}
+          {/* Image placement controls */}
+          {placingImage && (
+            <div className="pointer-events-auto absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 gap-2 rounded-xl bg-background/90 p-2 shadow">
+              <Button size="sm" variant="secondary" onClick={commitPlacedImage}>تثبيت الصورة</Button>
+              <Button size="sm" variant="outline" onClick={cancelPlacedImage}>إلغاء</Button>
             </div>
-
-            {/* Toolbar */}
-            <div className="w-full flex-shrink-0 rounded-lg border bg-background/80 p-2 backdrop-blur-sm">
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                        {BASE_TOOLS.slice(0, 5).map(({ tool: t, icon: Icon, label }) => (
-                            <Button key={t} title={label} variant={tool === t ? 'secondary' : 'outline'} size="icon" className="shrink-0" onClick={() => setTool(t)}> <Icon /> </Button>
-                        ))}
-                        <div className="h-8 w-px bg-border" />
-                        <Button variant="outline" size="icon" onClick={doUndo} disabled={!canUndo}><Undo2 /></Button>
-                        <Button variant="outline" size="icon" onClick={doRedo} disabled={!canRedo}><Redo /></Button>
-                        <Button variant="destructive" size="icon" onClick={doClear}><Trash2 /></Button>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                        {COLORS.map((c) => (
-                            <button
-                                key={c}
-                                onClick={() => setColor(c)}
-                                className={cn('h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 active:scale-95', color === c ? 'border-primary' : 'border-transparent')}
-                                style={{ backgroundColor: c }}
-                                aria-label={`pick ${c}`}
-                            />
-                        ))}
-                        <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-12 h-10 p-1" />
-                    </div>
-
-                    <div className="flex items-center gap-3 px-4">
-                        <Label>السماكة</Label>
-                        <Slider value={[thickness]} onValueChange={([v]) => setThickness(v)} max={50} step={1} className="max-w-sm" />
-                        <div className="w-10 text-center text-sm">{thickness}</div>
-                    </div>
-                </div>
-            </div>
+          )}
         </div>
+
+        {/* Toolbar */}
+        <div className="w-full flex-shrink-0 rounded-lg border bg-background/80 p-2 backdrop-blur-sm">
+          <div className="flex flex-col gap-2">
+            {/* Row 1: tools */}
+            <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              {BASE_TOOLS.map(({ tool: t, icon: Icon, label }) => (
+                <Button
+                  key={t}
+                  title={label}
+                  variant={tool === t ? 'secondary' : 'outline'}
+                  size="icon"
+                  className="shrink-0"
+                  onClick={() => {
+                    if (t === 'image') triggerImagePicker();
+                    setTool(t);
+                  }}
+                >
+                  <Icon />
+                </Button>
+              ))}
+              <div className="h-8 w-px bg-border" />
+              <Button variant="outline" size="icon" onClick={doUndo} disabled={!canUndo}><Undo2 /></Button>
+              <Button variant="outline" size="icon" onClick={doRedo} disabled={!canRedo}><Redo /></Button>
+              <Button variant="destructive" size="icon" onClick={doClear}><Trash2 /></Button>
+
+              <div className="ms-auto flex items-center gap-1">
+                <Button variant="outline" size="icon" onClick={() => { setScale((s) => clamp(s * 0.9, 0.25, 8)); renderAll(); }}><ZoomOut /></Button>
+                <div className="min-w-[60px] text-center text-sm tabular-nums">{Math.round(scale * 100)}%</div>
+                <Button variant="outline" size="icon" onClick={() => { setScale((s) => clamp(s * 1.1, 0.25, 8)); renderAll(); }}><ZoomIn /></Button>
+                <Button variant="outline" size="sm" onClick={resetView} className="ms-1">تصفير العرض</Button>
+              </div>
+            </div>
+
+            {/* Row 2: colors */}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setColor(c)}
+                  className={cn('h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 active:scale-95', color === c ? 'border-primary' : 'border-transparent')}
+                  style={{ backgroundColor: c }}
+                  aria-label={`pick ${c}`}
+                />
+              ))}
+              <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-10 w-12 p-1" />
+            </div>
+
+            {/* Row 3: sliders & switches */}
+            <div className="grid grid-cols-1 gap-3 px-1 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="flex items-center gap-3">
+                <Label className="whitespace-nowrap">السماكة</Label>
+                <Slider value={[thickness]} onValueChange={([v]) => setThickness(v)} max={50} step={1} className="max-w-sm" />
+                <div className="w-10 text-center text-sm">{thickness}</div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Label className="whitespace-nowrap">العتامة</Label>
+                <Slider value={[Math.round(opacity * 100)]} onValueChange={([v]) => setOpacity(v / 100)} max={100} step={1} className="max-w-sm" />
+                <div className="w-10 text-center text-sm">{Math.round(opacity * 100)}%</div>
+              </div>
+              {tool === 'fill' && (
+                <div className="flex items-center gap-3">
+                  <Label className="whitespace-nowrap">حساسية التعبئة</Label>
+                  <Slider value={[fillTolerance]} onValueChange={([v]) => setFillTolerance(v)} max={128} step={1} className="max-w-sm" />
+                  <div className="w-10 text-center text-sm">{fillTolerance}</div>
+                </div>
+              )}
+              {['rect', 'roundedRect', 'circle', 'ellipse', 'triangle', 'arrow'].includes(tool) && (
+                <div className="flex items-center gap-2">
+                  <Label className="whitespace-nowrap">نمط الشكل</Label>
+                  <div className="flex rounded-xl border p-1">
+                    <Button size="sm" variant={shapeMode === 'stroke' ? 'secondary' : 'ghost'} onClick={() => setShapeMode('stroke')}>حدود</Button>
+                    <Button size="sm" variant={shapeMode === 'fill' ? 'secondary' : 'ghost'} onClick={() => setShapeMode('fill')}>تعبئة</Button>
+                    <Button size="sm" variant={shapeMode === 'both' ? 'secondary' : 'ghost'} onClick={() => setShapeMode('both')}>كلاهما</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* hidden file input for images */}
+            <input ref={fileInputRef} className="hidden" type="file" accept="image/*" onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+              e.currentTarget.value = '';
+            }} />
+          </div>
+        </div>
+      </div>
     );
   }
 );
