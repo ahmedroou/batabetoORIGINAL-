@@ -10,7 +10,6 @@ import React, {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import {
   Pen,
@@ -30,7 +29,7 @@ import {
   SquareDashed,
   ArrowRight,
   Palette,
-  ChevronDown,
+  Type,
 } from 'lucide-react';
 
 export type Tool =
@@ -68,7 +67,6 @@ interface DrawingCanvasProps {
 
 /* ----------------------------- Utilities ----------------------------- */
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
-const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 const withAlphaHex = (hex: string, alpha01: number) =>
   hex + Math.round(clamp(alpha01, 0, 1) * 255).toString(16).padStart(2, '0');
 
@@ -87,33 +85,40 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     /* DOM refs */
     const wrapperRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<HTMLCanvasElement>(null);     // ما يُعرض للمستخدم
-    const overlayRef = useRef<HTMLCanvasElement>(null);  // للمعاينة فقط (لا تُحفظ)
-    const contentRef = useRef<HTMLCanvasElement | null>(null); // مخزن الرسم الحقيقي (خلف الكواليس)
+    const overlayRef = useRef<HTMLCanvasElement>(null);  // للمعاينة فقط
+    const contentRef = useRef<HTMLCanvasElement | null>(null); // الرسم الحقيقي
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const paletteWrapRef = useRef<HTMLDivElement>(null);
+    const shapesWrapRef = useRef<HTMLDivElement>(null);
+
     /* Sizes / DPR */
-    const cssSizeRef = useRef({ w: 0, h: 0 });          // بالحجم CSS
-    const dprRef = useRef<number>(1);                   // devicePixelRatio
-    const boardSizeRef = useRef({ w: 0, h: 0 });        // مساحة اللوحة بالرسم (CSS units)
+    const cssSizeRef = useRef({ w: 0, h: 0 });
+    const dprRef = useRef<number>(1);
+    const boardSizeRef = useRef({ w: 0, h: 0 });
 
     /* View state (pan/zoom) */
     const [scale, setScale] = useState(1);
     const [offset, setOffset] = useState<Point>({ x: 0, y: 0 });
 
-    /* Tooling state */
+    /* Tools state */
     const [tool, setTool] = useState<Tool>('pen');
     const [color, setColor] = useState<string>('#000000');
     const [thickness, setThickness] = useState<number>(5);
     const [opacity, setOpacity] = useState<number>(1);
     const [shapeMode, setShapeMode] = useState<'stroke' | 'fill' | 'both'>('stroke');
+    const cycleShapeMode = () =>
+      setShapeMode((m) => (m === 'stroke' ? 'fill' : m === 'fill' ? 'both' : 'stroke'));
 
     const [fillTolerance, setFillTolerance] = useState<number>(24);
     const [showPalette, setShowPalette] = useState<boolean>(false);
+    const [showShapes, setShowShapes] = useState<boolean>(false);
 
     /* Drawing state */
     const isDrawingRef = useRef(false);
     const startWorldRef = useRef<Point | null>(null);
     const lastWorldRef = useRef<Point | null>(null);
+    const movedRef = useRef<boolean>(false); // لمعالجة “نقرة بدون حركة”
 
     /* Placing image state */
     const [placingImage, setPlacingImage] = useState<{
@@ -145,11 +150,9 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       const bh = boardSizeRef.current.h * nextScale;
 
       const minX = Math.min(0, vw - bw);
-      const maxX = Math.max(0, vw - bw) === 0 ? 0 : 0;
       const minY = Math.min(0, vh - bh);
-      const maxY = Math.max(0, vh - bh) === 0 ? 0 : 0;
 
-      // عندما تكون اللوحة أصغر من الإطار، نقوم بتوسيطها
+      // إذا كانت اللوحة أصغر من الإطار، نوسّطها
       const cx = bw < vw ? (vw - bw) / 2 : clamp(nextOffset.x, minX, 0);
       const cy = bh < vh ? (vh - bh) / 2 : clamp(nextOffset.y, minY, 0);
       return { x: cx, y: cy };
@@ -166,11 +169,9 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       const dpr = Math.max(1, window.devicePixelRatio || 1);
       dprRef.current = dpr;
 
-      // سجل أحجام CSS
       cssSizeRef.current = { w: Math.floor(width), h: Math.floor(height) };
-      boardSizeRef.current = { w: Math.floor(width), h: Math.floor(height) }; // اللوحة = مساحة الإطار
+      boardSizeRef.current = { w: Math.floor(width), h: Math.floor(height) };
 
-      // اضبط view و overlay بدقة عالية
       [view, overlay].forEach((c) => {
         c.width = Math.max(1, Math.floor(width * dpr));
         c.height = Math.max(1, Math.floor(height * dpr));
@@ -181,24 +182,20 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         ctx.clearRect(0, 0, c.width, c.height);
       });
 
-      // جهّز Canvas المحتوى (الخلفي)
+      // Canvas المحتوى (خلفي) بوحدات CSS عبر مقياس DPR
       const old = contentRef.current;
       const newCan = document.createElement('canvas');
       newCan.width = Math.max(1, Math.floor(width * dpr));
       newCan.height = Math.max(1, Math.floor(height * dpr));
       const nctx = newCan.getContext('2d')!;
-      // نرسم بالوحدات العالمية (CSS) عبر تكبير DPR
       nctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       if (old && old.width > 0 && old.height > 0) {
-        // أعد التحجيم مع الحفاظ على المحتوى
-        const octx = old.getContext('2d')!;
+        // نسخ آمن للمحتوى السابق
         const temp = new Image();
         temp.src = old.toDataURL('image/png');
         temp.onload = () => {
-          // ارسم الصورة لتناسب مساحة اللوحة الجديدة (CSS)
           nctx.setTransform(1, 0, 0, 1, 0, 0);
-          // ارسم بالبكسل، ثم أعد إعداد التحويل
           nctx.drawImage(temp, 0, 0, newCan.width, newCan.height);
           nctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           contentRef.current = newCan;
@@ -209,7 +206,6 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         drawView();
       }
 
-      // أعِد ضبط العرض/الإزاحة كي لا تخرج اللوحة
       setOffset((o) => applyPanClamp(scale, o));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -223,7 +219,6 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
     /* ------------------------ Drawing / Rendering ------------------------ */
     const drawBoardFrame = (ctx: CanvasRenderingContext2D) => {
-      // إطار داخلي واضح (لا يتأثر بالتكبير لأننا نرسمه في طبقة العرض)
       const dpr = dprRef.current;
       const { w, h } = cssSizeRef.current;
       ctx.save();
@@ -242,17 +237,12 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       const vctx = view.getContext('2d')!;
       const dpr = dprRef.current;
 
-      // امسح
       vctx.setTransform(1, 0, 0, 1, 0, 0);
       vctx.clearRect(0, 0, view.width, view.height);
 
-      // طبّق التحويل (pan/zoom)
       vctx.setTransform(scale * dpr, 0, 0, scale * dpr, offset.x * dpr, offset.y * dpr);
-
-      // ارسم محتوى اللوحة (مقاس CSS = content.width/dpr)
       vctx.drawImage(content, 0, 0, content.width / dpr, content.height / dpr);
 
-      // إطار اللوحة
       drawBoardFrame(vctx);
     }, [offset.x, offset.y, scale]);
 
@@ -281,10 +271,9 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       const cctx = content.getContext('2d')!;
       cctx.save();
       cctx.setTransform(dpr, 0, 0, dpr, 0, 0); // نرسم بوحدات CSS
-      // قصّ داخل حدود اللوحة
       cctx.beginPath();
       cctx.rect(0, 0, content.width / dpr, content.height / dpr);
-      cctx.clip();
+      cctx.clip(); // ممنوع الخروج خارج اللوحة
       draw(cctx);
       cctx.restore();
       drawView();
@@ -322,7 +311,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         });
         pushHistory();
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialImage]);
 
     /* ---------------------------- Pointer logic -------------------------- */
@@ -340,8 +329,9 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
 
       if (tool === 'hand') {
         isDrawingRef.current = true;
-        lastWorldRef.current = world; // نستخدم screen delta لاحقًا
+        lastWorldRef.current = world;
         startWorldRef.current = null;
+        movedRef.current = false;
         return;
       }
 
@@ -359,8 +349,10 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       isDrawingRef.current = true;
       startWorldRef.current = world;
       lastWorldRef.current = world;
+      movedRef.current = false;
 
       if (tool === 'pen' || tool === 'eraser') {
+        // افتح مسار للرسم المتصل
         commitToContent((cctx) => {
           cctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
           cctx.globalAlpha = opacity;
@@ -379,14 +371,12 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       const world = clampToBoard(screenToWorld(p));
 
       if (tool === 'hand' && isDrawingRef.current && lastWorldRef.current) {
-        // نستخدم delta بالشاشة (أسهل للتمرير)
-        const rect = overlayRef.current!.getBoundingClientRect();
+        // حرّك الشاشة بمقدار الفارق البصري
         const prevScreen = {
-          x: (lastWorldRef.current.x * scale + offset.x),
-          y: (lastWorldRef.current.y * scale + offset.y),
+          x: lastWorldRef.current.x * scale + offset.x,
+          y: lastWorldRef.current.y * scale + offset.y,
         };
-        const currScreen = { x: p.x, y: p.y };
-        const delta = { x: currScreen.x - prevScreen.x, y: currScreen.y - prevScreen.y };
+        const delta = { x: p.x - prevScreen.x, y: p.y - prevScreen.y };
         const nextOffset = applyPanClamp(scale, { x: offset.x + delta.x, y: offset.y + delta.y });
         setOffset(nextOffset);
         drawView();
@@ -398,6 +388,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       if (tool === 'pen' || tool === 'eraser') {
         const from = lastWorldRef.current!;
         const to = world;
+        if (from.x !== to.x || from.y !== to.y) movedRef.current = true;
         commitToContent((cctx) => {
           cctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
           cctx.globalAlpha = opacity;
@@ -416,15 +407,17 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         return;
       }
 
-      // معاينة الأشكال بدون تكرار: نستخدم overlay ونمسحه كل مرة
+      // معاينة للأشكال على overlay
       const s = startWorldRef.current!;
       const eW = world;
+      if (s.x !== eW.x || s.y !== eW.y) movedRef.current = true;
+
       previewOnOverlay((o) => {
         o.lineCap = 'round';
         o.lineJoin = 'round';
         o.strokeStyle = withAlphaHex(color, opacity);
         o.fillStyle = withAlphaHex(color, opacity);
-        o.lineWidth = thickness / scale; // سماكة ثابتة على الشاشة
+        o.lineWidth = Math.max(1, thickness / scale);
 
         if (tool === 'line') {
           o.beginPath(); o.moveTo(s.x, s.y); o.lineTo(eW.x, eW.y); o.stroke();
@@ -497,13 +490,25 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       const s = startWorldRef.current;
       const eW = lastWorldRef.current ?? s;
 
-      // مسح المعاينة
       clearOverlay();
 
       if (tool === 'pen' || tool === 'eraser') {
+        // في حالة نقرة بلا حركة: ارسم نقطة لا تختفي
+        if (!movedRef.current) {
+          commitToContent((c) => {
+            c.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+            c.globalAlpha = opacity;
+            c.fillStyle = tool === 'eraser' ? '#000000' : color;
+            c.beginPath();
+            c.arc(s.x, s.y, Math.max(1, thickness / 2), 0, Math.PI * 2);
+            c.fill();
+            c.globalCompositeOperation = 'source-over';
+            c.globalAlpha = 1;
+          });
+        }
         pushHistory();
       } else if (tool !== 'fill' && tool !== 'image') {
-        // ثبّت الشكل لمرة واحدة فقط (لا تكرار)
+        // ثبّت الشكل لمرة واحدة فقط
         commitToContent((c) => {
           c.globalAlpha = opacity;
           c.strokeStyle = color;
@@ -566,6 +571,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       isDrawingRef.current = false;
       startWorldRef.current = null;
       lastWorldRef.current = null;
+      movedRef.current = false;
     };
 
     /* ------------------------------- Wheel/Pan ------------------------------ */
@@ -574,7 +580,6 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       const rect = overlayRef.current!.getBoundingClientRect();
       const pScreen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
 
-      // حساسية متّزنة حسب deltaMode
       const PIXELS_PER_LINE = 16;
       const PIXELS_PER_PAGE = rect.height;
       const scaleDelta =
@@ -586,7 +591,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         const factor = 1 + direction * 0.12 * (scaleDelta / 100);
         const newScale = clamp(scale * factor, 0.25, 8);
 
-        // تكبير حول نقطة المؤشر
+        // تكبير حول مؤشر الفأرة
         const world = screenToWorld(pScreen);
         const pre = { x: world.x * newScale + offset.x, y: world.y * newScale + offset.y };
         const nextOffset = applyPanClamp(newScale, {
@@ -599,7 +604,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         clearOverlay();
         drawView();
       } else {
-        // تمرير/سحب
+        // تمرير
         e.preventDefault();
         const dx = -e.deltaX * (scaleDelta === 1 ? 1 : scaleDelta / 100);
         const dy = -e.deltaY * (scaleDelta === 1 ? 1 : scaleDelta / 100);
@@ -791,23 +796,38 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       resetView,
     }));
 
+    /* ----------------------- Close popovers on outside ---------------------- */
+    useEffect(() => {
+      const handler = (e: MouseEvent) => {
+        const node = e.target as Node;
+        if (showPalette && paletteWrapRef.current && !paletteWrapRef.current.contains(node)) {
+          setShowPalette(false);
+        }
+        if (showShapes && shapesWrapRef.current && !shapesWrapRef.current.contains(node)) {
+          setShowShapes(false);
+        }
+      };
+      document.addEventListener('mousedown', handler);
+      return () => document.removeEventListener('mousedown', handler);
+    }, [showPalette, showShapes]);
+
     /* -------------------------------- Render ------------------------------- */
     return (
-      <div className={cn('flex h-[70vh] min-h-[360px] w-full flex-col gap-2', className)}>
+      <div className={cn('relative h-[78vh] min-h-[360px] w-full', className)}>
         {/* منطقة اللوحة */}
         <div
           ref={wrapperRef}
-          className="relative flex-1 min-h-0 w-full overflow-hidden rounded-lg border bg-white"
+          className="relative h-full w-full overflow-hidden rounded-lg border bg-white"
         >
           {/* Canvas العرض */}
           <canvas
             ref={viewRef}
-            className={cn('absolute inset-0 block h-full w-full touch-none', disabled && 'pointer-events-none opacity-60')}
+            className={cn('absolute inset-0 z-0 block h-full w-full touch-none', disabled && 'pointer-events-none opacity-60')}
           />
           {/* Canvas المعاينة */}
           <canvas
             ref={overlayRef}
-            className={cn('absolute inset-0 block h-full w-full touch-none', disabled && 'pointer-events-none')}
+            className={cn('absolute inset-0 z-10 block h-full w-full touch-none', disabled && 'pointer-events-none')}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -816,149 +836,243 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             onWheel={handleWheel}
           />
 
+          {/* شريط أدوات عائم بصفّين، مثبت أعلى اليمين */}
+          <div
+            className="
+              pointer-events-auto absolute right-2 top-2 z-30
+              grid grid-rows-2 grid-flow-col auto-cols-max justify-end
+              gap-1 rounded-2xl border bg-background/90 p-1 shadow backdrop-blur-sm
+              max-w-[calc(100%-1rem)] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden
+            "
+          >
+            {/* سماكة + شفافية في بداية الصف من اليمين */}
+            <div className="flex items-center gap-1 rounded-xl border bg-white/70 px-2 py-1">
+              <Minus className="h-4 w-4 opacity-70" />
+              <div className="w-24">
+                <Slider value={[thickness]} onValueChange={([v]) => setThickness(v)} max={50} step={1} />
+              </div>
+              <div className="w-8 text-center text-xs tabular-nums">{thickness}</div>
+            </div>
+
+            <div className="flex items-center gap-1 rounded-xl border bg-white/70 px-2 py-1">
+              <Circle className="h-4 w-4 opacity-70" />
+              <div className="w-24">
+                <Slider value={[Math.round(opacity * 100)]} onValueChange={([v]) => setOpacity(v / 100)} max={100} step={1} />
+              </div>
+              <div className="w-10 text-center text-xs">{Math.round(opacity * 100)}%</div>
+            </div>
+
+            {/* لون + لوحة منسدلة */}
+            <div ref={paletteWrapRef} className="relative">
+              <button
+                title="اختر اللون"
+                onClick={() => setShowPalette((s) => !s)}
+                className="h-8 w-8 rounded-full border"
+                style={{ backgroundColor: color }}
+              />
+              {showPalette && (
+                <div className="absolute right-0 top-[calc(100%+6px)] z-[60] rounded-xl border bg-white p-3 shadow-lg">
+                  <div className="grid grid-cols-12 gap-2 max-w-[72vw] sm:max-w-[520px]">
+                    {PALETTE.map((c) => (
+                      <button
+                        key={c}
+                        title={c}
+                        onClick={() => {
+                          setColor(c);
+                          setShowPalette(false); // يغلق تلقائيًا بعد الاختيار
+                        }}
+                        className={cn('h-6 w-6 rounded-full border', color === c ? 'border-primary ring-2 ring-primary/50' : 'border-gray-200')}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Input
+                      type="color"
+                      value={color}
+                      onChange={(e) => {
+                        setColor(e.target.value);
+                        setShowPalette(false);
+                      }}
+                      className="h-9 w-14 p-1"
+                    />
+                    <Input
+                      type="text"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      onBlur={() => setShowPalette(false)}
+                      className="h-9 w-28"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* نمط الشكل حدود/تعبئة/كلاهما */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={cycleShapeMode}
+              title={`نمط الشكل: ${shapeMode === 'stroke' ? 'حدود' : shapeMode === 'fill' ? 'تعبئة' : 'كلاهما'}`}
+            >
+              <Type className="h-4 w-4" />
+            </Button>
+
+            <div className="mx-1 h-5 w-px self-center bg-border" />
+
+            {/* أدوات رئيسية */}
+            <Button
+              key="pen"
+              title="قلم"
+              variant={tool === 'pen' ? 'secondary' : 'outline'}
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => { setTool('pen'); clearOverlay(); }}
+            >
+              <Pen className="h-4 w-4" />
+            </Button>
+
+            <Button
+              key="eraser"
+              title="ممحاة"
+              variant={tool === 'eraser' ? 'secondary' : 'outline'}
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => { setTool('eraser'); clearOverlay(); }}
+            >
+              <Eraser className="h-4 w-4" />
+            </Button>
+
+            {/* مجموعة الأشكال المنسدلة عموديًا */}
+            <div ref={shapesWrapRef} className="relative">
+              <Button
+                title="أشكال"
+                variant={['line','rect','roundedRect','circle','ellipse','triangle','arrow'].includes(tool) ? 'secondary' : 'outline'}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setShowShapes((s) => !s)}
+              >
+                <SquareDashed className="h-4 w-4" />
+              </Button>
+              {showShapes && (
+                <div className="absolute right-0 top-[calc(100%+6px)] z-[60] flex flex-col gap-1 rounded-xl border bg-white p-2 shadow-lg">
+                  {([
+                    { t: 'line', I: Minus, label: 'خط' },
+                    { t: 'rect', I: Square, label: 'مستطيل' },
+                    { t: 'roundedRect', I: SquareDashed, label: 'مستطيل مستدير' },
+                    { t: 'circle', I: Circle, label: 'دائرة' },
+                    { t: 'ellipse', I: Circle, label: 'بيضاوي' },
+                    { t: 'triangle', I: Triangle, label: 'مثلث' },
+                    { t: 'arrow', I: ArrowRight, label: 'سهم' },
+                  ] as { t: Tool; I: any; label: string }[]).map(({ t, I, label }) => (
+                    <Button
+                      key={t}
+                      variant={tool === t ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="justify-start gap-2"
+                      onClick={() => {
+                        setTool(t);
+                        clearOverlay();
+                        setShowShapes(false); // يغلق بعد الاختيار
+                      }}
+                    >
+                      <I className="h-4 w-4" />
+                      <span className="text-sm">{label}</span>
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* أدوات إضافية */}
+            <Button
+              key="fill"
+              title="تعبئة"
+              variant={tool === 'fill' ? 'secondary' : 'outline'}
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => { setTool('fill'); clearOverlay(); }}
+            >
+              <PaintBucket className="h-4 w-4" />
+            </Button>
+
+            <Button
+              key="image"
+              title="إدراج صورة"
+              variant={tool === 'image' ? 'secondary' : 'outline'}
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => { triggerImagePicker(); setTool('image'); clearOverlay(); }}
+            >
+              <ImageIcon className="h-4 w-4" />
+            </Button>
+
+            <Button
+              key="hand"
+              title="تحريك/تكبير"
+              variant={tool === 'hand' ? 'secondary' : 'outline'}
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => { setTool('hand'); clearOverlay(); }}
+            >
+              <Move className="h-4 w-4" />
+            </Button>
+
+            <div className="mx-1 h-5 w-px self-center bg-border" />
+
+            <Button variant="outline" size="icon" onClick={doUndo} disabled={!canUndo} className="h-8 w-8" title="تراجع"><Undo2 className="h-4 w-4" /></Button>
+            <Button variant="outline" size="icon" onClick={doRedo} disabled={!canRedo} className="h-8 w-8" title="إعادة"><Redo className="h-4 w-4" /></Button>
+            <Button variant="destructive" size="icon" onClick={doClear} className="h-8 w-8" title="مسح الكل"><Trash2 className="h-4 w-4" /></Button>
+
+            <div className="mx-1 h-5 w-px self-center bg-border" />
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => {
+                const nz = clamp(scale * 0.9, 0.25, 8);
+                const nextOffset = applyPanClamp(nz, offset);
+                setScale(nz); setOffset(nextOffset); clearOverlay(); drawView();
+              }}
+              className="h-8 w-8"
+              title="تصغير"
+            ><ZoomOut className="h-4 w-4" /></Button>
+            <div className="min-w-[48px] px-1 text-center text-xs tabular-nums self-center">{Math.round(scale * 100)}%</div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => {
+                const nz = clamp(scale * 1.1, 0.25, 8);
+                const nextOffset = applyPanClamp(nz, offset);
+                setScale(nz); setOffset(nextOffset); clearOverlay(); drawView();
+              }}
+              className="h-8 w-8"
+              title="تكبير"
+            ><ZoomIn className="h-4 w-4" /></Button>
+          </div>
+
           {/* التحكم في وضع الصورة */}
           {placingImage && (
-            <div className="pointer-events-auto absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 gap-2 rounded-xl bg-background/90 p-2 shadow">
+            <div className="pointer-events-auto absolute bottom-3 left-1/2 z-50 flex -translate-x-1/2 gap-2 rounded-xl bg-background/90 p-2 shadow">
               <Button size="sm" variant="secondary" onClick={commitPlacedImage}>تثبيت الصورة</Button>
               <Button size="sm" variant="outline" onClick={cancelPlacedImage}>إلغاء</Button>
             </div>
           )}
         </div>
 
-        {/* الشريط السفلي */}
-        <div className="w-full flex-shrink-0 rounded-lg border bg-background/70 p-2 backdrop-blur-sm">
-          <div className="flex flex-col gap-2">
-            {/* صف الأدوات */}
-            <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-              {[
-                { t: 'pen', I: Pen, label: 'قلم' },
-                { t: 'eraser', I: Eraser, label: 'ممحاة' },
-                { t: 'line', I: Minus, label: 'خط' },
-                { t: 'rect', I: Square, label: 'مستطيل' },
-                { t: 'roundedRect', I: SquareDashed, label: 'مستطيل مستدير' },
-                { t: 'circle', I: Circle, label: 'دائرة' },
-                { t: 'ellipse', I: Circle, label: 'بيضاوي' },
-                { t: 'triangle', I: Triangle, label: 'مثلث' },
-                { t: 'arrow', I: ArrowRight, label: 'سهم' },
-                { t: 'fill', I: PaintBucket, label: 'تعبئة' },
-                { t: 'image', I: ImageIcon, label: 'صورة' },
-                { t: 'hand', I: Move, label: 'تحريك/تكبير' },
-              ].map(({ t, I, label }) => (
-                <Button
-                  key={t}
-                  title={label}
-                  variant={tool === (t as Tool) ? 'secondary' : 'outline'}
-                  size="icon"
-                  className="shrink-0"
-                  onClick={() => {
-                    if (t === 'image') {
-                      fileInputRef.current?.click();
-                    }
-                    setTool(t as Tool);
-                    clearOverlay();
-                  }}
-                >
-                  <I />
-                </Button>
-              ))}
-
-              <div className="h-8 w-px bg-border" />
-
-              <Button variant="outline" size="icon" onClick={doUndo} disabled={!canUndo}><Undo2 /></Button>
-              <Button variant="outline" size="icon" onClick={doRedo} disabled={!canRedo}><Redo /></Button>
-              <Button variant="destructive" size="icon" onClick={doClear}><Trash2 /></Button>
-
-              <div className="ms-auto flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => {
-                    const nz = clamp(scale * 0.9, 0.25, 8);
-                    const nextOffset = applyPanClamp(nz, offset);
-                    setScale(nz); setOffset(nextOffset); clearOverlay(); drawView();
-                  }}
-                ><ZoomOut /></Button>
-                <div className="min-w-[60px] text-center text-sm tabular-nums">{Math.round(scale * 100)}%</div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => {
-                    const nz = clamp(scale * 1.1, 0.25, 8);
-                    const nextOffset = applyPanClamp(nz, offset);
-                    setScale(nz); setOffset(nextOffset); clearOverlay(); drawView();
-                  }}
-                ><ZoomIn /></Button>
-                <Button variant="outline" size="sm" onClick={resetView} className="ms-1">تصفير العرض</Button>
-              </div>
-            </div>
-
-            {/* صف الإعدادات */}
-            <div className="grid grid-cols-1 gap-3 px-1 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="flex items-center gap-3">
-                <Label className="whitespace-nowrap">السماكة</Label>
-                <Slider value={[thickness]} onValueChange={([v]) => setThickness(v)} max={50} step={1} className="max-w-sm" />
-                <div className="w-10 text-center text-sm">{thickness}</div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Label className="whitespace-nowrap">العتامة</Label>
-                <Slider value={[Math.round(opacity * 100)]} onValueChange={([v]) => setOpacity(v / 100)} max={100} step={1} className="max-w-sm" />
-                <div className="w-10 text-center text-sm">{Math.round(opacity * 100)}%</div>
-              </div>
-
-              {['rect', 'roundedRect', 'circle', 'ellipse', 'triangle', 'arrow'].includes(tool) && (
-                <div className="flex items-center gap-2">
-                  <Label className="whitespace-nowrap">نمط الشكل</Label>
-                  <div className="flex rounded-xl border p-1">
-                    <Button size="sm" variant={shapeMode === 'stroke' ? 'secondary' : 'ghost'} onClick={() => setShapeMode('stroke')}>حدود</Button>
-                    <Button size="sm" variant={shapeMode === 'fill' ? 'secondary' : 'ghost'} onClick={() => setShapeMode('fill')}>تعبئة</Button>
-                    <Button size="sm" variant={shapeMode === 'both' ? 'secondary' : 'ghost'} onClick={() => setShapeMode('both')}>كلاهما</Button>
-                  </div>
-                </div>
-              )}
-
-              {/* لوحة الألوان (منبثقة) */}
-              <div className="flex items-center gap-2">
-                <Label className="whitespace-nowrap">اللون</Label>
-                <Button variant="outline" size="sm" onClick={() => setShowPalette((s) => !s)}>
-                  <Palette className="me-2" /> افتح اللوحة <ChevronDown className="ms-2" />
-                </Button>
-                {showPalette && (
-                  <div className="z-20 max-w-[650px] rounded-xl border bg-white p-3 shadow-lg">
-                    <div className="grid grid-cols-12 gap-2">
-                      {PALETTE.map((c) => (
-                        <button
-                          key={c}
-                          title={c}
-                          onClick={() => setColor(c)}
-                          className={cn('h-6 w-6 rounded-full border', color === c ? 'border-primary ring-2 ring-primary/50' : 'border-gray-200')}
-                          style={{ backgroundColor: c }}
-                        />
-                      ))}
-                    </div>
-                    <div className="mt-3 flex items-center gap-2">
-                      <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-14 p-1" />
-                      <Input type="text" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-28" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ملف الصورة المخفي */}
-            <input
-              ref={fileInputRef}
-              className="hidden"
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-                e.currentTarget.value = '';
-              }}
-            />
-          </div>
-        </div>
+        {/* ملف الصورة المخفي */}
+        <input
+          ref={fileInputRef}
+          className="hidden"
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+            e.currentTarget.value = '';
+          }}
+        />
       </div>
     );
   }
