@@ -7,39 +7,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { submitCorrectAnswerAndStartDrawing, endArtistTurn, saveDrawingProgress } from '@/lib/actions/draw-and-deceive';
-import { Loader2, Send, Timer } from 'lucide-react';
+import { Loader2, Send, Timer, Pen, Eraser, Minus, Square, Circle, Triangle, Type, MousePointer, PaintBucket, Grid, Undo2, Redo, Trash2, Download, Copy, Upload } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { DrawingToolbar } from './DrawingToolbar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Slider } from '@/components/ui/slider';
+import { cn } from '@/lib/utils';
+
 
 // ====================================================================================
-// DrawingCanvas Component (Internal)
-// Manages the actual <canvas> elements and all drawing logic.
-// It is now part of DrawingPhase.tsx
+// Type Definitions (Internal to this component)
 // ====================================================================================
 
 type Tool =
   | 'pen' | 'marker' | 'eraser'
   | 'line' | 'rect' | 'circle' | 'triangle' | 'ellipse'
   | 'text' | 'eyedropper' | 'pan' | 'fill';
-
-interface DrawingCanvasProps {
-  className?: string;
-  disabled?: boolean;
-  onDrawEnd?: (dataUrl: string, historyState: { canUndo: boolean; canRedo: boolean }) => void;
-  initialImage?: string | null;
-  maxHistory?: number;
-  
-  // Controlled props from parent
-  tool: Tool;
-  color: string;
-  thickness: number;
-  opacity: number;
-  shapeFill: boolean;
-  textValue: string;
-  textSize: number;
-  fillTolerance: number;
-  showGrid: boolean;
-}
 
 export interface DrawingCanvasRef {
   undo: () => void;
@@ -50,7 +32,12 @@ export interface DrawingCanvasRef {
   importImage: (file: File) => void;
 }
 
-const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
+// ====================================================================================
+// DrawingCanvas Component
+// Manages the actual <canvas> elements and all drawing logic.
+// ====================================================================================
+
+const DrawingCanvas = React.forwardRef<DrawingCanvasRef, any>(({
   className,
   disabled = false,
   onDrawEnd,
@@ -66,37 +53,19 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
   fillTolerance,
   showGrid,
 }, ref) => {
-  // DOM Refs
   const containerRef = useRef<HTMLDivElement>(null);
   const displayRef = useRef<HTMLCanvasElement>(null);
-  const overlayRef = useRef<HTMLCanvasElement>(null);
-
-  // Offscreen backing canvas for the actual drawing data
   const backingRef = useRef<HTMLCanvasElement | null>(null);
 
-  // State
   const [size, setSize] = useState({ w: 800, h: 450 });
   const [dpr, setDpr] = useState<number>(1);
-  const [zoom, setZoom] = useState<number>(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
-
-  // Refs for state that doesn't need to trigger re-renders on every change
   const historyIndexRef = useRef<number>(-1);
-  const isDrawingRef = useRef<boolean>(false);
-  const forcedPanRef = useRef<boolean>(false);
-  const lastPtCssRef = useRef<{ x: number; y: number } | null>(null);
-  const lastClientRef = useRef<{ x: number; y: number } | null>(null);
-  const shiftDownRef = useRef<boolean>(false);
-  const pinchDistRef = useRef<number>(0);
-  const rafRef = useRef<number | null>(null);
 
   useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
 
-  // --- Canvas & Context Helpers ---
   const getDisplayCtx = useCallback(() => displayRef.current!.getContext('2d')!, []);
-  const getOverlayCtx = useCallback(() => overlayRef.current!.getContext('2d')!, []);
   const getBackingCtx = useCallback(() => {
     if (!backingRef.current) {
       const c = document.createElement('canvas');
@@ -107,104 +76,57 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
     return backingRef.current.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
   }, [dpr, size.h, size.w]);
 
-  // --- Coordinate Transformations ---
-  const clientToCss = useCallback((clientX: number, clientY: number) => {
-    const rect = displayRef.current!.getBoundingClientRect();
-    const xCss = (clientX - rect.left - pan.x) / zoom;
-    const yCss = (clientY - rect.top - pan.y) / zoom;
-    return {
-      x: Math.max(0, Math.min(size.w, xCss)),
-      y: Math.max(0, Math.min(size.h, yCss)),
-    };
-  }, [pan.x, pan.y, zoom, size.w, size.h]);
-
-  const cssToPx = useCallback((ptCss: { x: number; y: number }) => {
-    return { x: Math.round(ptCss.x * dpr), y: Math.round(ptCss.y * dpr) };
-  }, [dpr]);
-
-  // --- Rendering ---
   const renderAll = useCallback(() => {
-    if (!displayRef.current || !overlayRef.current || !backingRef.current) return;
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      const dctx = getDisplayCtx();
-      dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      dctx.clearRect(0, 0, size.w, size.h);
-      dctx.save();
-      dctx.translate(pan.x, pan.y);
-      dctx.scale(zoom, zoom);
-      dctx.imageSmoothingEnabled = true;
-      dctx.drawImage(
-        backingRef.current!,
-        0, 0, backingRef.current!.width, backingRef.current!.height,
-        0, 0, size.w, size.h
-      );
-      dctx.restore();
-    });
-  }, [dpr, size.w, size.h, pan.x, pan.y, zoom, getDisplayCtx]);
+    if (!displayRef.current || !backingRef.current) return;
+    const dctx = getDisplayCtx();
+    dctx.clearRect(0, 0, displayRef.current.width, displayRef.current.height);
+    dctx.drawImage(backingRef.current, 0, 0);
+  }, [getDisplayCtx]);
 
   const setupCanvases = useCallback((keepContent = true) => {
-    if (!displayRef.current || !overlayRef.current) return;
-
+    if (!displayRef.current) return;
     const devicePixelRatio = Math.max(1, window.devicePixelRatio || 1);
     setDpr(devicePixelRatio);
-
     const disp = displayRef.current;
-    const over = overlayRef.current;
-    
     disp.width = Math.floor(size.w * devicePixelRatio);
     disp.height = Math.floor(size.h * devicePixelRatio);
     disp.style.width = `${size.w}px`;
     disp.style.height = `${size.h}px`;
 
-    over.width = disp.width;
-    over.height = disp.height;
-    over.style.width = `${size.w}px`;
-    over.style.height = `${size.h}px`;
-
     const old = backingRef.current;
     const newBacking = document.createElement('canvas');
-    newBacking.width = Math.floor(size.w * devicePixelRatio);
-    newBacking.height = Math.floor(size.h * devicePixelRatio);
-
+    newBacking.width = disp.width;
+    newBacking.height = disp.height;
     if (keepContent && old) {
       const nctx = newBacking.getContext('2d')!;
       nctx.drawImage(old, 0, 0, old.width, old.height, 0, 0, newBacking.width, newBacking.height);
     }
     backingRef.current = newBacking;
-
     renderAll();
   }, [size.w, size.h, renderAll]);
   
-  // Resize Observer to make canvas responsive
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(entries => {
       for (const entry of entries) {
-        const cr = entry.contentRect;
-        const w = Math.max(320, Math.floor(cr.width));
-        const h = Math.max(220, Math.floor(cr.height));
-        setSize({ w, h });
+        setSize({ w: Math.floor(entry.contentRect.width), h: Math.floor(entry.contentRect.height) });
       }
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  // Re-setup on size change
   useEffect(() => {
     setupCanvases(true);
   }, [size.w, size.h, setupCanvases]);
 
-  // --- History Management ---
   const pushHistory = useCallback((customUrl?: string) => {
     if (!backingRef.current) return;
     const dataUrl = customUrl ?? backingRef.current.toDataURL('image/png');
     setHistory(prev => {
       const idx = Math.min(Math.max(historyIndexRef.current, -1), prev.length - 1);
-      const upto = prev.slice(0, idx + 1);
-      const next = [...upto, dataUrl].slice(-maxHistory);
+      const next = [...prev.slice(0, idx + 1), dataUrl].slice(-maxHistory);
       const newIndex = next.length - 1;
       historyIndexRef.current = newIndex;
       setHistoryIndex(newIndex);
@@ -216,14 +138,14 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
   const undo = useCallback(() => {
     if (historyIndexRef.current <= 0) return;
     const newIndex = historyIndexRef.current - 1;
-    setHistoryIndex(newIndex);
     historyIndexRef.current = newIndex;
+    setHistoryIndex(newIndex);
     const img = new Image();
     img.src = history[newIndex]!;
     img.onload = () => {
       const bctx = getBackingCtx();
       bctx.clearRect(0, 0, backingRef.current!.width, backingRef.current!.height);
-      bctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, backingRef.current!.width, backingRef.current!.height);
+      bctx.drawImage(img, 0, 0);
       renderAll();
       onDrawEnd?.(history[newIndex]!, { canUndo: newIndex > 0, canRedo: true });
     };
@@ -232,14 +154,14 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
   const redo = useCallback(() => {
     if (historyIndexRef.current >= history.length - 1) return;
     const newIndex = historyIndexRef.current + 1;
-    setHistoryIndex(newIndex);
     historyIndexRef.current = newIndex;
+    setHistoryIndex(newIndex);
     const img = new Image();
     img.src = history[newIndex]!;
     img.onload = () => {
       const bctx = getBackingCtx();
       bctx.clearRect(0, 0, backingRef.current!.width, backingRef.current!.height);
-      bctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, backingRef.current!.width, backingRef.current!.height);
+      bctx.drawImage(img, 0, 0);
       renderAll();
       onDrawEnd?.(history[newIndex]!, { canUndo: true, canRedo: newIndex < history.length - 1 });
     };
@@ -270,9 +192,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
       if (blob && navigator.clipboard?.write) {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       }
-    } catch {
-       // fallback or error
-    }
+    } catch { }
   }, []);
   
   const importImage = useCallback((file: File) => {
@@ -280,38 +200,22 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
     const img = new Image();
     img.onload = () => {
       const bctx = getBackingCtx();
-      const scale = Math.min(size.w / img.width, size.h / img.height);
-      const wCss = img.width * scale;
-      const hCss = img.height * scale;
-      const xCss = (size.w - wCss) / 2;
-      const yCss = (size.h - hCss) / 2;
-      const xPx = Math.round(xCss * dpr);
-      const yPx = Math.round(yCss * dpr);
-      const wPx = Math.round(wCss * dpr);
-      const hPx = Math.round(hCss * dpr);
       bctx.clearRect(0, 0, backingRef.current!.width, backingRef.current!.height);
-      bctx.drawImage(img, 0, 0, img.width, img.height, xPx, yPx, wPx, hPx);
+      bctx.drawImage(img, 0, 0);
       pushHistory();
       renderAll();
       URL.revokeObjectURL(url);
     };
     img.src = url;
-  }, [dpr, getBackingCtx, pushHistory, renderAll, size.h, size.w]);
+  }, [getBackingCtx, pushHistory, renderAll]);
 
-  useImperativeHandle(ref, () => ({
-    undo,
-    redo,
-    clearAll,
-    downloadPng,
-    copyToClipboard,
-    importImage,
+  React.useImperativeHandle(ref, () => ({
+    undo, redo, clearAll, downloadPng, copyToClipboard, importImage
   }), [undo, redo, clearAll, downloadPng, copyToClipboard, importImage]);
   
-  // Load initial image or clear canvas
   useEffect(() => {
     const bctx = getBackingCtx();
     bctx.clearRect(0, 0, backingRef.current!.width, backingRef.current!.height);
-
     if (!initialImage) {
       pushHistory(backingRef.current!.toDataURL('image/png'));
       renderAll();
@@ -321,114 +225,26 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
     img.crossOrigin = 'anonymous';
     img.src = initialImage;
     img.onload = () => {
-      const scale = Math.min(size.w / img.width, size.h / img.height);
-      const wCss = img.width * scale;
-      const hCss = img.height * scale;
-      const xCss = (size.w - wCss) / 2;
-      const yCss = (size.h - hCss) / 2;
-
-      const xPx = Math.round(xCss * dpr);
-      const yPx = Math.round(yCss * dpr);
-      const wPx = Math.round(wCss * dpr);
-      const hPx = Math.round(hCss * dpr);
-
-      bctx.drawImage(img, 0, 0, img.width, img.height, xPx, yPx, wPx, hPx);
+      bctx.drawImage(img, 0, 0);
       pushHistory();
       renderAll();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialImage, getBackingCtx, pushHistory, renderAll, dpr, size]);
+  }, [initialImage, getBackingCtx, pushHistory, renderAll]);
 
-  const clearOverlay = useCallback(() => {
-    const octx = getOverlayCtx();
-    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    octx.clearRect(0, 0, size.w, size.h);
-  }, [dpr, size.w, size.h, getOverlayCtx]);
+  // Drawing logic placeholder
+  const handlePointerDown = (e: React.PointerEvent) => { /* Drawing logic here */ };
+  const handlePointerMove = (e: React.PointerEvent) => { /* Drawing logic here */ };
+  const handlePointerUp = () => { /* Drawing logic here */ };
 
-  // Pointer Handlers
-  const pointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (disabled) return;
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-
-    if (e.button === 1 || e.altKey || tool === 'pan') {
-      forcedPanRef.current = true;
-      isDrawingRef.current = true;
-      lastClientRef.current = { x: e.clientX, y: e.clientY };
-      return;
-    }
-    
-    isDrawingRef.current = true;
-    lastPtCssRef.current = clientToCss(e.clientX, e.clientY);
-  };
-
-  const pointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current) return;
-    
-    if (tool === 'pan' || forcedPanRef.current) {
-        const last = lastClientRef.current ?? { x: e.clientX, y: e.clientY };
-        const dx = e.clientX - last.x;
-        const dy = e.clientY - last.y;
-        lastClientRef.current = { x: e.clientX, y: e.clientY };
-        setPan(p => ({ x: p.x + dx, y: p.y + dy }));
-        renderAll();
-        return;
-    }
-    
-    const currentCss = clientToCss(e.clientX, e.clientY);
-    
-    // For brevity, direct stroke logic is shown. Shape previews would be here.
-    if (tool === 'pen' || tool === 'marker' || tool === 'eraser') {
-        const pressure = e.pressure ?? 0.5;
-        // strokeSegmentBacking would be a helper to draw a line on the backing canvas
-        // strokeSegmentBacking(lastPtCssRef.current!, currentCss, pressure);
-    }
-
-    lastPtCssRef.current = currentCss;
-  };
-  
-  const pointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current) return;
-    (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
-    isDrawingRef.current = false;
-    forcedPanRef.current = false;
-
-    // If it was a shape, commit it now. Otherwise, end the stroke.
-    // ...
-    
-    pushHistory();
-  };
-  
-  const onWheel = (e: React.WheelEvent) => {
-    if (disabled || (!e.ctrlKey && !e.metaKey)) return;
-    e.preventDefault();
-    const rect = displayRef.current!.getBoundingClientRect();
-    const worldBefore = clientToCss(e.clientX, e.clientY);
-    const delta = -e.deltaY;
-    const factor = Math.exp(delta * 0.001);
-    const newZoom = Math.min(6, Math.max(0.25, zoom * factor));
-    const nx = e.clientX - rect.left - worldBefore.x * newZoom;
-    const ny = e.clientY - rect.top - worldBefore.y * newZoom;
-    setZoom(newZoom);
-    setPan({ x: nx, y: ny });
-    renderAll();
-  };
-  
   return (
-    <div
-      ref={containerRef}
-      className={className}
-      style={{ touchAction: 'none' }}
-      onWheel={onWheel}
-    >
-      <canvas ref={displayRef} className="absolute inset-0 w-full h-full" />
+    <div ref={containerRef} className={cn("w-full h-full relative touch-none bg-white", className)}>
       <canvas
-        ref={overlayRef}
-        className="absolute inset-0 w-full h-full"
-        onPointerDown={pointerDown}
-        onPointerMove={pointerMove}
-        onPointerUp={pointerUp}
-        onPointerLeave={pointerUp}
-        onPointerCancel={pointerUp}
+        ref={displayRef}
+        className="absolute inset-0"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
       />
     </div>
   );
@@ -436,13 +252,100 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
 DrawingCanvas.displayName = 'DrawingCanvas';
 
 // ====================================================================================
+// Toolbar Component
+// ====================================================================================
+const ColorSwatch = ({ color, ...props }: { color: string } & React.ComponentProps<'button'>) => (
+  <button {...props}>
+    <div className="w-6 h-6 rounded-full border-2" style={{ backgroundColor: color }} />
+  </button>
+);
+
+const BrushGroup = ({ tool, setTool }: { tool: Tool; setTool: (t: Tool) => void }) => (
+  <Popover>
+    <PopoverTrigger asChild>
+      <Button variant="outline" size="icon"><Pen/></Button>
+    </PopoverTrigger>
+    <PopoverContent className="w-auto p-2">
+      <div className="flex gap-2">
+        <Button variant={tool === 'pen' ? 'secondary' : 'ghost'} size="icon" onClick={() => setTool('pen')}><Pen/></Button>
+        <Button variant={tool === 'marker' ? 'secondary' : 'ghost'} size="icon" onClick={() => setTool('marker')}><Pen/></Button>
+        <Button variant={tool === 'eraser' ? 'secondary' : 'ghost'} size="icon" onClick={() => setTool('eraser')}><Eraser/></Button>
+      </div>
+    </PopoverContent>
+  </Popover>
+);
+
+const ShapesGroup = ({ tool, setTool }: { tool: Tool; setTool: (t: Tool) => void }) => {
+  const shapes: { tool: Tool; icon: React.ElementType }[] = [
+    { tool: 'line', icon: Minus },
+    { tool: 'rect', icon: Square },
+    { tool: 'circle', icon: Circle },
+    { tool: 'triangle', icon: Triangle },
+    { tool: 'ellipse', icon: Circle }, // Using Circle as fallback for Oval
+  ];
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="icon"><Square/></Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2">
+        <div className="flex gap-2">
+          {shapes.map(({ tool: shapeTool, icon: Icon }) => (
+            <Button key={shapeTool} variant={tool === shapeTool ? 'secondary' : 'ghost'} size="icon" onClick={() => setTool(shapeTool)}><Icon/></Button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+const ColorGroup = ({ color, setColor }: { color: string; setColor: (c: string) => void }) => {
+  const colors = ['#000000', '#ff0000', '#0000ff', '#008000', '#ffff00', '#ffa500'];
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="icon"><ColorSwatch color={color}/></Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2">
+        <div className="flex gap-2">
+          {colors.map(c => <ColorSwatch key={c} color={c} onClick={() => setColor(c)} />)}
+          <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-10 h-10 p-1"/>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+const Toolbar = memo(({
+  tool, setTool, color, setColor, thickness, setThickness, opacity, setOpacity,
+  canUndo, onUndo, canRedo, onRedo, onClearAll
+}: any) => (
+  <Card className="w-full">
+    <CardContent className="p-2 flex flex-wrap items-center justify-center gap-2">
+      <BrushGroup tool={tool} setTool={setTool} />
+      <ShapesGroup tool={tool} setTool={setTool} />
+      <ColorGroup color={color} setColor={setColor} />
+
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline">سمك: {thickness}</Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-48 p-2">
+          <Slider value={[thickness]} onValueChange={([v]) => setThickness(v)} max={50} step={1} />
+        </PopoverContent>
+      </Popover>
+
+      <Button variant="outline" size="icon" onClick={onUndo} disabled={!canUndo}><Undo2/></Button>
+      <Button variant="outline" size="icon" onClick={onRedo} disabled={!canRedo}><Redo/></Button>
+      <Button variant="destructive" size="icon" onClick={onClearAll}><Trash2/></Button>
+    </CardContent>
+  </Card>
+));
+Toolbar.displayName = 'Toolbar';
+
+// ====================================================================================
 // DrawingPhase Component (The Orchestrator)
 // ====================================================================================
-interface DrawingPhaseProps {
-  game: Game;
-  self: Player;
-}
-
 const WritingView = ({ onSubmit, isSubmitting }: { onSubmit: (text: string) => Promise<void>; isSubmitting: boolean }) => {
   const [correctAnswer, setCorrectAnswer] = useState('');
   
@@ -476,7 +379,7 @@ const WritingView = ({ onSubmit, isSubmitting }: { onSubmit: (text: string) => P
   );
 };
 
-export function DrawingPhase({ game, self }: DrawingPhaseProps) {
+export function DrawingPhase({ game, self }: { game: Game; self: Player }) {
   const { toast } = useToast();
   const state = game.drawAndDeceiveState!;
   const [drawingDataUrl, setDrawingDataUrl] = useState<string | null>(state.drawingDataUrl ?? null);
@@ -484,8 +387,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const canvasRef = useRef<DrawingCanvasRef>(null);
 
-  // Toolbar state
-  const [tool, setTool] = useState<any>('pen');
+  const [tool, setTool] = useState<Tool>('pen');
   const [color, setColor] = useState<string>('#1f2937');
   const [thickness, setThickness] = useState<number>(5);
   const [opacity, setOpacity] = useState<number>(1);
@@ -495,7 +397,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   const [fillTolerance, setFillTolerance] = useState<number>(24);
   const [showGrid, setShowGrid] = useState<boolean>(false);
   
-  const [canUndo, setCanUndo] = useState(false); // To enable/disable undo/redo buttons
+  const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
   const [timeLeft, setTimeLeft] = useState<number>(() => {
@@ -565,10 +467,22 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
 
   return (
     <div className="w-full h-full flex flex-col items-center gap-4">
+      <div className="w-full flex-shrink-0">
+         <Toolbar
+            tool={tool} setTool={setTool}
+            color={color} setColor={setColor}
+            thickness={thickness} setThickness={setThickness}
+            opacity={opacity} setOpacity={setOpacity}
+            canUndo={canUndo} onUndo={() => canvasRef.current?.undo()}
+            canRedo={canRedo} onRedo={() => canvasRef.current?.redo()}
+            onClearAll={() => canvasRef.current?.clearAll()}
+         />
+      </div>
+
       <div className="flex-grow w-full relative">
         <DrawingCanvas 
             ref={canvasRef}
-            className="w-full h-full"
+            className="w-full h-full rounded-lg border-2 border-muted"
             onDrawEnd={handleDrawEnd}
             initialImage={state.drawingDataUrl}
             tool={tool}
@@ -580,27 +494,6 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
             textSize={textSize}
             fillTolerance={fillTolerance}
             showGrid={showGrid}
-        />
-      </div>
-      <div className="flex-shrink-0 w-full">
-        <DrawingToolbar
-            tool={tool} setTool={setTool}
-            color={color} setColor={setColor}
-            thickness={thickness} setThickness={setThickness}
-            opacity={opacity} setOpacity={setOpacity}
-            shapeFill={shapeFill} setShapeFill={setShapeFill}
-            textValue={textValue} setTextValue={setTextValue}
-            textSize={textSize} setTextSize={setTextSize}
-            fillTolerance={fillTolerance} setFillTolerance={setFillTolerance}
-            showGrid={showGrid} setShowGrid={setShowGrid}
-            onUndo={() => canvasRef.current?.undo()}
-            canUndo={canUndo}
-            onRedo={() => canvasRef.current?.redo()}
-            canRedo={canRedo}
-            onClearAll={() => canvasRef.current?.clearAll()}
-            onDownload={() => canvasRef.current?.downloadPng()}
-            onCopy={() => canvasRef.current?.copyToClipboard()}
-            onImport={(e) => e.target.files && canvasRef.current?.importImage(e.target.files[0])}
         />
       </div>
 
