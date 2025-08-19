@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Pen, Eraser, Minus, Square, Circle, Undo2, Redo, Trash2 } from 'lucide-react';
 
 // ====================================================================================
@@ -136,7 +137,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
         const bctx = getBackingCtx();
         if (bctx && backingRef.current) {
           bctx.clearRect(0, 0, backingRef.current.width, backingRef.current.height);
-          bctx.drawImage(img, 0, 0, backingRef.current.width, backingRef.current.height);
+          bctx.drawImage(img, 0, 0, backingRef.current.width / (window.devicePixelRatio || 1), backingRef.current.height / (window.devicePixelRatio || 1));
           pushHistory();
           renderAll();
         }
@@ -260,7 +261,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
         bctx.drawImage(img,0,0);
         renderAll();
         historyIndexRef.current = newIndex;
-        onDrawEnd?.(history[newIndex]!, { canUndo: newIndex > 0, canRedo: true });
+        onDrawEnd?.(history[newIndex]!, { canUndo: newIndex > 0, canRedo: newIndex < history.length -1 });
       };
     },
     redo: () => {
