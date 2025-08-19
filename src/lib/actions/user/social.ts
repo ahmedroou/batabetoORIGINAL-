@@ -492,11 +492,8 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
 
         const actor = actorDoc.data() as UserProfile;
         const target = targetDoc.data() as UserProfile;
-        
-        if (!actor.permissions?.includes('can_force_avatar_change')) {
-            throw new Error("ليس لديك صلاحية فرض تغيير الصورة.");
-        }
 
+        // Dynamic permission check
         const getRank = (points: number, ranks: SocialRank[]) => {
             const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
             for (const rank of sortedRanks) {
@@ -504,11 +501,15 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
             }
             return sortedRanks[sortedRanks.length - 1] || null;
         };
-
+        
         const actorRank = getRank(actor.leaderboardPoints || 0, allRanks);
         const targetRank = getRank(target.leaderboardPoints || 0, allRanks);
+
+        if (!actorRank || !actorRank.permissions.includes('can_force_avatar_change')) {
+            throw new Error("ليس لديك صلاحية فرض تغيير الصورة.");
+        }
         
-        if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
+        if (!targetRank) throw new Error("خطأ في تحديد رتبة الهدف.");
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك معاقبة لاعب من نفس طبقتك أو أعلى.");
 
         if (!actor.unlockedPunishmentAvatars?.includes(avatarId)) {
@@ -548,6 +549,7 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         transaction.update(actorRef, {
             honorPoints: increment(-honorCost),
             [`lastPunishmentTimestamp.${targetId}`]: serverTimestamp(),
+            punishmentsIssued: increment(1)
         });
         
         const originalAvatar = {
@@ -716,3 +718,4 @@ export async function liftPunishment(actorId: string, targetId: string): Promise
 }
     
     
+
