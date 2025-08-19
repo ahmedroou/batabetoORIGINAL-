@@ -22,7 +22,7 @@ import type { Complaint, Game } from '@/types';
 import { sendSystemMail } from './user/mail';
 import { checkRateLimit } from './helpers';
 
-const COMPLAINT_RATE_LIMIT_SECONDS = 300; // 5 minutes
+const COMPLAINT_RATE_LIMIT_SECONDS = 43200; // 12 hours
 
 export async function submitComplaint(data: Omit<Complaint, 'id' | 'status' | 'createdAt'>): Promise<{ success: boolean; error?: string }> {
     try {
