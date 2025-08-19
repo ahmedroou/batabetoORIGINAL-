@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "deep-dive-the-friendship-game"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }
