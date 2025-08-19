@@ -1,4 +1,3 @@
-
 // lib/firebase.ts
 // Client-side Firebase bootstrap for Next.js (App Router safe)
 
@@ -40,25 +39,24 @@ const db: Firestore = getFirestore(app);
 
 // Auth: ensure it only runs in the browser; set robust persistence
 let auth: Auth;
-// eslint-disable-next-line no-constant-condition
 if (typeof window !== 'undefined') {
   auth = getAuth(app);
   // choose best available persistence without breaking first paint
   (async () => {
     try {
-      await setPersistence(auth!, indexedDBLocalPersistence);
+      await setPersistence(auth, indexedDBLocalPersistence);
     } catch {
       try {
-        await setPersistence(auth!, browserLocalPersistence);
+        await setPersistence(auth, browserLocalPersistence);
       } catch {
-        await setPersistence(auth!, browserSessionPersistence);
+        await setPersistence(auth, browserSessionPersistence);
       }
     }
 
     // Optional: connect to emulators in dev if flag is set
     if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true') {
       try {
-        connectAuthEmulator(auth!, 'http://localhost:9099', { disableWarnings: true });
+        connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
         // Firestore emulator is set up where it's used (if needed).
       } catch {
         // ignore if emulator not running
