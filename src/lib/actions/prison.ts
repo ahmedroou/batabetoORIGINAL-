@@ -36,6 +36,7 @@ import type {
 } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
 import { updateLeagueScoresForGameEnd } from './user';
+import { distributeEndOfGameAwards } from './admin/users';
 
 // ————————————————————————————————————————————
 // Utilities
