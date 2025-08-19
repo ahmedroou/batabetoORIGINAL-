@@ -1,5 +1,4 @@
 
-
 'use server';
 
 /**
@@ -173,7 +172,9 @@ export async function createGameRoom(
         settings: {
           categories: categoriesResult.categories || [],
           rounds: 10,
-          answerTime: 60,
+          trapTime: 35,
+          guessingTime: 25,
+          resultsTime: 90
         },
         trickStats: { trickedBy: {}, trickedOthers: {} },
       };
@@ -515,3 +516,5 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
     }
   });
 }
+
+    
