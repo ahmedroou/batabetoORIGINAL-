@@ -1,26 +1,21 @@
 
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { submitCorrectAnswerAndStartDrawing, submitDrawing } from '@/lib/actions/draw-and-deceive';
-import { Loader2, Send, Wand2, Eye, Brain } from 'lucide-react';
+import { Loader2, Send, Wand2, Eye, Brain, Timer } from 'lucide-react';
 import { DrawingCanvas } from './DrawingCanvas';
+import { WaitingPhase } from './WaitingPhase';
 
 interface DrawingPhaseProps {
   game: Game;
   self: Player;
 }
-
-const WAITING_CARD_PROPS = {
-  title: "في انتظار الفنان",
-  description: "يقوم الفنان حاليًا باختيار كلمة سرية ورسمها. استعد لوضع فخك!",
-  icon: Brain,
-};
 
 const WritingView = ({ artistName }: { artistName: string }) => (
   <Card className="w-full max-w-lg text-center">
@@ -35,20 +30,6 @@ const WritingView = ({ artistName }: { artistName: string }) => (
   </Card>
 );
 
-const WaitingView = () => (
-    <Card className="w-full max-w-lg text-center">
-        <CardHeader>
-             <CardTitle className="flex items-center justify-center gap-2 text-2xl">
-                <Brain className="w-8 h-8 text-primary"/>
-                {WAITING_CARD_PROPS.title}
-            </CardTitle>
-        </CardHeader>
-        <CardContent>
-            <p className="animate-pulse text-lg text-muted-foreground">{WAITING_CARD_PROPS.description}</p>
-        </CardContent>
-    </Card>
-);
-
 export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   const { toast } = useToast();
   const state = game.drawAndDeceiveState!;
@@ -56,11 +37,28 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   const [drawingDataUrl, setDrawingDataUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<'answer' | 'drawing' | false>(false);
   const [isArtistDone, setIsArtistDone] = useState(!!state.drawingDataUrl);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [timeLeft, setTimeLeft] = useState<number>(() => {
+      const ends = state.timerEndsAt?.toMillis();
+      return ends ? Math.max(0, Math.round((ends - Date.now()) / 1000)) : 0;
+  });
 
   const artist = useMemo(() => game.players.find(p => p.id === state.artistId), [game.players, state.artistId]);
   const isMyTurnAsArtist = artist?.id === self.id;
   const hasAnswerBeenSet = !!state.correctAnswer;
   
+  useEffect(() => {
+    const ends = state.timerEndsAt?.toMillis();
+    if (!ends) return;
+    const update = () => {
+        const remaining = Math.max(0, Math.round((ends - Date.now())/1000));
+        setTimeLeft(remaining);
+    };
+    const timer = setInterval(update, 1000);
+    update();
+    return () => clearInterval(timer);
+  }, [state.timerEndsAt]);
+
   const handleAnswerSubmit = async () => {
     if (!correctAnswer.trim() || isSubmitting) return;
     setIsSubmitting('answer');
@@ -73,12 +71,13 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     }
   };
 
-  const handleDrawingSubmit = async () => {
+  const handleManualDrawingSubmit = async () => {
     if (!drawingDataUrl || isSubmitting) return;
     setIsSubmitting('drawing');
     try {
       await submitDrawing(game.id, self.id, drawingDataUrl);
       setIsArtistDone(true);
+      toast({title: "تم استلام الرسمة!", description: "بانتظار اللاعبين لوضع فخاخهم."});
     } catch (err: any) {
       toast({ title: 'خطأ', description: err.message, variant: 'destructive' });
     } finally {
@@ -88,11 +87,22 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
 
   const handleDrawEnd = useCallback((dataUrl: string) => {
     setDrawingDataUrl(dataUrl);
+    if(autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+        submitDrawing(game.id, self.id, dataUrl).catch(() => {});
+    }, 2000);
+  }, [game.id, self.id]);
+  
+  // Cleanup autosave timer
+  useEffect(() => {
+    return () => {
+      if(autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    }
   }, []);
 
   if (!isMyTurnAsArtist) {
     if (!hasAnswerBeenSet) return <WritingView artistName={artist?.name || 'الفنان'} />;
-    return <WaitingView />;
+    return <WaitingPhase game={game} self={self} />;
   }
   
   if (isArtistDone) {
@@ -134,12 +144,15 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   }
 
   return (
-    <div className="w-full h-[85vh] max-w-5xl flex flex-col items-center gap-4">
+    <div className="w-full h-full flex flex-col items-center gap-4">
+       <div className="flex items-center gap-2 text-lg font-mono">
+            <Timer /> {timeLeft}s
+       </div>
       <div className="w-full flex-grow min-h-0">
         <DrawingCanvas onDrawEnd={handleDrawEnd} />
       </div>
-      <Button size="lg" onClick={handleDrawingSubmit} disabled={isSubmitting === 'drawing' || !drawingDataUrl} className="w-full max-w-md">
-        {isSubmitting === 'drawing' ? <Loader2 className="animate-spin" /> : "إرسال الرسمة"}
+      <Button size="lg" onClick={handleManualDrawingSubmit} disabled={isSubmitting === 'drawing' || !drawingDataUrl} className="w-full max-w-md">
+        {isSubmitting === 'drawing' ? <Loader2 className="animate-spin" /> : "إرسال الرسمة النهائية"}
       </Button>
     </div>
   );
