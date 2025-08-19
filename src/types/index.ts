@@ -106,7 +106,7 @@ export interface Complaint {
 }
 
 // Correctly define PermissionId first as a simple string type.
-export type PermissionId = string;
+export type PermissionId = (typeof ALL_PERMISSIONS)[number]['id'];
 
 // Then define Permission using the simple type.
 export interface Permission {

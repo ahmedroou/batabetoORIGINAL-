@@ -1,7 +1,7 @@
 
 import type { Permission } from '../types';
 
-export const ALL_PERMISSIONS: Permission[] = [
+export const ALL_PERMISSIONS_RAW = [
     // --- Social & Meta Permissions ---
     { id: 'can_view_player_balances', name: 'كشف الأرصدة', description: 'يمكنه رؤية الرصيد المالي لجميع اللاعبين في أي وقت.', category: 'social' },
     { id: 'can_force_name_change', name: 'تغيير اللقب القسري', description: 'يمكنه إجبار لاعب من طبقة أدنى على تغيير اسمه للقب مهين مؤقتًا.', category: 'social' },
@@ -50,4 +50,6 @@ export const ALL_PERMISSIONS: Permission[] = [
     { id: 'genius_extra_life', name: 'حياة إضافية (ساحة العباقرة)', description: 'يحصل على فرصة خطأ إضافية في تحديات مثل "كسر الشيفرة".', category: 'gameplay' },
     { id: 'genius_time_bonus', name: 'مكافأة وقت (ساحة العباقرة)', description: 'يحصل على 5 ثوانٍ إضافية في التحديات المعتمدة على الوقت.', category: 'gameplay' },
     { id: 'genius_reveal_one_hint', name: 'كشف تلميح (ساحة العباقرة)', description: 'يحصل على تلميح واحد مجاني في تحديات مثل "المتاهة الخفية" أو "الشبكة الذكية".', category: 'gameplay' }
-];
+] as const;
+
+export const ALL_PERMISSIONS: readonly Permission[] = ALL_PERMISSIONS_RAW;

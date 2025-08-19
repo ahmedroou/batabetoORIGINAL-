@@ -29,7 +29,7 @@ setGlobalOptions({ maxInstances: 10, memory: "256MiB" });
  */
 export const updateGameKings = onSchedule(
   "every thursday 10:00",
-  async (event): Promise<void> => {
+  async (event) => {
     logger.info("Starting weekly recalculation of Game Kings...", { event });
 
     try {
