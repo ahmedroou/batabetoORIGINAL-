@@ -210,7 +210,9 @@ export async function getGameKings(): Promise<Record<string, GameKing>> {
     for (const gameType in kings) {
       const king = kings[gameType];
       const kingUser = king.kingId ? usersData.get(king.kingId) : undefined;
-      if (kingUser) king.totalLeaderboardPoints = kingUser.leaderboardPoints || 0;
+      if (kingUser) {
+        king.totalLeaderboardPoints = kingUser.leaderboardPoints || 0;
+      }
     }
 
     return kings;

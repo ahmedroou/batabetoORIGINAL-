@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -13,6 +14,8 @@ import { motion } from "framer-motion";
 import { getKingsPageData } from "@/lib/actions/user/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
+import { RANK_ICON_MAP } from "@/data/social-ranks";
+
 
 // --- Countdown Timer Logic ---
 
@@ -279,7 +282,7 @@ export default function KingsClient() {
                         </div>
                         {kingOfGamesRank && kingOfGamesRank.icon && (
                           <div className="flex items-center gap-2">
-                            {React.createElement(kingOfGamesRank.icon, { className: "w-5 h-5" })}
+                            {React.createElement(RANK_ICON_MAP[kingOfGamesRank.icon as string] || Star, { className: "w-5 h-5" })}
                             <span>{kingOfGamesRank.name}</span>
                           </div>
                         )}
@@ -302,9 +305,9 @@ export default function KingsClient() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {gameEntries.map(([gameType, name], index) => {
                 const king = kings[gameType as keyof typeof kings];
-                const Icon = GAME_TYPE_NAMES[gameType as keyof typeof GAME_TYPE_NAMES] ? (GAME_ICONS as any)[gameType] || Star : Star;
+                const Icon = GAME_ICONS[gameType as keyof typeof GAME_ICONS] || Star;
                 const kingRank = king ? getSocialRankForUser(king.totalLeaderboardPoints || 0) : null;
-                const RankIcon = (kingRank && kingRank.icon) ? kingRank.icon : Shield;
+                const RankIcon = kingRank && kingRank.icon ? RANK_ICON_MAP[kingRank.icon as string] || Shield : Shield;
 
                 return (
                   <motion.div
@@ -376,5 +379,3 @@ export default function KingsClient() {
     </div>
   );
 }
-
-    
