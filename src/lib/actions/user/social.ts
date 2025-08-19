@@ -480,7 +480,9 @@ export async function respondToDuelChallenge(actorId: string, challenge: DuelCha
 }
 
 export async function forceAvatarChange(actorId: string, targetId: string, avatarId: string, durationInDays: number, taxToLift: number): Promise<{ success: boolean; error?: string }> {
+     const allRanks = await getRanks();
      const honorCost = durationInDays * 2;
+
      return runTransaction(db, async (transaction) => {
         const actorRef = doc(db, "users", actorId);
         const targetRef = doc(db, "users", targetId);
@@ -494,6 +496,21 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
         if (!actor.permissions?.includes('can_force_avatar_change')) {
             throw new Error("ليس لديك صلاحية فرض تغيير الصورة.");
         }
+
+        const getRank = (points: number, ranks: SocialRank[]) => {
+            const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
+            for (const rank of sortedRanks) {
+                if (points >= rank.threshold) return rank;
+            }
+            return sortedRanks[sortedRanks.length - 1] || null;
+        };
+
+        const actorRank = getRank(actor.leaderboardPoints, allRanks);
+        const targetRank = getRank(target.leaderboardPoints, allRanks);
+        
+        if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
+        if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك معاقبة لاعب من نفس طبقتك أو أعلى.");
+
         if (!actor.unlockedPunishmentAvatars?.includes(avatarId)) {
             throw new Error("أنت لا تملك شخصية العقوبة هذه. يجب عليك شراؤها أولاً.");
         }
@@ -511,18 +528,9 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
              const protectorDoc = await transaction.get(protectorRef);
              if (protectorDoc.exists()) {
                 const protector = protectorDoc.data() as UserProfile;
-                const allRanks = await getRanks();
-                const getRank = (points: number, ranks: SocialRank[]) => {
-                    const sortedRanks = [...ranks].sort((a,b) => b.threshold - a.threshold);
-                    for (const rank of sortedRanks) {
-                        if (points >= rank.threshold) return rank;
-                    }
-                    return sortedRanks[sortedRanks.length - 1] || null;
-                };
                 const protectorRank = getRank(protector.leaderboardPoints, allRanks);
-                const actorRank = getRank(actor.leaderboardPoints, allRanks);
 
-                if (protectorRank && actorRank && actorRank!.threshold <= protectorRank.threshold) {
+                if (protectorRank && actorRank!.threshold <= protectorRank.threshold) {
                      if ((protector.honorPoints || 0) >= 2) {
                         transaction.update(protectorRef, { honorPoints: increment(-2) });
                         transaction.update(actorRef, { honorPoints: increment(-honorCost) }); // Attacker still loses honor
