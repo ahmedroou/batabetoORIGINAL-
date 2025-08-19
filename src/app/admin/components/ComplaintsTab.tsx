@@ -79,18 +79,18 @@ export default function ComplaintsTab() {
 
   const fetchComplaints = useCallback(async () => {
     setIsLoading(true);
-    const result = await getComplaints();
+    const result = await getComplaints(statusFilter);
     if (result.success && result.complaints) {
       setComplaints(result.complaints);
     } else {
       toast({ title: "خطأ", description: "فشل جلب الشكاوى.", variant: "destructive" });
     }
     setIsLoading(false);
-  }, [toast]);
+  }, [toast, statusFilter]);
 
   useEffect(() => {
     fetchComplaints();
-  }, [fetchComplaints]);
+  }, [fetchComplaints, statusFilter]);
 
   // ---------- Derived ----------
   const normalized = useMemo(() =>
@@ -100,7 +100,6 @@ export default function ComplaintsTab() {
   const filtered = useMemo(() => {
     let list = [...normalized];
 
-    if (statusFilter !== "all") list = list.filter((c) => c.status === statusFilter);
     if (typeFilter !== "all") list = list.filter((c) => c.type === typeFilter);
 
     if (search.trim()) {
@@ -119,7 +118,7 @@ export default function ComplaintsTab() {
     });
 
     return list;
-  }, [normalized, search, statusFilter, typeFilter, sortDir]);
+  }, [normalized, search, typeFilter, sortDir]);
 
   const missingCurrency = useMemo(() => filtered.filter((c) => c.type === "missing_currency"), [filtered]);
   const bugReports = useMemo(() => filtered.filter((c) => c.type === "bug_report"), [filtered]);

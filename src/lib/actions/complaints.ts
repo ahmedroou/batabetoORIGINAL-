@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -14,7 +15,8 @@ import {
     updateDoc,
     deleteDoc,
     runTransaction,
-    increment
+    increment,
+    limit,
 } from 'firebase/firestore';
 import type { Complaint, Game } from '@/types';
 import { sendSystemMail } from './user/mail';
@@ -34,11 +36,19 @@ export async function submitComplaint(data: Omit<Complaint, 'id' | 'status' | 'c
     }
 }
 
-export async function getComplaints(): Promise<{ success: boolean; complaints?: Complaint[]; error?: string }> {
+export async function getComplaints(statusFilter: 'all' | 'pending' | 'resolved' | 'rejected' = 'all'): Promise<{ success: boolean; complaints?: Complaint[]; error?: string }> {
     try {
         const complaintsCol = collection(db, 'complaints');
-        // This query requires a composite index on (status, createdAt)
-        const q = query(complaintsCol, orderBy('createdAt', 'desc'));
+        
+        let q;
+        if (statusFilter !== 'all') {
+            // This query requires a composite index on (status, createdAt desc)
+            q = query(complaintsCol, where('status', '==', statusFilter), orderBy('createdAt', 'desc'), limit(100));
+        } else {
+            // This query requires an index on (createdAt desc)
+            q = query(complaintsCol, orderBy('createdAt', 'desc'), limit(200));
+        }
+
         const snapshot = await getDocs(q);
 
         const complaints = snapshot.docs.map(doc => {
@@ -58,12 +68,16 @@ export async function getComplaints(): Promise<{ success: boolean; complaints?: 
     }
 }
 
+
 export async function resolveComplaint(complaint: Complaint, resolution: 'approved' | 'rejected' | 'resolved', coins?: number, points?: number): Promise<{ success: boolean; error?: string }> {
     const complaintRef = doc(db, 'complaints', complaint.id);
     const userRef = doc(db, 'users', complaint.userId);
 
     try {
         await runTransaction(db, async (transaction) => {
+             const userSnap = await transaction.get(userRef);
+             if (!userSnap.exists()) throw new Error("المستخدم صاحب الشكوى لم يعد موجودًا.");
+            
             if (resolution === 'approved' && complaint.type === 'missing_currency') {
                 const updates: any = {};
                 if (coins && coins > 0) updates.coins = increment(coins);
@@ -81,6 +95,7 @@ export async function resolveComplaint(complaint: Complaint, resolution: 'approv
                     },
                     transaction
                 );
+                 transaction.update(complaintRef, { status: resolution, resolvedAt: serverTimestamp() });
             }
              else if (resolution === 'rejected') {
                  await sendSystemMail(
@@ -91,6 +106,8 @@ export async function resolveComplaint(complaint: Complaint, resolution: 'approv
                     },
                     transaction
                 );
+                transaction.update(complaintRef, { status: resolution, resolvedAt: serverTimestamp() });
+
             }
              else if (resolution === 'resolved' && complaint.type === 'bug_report') {
                  await sendSystemMail(
@@ -101,9 +118,8 @@ export async function resolveComplaint(complaint: Complaint, resolution: 'approv
                     },
                     transaction
                 );
+                 transaction.update(complaintRef, { status: resolution, resolvedAt: serverTimestamp() });
             }
-            // After handling, delete the complaint
-            transaction.delete(complaintRef);
         });
         return { success: true };
     } catch (error: any) {
