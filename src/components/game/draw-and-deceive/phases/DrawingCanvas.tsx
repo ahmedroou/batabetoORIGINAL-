@@ -33,7 +33,7 @@ interface DrawingCanvasProps {
   initialImage?: string | null;
 }
 
-const TOOL_CONFIG: { tool: Tool, icon: React.ElementType }[] = [
+const TOOL_CONFIG: { tool: Tool; icon: React.ElementType }[] = [
   { tool: 'pen', icon: Pen },
   { tool: 'eraser', icon: Eraser },
   { tool: 'line', icon: Minus },
@@ -105,7 +105,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
     onDrawEnd?.(dataUrl, { canUndo: historyIndexRef.current > 0, canRedo: false });
   }, [history, onDrawEnd]);
   
-    // Setup and resize handler
+  // Setup and resize handler
   useEffect(() => {
     const disp = displayRef.current;
     if (!disp) return;
@@ -268,7 +268,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
       img.src = history[newIndex]!;
       img.onload = () => {
         const bctx = getBackingCtx()!;
-        if (!bctx.canvas) return;
+        if (!bctx?.canvas) return;
         bctx.clearRect(0,0,bctx.canvas.width, bctx.canvas.height);
         bctx.drawImage(img,0,0);
         renderAll();
@@ -283,7 +283,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
       img.src = history[newIndex]!;
       img.onload = () => {
         const bctx = getBackingCtx()!;
-        if (!bctx.canvas) return;
+        if (!bctx?.canvas) return;
         bctx.clearRect(0,0,bctx.canvas.width, bctx.canvas.height);
         bctx.drawImage(img,0,0);
         renderAll();
@@ -293,7 +293,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
     },
     clearAll: () => {
       const bctx = getBackingCtx()!;
-      if (!bctx.canvas) return;
+      if (!bctx?.canvas) return;
       bctx.clearRect(0, 0, bctx.canvas.width, bctx.canvas.height);
       pushHistory();
       renderAll();

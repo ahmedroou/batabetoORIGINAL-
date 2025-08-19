@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState, useEffect, useRef, memo } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,7 +13,7 @@ import DrawingCanvas, { type DrawingCanvasRef } from './DrawingCanvas';
 // ====================================================================================
 // Writing View (Internal Component)
 // ====================================================================================
-const WritingView = memo(({ onSubmit, isSubmitting }: { onSubmit: (text: string) => Promise<void>; isSubmitting: boolean }) => {
+const WritingView = React.memo(({ onSubmit, isSubmitting }: { onSubmit: (text: string) => Promise<void>; isSubmitting: boolean }) => {
   const [correctAnswer, setCorrectAnswer] = useState('');
   
   const handleAnswerSubmit = (e: React.FormEvent) => {
@@ -121,24 +121,26 @@ export function DrawingPhase({ game, self }: { game: Game; self: Player }) {
 
   return (
     <div className="w-full h-full flex flex-col items-center gap-2">
-        <Card className="w-full text-center py-1">
-            <CardDescription>
-                كلمتك للرسم هي: <strong className="text-primary">{state.correctAnswer}</strong>. أمامك <strong className="font-mono">{timeLeft}</strong> ثانية للرسم.
-            </CardDescription>
-        </Card>
+      <Card className="w-full text-center py-1 flex-shrink-0">
+        <CardDescription>
+            كلمتك للرسم هي: <strong className="text-primary">{state.correctAnswer}</strong>. أمامك <strong className="font-mono">{timeLeft}</strong> ثانية للرسم.
+        </CardDescription>
+      </Card>
       
+      <div className="flex-grow w-full h-full relative">
         <DrawingCanvas 
             ref={canvasRef}
             onDrawEnd={handleDrawEnd}
             initialImage={state.drawingDataUrl}
-            className="flex-grow"
+            className="absolute inset-0"
         />
+      </div>
 
-        <div className="w-full flex-shrink-0">
-            <Button size="lg" className="w-full" onClick={handleManualDrawingSubmit} disabled={isSubmitting === 'drawing'}>
-                {isSubmitting === 'drawing' ? <Loader2 className="animate-spin" /> : "إرسال الرسمة النهائية"}
-            </Button>
-        </div>
+      <div className="w-full flex-shrink-0">
+          <Button size="lg" className="w-full" onClick={handleManualDrawingSubmit} disabled={isSubmitting === 'drawing'}>
+              {isSubmitting === 'drawing' ? <Loader2 className="animate-spin" /> : "إرسال الرسمة النهائية"}
+          </Button>
+      </div>
     </div>
   );
 }
