@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useMemo } from 'react';
@@ -29,7 +30,8 @@ const TrappingPhase     = dynamic(() => import('./phases/TrappingPhase').then(m 
 const GuessingPhase     = dynamic(() => import('./phases/GuessingPhase').then(m => m.GuessingPhase),        { ssr: false, loading: () => <PhaseSkeleton /> });
 const ResultsPhase      = dynamic(() => import('./phases/ResultsPhase').then(m => m.ResultsPhase),          { ssr: false, loading: () => <PhaseSkeleton /> });
 const FinalResultsPhase = dynamic(() => import('./phases/FinalResultsPhase').then(m => m.FinalResultsPhase),{ ssr: false, loading: () => <PhaseSkeleton /> });
-const KickVotePhase     = dynamic(() => import('./phases/KickVotePhase').then(m => m.KickVotePhase),        { ssr: false, loading: () => <PhaseSkeleton /> });
+const WaitingPhase      = dynamic(() => import('./phases/WaitingPhase').then(m => m.WaitingPhase),          { ssr: false, loading: () => <PhaseSkeleton /> });
+
 
 /* ---------------------------------- Types ---------------------------------- */
 type PhaseKey =
@@ -38,7 +40,6 @@ type PhaseKey =
   | 'trapping'
   | 'guessing'
   | 'results'
-  | 'kick_vote'
   | 'final_results';
 
 /* ------------------------------- Phase Mapping ------------------------------ */
@@ -48,22 +49,17 @@ const PHASE_COMPONENTS: Record<PhaseKey, React.ComponentType<{ game: Game; self:
   trapping:      TrappingPhase,
   guessing:      GuessingPhase,
   results:       ResultsPhase,
-  kick_vote:     KickVotePhase,
   final_results: FinalResultsPhase,
 };
 
 /* --------------------------------- Helpers --------------------------------- */
 const isPhaseKey = (v: unknown): v is PhaseKey =>
   typeof v === 'string' &&
-  ['lobby','drawing','trapping','guessing','results','kick_vote','final_results'].includes(v);
+  ['lobby','drawing','trapping','guessing','results','final_results'].includes(v);
 
-/** نشتق المرحلة الفعلية للعرض. يعطي أولوية لـ kick_vote عندما تكون فعّالة. */
+/** نشتق المرحلة الفعلية للعرض. */
 function resolveEffectivePhase(game: Game): PhaseKey | string {
-  const raw = game.drawAndDeceiveState?.phase ?? 'lobby';
-  const kickVoteActive = !!game.drawAndDeceiveState?.kickVote?.active;
-
-  if (kickVoteActive && raw !== 'final_results') return 'kick_vote';
-  return raw;
+  return game.drawAndDeceiveState?.phase ?? 'lobby';
 }
 
 /* --------------------------------- Boundary -------------------------------- */
@@ -117,13 +113,21 @@ interface DrawAndDeceiveGameProps {
 export function DrawAndDeceiveGame({ game, self }: DrawAndDeceiveGameProps) {
   const prefersReducedMotion = useReducedMotion();
 
-  // المرحلة الفعلية (تأخذ kickVote.active في الاعتبار)
   const effectivePhase = resolveEffectivePhase(game);
+  
+  const isWaiting = useMemo(() => {
+      if (game.gameState === 'drawing') {
+          const artistId = game.drawAndDeceiveState?.artistId;
+          const hasAnswer = !!game.drawAndDeceiveState?.correctAnswer;
+          return hasAnswer && self.id !== artistId;
+      }
+      return false;
+  }, [game, self.id]);
 
-  // اختيار مكوّن المرحلة بثبات
   const Content = useMemo(() => {
+    if (isWaiting) return WaitingPhase;
     return (PHASE_COMPONENTS as Record<string, React.ComponentType<{ game: Game; self: Player }>>)[effectivePhase] ?? null;
-  }, [effectivePhase]);
+  }, [effectivePhase, isWaiting]);
 
   // تمرير المستخدم لأعلى الصفحة عند تغير المرحلة
   useEffect(() => {

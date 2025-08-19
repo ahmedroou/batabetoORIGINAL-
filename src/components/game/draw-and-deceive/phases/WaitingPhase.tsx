@@ -88,4 +88,3 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
         </Card>
     );
 }
-
