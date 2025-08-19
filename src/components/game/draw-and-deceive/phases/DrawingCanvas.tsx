@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
@@ -672,6 +673,7 @@ export function DrawingCanvas({
 
     const ptCss = clientToCss(e.clientX, e.clientY);
     lastPtCssRef.current = ptCss;
+    if (!lastPtCssRef.current) return;
 
     // Pan
     if (tool === 'pan' || forcedPanRef.current) {
