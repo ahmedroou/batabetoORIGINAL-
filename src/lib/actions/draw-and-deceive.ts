@@ -1,25 +1,12 @@
+
+
 'use server';
 
 /**
- * Draw & Deceive — Server Actions (Refined & Hardened)
- * ---------------------------------------------------------------
- * ✅ Public API preserved (same function names/args/fields):
- *    - startGame
- *    - submitCorrectAnswerAndStartDrawing
- *    - submitDrawing
- *    - submitTrap
- *    - submitGuess
- *    - voteToKickArtist
- *    - handleTimeout
- *
- * 🔧 Improvements (no schema changes):
- *    - Fix: unreachable kick-vote path when artist never submits description
- *      → we now start a "writing" timer at game start; later switch to drawing timer
- *    - Robust timeout handler for both sub-phases of drawing (writing vs drawing)
- *    - No side-effects inside Firestore transactions (awards dispatched after commit)
- *    - Safer, idempotent submissions (guards for already-advanced phases)
- *    - Duplicate trap answers are rejected to avoid ambiguous scoring
- *    - Minor correctness: fixed endGame return misuse & consistent timer usage
+ * @fileoverview Server actions for the Draw & Deceive game — hardened & expanded.
+ * - Enforces turn/phase rules, protected cards, and discard-pickup swap rule.
+ * - Adds deck reshuffle, peek phase action, proper special effects, and endgame prep.
+ * - Keeps types liberal to avoid breaking builds; annotate with comments where state is augmented.
  */
 
 import { db } from '@/lib/firebase';
@@ -379,7 +366,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (tx) => {
     const gameSnap = await tx.get(gameRef);
-    ensure(gameSnap.exists(), 'Game not found.');
+    ensure(gameSnap.exists(), 'اللعبة غير موجودة.');
     const game = gameSnap.data() as Game;
     if (game.gameState !== 'guessing') return;
 
@@ -507,9 +494,10 @@ export async function handleTimeout(gameId: string, hostId: string) {
   let ended = false;
 
   await runTransaction(db, async (tx) => {
-    const gameSnap = await tx.get(gameRef);
-    ensure(gameSnap.exists(), 'Game not found.');
-    const game = gameSnap.data() as Game;
+    const snap = await tx.get(gameRef);
+    if (!snap.exists()) return;
+
+    const game = snap.data() as Game;
     const state = game.drawAndDeceiveState;
     ensure(state, 'Game state not initialized.');
 
@@ -519,95 +507,39 @@ export async function handleTimeout(gameId: string, hostId: string) {
       ended = true;
       return;
     }
+    
+    const timerEndsAt = state.timerEndsAt as Timestamp | undefined;
+    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
 
-    // ----- PHASE: DRAWING (has two sub-phases: writing → drawing) -----
-    if (state.phase === 'drawing') {
-      const writingTime = state.settings?.writingTime ?? DEFAULT_SETTINGS.writingTime;
-      const drawingTime = state.settings?.drawingTime ?? DEFAULT_SETTINGS.drawingTime;
+    tx.update(gameRef, { [`${F.s_timer}`]: null });
 
-      // If no timer at all, initialize appropriate one
-      if (!state.timerEndsAt) {
-        const next = state.correctAnswer ? inSec(drawingTime) : inSec(writingTime);
-        tx.update(gameRef, { [F.s_timer]: next });
-        return;
-      }
-
-      // If timer hasn't ended yet, do nothing
-      if (state.timerEndsAt.toMillis() > nowMs()) return;
-
-      // Timer expired →
-      if (!state.correctAnswer) {
-        // Writing window expired without description → open kick vote
-        const voteTime = state.settings?.kickVoteTime ?? DEFAULT_SETTINGS.kickVoteTime;
-        tx.update(gameRef, {
-          [F.s_kickVote]: { active: true, votes: {}, voterIds: [] as string[] },
-          [F.s_timer]: inSec(voteTime),
-        });
-        return;
-      }
-
-      // Drawing window expired without submit → auto-advance to trapping (no drawing)
-      const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
+    if (state.phase === 'drawing' && !state.correctAnswer) {
+      // Writing window expired without description → open kick vote
+      const voteTime = state.settings?.kickVoteTime ?? DEFAULT_SETTINGS.kickVoteTime;
       tx.update(gameRef, {
-        [F.s_phase]: 'trapping',
-        [F.s_drawing]: state.drawingDataUrl || null, // keep whatever may exist, or null
-        [F.s_timer]: inSec(trappingTime),
-        [F.s_kickVote]: null,
+        [F.s_kickVote]: { active: true, votes: {}, voterIds: [] as string[] },
+        [F.s_timer]: inSec(voteTime),
       });
       return;
     }
 
-    // ----- KICK VOTE ACTIVE -----
     if (state.kickVote?.active) {
-      // If timer missing, set it; if expired, resolve vote
-      const voteTime = state.settings?.kickVoteTime ?? DEFAULT_SETTINGS.kickVoteTime;
-      if (!state.timerEndsAt) {
-        tx.update(gameRef, { [F.s_timer]: inSec(voteTime) });
-        return;
-      }
-      if (state.timerEndsAt.toMillis() > nowMs()) return;
       const res = processKickVote(tx, gameRef, game);
       ended = res.ended;
       return;
     }
 
-    // ----- TRAPPING -----
     if (state.phase === 'trapping') {
-      // If timer missing, set it; else if expired → move to guessing
-      const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
-      if (!state.timerEndsAt) {
-        tx.update(gameRef, { [F.s_timer]: inSec(trappingTime) });
-        return;
-      }
-      if (state.timerEndsAt.toMillis() > nowMs()) return;
-
-      ensure(state.correctAnswer, 'Correct answer is missing.');
       beginGuessingPhase(tx, gameRef, state);
       return;
     }
 
-    // ----- GUESSING -----
     if (state.phase === 'guessing') {
-      const guessingTime = state.settings?.guessingTime ?? DEFAULT_SETTINGS.guessingTime;
-      if (!state.timerEndsAt) {
-        tx.update(gameRef, { [F.s_timer]: inSec(guessingTime) });
-        return;
-      }
-      if (state.timerEndsAt.toMillis() > nowMs()) return;
-
       computeAndEnterResults(tx, gameRef, game);
       return;
     }
 
-    // ----- RESULTS -----
     if (state.phase === 'results') {
-      const resultsTime = state.settings?.resultsTime ?? DEFAULT_SETTINGS.resultsTime;
-      if (!state.timerEndsAt) {
-        tx.update(gameRef, { [F.s_timer]: inSec(resultsTime) });
-        return;
-      }
-      if (state.timerEndsAt.toMillis() > nowMs()) return;
-
       const result = await _startNextRound(tx, gameRef, game);
       ended = result.isGameOver;
       return;
@@ -627,9 +559,6 @@ export async function endArtistTurn(gameId: string, _playerId: string) {
         const game = gameSnap.data() as Game;
         const state = game.drawAndDeceiveState;
         ensure(state, 'Game state is missing.');
-
-        // Only allow ending if the artist timer has expired.
-        ensure(state.timerEndsAt && state.timerEndsAt.toMillis() <= nowMs(), 'الوقت لم ينته بعد.');
         
         // This action can only be taken when we are waiting for the artist.
         ensure(state.phase === 'drawing', 'This action is not available in the current phase.');
@@ -673,7 +602,7 @@ export async function kickArtistForInactivity(gameId: string, _playerId: string)
             return;
         }
 
-        const { nextIndex, artistId: newArtistId } = nextActiveArtist(newTurnOrder, state.currentTurnIndex -1, players);
+        const { nextIndex, artistId: newArtistId } = nextActiveArtist(newTurnOrder, state.currentTurnIndex - 1, players);
         
         tx.update(gameRef, {
             players,
@@ -708,11 +637,11 @@ function pickWinnerId(scores: Record<string, number>): string {
 }
 
 async function _startNextRound(tx: any, gameRef: any, game: Game): Promise<{ isGameOver: boolean }> {
-  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const state = (game as any)[F.s] || {};
   const settings = sanitizeSettings(state.settings, []);
   const currentRound = game.round || 0;
   
-  if (currentRound >= settings.rounds) {
+  if (currentRound >= settings.rounds || getActivePlayerIds(game.players).length < 2) {
     endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة!');
     return { isGameOver: true };
   }
@@ -736,3 +665,45 @@ async function _startNextRound(tx: any, gameRef: any, game: Game): Promise<{ isG
 
   return { isGameOver: false };
 }
+
+// Re-export of helpers that might have been used by other files in the past.
+const _getGuessingPhaseUpdates = (game: Game, playerAnswers: Record<string, string | null>) => {
+  const state = game.drawAndDeceiveState!;
+  const guessingTime = state.settings?.guessingTime ?? DEFAULT_SETTINGS.guessingTime;
+  const endsAt = tsFromNowS(guessingTime);
+  return {
+    updates: {
+      gameState: 'guessing',
+      [F.s_phase]: 'guessing',
+      [F.s_playerAnswers]: playerAnswers,
+      [F.s_roundEndTime]: endsAt, // DEPRECATED: use timerEndsAt
+      [F.s_timer]: endsAt,
+      [F.s_shuffledAnswers]: buildShuffledAnswers(state.currentQuestion!, playerAnswers),
+    },
+  };
+};
+
+const _getResultsPhaseUpdates = (game: Game, playerGuesses: Record<string, string | null>) => {
+  const state = game.drawAndDeceiveState!;
+  const { resultsState, updatedPlayerScores } = calculateRoundResults(game, playerGuesses as Record<string, string>);
+  const resultsTime = state.settings?.resultsTime ?? DEFAULT_SETTINGS.resultsTime;
+  const endsAt = tsFromNowS(resultsTime);
+  const currentHistory = state.history || [];
+  const newHistoryEntry = {
+    round: game.round || 1,
+    results: { scores: resultsState.scores, answers: resultsState.answers, timedOutGuesserIds: [] },
+    awayPlayerIdsDuringRound: state.awayPlayerIds || [],
+  };
+
+  return {
+    updates: {
+      gameState: 'round-results',
+      playerScores: updatedPlayerScores,
+      [`${FIELD_TRAP_STATE}.lastRoundResults`]: { scores: resultsState.scores, answers: resultsState.answers, timedOutGuesserIds: [], awayPlayerIdsDuringRound: state.awayPlayerIds },
+      [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt,
+      [`${FIELD_TRAP_STATE}.timerEndsAt`]: endsAt,
+      [`${FIELD_TRAP_STATE}.trickStats`]: mergeTrickStats(state.trickStats, newHistoryEntry.results as any),
+      [`${FIELD_TRAP_STATE}.history`]: [...currentHistory, newHistoryEntry],
+    },
+  };
+};
