@@ -126,7 +126,6 @@ export async function createGameRoom(
   try {
     const gameId = generateGameId();
     const gameRef = doc(db, 'games', gameId);
-    const rateLimitRef = doc(db, 'rate_limits', userId);
 
     // Fetch player details before any write ops (keeps future transaction lean)
     const playerDetails = await getPlayerFromUserId(userId);
@@ -247,12 +246,9 @@ export async function createGameRoom(
     // Ensure the creator is not in any other lobby
     await removePlayerFromPreviousLobbies(userId, gameId);
 
-    // Create game, increment popularity, and update rate limit atomically.
+    // Create game, increment popularity.
     const statsRef = doc(db, 'game_settings', 'popularity');
     await runTransaction(db, async (tx) => {
-      // The security rule will enforce the rate limit.
-      // We just need to update the timestamp here.
-      tx.set(rateLimitRef, { 'create_game_room': serverTimestamp() }, { merge: true });
       tx.set(statsRef, { [gameType]: increment(1) }, { merge: true });
       tx.set(gameRef, newGame);
     });
@@ -263,7 +259,7 @@ export async function createGameRoom(
     console.error('Error in createGameRoom:', typed);
     let errorMessage = 'حدث خطأ غير متوقع عند إنشاء الغرفة.';
     if (typed.message.includes('permission-denied')) {
-        errorMessage = `لا يمكنك إنشاء غرفة جديدة الآن. الرجاء الانتظار ${CREATE_GAME_RATE_LIMIT_SECONDS} ثانية.`
+        errorMessage = `لا يمكنك إنشاء غرفة جديدة الآن. الرجاء الانتظار.`
     }
     return { error: errorMessage };
   }

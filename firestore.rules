@@ -3,79 +3,11 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    // Corrected function to be more robust against missing data
-    function isAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-    }
-
-    // -- Game Rooms --
-    match /games/{gameId} {
-      allow read: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (resource.data.hostId == request.auth.uid || request.auth.uid in resource.data.playerUids);
-    }
-    
-    // -- Users Collection --
-    // This allows any signed-in user to GET any other user's document,
-    // which is needed for functions like isAdmin() and for the client to read profiles.
-    match /users/{document=**} {
-        allow get: if isSignedIn();
-    }
-
-    // -- Specific User Document --
-    // This controls who can create, update, delete, or list documents within the users collection.
-    match /users/{userId} {
-      // Any signed-in user can list other users (e.g., for leaderboards)
-      allow list: if isSignedIn();
-      
-      // Allow users to create their own profile, but not impersonate others.
-      allow create: if isOwner(userId);
-
-      // Users can only update their own profile.
-      allow update: if isOwner(userId);
-      
-      // Prevent users from deleting their own accounts through this rule.
-      allow delete: if false; 
-    }
-
-    // -- Game Settings --
-    // More granular rules for game settings.
-    match /game_settings/{settingId} {
-        // Anyone can read any setting document.
-        allow read: if true;
-
-        // Admins can write to any settings document EXCEPT popularity.
-        allow write: if isAdmin() && settingId != 'popularity';
-    }
-
-    // Specific rule for the popularity document to allow incrementing by any user.
-    match /game_settings/popularity {
-        allow write: if isSignedIn();
-    }
-    
-    // -- Complaints (Rate-Limited) --
-    match /complaints/{complaintId} {
-      allow read: if isAdmin();
-      allow create: if isSignedIn()
-                    && request.resource.data.userId == request.auth.uid
-                    && request.time - get(/databases/$(database)/documents/rate_limits/$(request.auth.uid)).data.submit_complaint > duration.value(12, 'h');
-    }
-
-    // -- Rate Limiting Collection --
-    // Users can only write to their own rate-limit document.
-    match /rate_limits/{userId} {
-      allow write: if isOwner(userId);
-      allow read: if isOwner(userId) || isAdmin();
+    // WARNING: These rules are insecure and allow anyone to read and write to your database.
+    // They should only be used for debugging purposes to isolate issues.
+    // Replace them with secure rules before deploying to production.
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }
