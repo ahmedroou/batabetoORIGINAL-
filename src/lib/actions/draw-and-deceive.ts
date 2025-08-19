@@ -23,7 +23,7 @@
  */
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, type Transaction } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, type Transaction, updateDoc, increment } from 'firebase/firestore';
 import type { Game, Player, DrawAndDeceiveState, DrawAndDeceiveRoundResult } from '@/types';
 import { shuffle, safeCompareStrings } from './helpers';
 import { distributeEndOfGameAwards } from './admin/users';
@@ -312,16 +312,14 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
     ensure(state.artistId === playerId, 'Only the artist can submit a drawing.');
     ensure(state.correctAnswer, 'The correct answer must be submitted before the drawing.');
 
-    const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
-
+    // Just update the drawing URL, don't change the phase.
+    // The phase change is handled by endArtistTurn or by all players submitting traps.
     tx.update(gameRef, {
-      [F.s_phase]: 'trapping',
       [F.s_drawing]: drawingDataUrl || null,
-      [F.s_timer]: inSec(trappingTime),
-      [F.s_kickVote]: null, // Cancel any active kick vote upon successful submission
     });
   });
 }
+
 
 /* ---------------------------- Trapping Phase ------------------------- */
 export async function submitTrap(gameId: string, playerId: string, trap: string) {
@@ -383,15 +381,10 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
     const gameSnap = await tx.get(gameRef);
     ensure(gameSnap.exists(), 'Game not found.');
     const game = gameSnap.data() as Game;
+    if (game.gameState !== 'guessing') return;
 
     const state = game.drawAndDeceiveState;
     ensure(state, 'Game state not initialized.');
-
-    // If already advanced, quietly noop if user's guess was already recorded
-    if (state.phase !== 'guessing') {
-      if (state.playerGuesses?.[playerId] !== undefined) return;
-      throw new Error('Not in guessing phase.');
-    }
 
     ensure(state.artistId !== playerId, 'Artist cannot guess.');
     ensure(!state.playerGuesses[playerId], 'Guess already submitted.');
@@ -615,8 +608,8 @@ export async function handleTimeout(gameId: string, hostId: string) {
       }
       if (state.timerEndsAt.toMillis() > nowMs()) return;
 
-      const { isGameOver } = _startNextRound(tx, gameRef, game);
-      ended = isGameOver;
+      const result = await _startNextRound(tx, gameRef, game);
+      ended = result.isGameOver;
       return;
     }
   });
@@ -625,6 +618,84 @@ export async function handleTimeout(gameId: string, hostId: string) {
     await distributeEndOfGameAwards(gameId);
   }
 }
+
+export async function endArtistTurn(gameId: string, _playerId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (tx) => {
+        const gameSnap = await tx.get(gameRef);
+        ensure(gameSnap.exists(), 'Game not found.');
+        const game = gameSnap.data() as Game;
+        const state = game.drawAndDeceiveState;
+        ensure(state, 'Game state is missing.');
+
+        // Only allow ending if the artist timer has expired.
+        ensure(state.timerEndsAt && state.timerEndsAt.toMillis() <= nowMs(), 'الوقت لم ينته بعد.');
+        
+        // This action can only be taken when we are waiting for the artist.
+        ensure(state.phase === 'drawing', 'This action is not available in the current phase.');
+
+        const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
+        tx.update(gameRef, {
+            [F.s_phase]: 'trapping',
+            // drawingDataUrl is already the latest saved version, no change needed.
+            [F.s_timer]: inSec(trappingTime),
+        });
+    });
+}
+
+export async function kickArtistForInactivity(gameId: string, _playerId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    let ended = false;
+    await runTransaction(db, async (tx) => {
+        const gameSnap = await tx.get(gameRef);
+        ensure(gameSnap.exists(), 'Game not found.');
+        const game = gameSnap.data() as Game;
+        const state = game.drawAndDeceiveState;
+        ensure(state, 'Game state is missing.');
+        
+        ensure(state.timerEndsAt && state.timerEndsAt.toMillis() <= nowMs(), 'الوقت لم ينته بعد.');
+        ensure(state.phase === 'drawing', 'This action is not available.');
+
+        const artistId = state.artistId!;
+        const players = game.players;
+        
+        // Kick the artist
+        const artistIndex = players.findIndex(p => p.id === artistId);
+        if (artistIndex !== -1) {
+            players[artistIndex]!.status = 'left'; 
+        }
+
+        const newTurnOrder = state.turnOrder.filter(id => id !== artistId);
+
+        if (newTurnOrder.length < 2) {
+            endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة لعدم وجود لاعبين كافيين.');
+            ended = true;
+            return;
+        }
+
+        const { nextIndex, artistId: newArtistId } = nextActiveArtist(newTurnOrder, state.currentTurnIndex -1, players);
+        
+        tx.update(gameRef, {
+            players,
+            [F.s_turnOrder]: newTurnOrder,
+            [F.s_phase]: 'drawing',
+            [F.s_artistId]: newArtistId,
+            [F.s_currentTurnIndex]: nextIndex,
+            [F.s_drawing]: null,
+            [F.s_correct]: null,
+            [F.s_traps]: {},
+            [F.s_guesses]: {},
+            [F.s_answers]: [],
+            [F.s_kickVote]: null,
+            [F.s_timer]: inSec(state.settings?.writingTime ?? DEFAULT_SETTINGS.writingTime),
+        });
+    });
+
+    if (ended) {
+        await distributeEndOfGameAwards(gameId);
+    }
+}
+
 
 /* ------------------------- Next Round / Finish ----------------------- */
 function pickWinnerId(scores: Record<string, number>): string {
@@ -636,15 +707,11 @@ function pickWinnerId(scores: Record<string, number>): string {
     [0]![0];
 }
 
-function _startNextRound(
-  tx: Transaction,
-  gameRef: ReturnType<typeof doc>,
-  game: Game
-): { isGameOver: boolean } {
-  const state = game.drawAndDeceiveState!;
-  const settings = state.settings;
-  const currentRound = state.round || 1; // state.round starts at 1
-
+async function _startNextRound(tx: any, gameRef: any, game: Game): Promise<{ isGameOver: boolean }> {
+  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const settings = sanitizeSettings(state.settings, []);
+  const currentRound = game.round || 0;
+  
   if (currentRound >= settings.rounds) {
     endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة!');
     return { isGameOver: true };
@@ -653,9 +720,9 @@ function _startNextRound(
   const { nextIndex, artistId } = nextActiveArtist(state.turnOrder, state.currentTurnIndex, game.players);
 
   tx.update(gameRef, {
-    [F.gameState]: 'drawing',
+    gameState: 'drawing',
     [F.s_phase]: 'drawing',
-    [F.s_round]: currentRound + 1,
+    round: currentRound + 1,
     [F.s_currentTurnIndex]: nextIndex,
     [F.s_artistId]: artistId,
     [F.s_drawing]: null,
@@ -664,7 +731,7 @@ function _startNextRound(
     [F.s_guesses]: {},
     [F.s_answers]: [],
     [F.s_kickVote]: null,
-    [F.s_timer]: inSec(settings.writingTime ?? DEFAULT_SETTINGS.writingTime), // new artist writing window
+    [F.s_timer]: inSec(settings.writingTime ?? DEFAULT_SETTINGS.writingTime),
   });
 
   return { isGameOver: false };

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
@@ -137,7 +136,7 @@ export function DrawingCanvas({
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
       const dctx = getDisplayCtx();
-      dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      dctx.setTransform(dpr, 0, 0, 0, dpr, 0, 0);
       dctx.clearRect(0, 0, size.w, size.h);
       dctx.save();
       dctx.translate(pan.x, pan.y);
@@ -652,6 +651,7 @@ export function DrawingCanvas({
 
     // تعبئة
     if (tool === 'fill') {
+      if (!backingRef.current) return;
       const ptPx = cssToPx(ptCss);
       const rgba = hexToRgba(color, opacity);
       floodFill(ptPx, rgba, fillTolerance);
@@ -1021,7 +1021,7 @@ export function DrawingCanvas({
       {/* سطح الرسم + الشبكة */}
       <div
         className={cn(
-          'relative w-full rounded-xl overflow-hidden border bg-white flex-grow',
+          'relative w-full rounded-xl overflow-hidden border bg-white flex-grow h-full',
           disabled && 'pointer-events-none opacity-75',
           cursorClass
         )}
