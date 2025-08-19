@@ -1,244 +1,343 @@
 'use client';
 
-import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useRef, memo } from 'react';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import type { Game, Player } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
+import { Label } from '@/components/ui/label';
+import { Pen, Eraser, Minus, Square, Circle, Undo2, Redo, Trash2 } from 'lucide-react';
 
 // ====================================================================================
-// Type Definitions (Internal to this component)
+// Type Definitions
 // ====================================================================================
+type Tool = 'pen' | 'eraser' | 'line' | 'rect' | 'circle';
 
-type Tool =
-  | 'pen' | 'marker' | 'eraser'
-  | 'line' | 'rect' | 'circle' | 'triangle' | 'ellipse'
-  | 'text' | 'eyedropper' | 'pan' | 'fill';
+interface Point {
+  x: number;
+  y: number;
+}
 
 export interface DrawingCanvasRef {
   undo: () => void;
   redo: () => void;
   clearAll: () => void;
-  downloadPng: () => void;
-  copyToClipboard: () => Promise<void>;
-  importImage: (file: File) => void;
+  getDrawingDataUrl: () => string | undefined;
+}
+
+interface DrawingCanvasProps {
+  className?: string;
+  disabled?: boolean;
+  onDrawEnd: (dataUrl: string, historyState: { canUndo: boolean; canRedo: boolean }) => void;
+  initialImage?: string | null;
 }
 
 // ====================================================================================
-// DrawingCanvas Component
-// Manages the actual <canvas> elements and all drawing logic.
+// Drawing Canvas & Toolbar Component (Combined)
 // ====================================================================================
-
-const DrawingCanvas = React.forwardRef<DrawingCanvasRef, any>(({
+const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
   className,
   disabled = false,
   onDrawEnd,
   initialImage = null,
-  maxHistory = 60,
-  tool,
-  color,
-  thickness,
-  opacity,
-  shapeFill,
-  textValue,
-  textSize,
-  fillTolerance,
-  showGrid,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const displayRef = useRef<HTMLCanvasElement>(null);
   const backingRef = useRef<HTMLCanvasElement | null>(null);
 
-  const [size, setSize] = useState({ w: 800, h: 450 });
-  const [dpr, setDpr] = useState<number>(1);
+  // Drawing State
+  const [isDrawing, setIsDrawing] = useState(false);
+  const lastPointRef = useRef<Point | null>(null);
+  const startPointRef = useRef<Point | null>(null);
+  
+  // Toolbar State
+  const [tool, setTool] = useState<Tool>('pen');
+  const [color, setColor] = useState<string>('#000000');
+  const [thickness, setThickness] = useState<number>(5);
+
+  // History State
   const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const historyIndexRef = useRef<number>(-1);
 
-  useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
+  const getRelativePoint = (e: React.PointerEvent): Point | null => {
+    const canvas = displayRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+  };
 
-  const getDisplayCtx = useCallback(() => displayRef.current!.getContext('2d')!, []);
-  const getBackingCtx = useCallback(() => {
-    if (!backingRef.current) {
-      const c = document.createElement('canvas');
-      c.width = Math.floor(size.w * dpr);
-      c.height = Math.floor(size.h * dpr);
-      backingRef.current = c;
-    }
-    return backingRef.current.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
-  }, [dpr, size.h, size.w]);
-
+  const getDisplayCtx = useCallback(() => displayRef.current?.getContext('2d'), []);
+  const getBackingCtx = useCallback(() => backingRef.current?.getContext('2d'), []);
+  
   const renderAll = useCallback(() => {
-    if (!displayRef.current || !backingRef.current) return;
     const dctx = getDisplayCtx();
+    const bcan = backingRef.current;
+    if (!dctx || !bcan || !displayRef.current) return;
     dctx.clearRect(0, 0, displayRef.current.width, displayRef.current.height);
-    if(backingRef.current.width > 0 && backingRef.current.height > 0) {
-        dctx.drawImage(backingRef.current, 0, 0);
+    if (bcan.width > 0 && bcan.height > 0) {
+      dctx.drawImage(bcan, 0, 0);
     }
   }, [getDisplayCtx]);
 
-  const setupCanvases = useCallback((keepContent = true) => {
-    if (!displayRef.current) return;
-    const devicePixelRatio = Math.max(1, window.devicePixelRatio || 1);
-    setDpr(devicePixelRatio);
-    const disp = displayRef.current;
-    disp.width = Math.floor(size.w * devicePixelRatio);
-    disp.height = Math.floor(size.h * devicePixelRatio);
-    disp.style.width = `${size.w}px`;
-    disp.style.height = `${size.h}px`;
-
-    const old = backingRef.current;
-    const newBacking = document.createElement('canvas');
-    newBacking.width = disp.width;
-    newBacking.height = disp.height;
-    if (keepContent && old && old.width > 0 && old.height > 0) {
-      const nctx = newBacking.getContext('2d')!;
-      nctx.drawImage(old, 0, 0, old.width, old.height, 0, 0, newBacking.width, newBacking.height);
-    }
-    backingRef.current = newBacking;
-    renderAll();
-  }, [size.w, size.h, renderAll]);
+  const pushHistory = useCallback(() => {
+    const bcan = backingRef.current;
+    if (!bcan) return;
+    const dataUrl = bcan.toDataURL('image/png');
+    const newHistory = history.slice(0, historyIndexRef.current + 1);
+    newHistory.push(dataUrl);
+    setHistory(newHistory);
+    historyIndexRef.current = newHistory.length - 1;
+    onDrawEnd?.(dataUrl, { canUndo: historyIndexRef.current > 0, canRedo: false });
+  }, [history, onDrawEnd]);
   
+    // Setup and resize handler
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    const disp = displayRef.current;
+    if (!disp) return;
     const ro = new ResizeObserver(entries => {
       for (const entry of entries) {
-        setSize({ w: Math.floor(entry.contentRect.width), h: Math.floor(entry.contentRect.height) });
+        const { width, height } = entry.contentRect;
+        const dpr = window.devicePixelRatio || 1;
+        
+        const oldContent = backingRef.current;
+
+        disp.width = width * dpr;
+        disp.height = height * dpr;
+        const dctx = disp.getContext('2d');
+        dctx?.scale(dpr, dpr);
+        
+        const newBacking = document.createElement('canvas');
+        newBacking.width = disp.width;
+        newBacking.height = disp.height;
+        const newCtx = newBacking.getContext('2d');
+
+        if (newCtx && oldContent && oldContent.width > 0 && oldContent.height > 0) {
+          newCtx.drawImage(oldContent, 0, 0);
+        }
+        backingRef.current = newBacking;
+        
+        renderAll();
       }
     });
-    ro.observe(el);
+    ro.observe(disp);
     return () => ro.disconnect();
-  }, []);
+  }, [renderAll]);
 
+  // Initial image loader
   useEffect(() => {
-    setupCanvases(true);
-  }, [size.w, size.h, setupCanvases]);
-
-  const pushHistory = useCallback((customUrl?: string) => {
-    if (!backingRef.current) return;
-    const dataUrl = customUrl ?? backingRef.current.toDataURL('image/png');
-    setHistory(prev => {
-      const idx = Math.min(Math.max(historyIndexRef.current, -1), prev.length - 1);
-      const next = [...prev.slice(0, idx + 1), dataUrl].slice(-maxHistory);
-      const newIndex = next.length - 1;
-      historyIndexRef.current = newIndex;
-      setHistoryIndex(newIndex);
-      onDrawEnd?.(dataUrl, { canUndo: newIndex > 0, canRedo: false });
-      return next;
-    });
-  }, [maxHistory, onDrawEnd]);
-  
-  const undo = useCallback(() => {
-    if (historyIndexRef.current <= 0) return;
-    const newIndex = historyIndexRef.current - 1;
-    historyIndexRef.current = newIndex;
-    setHistoryIndex(newIndex);
-    const img = new Image();
-    img.src = history[newIndex]!;
-    img.onload = () => {
+    if (initialImage) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = initialImage;
+      img.onload = () => {
+        const bctx = getBackingCtx();
+        if (bctx && backingRef.current) {
+          bctx.clearRect(0, 0, backingRef.current.width, backingRef.current.height);
+          bctx.drawImage(img, 0, 0, backingRef.current.width, backingRef.current.height);
+          pushHistory();
+          renderAll();
+        }
+      };
+    } else {
       const bctx = getBackingCtx();
-      bctx.clearRect(0, 0, backingRef.current!.width, backingRef.current!.height);
-      bctx.drawImage(img, 0, 0);
-      renderAll();
-      onDrawEnd?.(history[newIndex]!, { canUndo: newIndex > 0, canRedo: true });
-    };
-  }, [history, onDrawEnd, renderAll, getBackingCtx]);
-
-  const redo = useCallback(() => {
-    if (historyIndexRef.current >= history.length - 1) return;
-    const newIndex = historyIndexRef.current + 1;
-    historyIndexRef.current = newIndex;
-    setHistoryIndex(newIndex);
-    const img = new Image();
-    img.src = history[newIndex]!;
-    img.onload = () => {
-      const bctx = getBackingCtx();
-      bctx.clearRect(0, 0, backingRef.current!.width, backingRef.current!.height);
-      bctx.drawImage(img, 0, 0);
-      renderAll();
-      onDrawEnd?.(history[newIndex]!, { canUndo: true, canRedo: newIndex < history.length - 1 });
-    };
-  }, [history, onDrawEnd, renderAll, getBackingCtx]);
-  
-  const clearAll = useCallback(() => {
-    const bctx = getBackingCtx();
-    bctx.clearRect(0, 0, backingRef.current!.width, backingRef.current!.height);
-    setHistory([]);
-    setHistoryIndex(-1);
-    historyIndexRef.current = -1;
-    pushHistory(backingRef.current!.toDataURL('image/png'));
-    renderAll();
-  }, [getBackingCtx, pushHistory, renderAll]);
-  
-  const downloadPng = useCallback(() => {
-    if (!backingRef.current) return;
-    const link = document.createElement('a');
-    link.download = `drawing-${Date.now()}.png`;
-    link.href = backingRef.current!.toDataURL('image/png');
-    link.click();
-  }, []);
-
-  const copyToClipboard = useCallback(async () => {
-    if (!backingRef.current) return;
-    try {
-      const blob = await new Promise<Blob | null>(res => backingRef.current!.toBlob(res, 'image/png'));
-      if (blob && navigator.clipboard?.write) {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      if (bctx && backingRef.current) {
+        bctx.clearRect(0, 0, backingRef.current.width, backingRef.current.height);
+        pushHistory();
+        renderAll();
       }
-    } catch { }
-  }, []);
+    }
+  }, [initialImage, getBackingCtx, pushHistory, renderAll]);
   
-  const importImage = useCallback((file: File) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      const bctx = getBackingCtx();
-      bctx.clearRect(0, 0, backingRef.current!.width, backingRef.current!.height);
-      bctx.drawImage(img, 0, 0);
-      pushHistory();
-      renderAll();
-      URL.revokeObjectURL(url);
+  const drawLine = (from: Point, to: Point, ctx: CanvasRenderingContext2D) => {
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+  };
+  
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (disabled || e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDrawing(true);
+    const point = getRelativePoint(e);
+    if (!point) return;
+    lastPointRef.current = point;
+    startPointRef.current = point;
+  };
+  
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDrawing || disabled) return;
+    const point = getRelativePoint(e);
+    if (!point || !lastPointRef.current) return;
+    
+    const dctx = getDisplayCtx();
+    const bctx = getBackingCtx();
+    if (!dctx || !bctx) return;
+
+    const currentTool = tool;
+
+    const applyStyle = (ctx: CanvasRenderingContext2D) => {
+        ctx.lineWidth = thickness;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = color;
+        ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
     };
-    img.src = url;
-  }, [getBackingCtx, pushHistory, renderAll]);
+    
+    applyStyle(dctx);
+    applyStyle(bctx);
+
+    if (currentTool === 'pen' || currentTool === 'eraser') {
+      drawLine(lastPointRef.current, point, bctx);
+      renderAll(); // redraw backing canvas to display
+    } else {
+      renderAll(); // clear display canvas
+      if (currentTool === 'line') {
+          drawLine(startPointRef.current!, point, dctx);
+      } else if (currentTool === 'rect') {
+          dctx.strokeRect(startPointRef.current!.x, startPointRef.current!.y, point.x - startPointRef.current!.x, point.y - startPointRef.current!.y);
+      } else if (currentTool === 'circle') {
+          dctx.beginPath();
+          const radius = Math.hypot(point.x - startPointRef.current!.x, point.y - startPointRef.current!.y);
+          dctx.arc(startPointRef.current!.x, startPointRef.current!.y, radius, 0, 2 * Math.PI);
+          dctx.stroke();
+      }
+    }
+    
+    lastPointRef.current = point;
+  };
+  
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!isDrawing) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    setIsDrawing(false);
+    
+    const bctx = getBackingCtx();
+    const point = lastPointRef.current;
+    const start = startPointRef.current;
+    
+    if (!bctx || !point || !start) return;
+
+    if (tool !== 'pen' && tool !== 'eraser') {
+        const applyStyle = (ctx: CanvasRenderingContext2D) => {
+          ctx.lineWidth = thickness;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = color;
+          ctx.globalCompositeOperation = 'source-over';
+        };
+        applyStyle(bctx);
+        if (tool === 'line') {
+            drawLine(start, point, bctx);
+        } else if (tool === 'rect') {
+            bctx.strokeRect(start.x, start.y, point.x - start.x, point.y - start.y);
+        } else if (tool === 'circle') {
+            bctx.beginPath();
+            const radius = Math.hypot(point.x - start.x, point.y - start.y);
+            bctx.arc(start.x, start.y, radius, 0, 2 * Math.PI);
+            bctx.stroke();
+        }
+        renderAll();
+    }
+    
+    lastPointRef.current = null;
+    startPointRef.current = null;
+    pushHistory();
+  };
 
   React.useImperativeHandle(ref, () => ({
-    undo, redo, clearAll, downloadPng, copyToClipboard, importImage
-  }), [undo, redo, clearAll, downloadPng, copyToClipboard, importImage]);
-  
-  useEffect(() => {
-    const bctx = getBackingCtx();
-    bctx.clearRect(0, 0, backingRef.current!.width, backingRef.current!.height);
-    if (!initialImage) {
-      pushHistory(backingRef.current!.toDataURL('image/png'));
-      renderAll();
-      return;
-    }
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = initialImage;
-    img.onload = () => {
-      bctx.drawImage(img, 0, 0);
+    undo: () => {
+      if (historyIndexRef.current <= 0) return;
+      const newIndex = historyIndexRef.current - 1;
+      const img = new Image();
+      img.src = history[newIndex]!;
+      img.onload = () => {
+        const bctx = getBackingCtx()!;
+        bctx.clearRect(0,0,bctx.canvas.width, bctx.canvas.height);
+        bctx.drawImage(img,0,0);
+        renderAll();
+        historyIndexRef.current = newIndex;
+        onDrawEnd?.(history[newIndex]!, { canUndo: newIndex > 0, canRedo: true });
+      };
+    },
+    redo: () => {
+      if (historyIndexRef.current >= history.length - 1) return;
+      const newIndex = historyIndexRef.current + 1;
+      const img = new Image();
+      img.src = history[newIndex]!;
+      img.onload = () => {
+        const bctx = getBackingCtx()!;
+        bctx.clearRect(0,0,bctx.canvas.width, bctx.canvas.height);
+        bctx.drawImage(img,0,0);
+        renderAll();
+        historyIndexRef.current = newIndex;
+        onDrawEnd?.(history[newIndex]!, { canUndo: true, canRedo: newIndex < history.length - 1 });
+      };
+    },
+    clearAll: () => {
+      const bctx = getBackingCtx()!;
+      bctx.clearRect(0, 0, bctx.canvas.width, bctx.canvas.height);
       pushHistory();
       renderAll();
-    };
-  }, [initialImage, getBackingCtx, pushHistory, renderAll]);
-
-  // Drawing logic placeholder
-  const handlePointerDown = (e: React.PointerEvent) => { /* Drawing logic here */ };
-  const handlePointerMove = (e: React.PointerEvent) => { /* Drawing logic here */ };
-  const handlePointerUp = () => { /* Drawing logic here */ };
+    },
+    getDrawingDataUrl: () => backingRef.current?.toDataURL('image/png'),
+  }));
 
   return (
-    <div ref={containerRef} className={cn("w-full h-full relative touch-none bg-white", className)}>
-      <canvas
-        ref={displayRef}
-        className="absolute inset-0"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
-      />
+    <div ref={containerRef} className={cn("w-full h-full flex flex-col gap-2 bg-gray-100 dark:bg-gray-800", className)}>
+        {/* Canvas Area */}
+        <div className="flex-grow w-full rounded-lg overflow-hidden border bg-white relative">
+             <canvas
+                ref={displayRef}
+                className="absolute inset-0 touch-none"
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerUp}
+            />
+        </div>
+
+        {/* Toolbar Area */}
+        <div className="shrink-0 w-full p-2 rounded-lg border bg-background/80 backdrop-blur-sm">
+            <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                    {TOOL_CONFIG.map(({ tool: t, icon: Icon }) => (
+                        <Button key={t} variant={tool === t ? 'secondary' : 'outline'} size="icon" onClick={() => setTool(t)}>
+                            <Icon />
+                        </Button>
+                    ))}
+                    <div className="w-px h-8 bg-border" />
+                    <Button variant="outline" size="icon" onClick={() => ref.current?.undo()} disabled={!onDrawEnd}><Undo2 /></Button>
+                    <Button variant="outline" size="icon" onClick={() => ref.current?.redo()} disabled={!onDrawEnd}><Redo /></Button>
+                    <Button variant="destructive" size="icon" onClick={() => ref.current?.clearAll()}><Trash2 /></Button>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                    {COLORS.map(c => (
+                        <button key={c} onClick={() => setColor(c)} className={cn("w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 active:scale-95", color === c ? 'border-primary' : 'border-transparent')} style={{ backgroundColor: c }} />
+                    ))}
+                    <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-12 h-10 p-1" />
+                </div>
+                <div className="flex items-center gap-3 px-4">
+                    <Label>السماكة</Label>
+                    <Slider value={[thickness]} onValueChange={([v]) => setThickness(v)} max={50} step={1} />
+                </div>
+            </div>
+        </div>
     </div>
   );
 });
 DrawingCanvas.displayName = 'DrawingCanvas';
+export default DrawingCanvas;
+
+const TOOL_CONFIG: { tool: Tool, icon: React.ElementType }[] = [
+  { tool: 'pen', icon: Pen },
+  { tool: 'eraser', icon: Eraser },
+  { tool: 'line', icon: Minus },
+  { tool: 'rect', icon: Square },
+  { tool: 'circle', icon: Circle },
+];
+
+const COLORS = ['#000000', '#EF4444', '#3B82F6', '#22C55E', '#FBBF24', '#A855F7', '#EC4899', '#FFFFFF'];
