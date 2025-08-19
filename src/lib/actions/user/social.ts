@@ -505,8 +505,8 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
             return sortedRanks[sortedRanks.length - 1] || null;
         };
 
-        const actorRank = getRank(actor.leaderboardPoints, allRanks);
-        const targetRank = getRank(target.leaderboardPoints, allRanks);
+        const actorRank = getRank(actor.leaderboardPoints || 0, allRanks);
+        const targetRank = getRank(target.leaderboardPoints || 0, allRanks);
         
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if (actorRank.threshold <= targetRank.threshold) throw new Error("لا يمكنك معاقبة لاعب من نفس طبقتك أو أعلى.");
@@ -528,7 +528,7 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
              const protectorDoc = await transaction.get(protectorRef);
              if (protectorDoc.exists()) {
                 const protector = protectorDoc.data() as UserProfile;
-                const protectorRank = getRank(protector.leaderboardPoints, allRanks);
+                const protectorRank = getRank(protector.leaderboardPoints || 0, allRanks);
 
                 if (protectorRank && actorRank!.threshold <= protectorRank.threshold) {
                      if ((protector.honorPoints || 0) >= 2) {
@@ -540,6 +540,11 @@ export async function forceAvatarChange(actorId: string, targetId: string, avata
              }
         }
         
+        const avatarRevert = target.originalAvatarToRevert;
+        if (avatarRevert && avatarRevert.until && new Date((avatarRevert.until as any).toDate()) > new Date()) {
+          throw new Error('هذا اللاعب يخضع بالفعل لعقوبة تغيير الصورة.');
+        }
+
         transaction.update(actorRef, {
             honorPoints: increment(-honorCost),
             [`lastPunishmentTimestamp.${targetId}`]: serverTimestamp(),
