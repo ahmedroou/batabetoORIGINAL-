@@ -1,3 +1,4 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -435,7 +436,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
 /* ---------------------- Timeout & Round Progression ------------------ */
 export async function handleTimeout(gameId: string, callerId: string) {
-    const gameRef = doc(db, "games", gameId);
+    const gameRef = doc(db, 'games', gameId);
     let isGameOver = false;
 
     await runTransaction(db, async (tx) => {
@@ -448,9 +449,10 @@ export async function handleTimeout(gameId: string, callerId: string) {
             return;
         }
         
-        const activePlayers = getActivePlayerIds(game.players);
+        // Caller doesn't have to be host, timeout is authoritative
+        tx.update(gameRef, { [`${F.s_timer}`]: deleteField() });
         
-        switch (state.phase) {
+        switch (game.gameState) {
             case 'drawing':
                 tx.update(gameRef, { 
                     [F.s_phase]: 'trapping', 
@@ -468,21 +470,37 @@ export async function handleTimeout(gameId: string, callerId: string) {
                  break;
             case 'guessing':
                  const playerGuesses = {...state.playerGuesses};
-                 activePlayers.forEach(pId => {
-                     if(pId !== state.artistId && !playerGuesses[pId]){
-                         playerGuesses[pId] = TIMEOUT_TOKEN;
-                     }
+                 getActiveNonArtistPlayers(game, state.artistId!).forEach(p => {
+                     if(!playerGuesses[p.id]) playerGuesses[p.id] = TIMEOUT_TOKEN;
                  });
                  computeAndEnterResults(tx, gameRef, {...game, drawAndDeceiveState: {...state, playerGuesses}});
                 break;
             case 'results':
-                const res = await _startNextRound(tx, gameRef, game);
-                isGameOver = res.isGameOver;
+                const result = await _startNextRound(tx, gameRef, game);
+                isGameOver = result.isGameOver;
                 break;
         }
     });
 
     if (isGameOver) {
+        await distributeEndOfGameAwards(gameId);
+    }
+}
+
+export async function nextRound(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    let isGameOver = false;
+    await runTransaction(db, async (tx) => {
+        const snap = await tx.get(gameRef);
+        ensure(snap.exists(), 'اللعبة غير موجودة.');
+        const game = snap.data() as Game;
+        ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
+        ensure(game.gameState === 'results', 'لا يمكنك بدء جولة جديدة الآن.');
+        const result = await _startNextRound(tx, gameRef, game);
+        isGameOver = result.isGameOver;
+    });
+
+    if(isGameOver) {
         await distributeEndOfGameAwards(gameId);
     }
 }

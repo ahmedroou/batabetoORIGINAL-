@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '../../PlayerAvatar';
-import { handleTimeout } from '@/lib/actions/draw-and-deceive';
+import { nextRound, handleTimeout } from '@/lib/actions/draw-and-deceive';
 import { Loader2, ArrowRight, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -44,10 +44,11 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
   const isFinalRound = !!state && state.round >= state.settings.rounds;
 
   const handleNext = useCallback(async () => {
-    if (isSubmitting) return;
+    if (isSubmitting || !isHost) return;
     setIsSubmitting(true);
     try {
-      await handleTimeout(game.id, self.id);
+      // Use the new dedicated action for advancing the round
+      await nextRound(game.id, self.id);
     } catch (error: any) {
       toast({
         title: 'خطأ',
@@ -57,7 +58,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [game.id, self.id, isSubmitting, toast]);
+  }, [game.id, self.id, isHost, isSubmitting, toast]);
 
   // حراسة بسيطة في حال وصول الحالة بدون بيانات (سلامة فقط)
   if (!state || !results || !artist) {
@@ -131,7 +132,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
                 const authors = (item.authorIds ?? []).map((id) => playerById.get(id)?.name).filter(Boolean);
                 const guessers = (item.guesserIds ?? [])
                   .map((id) => playerById.get(id))
-                  .filter(Boolean) as Player[];
+                  .filter((p): p is Player => !!p);
 
                 return (
                   <motion.div
