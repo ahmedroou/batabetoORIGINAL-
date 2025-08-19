@@ -119,6 +119,7 @@ function docToUserProfile(docSnap: DocumentData, uid: string): UserProfile {
         originalAvatarToRevert,
         unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
         isPunished: !!data.isPunished,
+        punishmentsIssued: data.punishmentsIssued || 0,
     } as UserProfile;
 }
 

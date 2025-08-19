@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import { z } from 'zod';
 import { ALL_PERMISSIONS_RAW } from '../data/permissions';
@@ -161,7 +162,7 @@ export interface Article {
 }
 
 export type ChallengePrize = {
-    type: 'coins' | 'diamonds' | 'honorPoints';
+    type: 'coins' | 'diamonds' | 'honorPoints' | 'leaderboardPoints';
     value: number;
 };
 
@@ -241,7 +242,7 @@ export type { DEFAULT_EDUCATED_MERCHANT_CATEGORIES };
 // -------------------------------------------------------------
 export type PlayerRole = 'killer' | 'detective' | 'doctor' | 'soldier' | 'spy' | 'shapeshifter' | 'bomber' | 'civilian' | 'contestant';
 export type PlayerTeam = 'mafia' | 'good' | 'neutral' | 'red' | 'blue';
-export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison' | 'bankrupt';
+export type PlayerStatus = 'alive' | 'killed' | 'voted_out' | 'left' | 'executed' | 'in_prison' | 'bankrupt' | 'winner';
 
 export type ClanMemberRole = 'leader' | 'vice-leader' | 'member';
 
@@ -431,6 +432,7 @@ export interface GameKing {
     kingId: string;
     totalLeaderboardPoints?: number;
     updatedAt?: any;
+    gameType?: Game['gameType']; // Add gameType to the king object
 }
 
 // -------------------------------------------------------------
@@ -636,6 +638,7 @@ export interface DrawAndDeceiveState {
         guessingTime: number; 
         resultsTime: number; 
         rounds: number;
+        writingTime: number; // Added this setting
     };
     turnOrder: string[];
     currentTurnIndex: number;
@@ -662,6 +665,7 @@ export interface DrawAndDeceiveState {
         answers: DrawAndDeceiveRoundResult[];
     };
     timerEndsAt?: Timestamp;
+    history?: any[];
 }
 
 
@@ -886,6 +890,7 @@ export interface Game {
 
   // "Draw & Deceive" specific state
   drawAndDeceiveState?: DrawAndDeceiveState;
+  stateVersion?: number;
 }
 
 export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
