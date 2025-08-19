@@ -228,3 +228,38 @@ export function safeCompareStrings(str1: string, str2: string): number {
 export const tsFromNowS = (seconds: number): Timestamp => {
   return Timestamp.fromMillis(Date.now() + seconds * 1000);
 };
+
+/**
+ * Checks if a user is rate-limited for a specific action. Throws an error if they are.
+ * Updates the timestamp for the action if they are not rate-limited.
+ * @param tx The Firestore transaction.
+ * @param userRef The reference to the user document.
+ * @param actionType A unique key for the action (e.g., 'submit_complaint').
+ * @param limitSeconds The cooldown period in seconds.
+ */
+export async function checkRateLimit(
+  tx: FirebaseFirestore.Transaction,
+  userRef: FirebaseFirestore.DocumentReference,
+  actionType: string,
+  limitSeconds: number
+) {
+  const userDoc = await tx.get(userRef);
+  if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
+
+  const userData = userDoc.data();
+  const lastActionTimestamps = userData.lastActionTimestamp || {};
+  const lastActionTime = lastActionTimestamps[actionType] as Timestamp | undefined;
+
+  if (lastActionTime) {
+    const timeSinceLastAction = (Date.now() - lastActionTime.toMillis()) / 1000;
+    if (timeSinceLastAction < limitSeconds) {
+      const waitTime = Math.ceil(limitSeconds - timeSinceLastAction);
+      throw new Error(`يجب عليك الانتظار ${waitTime} ثانية قبل القيام بهذا الإجراء مرة أخرى.`);
+    }
+  }
+
+  // If not rate-limited, update the timestamp for this action.
+  tx.update(userRef, {
+    [`lastActionTimestamp.${actionType}`]: Timestamp.now()
+  });
+}

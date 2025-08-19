@@ -26,7 +26,7 @@ import type {
   ChallengeResult,
   Game as GameTypeAlias, // helpful aliasing for string literal types, if needed later
 } from '@/types';
-import { generateGameId } from '@/lib/actions/helpers';
+import { generateGameId, checkRateLimit } from '@/lib/actions/helpers';
 import { getTrapAnswerCategories, getEducatedMerchantCategories } from './admin/settings';
 import { getPlayerFromUserId } from './user/queries';
 import { getGamePopularityStats } from './stats';
@@ -43,6 +43,7 @@ type KickPlayerFromLobbyResult = { success: boolean; error?: string };
 
 const LOBBY_TTL_MS = 60 * 60 * 1000; // 1 hour
 const DEFAULT_MAX_PLAYERS = 8; // fallback when challenge rules are absent
+const CREATE_GAME_RATE_LIMIT_SECONDS = 60; // 1 minute
 
 // ============================================================
 // Utilities
@@ -124,6 +125,7 @@ export async function createGameRoom(
   try {
     const gameId = generateGameId();
     const gameRef = doc(db, 'games', gameId);
+    const userRef = doc(db, 'users', userId);
 
     // Fetch player details before any write ops (keeps future transaction lean)
     const playerDetails = await getPlayerFromUserId(userId);
@@ -245,6 +247,9 @@ export async function createGameRoom(
     // Create game + increment popularity in a single transaction
     const statsRef = doc(db, 'game_settings', 'popularity');
     await runTransaction(db, async (tx) => {
+      // Check rate limit before creating the game
+      await checkRateLimit(tx, userRef, 'create_game_room', CREATE_GAME_RATE_LIMIT_SECONDS);
+      
       tx.set(statsRef, { [gameType]: increment(1) }, { merge: true });
       tx.set(gameRef, newGame);
     });

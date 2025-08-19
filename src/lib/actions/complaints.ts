@@ -20,19 +20,30 @@ import {
 } from 'firebase/firestore';
 import type { Complaint, Game } from '@/types';
 import { sendSystemMail } from './user/mail';
+import { checkRateLimit } from './helpers';
 
+const COMPLAINT_RATE_LIMIT_SECONDS = 300; // 5 minutes
 
 export async function submitComplaint(data: Omit<Complaint, 'id' | 'status' | 'createdAt'>): Promise<{ success: boolean; error?: string }> {
     try {
-        await addDoc(collection(db, 'complaints'), {
-            ...data,
-            status: 'pending',
-            createdAt: serverTimestamp(),
+        const userRef = doc(db, 'users', data.userId);
+
+        await runTransaction(db, async (transaction) => {
+            // Check rate limit before proceeding
+            await checkRateLimit(transaction, userRef, 'submit_complaint', COMPLAINT_RATE_LIMIT_SECONDS);
+
+            const complaintRef = doc(collection(db, 'complaints'));
+            transaction.set(complaintRef, {
+                ...data,
+                status: 'pending',
+                createdAt: serverTimestamp(),
+            });
         });
+
         return { success: true };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error submitting complaint:", error);
-        return { success: false, error: 'فشل إرسال الشكوى.' };
+        return { success: false, error: error.message || 'فشل إرسال الشكوى.' };
     }
 }
 

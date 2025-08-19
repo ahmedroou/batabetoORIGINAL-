@@ -94,7 +94,7 @@ export interface Complaint {
   userName: string;
   userAvatar: string;
   type: ComplaintType;
-  status: 'pending' | 'resolved' | 'rejected';
+  status: 'pending' | 'resolved' | 'rejected' | 'approved';
   details: {
     game?: Game['gameType'];
     coins?: number;
@@ -400,12 +400,11 @@ export interface UserProfile {
   audienceGroups?: string[];
   humiliation?: Humiliation | null;
   allegiance?: ActiveAllegiance | null;
-  allegianceRequests?: AllegianceRequest[];
   taxDemands?: TaxDemand[];
   alliances?: Alliance[];
   decrees?: Decree[];
   duelChallenges?: DuelChallenge[];
-  lastPunishmentTimestamp?: Record<string, Date>; 
+  lastPunishmentTimestamp?: Record<string, Timestamp>; // Rate limiting
   originalAvatarToRevert?: { 
       id: string; 
       until: Date;
@@ -419,6 +418,7 @@ export interface UserProfile {
   punishmentsIssued?: number;
   matchHistory?: MatchHistoryItem[];
   updatedAt?: Timestamp; // for profile card
+  lastComplaintAt?: Timestamp; // For rate limiting complaints
 }
 
 export interface GameKing {
@@ -648,6 +648,7 @@ export interface DrawAndDeceiveState {
     shuffledAnswers: string[];
     
     kickVote?: {
+        active: boolean;
         votes: Record<string, 'kick' | 'spare'>;
         voterIds: string[];
     };
