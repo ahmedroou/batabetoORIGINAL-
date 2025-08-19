@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
@@ -986,7 +987,7 @@ export function DrawingCanvas({
   }, [tool, disabled]);
 
   return (
-    <div ref={containerRef} className={cn('w-full select-none flex flex-col gap-2', className)}>
+    <div ref={containerRef} className={cn('w-full h-full select-none flex flex-col gap-2', className)}>
       {/* شريط الأدوات */}
       <div className="p-2 rounded-2xl bg-white/75 dark:bg-slate-900/50 backdrop-blur shadow border border-border/50">
         {/* Desktop */}
