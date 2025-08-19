@@ -411,6 +411,28 @@ export async function removePlayerFromAudienceGroup(groupId: string, userId: str
   }
 }
 
+export async function adminSearchUsersInNews(searchTerm: string): Promise<UserProfile[]> {
+    if (!searchTerm.trim()) {
+      return [];
+    }
+    const lowerCaseSearchTerm = searchTerm.toLowerCase();
+  
+    try {
+      const usersRef = collection(db, 'users');
+      const querySnapshot = await getDocs(usersRef);
+      const users = querySnapshot.docs
+        .map((doc) => ({ uid: doc.id, ...doc.data() } as UserProfile))
+        .filter(
+          (user) =>
+            user.name?.toLowerCase().includes(lowerCaseSearchTerm) ||
+            user.email?.toLowerCase().includes(lowerCaseSearchTerm)
+        );
+      return users;
+    } catch (error) {
+      console.error('Error searching users:', error);
+      return [];
+    }
+}
 // -----------------------------
 // Maintenance
 // -----------------------------

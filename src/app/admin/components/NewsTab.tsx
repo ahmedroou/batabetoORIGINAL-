@@ -42,8 +42,8 @@ import {
   addPlayerToAudienceGroup,
   deleteAudienceGroup,
   removePlayerFromAudienceGroup,
+  adminSearchUsersInNews,
 } from "@/lib/actions/news";
-import { adminSearchUsers } from "@/lib/actions/admin/users";
 import { Timestamp } from "firebase/firestore";
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -399,7 +399,7 @@ export default function NewsTab() {
       return;
     }
     setIsLoadingUsers(true);
-    const users = await adminSearchUsers(term);
+    const users = await adminSearchUsersInNews(term);
     setSearchedUsers(users);
     setIsLoadingUsers(false);
   };
