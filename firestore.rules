@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -12,53 +13,69 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
-    function isRateLimited(action, duration) {
-      return !exists(/databases/$(database)/documents/rate_limits/$(request.auth.uid)) ||
-             request.time > get(/databases/$(database)/documents/rate_limits/$(request.auth.uid)).data[action] + duration;
+    // Corrected function to be more robust against missing data
+    function isAdmin() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
-    // Users collection
-    match /users/{userId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn(); // FIX: Allow clients to list/query users for leaderboards, etc.
-      allow write: if isOwner(userId);
-    }
-
-    // Games collection
+    // -- Game Rooms --
     match /games/{gameId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isRateLimited('create_game_room', duration.value(60, 's'));
-      allow update, delete: if isSignedIn() && (
-        resource.data.hostId == request.auth.uid ||
-        request.auth.uid in resource.data.playerUids
-      );
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.hostId == request.auth.uid || request.auth.uid in resource.data.playerUids);
     }
     
-    // Complaints collection
-    match /complaints/{complaintId} {
-        allow create: if isSignedIn() && isRateLimited('submit_complaint', duration.value(43200, 's'));
-        allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    // -- Users Collection --
+    // This allows any signed-in user to GET any other user's document,
+    // which is needed for functions like isAdmin() and for the client to read profiles.
+    match /users/{document=**} {
+        allow get: if isSignedIn();
     }
 
-    // Game Settings
-    match /game_settings/{settingId} {
-        // Only admins can write to general settings
-        allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-        
-        // Anyone can read settings like ranks, prices, etc.
-        allow get: if true;
-        allow list: if true; // FIX: Allow clients to list/query settings documents.
+    // -- Specific User Document --
+    // This controls who can create, update, delete, or list documents within the users collection.
+    match /users/{userId} {
+      // Any signed-in user can list other users (e.g., for leaderboards)
+      allow list: if isSignedIn();
+      
+      // Allow users to create their own profile, but not impersonate others.
+      allow create: if isOwner(userId);
+
+      // Users can only update their own profile.
+      allow update: if isOwner(userId);
+      
+      // Prevent users from deleting their own accounts through this rule.
+      allow delete: if false; 
     }
-    
-    // Specifically allow non-admins to update popularity stats
+
+    // -- Game Settings --
+    // More granular rules for game settings.
+    match /game_settings/{settingId} {
+        // Anyone can read any setting document.
+        allow read: if true;
+
+        // Admins can write to any settings document EXCEPT popularity.
+        allow write: if isAdmin() && settingId != 'popularity';
+    }
+
+    // Specific rule for the popularity document to allow incrementing by any user.
     match /game_settings/popularity {
         allow write: if isSignedIn();
     }
     
-    // Rate limits can be written by anyone signed in
-    match /rate_limits/{userId} {
-      allow write: if isSignedIn() && isOwner(userId);
+    // -- Complaints (Rate-Limited) --
+    match /complaints/{complaintId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.time - get(/databases/$(database)/documents/rate_limits/$(request.auth.uid)).data.submit_complaint > duration.value(12, 'h');
     }
 
+    // -- Rate Limiting Collection --
+    // Users can only write to their own rate-limit document.
+    match /rate_limits/{userId} {
+      allow write: if isOwner(userId);
+      allow read: if isOwner(userId) || isAdmin();
+    }
   }
 }
