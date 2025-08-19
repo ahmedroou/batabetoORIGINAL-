@@ -8,14 +8,17 @@ import { Input } from '@/components/ui/input';
 import {
   Undo2, Redo2, Eraser, Pencil, Highlighter, Type, Droplet,
   Image as ImageIcon, Download, Square, Circle, Minus, Grid, Trash2,
-  Hand, PaintBucket, Copy as CopyIcon, RefreshCcw, HelpCircle, ZoomIn, ZoomOut
+  Hand, PaintBucket, Copy as CopyIcon, RefreshCcw, HelpCircle, ZoomIn, ZoomOut, Triangle, Ellipse
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 
-type Tool = 'pen' | 'marker' | 'eraser' | 'line' | 'rect' | 'circle' | 'text' | 'eyedropper' | 'pan' | 'fill';
+type Tool =
+  | 'pen' | 'marker' | 'eraser'
+  | 'line' | 'rect' | 'circle' | 'triangle' | 'ellipse'
+  | 'text' | 'eyedropper' | 'pan' | 'fill';
 
 interface DrawingCanvasProps {
   className?: string;
@@ -23,10 +26,8 @@ interface DrawingCanvasProps {
   onDrawEnd?: (dataUrl: string) => void;
   initialImage?: string | null;
   maxHistory?: number;
-  /** إذا تركتها فارغة، اللوحة تتمدّد تلقائياً داخل الحاوية */
   width?: number;
   height?: number;
-  /** نسبة أبعاد افتراضية عند الوضع التلقائي */
   aspect?: number; // مثال 16/9
 }
 
@@ -52,7 +53,7 @@ export function DrawingCanvas({
   // مقاسات منطقية (CSS pixels)
   const [size, setSize] = useState<{ w: number; h: number }>({
     w: width || 800,
-    h: height || Math.round((800) / aspect),
+    h: height || Math.round(800 / aspect),
   });
 
   // DPI
@@ -75,7 +76,7 @@ export function DrawingCanvas({
   const forcedPanRef = useRef<boolean>(false); // Space/Alt/زر وسط
   const isDrawingRef = useRef<boolean>(false);
   const lastPtCssRef = useRef<{ x: number; y: number } | null>(null);
-  const lastClientRef = useRef<{ x: number; y: number } | null>(null); // لإصلاح Pan
+  const lastClientRef = useRef<{ x: number; y: number } | null>(null);
 
   // Mobile pinch state
   const pinchDistRef = useRef<number>(0);
@@ -93,7 +94,7 @@ export function DrawingCanvas({
   const historyIndexRef = useRef<number>(-1);
   useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
 
-  // شبكة الخلفية CSS (خفيفة ولا تتبع التكبير)
+  // شبكة الخلفية CSS
   const gridBg = useMemo(() => {
     if (!showGrid) return '';
     const s = 32;
@@ -136,7 +137,7 @@ export function DrawingCanvas({
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
       const dctx = getDisplayCtx();
-      dctx.setTransform(dpr, 0, 0, 0, dpr, 0, 0);
+      dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       dctx.clearRect(0, 0, size.w, size.h);
       dctx.save();
       dctx.translate(pan.x, pan.y);
@@ -160,7 +161,6 @@ export function DrawingCanvas({
     const disp = displayRef.current;
     const over = overlayRef.current;
 
-    // أحجام فعلية × DPR
     disp.width = Math.floor(size.w * devicePixelRatio);
     disp.height = Math.floor(size.h * devicePixelRatio);
     disp.style.width = `${size.w}px`;
@@ -235,7 +235,7 @@ export function DrawingCanvas({
     onDrawEnd?.(dataUrl);
   }, [maxHistory, onDrawEnd]);
 
-  // تحميل صورة ابتدائية (مرة واحدة عند تغيّر القيمة)
+  // تحميل صورة ابتدائية
   const didInitRef = useRef(false);
   useEffect(() => {
     if (!displayRef.current || !overlayRef.current) return;
@@ -247,7 +247,6 @@ export function DrawingCanvas({
     bctx.clearRect(0, 0, backingRef.current!.width, backingRef.current!.height);
 
     if (!initialImage) {
-      // صورة شفافة كبداية
       pushHistory(backingRef.current!.toDataURL('image/png'));
       renderAll();
       return;
@@ -373,6 +372,33 @@ export function DrawingCanvas({
       octx.beginPath();
       octx.arc(startCss.x, startCss.y, r, 0, Math.PI * 2);
       octx.stroke();
+    } else if (tool === 'ellipse') {
+      const rx = Math.abs(currentCss.x - startCss.x);
+      const ry = Math.abs(currentCss.y - startCss.y);
+      octx.beginPath();
+      octx.ellipse(startCss.x, startCss.y, rx, ry, 0, 0, Math.PI * 2);
+      octx.stroke();
+    } else if (tool === 'triangle') {
+      const left = Math.min(startCss.x, currentCss.x);
+      const right = Math.max(startCss.x, currentCss.x);
+      const top = Math.min(startCss.y, currentCss.y);
+      const bottom = Math.max(startCss.y, currentCss.y);
+      const w = right - left;
+      let p1 = { x: left, y: bottom };
+      let p2 = { x: right, y: bottom };
+      let p3 = { x: left + w / 2, y: top };
+      if (shiftDownRef.current) {
+        const hEq = w * Math.sqrt(3) / 2;
+        p1 = { x: left, y: top + hEq };
+        p2 = { x: right, y: top + hEq };
+        p3 = { x: left + w / 2, y: top };
+      }
+      octx.beginPath();
+      octx.moveTo(p1.x, p1.y);
+      octx.lineTo(p2.x, p2.y);
+      octx.lineTo(p3.x, p3.y);
+      octx.closePath();
+      octx.stroke();
     }
     octx.restore();
   };
@@ -421,6 +447,35 @@ export function DrawingCanvas({
       const r = Math.sqrt(dx * dx + dy * dy);
       ctx.beginPath();
       ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      if (shapeFill) ctx.fill();
+      ctx.stroke();
+    } else if (tool === 'ellipse') {
+      const rx = Math.abs(e.x - s.x);
+      const ry = Math.abs(e.y - s.y);
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI * 2);
+      if (shapeFill) ctx.fill();
+      ctx.stroke();
+    } else if (tool === 'triangle') {
+      const left = Math.min(startCss.x, endCss.x);
+      const right = Math.max(startCss.x, endCss.x);
+      const top = Math.min(startCss.y, endCss.y);
+      const bottom = Math.max(startCss.y, endCss.y);
+      const w = right - left;
+      let p1 = cssToPx({ x: left, y: bottom });
+      let p2 = cssToPx({ x: right, y: bottom });
+      let p3 = cssToPx({ x: left + w / 2, y: top });
+      if (shiftDownRef.current) {
+        const hEq = w * Math.sqrt(3) / 2;
+        p1 = cssToPx({ x: left, y: top + hEq });
+        p2 = cssToPx({ x: right, y: top + hEq });
+        p3 = cssToPx({ x: left + w / 2, y: top });
+      }
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
       if (shapeFill) ctx.fill();
       ctx.stroke();
     }
@@ -494,23 +549,43 @@ export function DrawingCanvas({
     link.click();
   };
 
+  // تحويل DataURL إلى Blob (fallback للنسخ)
+  const dataURLToBlob = (dataURL: string) => {
+    const [head, body] = dataURL.split(',');
+    const mime = head.match(/:(.*?);/)?.[1] || 'image/png';
+    const binStr = atob(body);
+    const len = binStr.length;
+    const arr = new Uint8Array(len);
+    for (let i = 0; i < len; i++) arr[i] = binStr.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  };
+
   const copyToClipboard = async () => {
     try {
       const c = backingRef.current!;
-      const blob: Blob = await new Promise(res => c.toBlob(b => res(b!), 'image/png'));
+      const blob: Blob = await new Promise((res, rej) =>
+        c.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png')
+      );
+
       // Clipboard API إن أمكن
       // @ts-ignore
-      if (navigator.clipboard && (window as any).ClipboardItem) {
+      if (navigator.clipboard && window.ClipboardItem) {
         // @ts-ignore
-        await navigator.clipboard.write([new (window as any).ClipboardItem({ 'image/png': blob })]);
-      } else {
-        // Fallback: تنزيل سريع
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = `drawing-${Date.now()}.png`; a.click();
-        URL.revokeObjectURL(url);
+        await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })]);
+        return;
       }
-    } catch { /* تجاهل */ }
+
+      // Fallback: DataURL -> Blob -> تنزيل سريع كحل أخير
+      const url = URL.createObjectURL(blob || dataURLToBlob(c.toDataURL('image/png')));
+      const a = document.createElement('a');
+      a.href = url; a.download = `drawing-${Date.now()}.png`; a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // آخر حل: نسخ DataURL كنص
+      try {
+        await navigator.clipboard?.writeText(backingRef.current!.toDataURL('image/png'));
+      } catch { /* تجاهل */ }
+    }
   };
 
   // Flood Fill
@@ -604,9 +679,6 @@ export function DrawingCanvas({
       lastClientRef.current = { x: e.clientX, y: e.clientY };
       return;
     }
-    
-    // Add this null check
-    if (!lastPtCssRef.current) return;
 
     // نص
     if (tool === 'text') {
@@ -649,9 +721,8 @@ export function DrawingCanvas({
       return;
     }
 
-    // تعبئة
+    // تعبئة — تُفعّل الآن فعليًا من زر الأداة
     if (tool === 'fill') {
-      if (!backingRef.current) return;
       const ptPx = cssToPx(ptCss);
       const rgba = hexToRgba(color, opacity);
       floodFill(ptPx, rgba, fillTolerance);
@@ -659,9 +730,9 @@ export function DrawingCanvas({
       return;
     }
 
-    // أشكال/قلم  ل
+    // أشكال/قلم
     isDrawingRef.current = true;
-    if (tool === 'line' || tool === 'rect' || tool === 'circle') {
+    if (tool === 'line' || tool === 'rect' || tool === 'circle' || tool === 'triangle' || tool === 'ellipse') {
       drawPreviewShape(ptCss, ptCss);
     }
   };
@@ -669,15 +740,15 @@ export function DrawingCanvas({
   const pointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const currentCss = clientToCss(e.clientX, e.clientY);
 
-    // معاينة مؤشر الفرشاة عندما لا نرسم ولا في Pan ولا في شكل
-    if (!isDrawingRef.current && !forcedPanRef.current && !(tool === 'pan') && !(tool === 'line' || tool === 'rect' || tool === 'circle')) {
+    // معاينة مؤشر الفرشاة
+    if (!isDrawingRef.current && !forcedPanRef.current && !(tool === 'pan') &&
+        !(tool === 'line' || tool === 'rect' || tool === 'circle' || tool === 'triangle' || tool === 'ellipse')) {
       drawCursor(currentCss);
     }
 
     if (!isDrawingRef.current) return;
 
     if (tool === 'pan' || forcedPanRef.current) {
-      // تحريك الكاميرا — استخدام إحداثيات client الحقيقية
       const last = lastClientRef.current ?? { x: e.clientX, y: e.clientY };
       const dx = e.clientX - last.x;
       const dy = e.clientY - last.y;
@@ -687,7 +758,7 @@ export function DrawingCanvas({
       return;
     }
 
-    if (tool === 'line' || tool === 'rect' || tool === 'circle') {
+    if (tool === 'line' || tool === 'rect' || tool === 'circle' || tool === 'triangle' || tool === 'ellipse') {
       drawPreviewShape(lastPtCssRef.current!, currentCss);
       return;
     }
@@ -711,8 +782,8 @@ export function DrawingCanvas({
 
     const endCss = clientToCss(e.clientX, e.clientY);
 
-    if (tool === 'line' || tool === 'rect' || tool === 'circle') {
-      if(lastPtCssRef.current) {
+    if (tool === 'line' || tool === 'rect' || tool === 'circle' || tool === 'triangle' || tool === 'ellipse') {
+      if (lastPtCssRef.current) {
         commitShapeBacking(lastPtCssRef.current!, endCss);
       }
       clearOverlay();
@@ -751,7 +822,7 @@ export function DrawingCanvas({
     renderAll();
   };
 
-  // Touch: إصبعان للتكبير/تحريك، إصبع واحد: رسم أو Pan حسب الأداة
+  // Touch pinch/drag
   const onTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length === 2) {
       e.preventDefault();
@@ -878,113 +949,107 @@ export function DrawingCanvas({
   // دبل-كليك لإعادة التعيين
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); renderAll(); };
 
-  // واجهة الأدوات
-  const ToolbarContent = () => (
-    <>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="icon" aria-label="قلم" variant={tool === 'pen' ? 'default' : 'secondary'} onClick={() => setTool('pen')} title="قلم"><Pencil className="w-4 h-4" /></Button>
-        <Button size="icon" aria-label="ماركر" variant={tool === 'marker' ? 'default' : 'secondary'} onClick={() => setTool('marker')} title="ماركر"><Highlighter className="w-4 h-4" /></Button>
-        <Button size="icon" aria-label="ممحاة" variant={tool === 'eraser' ? 'default' : 'secondary'} onClick={() => setTool('eraser')} title="ممحاة"><Eraser className="w-4 h-4" /></Button>
+  /* ============================== واجهة الأدوات ============================== */
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button size="icon" aria-label="أشكال" variant={['line', 'rect', 'circle'].includes(tool) ? 'default' : 'secondary'}><Square className="w-4 h-4" /></Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-2 space-y-1">
-            <Button size="sm" variant={tool === 'line' ? 'default' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTool('line')}><Minus className="w-4 h-4" /> خط</Button>
-            <Button size="sm" variant={tool === 'rect' ? 'default' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTool('rect')}><Square className="w-4 h-4" /> مستطيل</Button>
-            <Button size="sm" variant={tool === 'circle' ? 'default' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTool('circle')}><Circle className="w-4 h-4" /> دائرة</Button>
-            <div className="flex items-center gap-2 pt-2 border-t mt-1 pl-1">
-              <input type="checkbox" id="shape-fill-check" checked={shapeFill} onChange={e => setShapeFill(e.target.checked)} className="h-4 w-4 rounded" />
-              <label htmlFor="shape-fill-check" className="text-xs">تعبئة الشكل</label>
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button size="icon" aria-label="تعبئة" variant={tool === 'fill' ? 'default' : 'secondary'} title="تعبئة"><PaintBucket className="w-4 h-4" /></Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-2">
-            <Label className="text-xs">دقة التعبئة</Label>
-            <Slider min={0} max={100} step={2} value={[fillTolerance]} onValueChange={v => setFillTolerance(v[0])} />
-          </PopoverContent>
-        </Popover>
-
-        <Button size="icon" aria-label="تحريك" variant={tool === 'pan' ? 'default' : 'secondary'} onClick={() => setTool('pan')} title="تحريك"><Hand className="w-4 h-4" /></Button>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs">لون</span>
-          <Input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-8 p-1 bg-transparent" aria-label="لون الفرشاة" />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 pt-2 border-t mt-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs">السماكة</span>
-          <div className="w-28">
-            <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0])} />
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs">الشفافية</span>
-          <div className="w-28">
-            <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0])} />
-          </div>
-        </div>
-
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button size="icon" aria-label="نص" variant={tool === 'text' ? 'default' : 'secondary'} title="نص"><Type className="w-4 h-4" /></Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-2 space-y-2">
-            <Textarea placeholder="اكتب نصك هنا..." value={textValue} onChange={e => setTextValue(e.target.value)} rows={3} />
-            <div className="flex items-center gap-2">
-              <span className="text-xs">الحجم:</span>
-              <Slider min={10} max={120} step={2} value={[textSize]} onValueChange={v => setTextSize(v[0])} />
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        <Button size="icon" aria-label="قطّارة" variant={tool === 'eyedropper' ? 'default' : 'secondary'} onClick={() => setTool('eyedropper')} title="قطّارة"><Droplet className="w-4 h-4" /></Button>
-        <Button size="icon" aria-label="شبكة" variant={showGrid ? 'default' : 'secondary'} onClick={() => setShowGrid(s => !s)} title="شبكة"><Grid className="w-4 h-4" /></Button>
-
-        <div className="flex items-center gap-1">
-          <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.max(0.25, z / 1.1))} title="تصغير"><ZoomOut className="w-4 h-4" /></Button>
-          <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.min(6, z * 1.1))} title="تكبير"><ZoomIn className="w-4 h-4" /></Button>
-          <Button size="icon" variant="secondary" onClick={resetView} title="إعادة ضبط"><RefreshCcw className="w-4 h-4" /></Button>
-        </div>
-
-        <Button size="icon" variant="secondary" onClick={undo} disabled={historyIndex <= 0} title="تراجع (Ctrl+Z)"><Undo2 className="w-4 h-4" /></Button>
-        <Button size="icon" variant="secondary" onClick={redo} disabled={historyIndex >= history.length - 1} title="إعادة (Ctrl+Y)"><Redo2 className="w-4 h-4" /></Button>
-        <Button size="icon" variant="secondary" onClick={clearAll} title="مسح الكل"><Trash2 className="w-4 h-4" /></Button>
-
-        <input ref={inputFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files && importImage(e.target.files[0])} />
-        <Button size="icon" variant="secondary" title="استيراد صورة" onClick={() => inputFileRef.current?.click()}><ImageIcon className="w-4 h-4" /></Button>
-
-        <Button size="icon" variant="secondary" onClick={copyToClipboard} title="نسخ للصق"><CopyIcon className="w-4 h-4" /></Button>
-        <Button size="icon" variant="secondary" onClick={downloadPng} title="حفظ كصورة"><Download className="w-4 h-4" /></Button>
-
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button size="icon" variant="ghost" title="مساعدة"><HelpCircle className="w-4 h-4" /></Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-72 text-xs space-y-1">
-            <p className="font-semibold">اختصارات سريعة</p>
-            <ul className="list-disc pl-4 space-y-1">
-              <li>Ctrl/Cmd + عجلة: تكبير/تصغير حول المؤشر</li>
-              <li>مسطرة (Space): تحريك مؤقت</li>
-              <li>Shift: قيود للأشكال/الخط</li>
-              <li>Ctrl/Cmd + Z / Shift+Z / Y: تراجع/إعادة</li>
-              <li>دبل-كليك على اللوحة: إعادة الضبط</li>
-            </ul>
-          </PopoverContent>
-        </Popover>
-      </div>
-    </>
+  // مجموعات: فرش / أشكال / تعبئة / نص / بقية الأدوات
+  const BrushesGroup = () => (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          size="icon"
+          aria-label="الفرش"
+          variant={['pen', 'marker', 'eraser'].includes(tool) ? 'default' : 'secondary'}
+          title="الفرش"
+        >
+          <Pencil className="w-4 h-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2 space-y-1">
+        <Button size="sm" variant={tool === 'pen' ? 'default' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTool('pen')}>
+          <Pencil className="w-4 h-4" /> قلم
+        </Button>
+        <Button size="sm" variant={tool === 'marker' ? 'default' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTool('marker')}>
+          <Highlighter className="w-4 h-4" /> ماركر
+        </Button>
+        <Button size="sm" variant={tool === 'eraser' ? 'default' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTool('eraser')}>
+          <Eraser className="w-4 h-4" /> ممحاة
+        </Button>
+      </PopoverContent>
+    </Popover>
   );
 
-  // نمط المؤشر حسب الأداة 
+  const ShapesGroup = () => (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          size="icon"
+          aria-label="أشكال"
+          variant={['line', 'rect', 'circle', 'triangle', 'ellipse'].includes(tool) ? 'default' : 'secondary'}
+          title="أشكال"
+        >
+          <Square className="w-4 h-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2 space-y-1">
+        <Button size="sm" variant={tool === 'line' ? 'default' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTool('line')}>
+          <Minus className="w-4 h-4" /> خط
+        </Button>
+        <Button size="sm" variant={tool === 'rect' ? 'default' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTool('rect')}>
+          <Square className="w-4 h-4" /> مستطيل
+        </Button>
+        <Button size="sm" variant={tool === 'circle' ? 'default' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTool('circle')}>
+          <Circle className="w-4 h-4" /> دائرة
+        </Button>
+        <Button size="sm" variant={tool === 'ellipse' ? 'default' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTool('ellipse')}>
+          <Ellipse className="w-4 h-4" /> بيضاوي
+        </Button>
+        <Button size="sm" variant={tool === 'triangle' ? 'default' : 'ghost'} className="w-full justify-start gap-2" onClick={() => setTool('triangle')}>
+          <Triangle className="w-4 h-4" /> مثلث
+        </Button>
+        <div className="flex items-center gap-2 pt-2 border-t mt-1 pl-1">
+          <input type="checkbox" id="shape-fill-check" checked={shapeFill} onChange={e => setShapeFill(e.target.checked)} className="h-4 w-4 rounded" />
+          <label htmlFor="shape-fill-check" className="text-xs">تعبئة الشكل</label>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+
+  const FillGroup = () => (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          size="icon"
+          aria-label="تعبئة"
+          variant={tool === 'fill' ? 'default' : 'secondary'}
+          title="تعبئة"
+          onClick={() => setTool('fill')} // <<< مهم: تفعيل الأداة فور الضغط
+        >
+          <PaintBucket className="w-4 h-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2">
+        <Label className="text-xs">حساسية التعبئة</Label>
+        <Slider min={0} max={100} step={2} value={[fillTolerance]} onValueChange={v => setFillTolerance(v[0])} />
+      </PopoverContent>
+    </Popover>
+  );
+
+  const TextGroup = () => (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button size="icon" aria-label="نص" variant={tool === 'text' ? 'default' : 'secondary'} title="نص"><Type className="w-4 h-4" /></Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2 space-y-2">
+        <Textarea placeholder="اكتب نصك هنا..." value={textValue} onChange={e => setTextValue(e.target.value)} rows={3} />
+        <div className="flex items-center gap-2">
+          <span className="text-xs">الحجم:</span>
+          <Slider min={10} max={120} step={2} value={[textSize]} onValueChange={v => setTextSize(v[0])} />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+
+  // نمط المؤشر حسب الأداة
   const cursorClass = useMemo(() => {
     if (disabled) return 'cursor-not-allowed';
     if (tool === 'pan' || forcedPanRef.current) return 'cursor-grab';
@@ -998,8 +1063,71 @@ export function DrawingCanvas({
       <div className="p-2 rounded-2xl bg-white/75 dark:bg-slate-900/50 backdrop-blur shadow border border-border/50">
         {/* Desktop */}
         <div className="hidden md:flex md:flex-col md:gap-2">
-          <ToolbarContent />
+          <div className="flex flex-wrap items-center gap-2">
+            <BrushesGroup />
+            <ShapesGroup />
+            <FillGroup />
+            <TextGroup />
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs">لون</span>
+              <Input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-8 p-1 bg-transparent" aria-label="لون الفرشاة" />
+            </div>
+
+            <Button size="icon" aria-label="تحريك" variant={tool === 'pan' ? 'default' : 'secondary'} onClick={() => setTool('pan')} title="تحريك"><Hand className="w-4 h-4" /></Button>
+            <Button size="icon" aria-label="قطّارة" variant={tool === 'eyedropper' ? 'default' : 'secondary'} onClick={() => setTool('eyedropper')} title="قطّارة"><Droplet className="w-4 h-4" /></Button>
+            <Button size="icon" aria-label="شبكة" variant={showGrid ? 'default' : 'secondary'} onClick={() => setShowGrid(s => !s)} title="شبكة"><Grid className="w-4 h-4" /></Button>
+
+            <div className="flex items-center gap-1">
+              <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.max(0.25, z / 1.1))} title="تصغير"><ZoomOut className="w-4 h-4" /></Button>
+              <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.min(6, z * 1.1))} title="تكبير"><ZoomIn className="w-4 h-4" /></Button>
+              <Button size="icon" variant="secondary" onClick={resetView} title="إعادة ضبط"><RefreshCcw className="w-4 h-4" /></Button>
+            </div>
+
+            <Button size="icon" variant="secondary" onClick={undo} disabled={historyIndex <= 0} title="تراجع (Ctrl+Z)"><Undo2 className="w-4 h-4" /></Button>
+            <Button size="icon" variant="secondary" onClick={redo} disabled={historyIndex >= history.length - 1} title="إعادة (Ctrl+Y)"><Redo2 className="w-4 h-4" /></Button>
+            <Button size="icon" variant="secondary" onClick={clearAll} title="مسح الكل"><Trash2 className="w-4 h-4" /></Button>
+
+            <input ref={inputFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files && importImage(e.target.files[0])} />
+            <Button size="icon" variant="secondary" title="استيراد صورة" onClick={() => inputFileRef.current?.click()}><ImageIcon className="w-4 h-4" /></Button>
+
+            <Button size="icon" variant="secondary" onClick={copyToClipboard} title="نسخ للصق"><CopyIcon className="w-4 h-4" /></Button>
+            <Button size="icon" variant="secondary" onClick={downloadPng} title="حفظ كصورة"><Download className="w-4 h-4" /></Button>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button size="icon" variant="ghost" title="مساعدة"><HelpCircle className="w-4 h-4" /></Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 text-xs space-y-1">
+                <p className="font-semibold">اختصارات سريعة</p>
+                <ul className="list-disc pl-4 space-y-1">
+                  <li>Ctrl/Cmd + عجلة: تكبير/تصغير حول المؤشر</li>
+                  <li>مسطرة (Space): تحريك مؤقت</li>
+                  <li>Shift: قيود للأشكال/الخط</li>
+                  <li>Ctrl/Cmd + Z / Shift+Z / Y: تراجع/إعادة</li>
+                  <li>دبل-كليك على اللوحة: إعادة الضبط</li>
+                </ul>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* تحكم السماكة/الشفافية */}
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t mt-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs">السماكة</span>
+              <div className="w-28">
+                <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0])} />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs">الشفافية</span>
+              <div className="w-28">
+                <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0])} />
+              </div>
+            </div>
+          </div>
         </div>
+
         {/* Mobile: collapsible */}
         <div className="md:hidden">
           <Collapsible>
@@ -1011,7 +1139,47 @@ export function DrawingCanvas({
             </div>
             <CollapsibleContent className="mt-2 pt-2 border-t">
               <div className="flex flex-col gap-3">
-                <ToolbarContent />
+                {/* نعيد استخدام نفس المجموعات في الموبايل */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <BrushesGroup />
+                  <ShapesGroup />
+                  <FillGroup />
+                  <TextGroup />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs">لون</span>
+                    <Input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-8 p-1 bg-transparent" aria-label="لون الفرشاة" />
+                  </div>
+                  <Button size="icon" aria-label="تحريك" variant={tool === 'pan' ? 'default' : 'secondary'} onClick={() => setTool('pan')} title="تحريك"><Hand className="w-4 h-4" /></Button>
+                  <Button size="icon" aria-label="قطّارة" variant={tool === 'eyedropper' ? 'default' : 'secondary'} onClick={() => setTool('eyedropper')} title="قطّارة"><Droplet className="w-4 h-4" /></Button>
+                  <Button size="icon" aria-label="شبكة" variant={showGrid ? 'default' : 'secondary'} onClick={() => setShowGrid(s => !s)} title="شبكة"><Grid className="w-4 h-4" /></Button>
+                  <div className="flex items-center gap-1">
+                    <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.max(0.25, z / 1.1))} title="تصغير"><ZoomOut className="w-4 h-4" /></Button>
+                    <Button size="icon" variant="secondary" onClick={() => setZoom(z => Math.min(6, z * 1.1))} title="تكبير"><ZoomIn className="w-4 h-4" /></Button>
+                    <Button size="icon" variant="secondary" onClick={resetView} title="إعادة ضبط"><RefreshCcw className="w-4 h-4" /></Button>
+                  </div>
+                  <Button size="icon" variant="secondary" onClick={undo} disabled={historyIndex <= 0} title="تراجع (Ctrl+Z)"><Undo2 className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="secondary" onClick={redo} disabled={historyIndex >= history.length - 1} title="إعادة (Ctrl+Y)"><Redo2 className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="secondary" onClick={clearAll} title="مسح الكل"><Trash2 className="w-4 h-4" /></Button>
+                  <input ref={inputFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files && importImage(e.target.files[0])} />
+                  <Button size="icon" variant="secondary" title="استيراد صورة" onClick={() => inputFileRef.current?.click()}><ImageIcon className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="secondary" onClick={copyToClipboard} title="نسخ للصق"><CopyIcon className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="secondary" onClick={downloadPng} title="حفظ كصورة"><Download className="w-4 h-4" /></Button>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2 border-t mt-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs">السماكة</span>
+                    <div className="w-28">
+                      <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0])} />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs">الشفافية</span>
+                    <div className="w-28">
+                      <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0])} />
+                    </div>
+                  </div>
+                </div>
               </div>
             </CollapsibleContent>
           </Collapsible>
@@ -1021,11 +1189,11 @@ export function DrawingCanvas({
       {/* سطح الرسم + الشبكة */}
       <div
         className={cn(
-          'relative w-full rounded-xl overflow-hidden border bg-white flex-grow h-full',
+          'relative w-full rounded-xl overflow-hidden border bg-white flex-grow',
           disabled && 'pointer-events-none opacity-75',
           cursorClass
         )}
-        style={{ backgroundImage: gridBg || undefined, touchAction: 'none' }} // منع سلوك اللمس الافتراضي
+        style={{ backgroundImage: gridBg || undefined, touchAction: 'none' }}
         onWheel={onWheel}
         onDoubleClick={resetView}
         onTouchStart={onTouchStart}

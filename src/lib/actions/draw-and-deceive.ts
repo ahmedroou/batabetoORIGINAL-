@@ -1,5 +1,4 @@
 
-
 'use server';
 
 /**
@@ -13,7 +12,7 @@ import { db } from '@/lib/firebase';
 import { doc, runTransaction, Timestamp, type Transaction, updateDoc, increment } from 'firebase/firestore';
 import type { Game, Player, DrawAndDeceiveState, DrawAndDeceiveRoundResult } from '@/types';
 import { shuffle, safeCompareStrings } from './helpers';
-import { distributeEndOfGameAwards } from './admin/users';
+import { distributeEndOfGameAwards } from '@/lib/actions/admin';
 
 /* ----------------------------- Constants ----------------------------- */
 const DEFAULT_SETTINGS = {
@@ -307,6 +306,86 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
   });
 }
 
+export async function endArtistTurn(gameId: string, playerId: string) {
+  const gameRef = doc(db, 'games', gameId);
+  await runTransaction(db, async (tx) => {
+    const gameSnap = await tx.get(gameRef);
+    ensure(gameSnap.exists(), 'Game not found.');
+    const game = gameSnap.data() as Game;
+    const state = game.drawAndDeceiveState;
+    ensure(state, 'Game state is missing.');
+
+    // This action can be taken by any player if the timer is up, or the artist manually
+    const isArtist = state.artistId === playerId;
+    const timerUp = state.timerEndsAt ? state.timerEndsAt.toMillis() <= nowMs() : false;
+    ensure(isArtist || timerUp, 'Cannot end the artist\'s turn yet.');
+    
+    // This action can only be taken when we are waiting for the artist.
+    ensure(state.phase === 'drawing', 'This action is not available in the current phase.');
+
+    const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
+    tx.update(gameRef, {
+      [F.s_phase]: 'trapping',
+      // drawingDataUrl is already the latest saved version, no change needed.
+      [F.s_timer]: inSec(trappingTime),
+    });
+  });
+}
+
+export async function kickArtistForInactivity(gameId: string, playerId: string) {
+  const gameRef = doc(db, 'games', gameId);
+  let ended = false;
+  await runTransaction(db, async (tx) => {
+    const gameSnap = await tx.get(gameRef);
+    ensure(gameSnap.exists(), 'Game not found.');
+    const game = gameSnap.data() as Game;
+    const state = game.drawAndDeceiveState;
+    ensure(state, 'Game state is missing.');
+
+    const timerUp = state.timerEndsAt ? state.timerEndsAt.toMillis() <= nowMs() : false;
+    ensure(timerUp, 'الوقت لم ينته بعد لطرد الفنان.');
+    ensure(state.phase === 'drawing', 'This action is not available.');
+
+    const artistId = state.artistId!;
+    const players = [...game.players];
+    
+    // Kick the artist
+    const artistIndex = players.findIndex(p => p.id === artistId);
+    if (artistIndex !== -1) {
+      players[artistIndex]!.status = 'left';
+    }
+
+    const newTurnOrder = state.turnOrder.filter(id => id !== artistId);
+
+    if (newTurnOrder.length < 2) {
+      endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة لعدم وجود لاعبين كافيين.');
+      ended = true;
+      return;
+    }
+
+    const { nextIndex, artistId: newArtistId } = nextActiveArtist(newTurnOrder, state.currentTurnIndex > 0 ? state.currentTurnIndex -1 : newTurnOrder.length-1, players);
+    
+    tx.update(gameRef, {
+      players,
+      [F.s_turnOrder]: newTurnOrder,
+      [F.s_phase]: 'drawing',
+      [F.s_artistId]: newArtistId,
+      [F.s_currentTurnIndex]: nextIndex,
+      [F.s_drawing]: null,
+      [F.s_correct]: null,
+      [F.s_traps]: {},
+      [F.s_guesses]: {},
+      [F.s_answers]: [],
+      [F.s_kickVote]: null,
+      [F.s_timer]: inSec(state.settings?.writingTime ?? DEFAULT_SETTINGS.writingTime),
+    });
+  });
+
+  if (ended) {
+    await distributeEndOfGameAwards(gameId);
+  }
+}
+
 
 /* ---------------------------- Trapping Phase ------------------------- */
 export async function submitTrap(gameId: string, playerId: string, trap: string) {
@@ -314,7 +393,7 @@ export async function submitTrap(gameId: string, playerId: string, trap: string)
   try {
     await runTransaction(db, async (tx) => {
       const gameSnap = await tx.get(gameRef);
-      ensure(gameSnap.exists(), 'Game not found.');
+      ensure(gameSnap.exists(), 'اللعبة غير موجودة.');
       const game = gameSnap.data() as Game;
 
       const state = game.drawAndDeceiveState;
@@ -377,9 +456,10 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
     ensure(!state.playerGuesses[playerId], 'Guess already submitted.');
 
     const normalizedGuess = guess ? normalizeAnswer(guess) : null;
-    ensure(!guess || (state.shuffledAnswers || []).includes(normalizedGuess!), 'Invalid answer choice.');
+    const availableAnswers = (state.shuffledAnswers || []).map(a => normalizeAnswer(a));
+    ensure(!guess || availableAnswers.includes(normalizedGuess!), 'Invalid answer choice.');
 
-    const updatedGuesses = { ...state.playerGuesses, [playerId]: normalizedGuess } as Record<string, string | null>;
+    const updatedGuesses = { ...(state.playerGuesses || {}), [playerId]: normalizedGuess } as Record<string, string | null>;
     tx.update(gameRef, { [F.s_guesses]: updatedGuesses });
 
     const activeNonArtist = getActiveNonArtistPlayers(game, state.artistId!);
@@ -395,37 +475,38 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
 /* ---------------------- Kick Vote Actions ---------------------------- */
 export async function voteToKickArtist(gameId: string, voterId: string, vote: 'kick' | 'spare') {
-  const gameRef = doc(db, 'games', gameId);
-  let ended = false;
-  await runTransaction(db, async (tx) => {
-    const gameSnap = await tx.get(gameRef);
-    ensure(gameSnap.exists(), 'Game not found.');
-    const game = gameSnap.data() as Game;
-    const state = game.drawAndDeceiveState;
+    const gameRef = doc(db, 'games', gameId);
+    let ended = false;
+    await runTransaction(db, async (tx) => {
+        const gameSnap = await tx.get(gameRef);
+        ensure(gameSnap.exists(), 'Game not found.');
+        const game = gameSnap.data() as Game;
+        const state = game.drawAndDeceiveState;
 
-    ensure(state, 'Game state not initialized.');
-    ensure(state.kickVote?.active, 'Kick vote is not active.');
-    ensure(state.artistId !== voterId, 'The artist cannot vote on themselves.');
+        ensure(state, 'Game state not initialized.');
+        ensure(state.kickVote?.active, 'Kick vote is not active.');
+        ensure(state.artistId !== voterId, 'The artist cannot vote on themselves.');
 
-    const kickVote = state.kickVote || { active: true, votes: {}, voterIds: [] as string[] };
-    ensure(!kickVote.voterIds.includes(voterId), 'You have already voted.');
+        const kickVote = state.kickVote || { active: true, votes: {}, voterIds: [] as string[] };
+        ensure(!kickVote.voterIds.includes(voterId), 'You have already voted.');
 
-    const updatedVotes = { ...kickVote.votes, [voterId]: vote } as Record<string, 'kick' | 'spare'>;
-    const updatedVoterIds = [...kickVote.voterIds, voterId];
-    const kickVotesCount = Object.values(updatedVotes).filter((v) => v === 'kick').length;
+        const updatedVotes = { ...kickVote.votes, [voterId]: vote } as Record<string, 'kick' | 'spare'>;
+        const updatedVoterIds = [...kickVote.voterIds, voterId];
+        const kickVotesCount = Object.values(updatedVotes).filter((v) => v === 'kick').length;
 
-    if (kickVotesCount >= KICK_VOTE_THRESHOLD) {
-      const res = processKickVote(tx, gameRef, { ...game, drawAndDeceiveState: { ...state, kickVote: { active: true, votes: updatedVotes, voterIds: updatedVoterIds } } } as Game);
-      ended = res.ended;
-    } else {
-      tx.update(gameRef, { [F.s_kickVote]: { active: true, votes: updatedVotes, voterIds: updatedVoterIds } });
+        if (kickVotesCount >= KICK_VOTE_THRESHOLD) {
+            const res = processKickVote(tx, gameRef, { ...game, drawAndDeceiveState: { ...state, kickVote: { active: true, votes: updatedVotes, voterIds: updatedVoterIds } } } as Game);
+            ended = res.ended;
+        } else {
+            tx.update(gameRef, { [F.s_kickVote]: { active: true, votes: updatedVotes, voterIds: updatedVoterIds } });
+        }
+    });
+
+    if (ended) {
+        await distributeEndOfGameAwards(gameId);
     }
-  });
-
-  if (ended) {
-    await distributeEndOfGameAwards(gameId);
-  }
 }
+
 
 function processKickVote(
   tx: Transaction,
@@ -461,6 +542,12 @@ function processKickVote(
   }
 
   // Kick the artist
+  const players = [...game.players];
+  const artistIndex = players.findIndex(p => p.id === artistId);
+  if (artistIndex !== -1) {
+    players[artistIndex]!.status = 'left';
+  }
+
   const newTurnOrder = state.turnOrder.filter((id) => id !== artistId);
 
   // If fewer than 2 players remain, end the game
@@ -469,9 +556,10 @@ function processKickVote(
     return { ended: true };
   }
 
-  const { nextIndex, artistId: newArtistId } = nextActiveArtist(newTurnOrder, state.currentTurnIndex - 1, game.players);
+  const { nextIndex, artistId: newArtistId } = nextActiveArtist(newTurnOrder, state.currentTurnIndex > 0 ? state.currentTurnIndex -1 : newTurnOrder.length-1, players);
 
   tx.update(gameRef, {
+    players,
     [F.s_turnOrder]: newTurnOrder,
     [F.s_phase]: 'drawing',
     [F.s_artistId]: newArtistId,
@@ -482,14 +570,14 @@ function processKickVote(
     [F.s_guesses]: {},
     [F.s_answers]: [],
     [F.s_kickVote]: null,
-    [F.s_timer]: inSec(state.settings?.writingTime ?? DEFAULT_SETTINGS.writingTime), // wait for new artist to write
+    [F.s_timer]: inSec(state.settings?.writingTime ?? DEFAULT_SETTINGS.writingTime),
   });
   return { ended: false };
 }
 
 /* ---------------------- Timeout & Round Progression ------------------ */
 // Note: hostId is intentionally ignored so that *any* player/client ping can advance timeouts.
-export async function handleTimeout(gameId: string, hostId: string) {
+export async function handleTimeout(gameId: string, _hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   let ended = false;
 
@@ -508,10 +596,8 @@ export async function handleTimeout(gameId: string, hostId: string) {
       return;
     }
     
-    const timerEndsAt = state.timerEndsAt as Timestamp | undefined;
+    const timerEndsAt = state.timerEndsAt;
     if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
-
-    tx.update(gameRef, { [`${F.s_timer}`]: null });
 
     if (state.phase === 'drawing' && !state.correctAnswer) {
       // Writing window expired without description → open kick vote
@@ -530,12 +616,16 @@ export async function handleTimeout(gameId: string, hostId: string) {
     }
 
     if (state.phase === 'trapping') {
-      beginGuessingPhase(tx, gameRef, state);
+      const playerAnswers = { ...(state.playerTraps || {}) };
+      getActiveNonArtistPlayers(game, state.artistId!).forEach(p => { if (!playerAnswers[p.id]) playerAnswers[p.id] = null; });
+      beginGuessingPhase(tx, gameRef, { ...state, playerTraps: playerAnswers } as DrawAndDeceiveState);
       return;
     }
 
     if (state.phase === 'guessing') {
-      computeAndEnterResults(tx, gameRef, game);
+      const playerGuesses = { ...(state.playerGuesses || {}) };
+      getActiveNonArtistPlayers(game, state.artistId!).forEach(p => { if (!playerGuesses[p.id]) playerGuesses[p.id] = null; });
+      computeAndEnterResults(tx, gameRef, { ...game, drawAndDeceiveState: { ...state, playerGuesses } } as Game);
       return;
     }
 
@@ -551,81 +641,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
   }
 }
 
-export async function endArtistTurn(gameId: string, _playerId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (tx) => {
-        const gameSnap = await tx.get(gameRef);
-        ensure(gameSnap.exists(), 'Game not found.');
-        const game = gameSnap.data() as Game;
-        const state = game.drawAndDeceiveState;
-        ensure(state, 'Game state is missing.');
-        
-        // This action can only be taken when we are waiting for the artist.
-        ensure(state.phase === 'drawing', 'This action is not available in the current phase.');
-
-        const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
-        tx.update(gameRef, {
-            [F.s_phase]: 'trapping',
-            // drawingDataUrl is already the latest saved version, no change needed.
-            [F.s_timer]: inSec(trappingTime),
-        });
-    });
-}
-
-export async function kickArtistForInactivity(gameId: string, _playerId: string) {
-    const gameRef = doc(db, 'games', gameId);
-    let ended = false;
-    await runTransaction(db, async (tx) => {
-        const gameSnap = await tx.get(gameRef);
-        ensure(gameSnap.exists(), 'Game not found.');
-        const game = gameSnap.data() as Game;
-        const state = game.drawAndDeceiveState;
-        ensure(state, 'Game state is missing.');
-        
-        ensure(state.timerEndsAt && state.timerEndsAt.toMillis() <= nowMs(), 'الوقت لم ينته بعد.');
-        ensure(state.phase === 'drawing', 'This action is not available.');
-
-        const artistId = state.artistId!;
-        const players = game.players;
-        
-        // Kick the artist
-        const artistIndex = players.findIndex(p => p.id === artistId);
-        if (artistIndex !== -1) {
-            players[artistIndex]!.status = 'left'; 
-        }
-
-        const newTurnOrder = state.turnOrder.filter(id => id !== artistId);
-
-        if (newTurnOrder.length < 2) {
-            endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة لعدم وجود لاعبين كافيين.');
-            ended = true;
-            return;
-        }
-
-        const { nextIndex, artistId: newArtistId } = nextActiveArtist(newTurnOrder, state.currentTurnIndex - 1, players);
-        
-        tx.update(gameRef, {
-            players,
-            [F.s_turnOrder]: newTurnOrder,
-            [F.s_phase]: 'drawing',
-            [F.s_artistId]: newArtistId,
-            [F.s_currentTurnIndex]: nextIndex,
-            [F.s_drawing]: null,
-            [F.s_correct]: null,
-            [F.s_traps]: {},
-            [F.s_guesses]: {},
-            [F.s_answers]: [],
-            [F.s_kickVote]: null,
-            [F.s_timer]: inSec(state.settings?.writingTime ?? DEFAULT_SETTINGS.writingTime),
-        });
-    });
-
-    if (ended) {
-        await distributeEndOfGameAwards(gameId);
-    }
-}
-
-
 /* ------------------------- Next Round / Finish ----------------------- */
 function pickWinnerId(scores: Record<string, number>): string {
   const entries = Object.entries(scores);
@@ -637,12 +652,17 @@ function pickWinnerId(scores: Record<string, number>): string {
 }
 
 async function _startNextRound(tx: any, gameRef: any, game: Game): Promise<{ isGameOver: boolean }> {
-  const state = (game as any)[F.s] || {};
+  const state = (game as any)[FIELD_TRAP_STATE] || {};
   const settings = sanitizeSettings(state.settings, []);
   const currentRound = game.round || 0;
   
-  if (currentRound >= settings.rounds || getActivePlayerIds(game.players).length < 2) {
-    endGame(tx, gameRef, game.playerScores || {}, 'انتهت اللعبة!');
+  if (currentRound >= settings.rounds) {
+    const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) => ((game.playerScores?.[a] || 0) > (game.playerScores?.[b] || 0) ? a : b), '');
+    tx.update(gameRef, {
+      gameState: 'final_results',
+      [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField(),
+      gameResult: { winner: winnerId, message: 'انتهت اللعبة!' }
+    });
     return { isGameOver: true };
   }
 
@@ -650,60 +670,21 @@ async function _startNextRound(tx: any, gameRef: any, game: Game): Promise<{ isG
 
   tx.update(gameRef, {
     gameState: 'drawing',
-    [F.s_phase]: 'drawing',
     round: currentRound + 1,
-    [F.s_currentTurnIndex]: nextIndex,
-    [F.s_artistId]: artistId,
-    [F.s_drawing]: null,
-    [F.s_correct]: null,
-    [F.s_traps]: {},
-    [F.s_guesses]: {},
-    [F.s_answers]: [],
-    [F.s_kickVote]: null,
-    [F.s_timer]: inSec(settings.writingTime ?? DEFAULT_SETTINGS.writingTime),
+    [F.s]: {
+        ...state,
+        phase: 'drawing',
+        currentTurnIndex: nextIndex,
+        artistId: artistId,
+        drawingDataUrl: null,
+        correctAnswer: null,
+        playerTraps: {},
+        playerGuesses: {},
+        shuffledAnswers: [],
+        kickVote: null,
+        timerEndsAt: inSec(settings.writingTime ?? DEFAULT_SETTINGS.writingTime),
+    }
   });
 
   return { isGameOver: false };
 }
-
-// Re-export of helpers that might have been used by other files in the past.
-const _getGuessingPhaseUpdates = (game: Game, playerAnswers: Record<string, string | null>) => {
-  const state = game.drawAndDeceiveState!;
-  const guessingTime = state.settings?.guessingTime ?? DEFAULT_SETTINGS.guessingTime;
-  const endsAt = tsFromNowS(guessingTime);
-  return {
-    updates: {
-      gameState: 'guessing',
-      [F.s_phase]: 'guessing',
-      [F.s_playerAnswers]: playerAnswers,
-      [F.s_roundEndTime]: endsAt, // DEPRECATED: use timerEndsAt
-      [F.s_timer]: endsAt,
-      [F.s_shuffledAnswers]: buildShuffledAnswers(state.currentQuestion!, playerAnswers),
-    },
-  };
-};
-
-const _getResultsPhaseUpdates = (game: Game, playerGuesses: Record<string, string | null>) => {
-  const state = game.drawAndDeceiveState!;
-  const { resultsState, updatedPlayerScores } = calculateRoundResults(game, playerGuesses as Record<string, string>);
-  const resultsTime = state.settings?.resultsTime ?? DEFAULT_SETTINGS.resultsTime;
-  const endsAt = tsFromNowS(resultsTime);
-  const currentHistory = state.history || [];
-  const newHistoryEntry = {
-    round: game.round || 1,
-    results: { scores: resultsState.scores, answers: resultsState.answers, timedOutGuesserIds: [] },
-    awayPlayerIdsDuringRound: state.awayPlayerIds || [],
-  };
-
-  return {
-    updates: {
-      gameState: 'round-results',
-      playerScores: updatedPlayerScores,
-      [`${FIELD_TRAP_STATE}.lastRoundResults`]: { scores: resultsState.scores, answers: resultsState.answers, timedOutGuesserIds: [], awayPlayerIdsDuringRound: state.awayPlayerIds },
-      [`${FIELD_TRAP_STATE}.roundEndTime`]: endsAt,
-      [`${FIELD_TRAP_STATE}.timerEndsAt`]: endsAt,
-      [`${FIELD_TRAP_STATE}.trickStats`]: mergeTrickStats(state.trickStats, newHistoryEntry.results as any),
-      [`${FIELD_TRAP_STATE}.history`]: [...currentHistory, newHistoryEntry],
-    },
-  };
-};
