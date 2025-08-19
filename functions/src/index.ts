@@ -7,19 +7,70 @@
  * See a full list of supported triggers at https://firebase.google.com/docs/functions
  */
 
-import {setGlobalOptions} from "firebase-functions";
+import { setGlobalOptions } from "firebase-functions/v2";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import * as logger from "firebase-functions/logger";
+import * as admin from "firebase-admin";
+import type { GameKing, UserProfile } from "../../src/types";
 
-// Start writing functions
-// https://firebase.google.com/docs/functions/typescript
+// Initialize Firebase Admin SDK
+admin.initializeApp();
+const db = admin.firestore();
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({maxInstances: 10});
+// Global options
+setGlobalOptions({ maxInstances: 10, memory: "256MiB" });
+
+/**
+ * A scheduled function that runs every Thursday at 10:00 AM UTC to recalculate and update the "Game Kings".
+ * This function is robust and crucial for keeping the leaderboards up-to-date automatically.
+ */
+export const updateGameKings = onSchedule("every thursday 10:00", async (event) => {
+  logger.info("Starting weekly recalculation of Game Kings...", { event });
+
+  try {
+    const gameTypesSnapshot = await db.collection("game_types").get();
+    const gameTypes = gameTypesSnapshot.docs.map(doc => doc.id);
+
+    const kingsCollectionRef = db.collection("game_kings");
+    const usersCollectionRef = db.collection("users");
+    const batch = db.batch();
+
+    let updatedCount = 0;
+
+    for (const gameType of gameTypes) {
+      const winCountsQuery = usersCollectionRef
+        .where(`winCounts.${gameType}`, ">", 0)
+        .orderBy(`winCounts.${gameType}`, "desc")
+        .limit(1);
+        
+      const snapshot = await winCountsQuery.get();
+
+      if (!snapshot.empty) {
+        const kingDoc = snapshot.docs[0];
+        const kingData = kingDoc.data() as UserProfile;
+        
+        const gameKingRef = kingsCollectionRef.doc(gameType);
+
+        const newKingData: GameKing = {
+          kingId: kingDoc.id,
+          name: kingData.name,
+          avatarId: kingData.avatarId,
+          winCount: kingData.winCounts?.[gameType as keyof typeof kingData.winCounts] || 0,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp() as any, // Use server timestamp for consistency
+        };
+        
+        batch.set(gameKingRef, newKingData, { merge: true });
+        updatedCount++;
+        logger.info(`New king for ${gameType}: ${kingData.name} with ${newKingData.winCount} wins.`);
+      }
+    }
+
+    await batch.commit();
+    logger.log(`Successfully updated ${updatedCount} game kings.`);
+    return null;
+  } catch (error) {
+    logger.error("Error recalculating game kings:", error);
+    // Optionally, re-throw the error to have the function execution marked as a failure
+    throw new Error("Failed to update game kings.");
+  }
+});
