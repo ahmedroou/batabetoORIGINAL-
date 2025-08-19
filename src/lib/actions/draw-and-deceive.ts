@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -495,7 +496,7 @@ export async function nextRound(gameId: string, hostId: string) {
         ensure(snap.exists(), 'اللعبة غير موجودة.');
         const game = snap.data() as Game;
         ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
-        ensure(game.gameState === 'results', 'لا يمكنك بدء جولة جديدة الآن.');
+        ensure(game.gameState === 'results' || game.gameState === 'round-results', 'لا يمكنك بدء جولة جديدة الآن.');
         const result = await _startNextRound(tx, gameRef, game);
         isGameOver = result.isGameOver;
     });
