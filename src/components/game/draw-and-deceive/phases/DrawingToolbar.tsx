@@ -1,0 +1,1 @@
+// This file is obsolete and its content has been moved to DrawingPhase.tsx. It can be safely deleted.
