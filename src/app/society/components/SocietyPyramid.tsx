@@ -22,6 +22,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RANK_ICON_MAP } from '@/data/social-ranks';
+import { Trophy } from 'lucide-react';
+
 
 /**
  * —— Enhancements summary ——
@@ -385,7 +388,7 @@ const PlayerCard = ({ player, rank, onPlayerClick, colorClass }: { player: UserP
   const titleToShow = currentDecree ? currentDecree.title : rank?.name;
   const isUnderProtection = !!player.allegiance?.to;
   const isPunished = isHumiliated || hasPunishmentAvatar;
-  const RankIcon = rank?.icon as React.ComponentType<{ className?: string }> | undefined;
+  const RankIcon = rank?.icon ? RANK_ICON_MAP[rank.icon as string] || Trophy : Trophy;
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -620,7 +623,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
         ) : (
           sortedRanksForDisplay.map((rank, index) => {
             const playersInRank = playersByRank[rank.name] || [];
-            const Icon = (rank.icon || Star) as any;
+            const Icon = RANK_ICON_MAP[rank.icon as string] || Trophy;
 
             const cardStyle =
               index === 0 ? 'bg-top-rank-card' : index === 1 ? 'bg-second-rank-card' : index === 2 ? 'bg-third-rank-card' : 'bg-common-card';
