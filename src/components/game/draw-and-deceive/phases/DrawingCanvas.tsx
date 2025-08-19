@@ -12,7 +12,7 @@ import { Pen, Eraser, Minus, Square, Circle, Undo2, Redo, Trash2 } from 'lucide-
 // ====================================================================================
 // Type Definitions
 // ====================================================================================
-type Tool = 'pen' | 'eraser' | 'line' | 'rect' | 'circle';
+export type Tool = 'pen' | 'eraser' | 'line' | 'rect' | 'circle';
 
 interface Point {
   x: number;
@@ -33,8 +33,19 @@ interface DrawingCanvasProps {
   initialImage?: string | null;
 }
 
+const TOOL_CONFIG: { tool: Tool, icon: React.ElementType }[] = [
+  { tool: 'pen', icon: Pen },
+  { tool: 'eraser', icon: Eraser },
+  { tool: 'line', icon: Minus },
+  { tool: 'rect', icon: Square },
+  { tool: 'circle', icon: Circle },
+];
+
+const COLORS = ['#000000', '#EF4444', '#3B82F6', '#22C55E', '#FBBF24', '#A855F7', '#EC4899', '#FFFFFF'];
+
+
 // ====================================================================================
-// Drawing Canvas & Toolbar Component (Combined)
+// Drawing Canvas Component
 // ====================================================================================
 const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
   className,
@@ -116,7 +127,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
         const newCtx = newBacking.getContext('2d');
 
         if (newCtx && oldContent && oldContent.width > 0 && oldContent.height > 0) {
-          newCtx.drawImage(oldContent, 0, 0);
+          newCtx.drawImage(oldContent, 0, 0, width, height);
         }
         backingRef.current = newBacking;
         
@@ -129,26 +140,24 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
 
   // Initial image loader
   useEffect(() => {
+    const bctx = getBackingCtx();
+    if (!bctx || !backingRef.current) return;
+
     if (initialImage) {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.src = initialImage;
       img.onload = () => {
-        const bctx = getBackingCtx();
-        if (bctx && backingRef.current) {
-          bctx.clearRect(0, 0, backingRef.current.width, backingRef.current.height);
-          bctx.drawImage(img, 0, 0, backingRef.current.width / (window.devicePixelRatio || 1), backingRef.current.height / (window.devicePixelRatio || 1));
-          pushHistory();
-          renderAll();
-        }
+        if (!backingRef.current) return;
+        bctx.clearRect(0, 0, backingRef.current.width, backingRef.current.height);
+        bctx.drawImage(img, 0, 0, backingRef.current.width / (window.devicePixelRatio || 1), backingRef.current.height / (window.devicePixelRatio || 1));
+        pushHistory();
+        renderAll();
       };
     } else {
-      const bctx = getBackingCtx();
-      if (bctx && backingRef.current) {
         bctx.clearRect(0, 0, backingRef.current.width, backingRef.current.height);
         pushHistory();
         renderAll();
-      }
     }
   }, [initialImage, getBackingCtx, pushHistory, renderAll]);
   
@@ -193,18 +202,20 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
 
     if (currentTool === 'pen' || currentTool === 'eraser') {
       drawLine(lastPointRef.current, point, bctx);
-      renderAll(); // redraw backing canvas to display
+      renderAll();
     } else {
-      renderAll(); // clear display canvas
-      if (currentTool === 'line') {
-          drawLine(startPointRef.current!, point, dctx);
-      } else if (currentTool === 'rect') {
-          dctx.strokeRect(startPointRef.current!.x, startPointRef.current!.y, point.x - startPointRef.current!.x, point.y - startPointRef.current!.y);
-      } else if (currentTool === 'circle') {
-          dctx.beginPath();
-          const radius = Math.hypot(point.x - startPointRef.current!.x, point.y - startPointRef.current!.y);
-          dctx.arc(startPointRef.current!.x, startPointRef.current!.y, radius, 0, 2 * Math.PI);
-          dctx.stroke();
+      renderAll();
+      if (startPointRef.current) {
+        if (currentTool === 'line') {
+            drawLine(startPointRef.current, point, dctx);
+        } else if (currentTool === 'rect') {
+            dctx.strokeRect(startPointRef.current.x, startPointRef.current.y, point.x - startPointRef.current.x, point.y - startPointRef.current.y);
+        } else if (currentTool === 'circle') {
+            dctx.beginPath();
+            const radius = Math.hypot(point.x - startPointRef.current.x, point.y - startPointRef.current.y);
+            dctx.arc(startPointRef.current.x, startPointRef.current.y, radius, 0, 2 * Math.PI);
+            dctx.stroke();
+        }
       }
     }
     
@@ -257,6 +268,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
       img.src = history[newIndex]!;
       img.onload = () => {
         const bctx = getBackingCtx()!;
+        if (!bctx.canvas) return;
         bctx.clearRect(0,0,bctx.canvas.width, bctx.canvas.height);
         bctx.drawImage(img,0,0);
         renderAll();
@@ -271,6 +283,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
       img.src = history[newIndex]!;
       img.onload = () => {
         const bctx = getBackingCtx()!;
+        if (!bctx.canvas) return;
         bctx.clearRect(0,0,bctx.canvas.width, bctx.canvas.height);
         bctx.drawImage(img,0,0);
         renderAll();
@@ -280,6 +293,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
     },
     clearAll: () => {
       const bctx = getBackingCtx()!;
+      if (!bctx.canvas) return;
       bctx.clearRect(0, 0, bctx.canvas.width, bctx.canvas.height);
       pushHistory();
       renderAll();
@@ -288,57 +302,47 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
   }));
 
   return (
-    <div ref={containerRef} className={cn("w-full h-full flex flex-col gap-2 bg-gray-100 dark:bg-gray-800", className)}>
-        {/* Canvas Area */}
-        <div className="flex-grow w-full rounded-lg overflow-hidden border bg-white relative">
-             <canvas
-                ref={displayRef}
-                className="absolute inset-0 touch-none"
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerUp}
-            />
-        </div>
+    <div ref={containerRef} className={cn("w-full h-full flex flex-col gap-2", className)}>
+      {/* Canvas Area */}
+      <div className="flex-grow w-full rounded-lg overflow-hidden border bg-white relative">
+        <canvas
+          ref={displayRef}
+          className="absolute inset-0 touch-none"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+        />
+      </div>
 
-        {/* Toolbar Area */}
-        <div className="shrink-0 w-full p-2 rounded-lg border bg-background/80 backdrop-blur-sm">
-            <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                    {TOOL_CONFIG.map(({ tool: t, icon: Icon }) => (
-                        <Button key={t} variant={tool === t ? 'secondary' : 'outline'} size="icon" onClick={() => setTool(t)}>
-                            <Icon />
-                        </Button>
-                    ))}
-                    <div className="w-px h-8 bg-border" />
-                    <Button variant="outline" size="icon" onClick={() => ref.current?.undo()} disabled={!onDrawEnd}><Undo2 /></Button>
-                    <Button variant="outline" size="icon" onClick={() => ref.current?.redo()} disabled={!onDrawEnd}><Redo /></Button>
-                    <Button variant="destructive" size="icon" onClick={() => ref.current?.clearAll()}><Trash2 /></Button>
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                    {COLORS.map(c => (
-                        <button key={c} onClick={() => setColor(c)} className={cn("w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 active:scale-95", color === c ? 'border-primary' : 'border-transparent')} style={{ backgroundColor: c }} />
-                    ))}
-                    <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-12 h-10 p-1" />
-                </div>
-                <div className="flex items-center gap-3 px-4">
-                    <Label>السماكة</Label>
-                    <Slider value={[thickness]} onValueChange={([v]) => setThickness(v)} max={50} step={1} />
-                </div>
-            </div>
+      {/* Toolbar Area */}
+      <div className="flex-shrink-0 w-full p-2 rounded-lg border bg-background/80 backdrop-blur-sm">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {TOOL_CONFIG.map(({ tool: t, icon: Icon }) => (
+              <Button key={t} variant={tool === t ? 'secondary' : 'outline'} size="icon" onClick={() => setTool(t)}>
+                <Icon />
+              </Button>
+            ))}
+            <div className="w-px h-8 bg-border" />
+            <Button variant="outline" size="icon" onClick={() => ref.current?.undo()} disabled={historyIndexRef.current <= 0}><Undo2 /></Button>
+            <Button variant="outline" size="icon" onClick={() => ref.current?.redo()} disabled={historyIndexRef.current >= history.length - 1}><Redo /></Button>
+            <Button variant="destructive" size="icon" onClick={() => ref.current?.clearAll()}><Trash2 /></Button>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {COLORS.map(c => (
+              <button key={c} onClick={() => setColor(c)} className={cn("w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 active:scale-95", color === c ? 'border-primary' : 'border-transparent')} style={{ backgroundColor: c }} />
+            ))}
+            <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-12 h-10 p-1" />
+          </div>
+          <div className="flex items-center gap-3 px-4">
+            <Label>السماكة</Label>
+            <Slider value={[thickness]} onValueChange={([v]) => setThickness(v)} max={50} step={1} />
+          </div>
         </div>
+      </div>
     </div>
   );
 });
 DrawingCanvas.displayName = 'DrawingCanvas';
 export default DrawingCanvas;
-
-const TOOL_CONFIG: { tool: Tool, icon: React.ElementType }[] = [
-  { tool: 'pen', icon: Pen },
-  { tool: 'eraser', icon: Eraser },
-  { tool: 'line', icon: Minus },
-  { tool: 'rect', icon: Square },
-  { tool: 'circle', icon: Circle },
-];
-
-const COLORS = ['#000000', '#EF4444', '#3B82F6', '#22C55E', '#FBBF24', '#A855F7', '#EC4899', '#FFFFFF'];
