@@ -218,12 +218,12 @@ const AvatarTile = React.memo(function AvatarTile({
           />
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2">
           <Input
             aria-label={`سعر ${avatarId}`}
             type="number"
             inputMode="numeric"
-            className="text-center"
+            className="w-full text-center"
             value={notForSale ? "" : String(price?.price ?? "")}
             onChange={(e) => {
               const v = e.target.value;
@@ -243,7 +243,7 @@ const AvatarTile = React.memo(function AvatarTile({
             }
             disabled={disabled || isDefault || notForSale}
           >
-            <SelectTrigger className="w-28">
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="العملة" />
             </SelectTrigger>
             <SelectContent>
@@ -1218,44 +1218,6 @@ export default function AdminStoreClient() {
         <aside className="space-y-6">
           <Card className="border-cyan-500/20 bg-white/5">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">إحصاءات سريعة</CardTitle>
-              <CardDescription>نظرة عامة</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
-                <div className="text-xs text-white/60">الشخصيات</div>
-                <div className="text-2xl font-bold text-cyan-300">
-                  {AVATAR_IDS.length}
-                </div>
-              </div>
-              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
-                <div className="text-xs text-white/60">العقوبات</div>
-                <div className="text-2xl font-bold text-cyan-300">
-                  {PUNISHMENT_AVATAR_IDS.length}
-                </div>
-              </div>
-              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
-                <div className="text-xs text-white/60">الألقاب</div>
-                <div className="text-2xl font-bold text-cyan-300">
-                  {ranks.length}
-                </div>
-              </div>
-              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
-                <div className="text-xs text-white/60">الحالة</div>
-                <div
-                  className={cn(
-                    "text-2xl font-bold",
-                    hasDirty ? "text-amber-300" : "text-emerald-300"
-                  )}
-                >
-                  {hasDirty ? "غير محفوظ" : "محفوظ"}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-cyan-500/20 bg-white/5">
-            <CardHeader className="pb-2">
               <CardTitle className="text-base">فلاتر المتجر</CardTitle>
               <CardDescription>تحكم بسرعة في المعروض</CardDescription>
             </CardHeader>
@@ -1323,8 +1285,45 @@ export default function AdminStoreClient() {
               </div>
             </CardContent>
           </Card>
-          
            <Card className="border-cyan-500/20 bg-white/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">إحصاءات سريعة</CardTitle>
+              <CardDescription>نظرة عامة</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
+                <div className="text-xs text-white/60">الشخصيات</div>
+                <div className="text-2xl font-bold text-cyan-300">
+                  {AVATAR_IDS.length}
+                </div>
+              </div>
+              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
+                <div className="text-xs text-white/60">العقوبات</div>
+                <div className="text-2xl font-bold text-cyan-300">
+                  {PUNISHMENT_AVATAR_IDS.length}
+                </div>
+              </div>
+              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
+                <div className="text-xs text-white/60">الألقاب</div>
+                <div className="text-2xl font-bold text-cyan-300">
+                  {ranks.length}
+                </div>
+              </div>
+              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
+                <div className="text-xs text-white/60">الحالة</div>
+                <div
+                  className={cn(
+                    "text-2xl font-bold",
+                    hasDirty ? "text-amber-300" : "text-emerald-300"
+                  )}
+                >
+                  {hasDirty ? "غير محفوظ" : "محفوظ"}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-cyan-500/20 bg-white/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Trophy className="h-5 w-5" /> أقوى اللاعبين
