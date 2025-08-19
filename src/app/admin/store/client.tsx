@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, {
@@ -968,138 +969,7 @@ export default function AdminStoreClient() {
         </div>
       </div>
 
-      <div className="container relative mx-auto grid gap-6 px-4 py-6 lg:grid-cols-[280px_1fr]">
-        {/* سايدبار: معلومات وفلاتر */}
-        <aside className="space-y-6">
-          <Card className="border-cyan-500/20 bg-white/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">إحصاءات سريعة</CardTitle>
-              <CardDescription>نظرة عامة</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
-                <div className="text-xs text-white/60">الشخصيات</div>
-                <div className="text-2xl font-bold text-cyan-300">
-                  {AVATAR_IDS.length}
-                </div>
-              </div>
-              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
-                <div className="text-xs text-white/60">العقوبات</div>
-                <div className="text-2xl font-bold text-cyan-300">
-                  {PUNISHMENT_AVATAR_IDS.length}
-                </div>
-              </div>
-              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
-                <div className="text-xs text-white/60">الألقاب</div>
-                <div className="text-2xl font-bold text-cyan-300">
-                  {ranks.length}
-                </div>
-              </div>
-              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
-                <div className="text-xs text-white/60">الحالة</div>
-                <div
-                  className={cn(
-                    "text-2xl font-bold",
-                    hasDirty ? "text-amber-300" : "text-emerald-300"
-                  )}
-                >
-                  {hasDirty ? "غير محفوظ" : "محفوظ"}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-cyan-500/20 bg-white/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">فلاتر المتجر</CardTitle>
-              <CardDescription>تحكم بسرعة في المعروض</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-black/30 p-2">
-                <Button
-                  variant={storeTab === "regular" ? "default" : "outline"}
-                  onClick={() => setStoreTab("regular")}
-                  className="flex-1"
-                >
-                  المتجر
-                </Button>
-                <Button
-                  variant={storeTab === "punishment" ? "default" : "outline"}
-                  onClick={() => setStoreTab("punishment")}
-                  className="flex-1"
-                >
-                  العقوبات
-                </Button>
-              </div>
-
-              <Button
-                variant={showOnlyChanged ? "default" : "outline"}
-                onClick={() => setShowOnlyChanged((s) => !s)}
-                className="w-full"
-              >
-                <Filter className="me-2 h-4 w-4" />
-                فقط المعدّلة
-              </Button>
-
-              <div className="space-y-2">
-                <Label className="text-xs text-white/70">عمليات جماعية</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => bulkApply({ currency: "coins" })}
-                  >
-                    كوينز
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => bulkApply({ currency: "diamonds" })}
-                  >
-                    ألماس
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => bulkApply({ price: 0, forSale: true })}
-                  >
-                    تصفير الأسعار
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => bulkApply({ forSale: false })}
-                  >
-                    إخفاء من المتجر
-                  </Button>
-                </div>
-                <div className="text-[11px] text-white/60">
-                  التطبيق على{" "}
-                  <span className="font-semibold text-cyan-300">
-                    {selectedIds.size ? `${selectedIds.size} محددة` : "العناصر الظاهرة"}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-cyan-500/20 bg-white/5">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Trophy className="h-5 w-5" /> أقوى اللاعبين
-              </CardTitle>
-              <CardDescription>أعلى نقاط الصدارة</CardDescription>
-            </CardHeader>
-            <CardContent>{renderTopUsers(topPointsUsers, "leaderboardPoints")}</CardContent>
-          </Card>
-
-          <Card className="border-cyan-500/20 bg-white/5">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CircleDollarSign className="h-5 w-5" /> أغنى اللاعبين
-              </CardTitle>
-              <CardDescription>أعلى الكوينز</CardDescription>
-            </CardHeader>
-            <CardContent>{renderTopUsers(topCoinsUsers, "coins")}</CardContent>
-          </Card>
-        </aside>
-
+      <div className="container relative mx-auto grid gap-6 px-4 py-6 lg:grid-cols-[1fr_280px]">
         {/* المحتوى الرئيسي */}
         <section className="space-y-6">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
@@ -1343,6 +1213,137 @@ export default function AdminStoreClient() {
             </TabsContent>
           </Tabs>
         </section>
+
+        {/* سايدبار: معلومات وفلاتر */}
+        <aside className="space-y-6">
+          <Card className="border-cyan-500/20 bg-white/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">إحصاءات سريعة</CardTitle>
+              <CardDescription>نظرة عامة</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
+                <div className="text-xs text-white/60">الشخصيات</div>
+                <div className="text-2xl font-bold text-cyan-300">
+                  {AVATAR_IDS.length}
+                </div>
+              </div>
+              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
+                <div className="text-xs text-white/60">العقوبات</div>
+                <div className="text-2xl font-bold text-cyan-300">
+                  {PUNISHMENT_AVATAR_IDS.length}
+                </div>
+              </div>
+              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
+                <div className="text-xs text-white/60">الألقاب</div>
+                <div className="text-2xl font-bold text-cyan-300">
+                  {ranks.length}
+                </div>
+              </div>
+              <div className="rounded-xl border border-cyan-500/20 bg-black/30 p-3 text-center">
+                <div className="text-xs text-white/60">الحالة</div>
+                <div
+                  className={cn(
+                    "text-2xl font-bold",
+                    hasDirty ? "text-amber-300" : "text-emerald-300"
+                  )}
+                >
+                  {hasDirty ? "غير محفوظ" : "محفوظ"}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-cyan-500/20 bg-white/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">فلاتر المتجر</CardTitle>
+              <CardDescription>تحكم بسرعة في المعروض</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-black/30 p-2">
+                <Button
+                  variant={storeTab === "regular" ? "default" : "outline"}
+                  onClick={() => setStoreTab("regular")}
+                  className="flex-1"
+                >
+                  المتجر
+                </Button>
+                <Button
+                  variant={storeTab === "punishment" ? "default" : "outline"}
+                  onClick={() => setStoreTab("punishment")}
+                  className="flex-1"
+                >
+                  العقوبات
+                </Button>
+              </div>
+
+              <Button
+                variant={showOnlyChanged ? "default" : "outline"}
+                onClick={() => setShowOnlyChanged((s) => !s)}
+                className="w-full"
+              >
+                <Filter className="me-2 h-4 w-4" />
+                فقط المعدّلة
+              </Button>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-white/70">عمليات جماعية</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => bulkApply({ currency: "coins" })}
+                  >
+                    كوينز
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => bulkApply({ currency: "diamonds" })}
+                  >
+                    ألماس
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => bulkApply({ price: 0, forSale: true })}
+                  >
+                    تصفير الأسعار
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => bulkApply({ forSale: false })}
+                  >
+                    إخفاء من المتجر
+                  </Button>
+                </div>
+                <div className="text-[11px] text-white/60">
+                  التطبيق على{" "}
+                  <span className="font-semibold text-cyan-300">
+                    {selectedIds.size ? `${selectedIds.size} محددة` : "العناصر الظاهرة"}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+           <Card className="border-cyan-500/20 bg-white/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="h-5 w-5" /> أقوى اللاعبين
+              </CardTitle>
+              <CardDescription>أعلى نقاط الصدارة</CardDescription>
+            </CardHeader>
+            <CardContent>{renderTopUsers(topPointsUsers, "leaderboardPoints")}</CardContent>
+          </Card>
+
+          <Card className="border-cyan-500/20 bg-white/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CircleDollarSign className="h-5 w-5" /> أغنى اللاعبين
+              </CardTitle>
+              <CardDescription>أعلى الكوينز</CardDescription>
+            </CardHeader>
+            <CardContent>{renderTopUsers(topCoinsUsers, "coins")}</CardContent>
+          </Card>
+        </aside>
       </div>
 
       {/* حوار حذف لقب */}
