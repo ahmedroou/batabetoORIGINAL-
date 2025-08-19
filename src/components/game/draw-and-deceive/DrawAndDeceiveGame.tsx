@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useMemo } from 'react';
@@ -118,14 +117,13 @@ export function DrawAndDeceiveGame({ game, self }: DrawAndDeceiveGameProps) {
   const isArtist = game.drawAndDeceiveState?.artistId === self.id;
   
   const Content = useMemo(() => {
-    const isArtistDrawingOrTrapping = isArtist && (effectivePhase === 'drawing' || effectivePhase === 'trapping');
-    const isPlayerWaiting = !isArtist && (effectivePhase === 'drawing' || effectivePhase === 'trapping');
-    
-    if (isArtistDrawingOrTrapping) {
-        return DrawingPhase;
+    // During the drawing phase, only the artist draws, others wait.
+    if (effectivePhase === 'drawing') {
+        return isArtist ? DrawingPhase : WaitingPhase;
     }
-    if (isPlayerWaiting) {
-        return WaitingPhase;
+    // During the trapping phase, only the non-artists set traps, the artist waits.
+    if (effectivePhase === 'trapping') {
+        return isArtist ? WaitingPhase : TrappingPhase;
     }
     
     return (PHASE_COMPONENTS as Record<string, React.ComponentType<{ game: Game; self: Player }>>)[effectivePhase] ?? null;
