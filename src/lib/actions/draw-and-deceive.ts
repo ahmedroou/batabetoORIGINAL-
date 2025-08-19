@@ -1,5 +1,3 @@
-
-
 'use server';
 
 /**
@@ -13,7 +11,7 @@ import { db } from '@/lib/firebase';
 import { doc, runTransaction, Timestamp, type Transaction, updateDoc, increment, arrayUnion, arrayRemove, deleteField } from 'firebase/firestore';
 import type { Game, Player, DrawAndDeceiveState, DrawAndDeceiveRoundResult } from '@/types';
 import { shuffle, safeCompareStrings } from './helpers';
-import { distributeEndOfGameAwards } from './admin/users';
+import { distributeEndOfGameAwards } from '../admin/users';
 
 
 /* ----------------------------- Constants ----------------------------- */
@@ -173,7 +171,7 @@ const beginGuessingPhase = (
   state: DrawAndDeceiveState
 ) => {
   const allAnswers = [state.correctAnswer!, ...Object.values(state.playerTraps)].filter((a): a is string => !!a);
-  const shuffledAnswers = shuffle(allAnswers);
+  const shuffledAnswers = shuffle(Array.from(new Set(allAnswers)));
   const guessingTime = state.settings?.guessingTime ?? DEFAULT_SETTINGS.guessingTime;
   tx.update(gameRef, {
     [F.s_phase]: 'guessing',
@@ -248,7 +246,6 @@ export async function startGame(gameId: string, hostId: string) {
       shuffledAnswers: [],
       drawingDataUrl: null,
       correctAnswer: null,
-      // 🔥 Start with "writing" window; if expired without description → kick-vote
       timerEndsAt: inSec(baseSettings.writingTime),
       kickVote: null,
     };
@@ -278,7 +275,6 @@ export async function submitCorrectAnswerAndStartDrawing(gameId: string, playerI
     const normalizedAnswer = normalizeAnswer(correctAnswer);
     const drawingTime = state.settings?.drawingTime ?? DEFAULT_SETTINGS.drawingTime;
 
-    // Switch from writing timer → drawing timer
     tx.update(gameRef, {
       [F.s_correct]: normalizedAnswer,
       [F.s_timer]: inSec(drawingTime),
@@ -298,13 +294,8 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
     ensure(state.phase === 'drawing', 'Cannot submit drawing now.');
     ensure(state.artistId === playerId, 'Only the artist can submit a drawing.');
     
-    // Auto-advance to trapping phase
-    const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
     tx.update(gameRef, {
-      [F.s_phase]: 'trapping',
       [F.s_drawing]: drawingDataUrl || null,
-      [F.s_timer]: inSec(trappingTime),
-      [F.s_kickVote]: null,
     });
   });
 }
@@ -319,9 +310,8 @@ export async function endArtistTurn(gameId: string, playerId: string) {
     const state = game.drawAndDeceiveState;
     ensure(state, 'Game state is missing.');
 
-    const isArtist = state.artistId === playerId;
     const timerUp = state.timerEndsAt ? state.timerEndsAt.toMillis() <= nowMs() : false;
-    ensure(isArtist || timerUp, 'Cannot end the artist\'s turn yet.');
+    ensure(timerUp, 'الوقت لم ينته بعد لإنهاء دور الفنان.');
     
     ensure(state.phase === 'drawing', 'This action is not available in the current phase.');
 
@@ -351,7 +341,6 @@ export async function kickArtistForInactivity(gameId: string, playerId: string) 
     const artistId = state.artistId!;
     const players = [...game.players];
     
-    // Kick the artist
     const artistIndex = players.findIndex(p => p.id === artistId);
     if (artistIndex !== -1) {
       players[artistIndex]!.status = 'left';
@@ -405,8 +394,6 @@ export async function submitTrap(gameId: string, playerId: string, trap: string)
       const norm = normalizeAnswer(trap);
       
       const currentTraps = { ...(state.playerTraps || {}), [playerId]: norm };
-      
-      // No similarity check server-side in this version, client handles it
       
       const activeNonArtists = getActiveNonArtistPlayers(game, state.artistId!);
       const everyoneAnswered = activeNonArtists.every(p => Object.prototype.hasOwnProperty.call(currentTraps, p.id));
@@ -559,3 +546,4 @@ function pickWinnerId(scores: Record<string, number>): string {
     if (!entries.length) return '';
     return entries.sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))[0]![0];
 }
+const TIMEOUT_TOKEN = '__TIMEOUT__';

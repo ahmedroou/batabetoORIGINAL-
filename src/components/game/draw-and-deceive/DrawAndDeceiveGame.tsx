@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useMemo } from 'react';
@@ -119,15 +118,20 @@ export function DrawAndDeceiveGame({ game, self }: DrawAndDeceiveGameProps) {
       if (game.gameState === 'drawing') {
           const artistId = game.drawAndDeceiveState?.artistId;
           const hasAnswer = !!game.drawAndDeceiveState?.correctAnswer;
+          // You are waiting if the answer is set, but you are not the artist
           return hasAnswer && self.id !== artistId;
       }
       return false;
   }, [game, self.id]);
 
   const Content = useMemo(() => {
-    if (isWaiting) return WaitingPhase;
+    // The artist is never in a "waiting" state during the drawing phase.
+    if (game.gameState === 'drawing' && self.id !== game.drawAndDeceiveState?.artistId) {
+        return WaitingPhase;
+    }
     return (PHASE_COMPONENTS as Record<string, React.ComponentType<{ game: Game; self: Player }>>)[effectivePhase] ?? null;
-  }, [effectivePhase, isWaiting]);
+  }, [effectivePhase, game.gameState, game.drawAndDeceiveState?.artistId, self.id]);
+
 
   // تمرير المستخدم لأعلى الصفحة عند تغير المرحلة
   useEffect(() => {

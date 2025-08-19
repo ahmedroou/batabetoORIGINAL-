@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -22,6 +21,7 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
     });
 
     const artist = useMemo(() => game.players.find(p => p.id === state.artistId), [game.players, state.artistId]);
+    const artistIsWriting = !state.correctAnswer;
 
     useEffect(() => {
         const ends = state.timerEndsAt?.toMillis();
@@ -34,6 +34,7 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
     }, [state.timerEndsAt]);
 
     const handleEndTurn = async () => {
+        if(isSubmitting) return;
         setIsSubmitting('end');
         try {
             await endArtistTurn(game.id, self.id);
@@ -45,6 +46,7 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
     };
     
     const handleKickArtist = async () => {
+        if(isSubmitting) return;
         setIsSubmitting('kick');
         try {
             await kickArtistForInactivity(game.id, self.id);
@@ -55,15 +57,18 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
         }
     };
 
+    const title = artistIsWriting ? `في انتظار ${artist?.name || 'الفنان'}...` : `في انتظار ${artist?.name || 'الفنان'}`;
+    const description = artistIsWriting ? "يقوم بكتابة وصف للرسمة..." : "يقوم بالرسم الآن...";
+
     return (
         <Card className="w-full max-w-lg text-center">
             <CardHeader>
                 <CardTitle className="flex items-center justify-center gap-2 text-2xl">
                     <Brain className="w-8 h-8 text-primary"/>
-                    في انتظار الفنان
+                    {title}
                 </CardTitle>
                 <CardDescription>
-                    يقوم {artist?.name || 'الفنان'} حاليًا بالرسم. استعد لوضع فخك!
+                    {description}
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
