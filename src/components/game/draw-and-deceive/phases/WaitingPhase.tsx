@@ -26,7 +26,7 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
         const ends = state.timerEndsAt?.toMillis();
         if (!ends) return;
         const timer = setInterval(() => {
-            const remaining = Math.max(0, Math.round((ends - Date.now()) / 1000));
+            const remaining = Math.max(0, Math.round((ends - Date.now())/1000));
             setTimeLeft(remaining);
         }, 1000);
         return () => clearInterval(timer);

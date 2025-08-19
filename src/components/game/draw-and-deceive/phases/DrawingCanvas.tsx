@@ -554,7 +554,7 @@ export function DrawingCanvas({
   const dataURLToBlob = (dataURL: string) => {
     const [head, body] = dataURL.split(',');
     const mime = head.match(/:(.*?);/)?.[1] || 'image/png';
-    const binStr = atob(body);
+    const binStr = atob(body!);
     const len = binStr.length;
     const arr = new Uint8Array(len);
     for (let i = 0; i < len; i++) arr[i] = binStr.charCodeAt(i);
@@ -622,7 +622,7 @@ export function DrawingCanvas({
       const i = y * width + x;
       if (visited[i]) return;
       const off = i * 4;
-      if (!within(data[off], data[off + 1], data[off + 2], data[off + 3])) return;
+      if (!within(data[off]!, data[off + 1]!, data[off + 2]!, data[off + 3]!)) return;
       visited[i] = 1;
       q.push({ x, y });
     };
@@ -712,7 +712,7 @@ export function DrawingCanvas({
       const { data } = bctx.getImageData(sx, sy, ex, ey);
       let r = 0, g = 0, b = 0, a = 0, n = (ex * ey);
       for (let i = 0; i < data.length; i += 4) {
-        r += data[i]; g += data[i + 1]; b += data[i + 2]; a += data[i + 3];
+        r += data[i]!; g += data[i + 1]!; b += data[i + 2]!; a += data[i + 3]!;
       }
       r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n); a = Math.round(a / n);
       if (a > 0) {
@@ -828,11 +828,11 @@ export function DrawingCanvas({
   const onTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length === 2) {
       e.preventDefault();
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
+      const t1 = e.touches[0]!;
+      const t2 = e.touches[1]!;
       pinchDistRef.current = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
     } else if (e.touches.length === 1) {
-      const t = e.touches[0];
+      const t = e.touches[0]!;
       if (tool === 'pan') {
         isDrawingRef.current = true;
         lastClientRef.current = { x: t.clientX, y: t.clientY };
@@ -843,8 +843,8 @@ export function DrawingCanvas({
   const onTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length === 2) {
       e.preventDefault();
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
+      const t1 = e.touches[0]!;
+      const t2 = e.touches[1]!;
       const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
       const factor = currentDist / (pinchDistRef.current || currentDist);
       const newZoom = Math.min(6, Math.max(0.25, zoom * factor));
@@ -862,7 +862,7 @@ export function DrawingCanvas({
       pinchDistRef.current = currentDist;
       renderAll();
     } else if (e.touches.length === 1 && (tool === 'pan' || forcedPanRef.current)) {
-      const t = e.touches[0];
+      const t = e.touches[0]!;
       const last = lastClientRef.current ?? { x: t.clientX, y: t.clientY };
       const dx = t.clientX - last.x;
       const dy = t.clientY - last.y;
@@ -1031,7 +1031,7 @@ export function DrawingCanvas({
       </PopoverTrigger>
       <PopoverContent className="w-64 p-2">
         <Label className="text-xs">حساسية التعبئة</Label>
-        <Slider min={0} max={100} step={2} value={[fillTolerance]} onValueChange={v => setFillTolerance(v[0])} />
+        <Slider min={0} max={100} step={2} value={[fillTolerance]} onValueChange={v => setFillTolerance(v[0]!)} />
       </PopoverContent>
     </Popover>
   );
@@ -1045,7 +1045,7 @@ export function DrawingCanvas({
         <Textarea placeholder="اكتب نصك هنا..." value={textValue} onChange={e => setTextValue(e.target.value)} rows={3} />
         <div className="flex items-center gap-2">
           <span className="text-xs">الحجم:</span>
-          <Slider min={10} max={120} step={2} value={[textSize]} onValueChange={v => setTextSize(v[0])} />
+          <Slider min={10} max={120} step={2} value={[textSize]} onValueChange={v => setTextSize(v[0]!)} />
         </div>
       </PopoverContent>
     </Popover>
@@ -1118,13 +1118,13 @@ export function DrawingCanvas({
             <div className="flex items-center gap-2">
               <span className="text-xs">السماكة</span>
               <div className="w-28">
-                <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0])} />
+                <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0]!)} />
               </div>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs">الشفافية</span>
               <div className="w-28">
-                <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0])} />
+                <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0]!)} />
               </div>
             </div>
           </div>
@@ -1172,13 +1172,13 @@ export function DrawingCanvas({
                   <div className="flex items-center gap-2">
                     <span className="text-xs">السماكة</span>
                     <div className="w-28">
-                      <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0])} />
+                      <Slider min={1} max={60} step={1} value={[thickness]} onValueChange={v => setThickness(v[0]!)} />
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs">الشفافية</span>
                     <div className="w-28">
-                      <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0])} />
+                      <Slider min={0.1} max={1} step={0.05} value={[opacity]} onValueChange={v => setOpacity(v[0]!)} />
                     </div>
                   </div>
                 </div>
@@ -1191,7 +1191,7 @@ export function DrawingCanvas({
       {/* سطح الرسم + الشبكة */}
       <div
         className={cn(
-          'relative w-full rounded-xl overflow-hidden border bg-white flex-grow',
+          'relative w-full h-full rounded-xl overflow-hidden border bg-white flex-grow',
           disabled && 'pointer-events-none opacity-75',
           cursorClass
         )}
