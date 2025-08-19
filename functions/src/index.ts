@@ -14,6 +14,8 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import type { GameKing, UserProfile } from "../../src/types";
 import { FieldValue } from "firebase-admin/firestore";
+import { onRequest } from 'firebase-functions/v2/https';
+import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
