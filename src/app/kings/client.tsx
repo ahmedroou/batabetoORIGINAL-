@@ -269,11 +269,7 @@ export default function KingsClient() {
                         <Crown className="w-8 h-8 drop-shadow-lg" />
                         <h2 className="text-2xl font-bold">ملك بطابيطو</h2>
                       </div>
-                      <h3
-                        className="text-4xl md:text-5xl font-extrabold mt-1 king-of-games-name"
-                      >
-                        {kingOfGames.name}
-                      </h3>
+                      <h3 className="text-4xl md:text-5xl font-extrabold mt-1 king-of-games-name">{kingOfGames.name}</h3>
                        <div className="flex flex-col md:flex-row items-center justify-center md:justify-start gap-x-4 gap-y-1 mt-2 text-xl font-semibold text-yellow-100/90" style={{textShadow: '1px 1px 2px rgba(0,0,0,0.3)'}}>
                         <div className="flex items-center gap-2">
                           <Trophy className="w-5 h-5" />
