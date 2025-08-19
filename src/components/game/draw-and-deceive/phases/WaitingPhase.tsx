@@ -3,9 +3,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { Game, Player } from '@/types';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Brain, Timer, UserX, PenSquare, HelpCircle } from 'lucide-react';
+import { handleTimeout } from '@/lib/actions/draw-and-deceive';
 import { Button } from '@/components/ui/button';
-import { Loader2, Brain, Timer, UserX } from 'lucide-react';
-import { endArtistTurn, kickArtistForInactivity } from '@/lib/actions/draw-and-deceive';
+import { Loader2 } from 'lucide-react';
 
 interface WaitingPhaseProps {
     game: Game;
@@ -14,14 +15,13 @@ interface WaitingPhaseProps {
 
 export function WaitingPhase({ game, self }: WaitingPhaseProps) {
     const state = game.drawAndDeceiveState!;
-    const [isSubmitting, setIsSubmitting] = useState<'end' | 'kick' | false>(false);
     const [timeLeft, setTimeLeft] = useState(() => {
         const ends = state.timerEndsAt?.toMillis();
         return ends ? Math.max(0, Math.round((ends - Date.now()) / 1000)) : 0;
     });
 
-    const artist = useMemo(() => game.players.find(p => p.id === state.artistId), [game.players, state.artistId]);
-    const artistIsWriting = !state.correctAnswer;
+    const isHost = game.hostId === self.id;
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         const ends = state.timerEndsAt?.toMillis();
@@ -32,60 +32,68 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
         }, 1000);
         return () => clearInterval(timer);
     }, [state.timerEndsAt]);
-
-    const handleEndTurn = async () => {
-        if(isSubmitting) return;
-        setIsSubmitting('end');
-        try {
-            await endArtistTurn(game.id, self.id);
-        } catch(e) {
-            // handle error with toast if available
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
     
-    const handleKickArtist = async () => {
-        if(isSubmitting) return;
-        setIsSubmitting('kick');
+    const handleEndTurnByVote = async () => {
+        if (!isHost || isSubmitting) return;
+        setIsSubmitting(true);
         try {
-            await kickArtistForInactivity(game.id, self.id);
-        } catch(e) {
-            // handle error
+            await handleTimeout(game.id, self.id);
+        } catch(e: any) {
+            console.error("Failed to end turn", e.message);
         } finally {
             setIsSubmitting(false);
         }
-    };
+    }
 
-    const title = artistIsWriting ? `في انتظار ${artist?.name || 'الفنان'}...` : `في انتظار ${artist?.name || 'الفنان'}`;
-    const description = artistIsWriting ? "يقوم بكتابة وصف للرسمة..." : "يقوم بالرسم الآن...";
+    const phaseDetails = useMemo(() => {
+        switch(state.phase) {
+            case 'drawing':
+                const artist = game.players.find(p => p.id === state.artistId);
+                return {
+                    title: `في انتظار ${artist?.name || 'الفنان'}...`,
+                    description: 'يقوم بكتابة وصف الرسمة...',
+                    icon: <Brain className="w-16 h-16 text-primary" />
+                };
+            case 'trapping':
+                 return {
+                    title: 'في انتظار اللاعبين...',
+                    description: 'يقوم اللاعبون الآخرون بوضع فخاخهم.',
+                    icon: <PenSquare className="w-16 h-16 text-primary" />
+                };
+            case 'guessing':
+                 return {
+                    title: 'في انتظار التخمينات...',
+                    description: 'يقوم اللاعبون باختيار تخميناتهم.',
+                    icon: <HelpCircle className="w-16 h-16 text-primary" />
+                };
+            default:
+                return {
+                    title: 'في الانتظار...',
+                    description: 'يرجى انتظار اكتمال الإجراءات.',
+                    icon: <Loader2 className="w-16 h-16 text-primary animate-spin" />
+                };
+        }
+    }, [state.phase, state.artistId, game.players]);
+    
 
     return (
         <Card className="w-full max-w-lg text-center">
             <CardHeader>
-                <CardTitle className="flex items-center justify-center gap-2 text-2xl">
-                    <Brain className="w-8 h-8 text-primary"/>
-                    {title}
-                </CardTitle>
-                <CardDescription>
-                    {description}
-                </CardDescription>
+                <div className="mx-auto mb-4">{phaseDetails.icon}</div>
+                <CardTitle className="text-2xl">{phaseDetails.title}</CardTitle>
+                <CardDescription>{phaseDetails.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="flex items-center justify-center gap-2 font-mono text-xl">
-                    <Timer/> {timeLeft}s
+                    <Timer /> {timeLeft}s
                 </div>
-                
-                {timeLeft === 0 && (
+                {isHost && timeLeft === 0 && (
                     <div className="p-4 border-t space-y-3">
-                        <p className="text-sm text-muted-foreground">انتهى وقت الفنان!</p>
+                        <p className="text-sm text-muted-foreground">انتهى وقت اللاعب الحالي!</p>
                         <div className="flex justify-center gap-2">
-                            <Button onClick={handleEndTurn} disabled={!!isSubmitting}>
-                                {isSubmitting === 'end' ? <Loader2 className="animate-spin"/> : 'إنهاء دوره (حفظ الرسمة)'}
-                            </Button>
-                            <Button variant="destructive" onClick={handleKickArtist} disabled={!!isSubmitting}>
-                                {isSubmitting === 'kick' ? <Loader2 className="animate-spin"/> : <UserX/>} طرد الفنان
-                            </Button>
+                           <Button onClick={handleEndTurnByVote} disabled={isSubmitting}>
+                            {isSubmitting ? <Loader2 className="animate-spin"/> : 'إنهاء دوره'}
+                           </Button>
                         </div>
                     </div>
                 )}
