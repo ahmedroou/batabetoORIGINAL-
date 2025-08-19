@@ -1,4 +1,3 @@
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -275,7 +274,24 @@ export async function submitCorrectAnswerAndStartDrawing(gameId: string, playerI
   });
 }
 
-export async function submitDrawing(gameId: string, playerId: string, drawingDataUrl?: string) {
+/** NEW: Saves drawing progress without advancing state */
+export async function saveDrawingProgress(gameId: string, playerId: string, drawingDataUrl?: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (tx) => {
+        const gameSnap = await tx.get(gameRef);
+        ensure(gameSnap.exists(), 'Game not found.');
+        const game = gameSnap.data() as Game;
+        const state = game.drawAndDeceiveState;
+
+        ensure(state, 'Game state not initialized for Draw and Deceive.');
+        if (state.phase !== 'drawing' || state.artistId !== playerId) return;
+        
+        tx.update(gameRef, { [F.s_drawing]: drawingDataUrl || null });
+    });
+}
+
+
+export async function endArtistTurn(gameId: string, playerId: string, drawingDataUrl?: string) {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (tx) => {
     const gameSnap = await tx.get(gameRef);
@@ -294,30 +310,6 @@ export async function submitDrawing(gameId: string, playerId: string, drawingDat
         [F.s_phase]: 'trapping',
         [F.s_timer]: inSec(trappingTime),
         [F.s_kickVote]: null,
-    });
-  });
-}
-
-
-export async function endArtistTurn(gameId: string, playerId: string) {
-  const gameRef = doc(db, 'games', gameId);
-  await runTransaction(db, async (tx) => {
-    const gameSnap = await tx.get(gameRef);
-    ensure(gameSnap.exists(), 'Game not found.');
-    const game = gameSnap.data() as Game;
-    const state = game.drawAndDeceiveState;
-    ensure(state, 'Game state is missing.');
-
-    const timerUp = state.timerEndsAt ? state.timerEndsAt.toMillis() <= nowMs() : false;
-    ensure(timerUp, 'الوقت لم ينته بعد لإنهاء دور الفنان.');
-    
-    ensure(state.phase === 'drawing', 'This action is not available in the current phase.');
-
-    const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
-    tx.update(gameRef, {
-      [F.s_phase]: 'trapping',
-      [F.s_timer]: inSec(trappingTime),
-      [F.s_kickVote]: null,
     });
   });
 }
@@ -452,7 +444,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
         const game = snap.data() as Game;
         const state = game.drawAndDeceiveState;
 
-        if (!state?.timerEndsAt || state.timerEndsAt.toMillis() > Date.now()) {
+        if (!state?.timerEndsAt || state.timerEndsAt.toMillis() > nowMs()) {
             return;
         }
         

@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { submitCorrectAnswerAndStartDrawing, submitDrawing } from '@/lib/actions/draw-and-deceive';
+import { submitCorrectAnswerAndStartDrawing, endArtistTurn, saveDrawingProgress } from '@/lib/actions/draw-and-deceive';
 import { Loader2, Send, Timer } from 'lucide-react';
 import { DrawingCanvas } from './DrawingCanvas';
 
@@ -88,10 +88,10 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   };
 
   const handleManualDrawingSubmit = async () => {
-    if (!drawingDataUrl || isSubmitting) return;
+    if (isSubmitting) return;
     setIsSubmitting('drawing');
     try {
-      await submitDrawing(game.id, self.id, drawingDataUrl);
+      await endArtistTurn(game.id, self.id, drawingDataUrl ?? undefined);
       toast({title: "تم استلام الرسمة!", description: "بانتظار اللاعبين لوضع فخاخهم."});
     } catch (err: any) {
       toast({ title: 'خطأ', description: err.message, variant: 'destructive' });
@@ -104,7 +104,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
     setDrawingDataUrl(dataUrl);
     if(autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
-        submitDrawing(game.id, self.id, dataUrl).catch(() => {});
+        saveDrawingProgress(game.id, self.id, dataUrl).catch(() => {});
     }, 2000);
   }, [game.id, self.id]);
   
@@ -126,7 +126,7 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
       <div className="w-full flex-grow min-h-0">
         <DrawingCanvas onDrawEnd={handleDrawEnd} />
       </div>
-      <Button size="lg" onClick={handleManualDrawingSubmit} disabled={isSubmitting === 'drawing' || !drawingDataUrl} className="w-full max-w-md">
+      <Button size="lg" onClick={handleManualDrawingSubmit} disabled={isSubmitting === 'drawing'} className="w-full max-w-md">
         {isSubmitting === 'drawing' ? <Loader2 className="animate-spin" /> : "إرسال الرسمة النهائية"}
       </Button>
     </div>
