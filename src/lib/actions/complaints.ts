@@ -17,6 +17,7 @@ import {
     runTransaction,
     increment,
     limit,
+    setDoc,
 } from 'firebase/firestore';
 import type { Complaint, Game } from '@/types';
 import { sendSystemMail } from './user/mail';
@@ -26,23 +27,30 @@ const COMPLAINT_RATE_LIMIT_SECONDS = 43200; // 12 hours
 
 export async function submitComplaint(data: Omit<Complaint, 'id' | 'status' | 'createdAt'>): Promise<{ success: boolean; error?: string }> {
     try {
-        const userRef = doc(db, 'users', data.userId);
-
+        const userRateLimitRef = doc(db, 'rate_limits', data.userId);
+        const complaintRef = doc(collection(db, 'complaints'));
+        
+        // The check is now primarily enforced by security rules.
+        // This transaction just ensures the timestamp is updated atomically with creation.
         await runTransaction(db, async (transaction) => {
-            // Check rate limit before proceeding
-            await checkRateLimit(transaction, userRef, 'submit_complaint', COMPLAINT_RATE_LIMIT_SECONDS);
-
-            const complaintRef = doc(collection(db, 'complaints'));
             transaction.set(complaintRef, {
                 ...data,
                 status: 'pending',
                 createdAt: serverTimestamp(),
             });
+            // Update the timestamp for the rate limit check in security rules
+            transaction.set(userRateLimitRef, { 
+                'submit_complaint': serverTimestamp() 
+            }, { merge: true });
         });
 
         return { success: true };
     } catch (error: any) {
         console.error("Error submitting complaint:", error);
+        // Provide a user-friendly error message if rules deny the request
+        if (error.code === 'permission-denied') {
+            return { success: false, error: 'لا يمكنك إرسال شكوى أخرى الآن. الرجاء الانتظار 12 ساعة.' };
+        }
         return { success: false, error: error.message || 'فشل إرسال الشكوى.' };
     }
 }

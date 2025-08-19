@@ -143,7 +143,7 @@ function toWesternDigits(s: string): string {
  * - strips punctuation & tatweel
  * - removes Arabic diacritics
  * - unifies digits to Western 0–9
- * - unifies Alef forms (أإآ → ا)
+ * - unifies Alef forms (أإآا → ا)
  * - unifies Yeh/Alef Maqsura (ي/ى → ي)
  * - Ta Marbuta → ه
  * - collapses whitespace
@@ -158,7 +158,7 @@ export function normalizeForSignature(s: string): string {
       .replace(PUNCTUATION, ' ')
       .replace(TATWEEL, '')
       .replace(ARABIC_DIACRITICS, '')
-      .replace(/[أإآ]/g, 'ا')
+      .replace(/[أإآا]/g, 'ا')
       .replace(/[يى]/g, 'ي')
       .replace(/ة/g, 'ه')
       .replace(/\s+/g, ' ')
@@ -231,8 +231,8 @@ export const tsFromNowS = (seconds: number): Timestamp => {
 
 /**
  * Checks if a user is rate-limited for a specific action. Throws an error if they are.
- * Updates the timestamp for the action if they are not rate-limited.
- * @param tx The Firestore transaction.
+ * This is a server-side utility to be used within Firestore transactions.
+ * @param tx The Firestore transaction object.
  * @param userRef The reference to the user document.
  * @param actionType A unique key for the action (e.g., 'submit_complaint').
  * @param limitSeconds The cooldown period in seconds.
@@ -242,7 +242,7 @@ export async function checkRateLimit(
   userRef: FirebaseFirestore.DocumentReference,
   actionType: string,
   limitSeconds: number
-) {
+): Promise<void> {
   const userDoc = await tx.get(userRef);
   if (!userDoc.exists()) throw new Error("المستخدم غير موجود.");
 
@@ -254,12 +254,17 @@ export async function checkRateLimit(
     const timeSinceLastAction = (Date.now() - lastActionTime.toMillis()) / 1000;
     if (timeSinceLastAction < limitSeconds) {
       const waitTime = Math.ceil(limitSeconds - timeSinceLastAction);
-      throw new Error(`يجب عليك الانتظار ${waitTime} ثانية قبل القيام بهذا الإجراء مرة أخرى.`);
+      // Convert wait time to a more readable format
+      let waitMsg = '';
+      const hours = Math.floor(waitTime / 3600);
+      const minutes = Math.floor((waitTime % 3600) / 60);
+      const seconds = waitTime % 60;
+
+      if(hours > 0) waitMsg += `${hours} ساعة `;
+      if(minutes > 0) waitMsg += `${minutes} دقيقة `;
+      if(seconds > 0 && hours === 0) waitMsg += `${seconds} ثانية`;
+      
+      throw new Error(`يجب عليك الانتظار ${waitMsg.trim()} قبل القيام بهذا الإجراء مرة أخرى.`);
     }
   }
-
-  // If not rate-limited, update the timestamp for this action.
-  tx.update(userRef, {
-    [`lastActionTimestamp.${actionType}`]: Timestamp.now()
-  });
 }

@@ -126,6 +126,7 @@ export async function createGameRoom(
     const gameId = generateGameId();
     const gameRef = doc(db, 'games', gameId);
     const userRef = doc(db, 'users', userId);
+    const rateLimitRef = doc(db, 'rate_limits', userId);
 
     // Fetch player details before any write ops (keeps future transaction lean)
     const playerDetails = await getPlayerFromUserId(userId);
