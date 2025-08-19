@@ -43,10 +43,9 @@ import {
   adminUpdateUser,
   giveReward,
   applyPunishment,
-  adminSearchUsers,
-  recalculateGameKings,
   adminSendMail,
 } from "@/lib/actions/admin";
+import { adminSearchUsers } from "@/lib/actions/admin/users";
 import {
   setAnnouncement,
   getAnnouncement,
