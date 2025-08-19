@@ -604,6 +604,9 @@ export function DrawingCanvas({
       lastClientRef.current = { x: e.clientX, y: e.clientY };
       return;
     }
+    
+    // Add this null check
+    if (!lastPtCssRef.current) return;
 
     // نص
     if (tool === 'text') {
@@ -708,7 +711,9 @@ export function DrawingCanvas({
     const endCss = clientToCss(e.clientX, e.clientY);
 
     if (tool === 'line' || tool === 'rect' || tool === 'circle') {
-      commitShapeBacking(lastPtCssRef.current!, endCss);
+      if(lastPtCssRef.current) {
+        commitShapeBacking(lastPtCssRef.current!, endCss);
+      }
       clearOverlay();
       finishStroke(true);
     } else if (tool === 'pan' || forcedPanRef.current) {
@@ -984,7 +989,7 @@ export function DrawingCanvas({
     if (tool === 'pan' || forcedPanRef.current) return 'cursor-grab';
     if (tool === 'text') return 'cursor-text';
     return 'cursor-crosshair';
-  }, [tool, disabled]);
+  }, [tool, disabled, forcedPanRef]);
 
   return (
     <div ref={containerRef} className={cn('w-full h-full select-none flex flex-col gap-2', className)}>
