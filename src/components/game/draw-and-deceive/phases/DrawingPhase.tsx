@@ -134,17 +134,11 @@ export function DrawingPhase({ game, self }: DrawingPhaseProps) {
   }
 
   return (
-    <div className="w-full max-w-4xl flex flex-col items-center gap-4">
-      <Card className="w-full text-center">
-        <CardHeader>
-          <CardTitle>ارسم: "{state.correctAnswer}"</CardTitle>
-          <CardDescription>لديك {state.settings.drawingTime} ثانية لرسم هذا الوصف.</CardDescription>
-        </CardHeader>
-      </Card>
-      <div className="w-full aspect-video">
+    <div className="w-full h-[85vh] max-w-5xl flex flex-col items-center gap-4">
+      <div className="w-full flex-grow min-h-0">
         <DrawingCanvas onDrawEnd={handleDrawEnd} />
       </div>
-      <Button size="lg" onClick={handleDrawingSubmit} disabled={isSubmitting === 'drawing' || !drawingDataUrl}>
+      <Button size="lg" onClick={handleDrawingSubmit} disabled={isSubmitting === 'drawing' || !drawingDataUrl} className="w-full max-w-md">
         {isSubmitting === 'drawing' ? <Loader2 className="animate-spin" /> : "إرسال الرسمة"}
       </Button>
     </div>
