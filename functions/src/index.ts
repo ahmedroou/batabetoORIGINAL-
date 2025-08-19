@@ -13,6 +13,7 @@ import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import type {GameKing, UserProfile} from "../../src/types";
+import { FieldValue } from "firebase-admin/firestore";
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
@@ -27,7 +28,7 @@ setGlobalOptions({maxInstances: 10, memory: "256MiB"});
  * crucial for keeping the leaderboards up-to-date automatically.
  */
 export const updateGameKings = onSchedule("every thursday 10:00",
-  async (event) => {
+  async (event): Promise<void> => {
     logger.info("Starting weekly recalculation of Game Kings...", {event});
 
     try {
@@ -55,19 +56,21 @@ export const updateGameKings = onSchedule("every thursday 10:00",
           const gameKingRef = kingsCollectionRef.doc(gameType);
 
           const winCounts = kingData.winCounts;
-          const winCount = winCounts?.[gameType as keyof typeof winCounts] || 0;
+          const winCount =
+            (winCounts?.[gameType as keyof typeof winCounts] || 0);
 
           const newKingData: GameKing = {
             kingId: kingDoc.id,
             name: kingData.name,
             avatarId: kingData.avatarId,
             winCount: winCount,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
           };
 
           batch.set(gameKingRef, newKingData, {merge: true});
           updatedCount++;
-          const logMessage = `New king for ${gameType}: ${kingData.name} ` +
+          const logMessage =
+            `New king for ${gameType}: ${kingData.name} ` +
             `with ${newKingData.winCount} wins.`;
           logger.info(logMessage);
         }
@@ -75,7 +78,7 @@ export const updateGameKings = onSchedule("every thursday 10:00",
 
       await batch.commit();
       logger.log(`Successfully updated ${updatedCount} game kings.`);
-      return null;
+      return;
     } catch (error) {
       logger.error("Error recalculating game kings:", error);
       // Optionally, re-throw the error to have the function execution
@@ -83,3 +86,4 @@ export const updateGameKings = onSchedule("every thursday 10:00",
       throw new Error("Failed to update game kings.");
     }
   });
+
