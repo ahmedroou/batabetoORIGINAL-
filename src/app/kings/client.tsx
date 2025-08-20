@@ -1,6 +1,5 @@
 
-
-"use client";
+'use client';
 
 import * as React from "react";
 import { useState, useEffect, useMemo } from "react";
@@ -15,6 +14,7 @@ import { getKingsPageData } from "@/lib/actions/user/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { RANK_ICON_MAP } from "@/data/social-ranks";
+import { Timestamp } from "firebase/firestore";
 
 
 // --- Countdown Timer Logic ---
@@ -373,4 +373,5 @@ export default function KingsClient() {
       </div>
     </div>
   );
-}
+
+    

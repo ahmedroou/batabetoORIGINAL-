@@ -301,9 +301,50 @@
 
 /* Golden Name for the King of Games */
 .king-of-games-name {
-    @apply bg-gradient-to-r from-yellow-400 via-amber-300 to-yellow-500 bg-clip-text text-transparent;
-    text-shadow: 0 1px 4px rgba(250, 204, 21, 0.2);
+  /* luxe metallic gold gradient */
+  background: linear-gradient(100deg,
+    #8f7300 0%,    /* deep bronze base */
+    #b8860b 20%,   /* dark goldenrod (depth) */
+    #d4af37 45%,   /* classic gold (main) */
+    #ffd26a 60%,   /* warm highlight */
+    #fff7d0 72%,   /* specular highlight */
+    #c28f00 100%); /* return to depth */
+
+  /* keep gradient inside the text */
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+
+  /* layered shadows for depth + subtle warm glow */
+  text-shadow:
+    0 1px 0 rgba(0,0,0,0.60),    /* crisp baseline edge */
+    0 3px 8px rgba(0,0,0,0.45),  /* soft drop shadow */
+    0 8px 30px rgba(212,175,55,0.06); /* warm diffuse gold glow */
+
+  /* small sharpen + contrast boost */
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.25));
+  font-weight: 700;
+  letter-spacing: 0.6px;
 }
+.king-of-games-name.shimmer {
+  background-size: 220% 100%;
+  animation: gold-shimmer 3.5s linear infinite;
+}
+
+@keyframes gold-shimmer {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .king-of-games-name {
+    color: #d4af37; /* classic gold fallback */
+    text-shadow: 0 1px 0 rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.35);
+    -webkit-text-fill-color: initial;
+  }
+}
+
 
 
 /* Print styles for articles */

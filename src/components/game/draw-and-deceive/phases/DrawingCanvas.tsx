@@ -1,77 +1,65 @@
 'use client';
 
 import React, {
-  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
-import { Input } from '@/components/ui/input';
 import {
   Pen,
   Eraser,
-  Minus,
+  PaintBucket,
+  Undo2,
+  Trash2,
+  Palette,
   Square,
   Circle,
-  Undo2,
-  Redo,
-  Trash2,
-  PaintBucket,
-  Image as ImageIcon,
-  Move,
-  ZoomIn,
-  ZoomOut,
   Triangle,
-  SquareDashed,
   ArrowRight,
-  Palette,
-  Type,
 } from 'lucide-react';
 
-export type Tool =
-  | 'pen'
+/**
+ * Gartic-like Drawing Canvas — fixed (Tools clickable reliably)
+ * - UI (toolbar + palette button) moved OUTSIDE the wrapRef (away from overlay canvas)
+ * - Higher z-index for UI + stopPropagation on UI wrappers
+ * - Precise cursor ring (no DPI offset)
+ * - Color palette updates brush color immediately
+ * - Geometry popover via Portal (no clipping)
+ * - Eraser has independent sizes; destination-out works
+ */
+
+export type GarticTool =
+  | 'brush'
   | 'eraser'
+  | 'fill'
   | 'line'
   | 'rect'
   | 'roundedRect'
   | 'circle'
   | 'ellipse'
   | 'triangle'
-  | 'arrow'
-  | 'fill'
-  | 'image'
-  | 'hand';
+  | 'arrow';
 
-type Point = { x: number; y: number };
-
-export interface DrawingCanvasRef {
+export interface GarticCanvasRef {
   undo: () => void;
-  redo: () => void;
   clearAll: () => void;
   getDrawingDataUrl: () => string | undefined;
-  setTool: (t: Tool) => void;
-  setZoom: (z: number) => void;
-  resetView: () => void;
+  setTool: (t: GarticTool) => void;
+  setColor: (hex: string) => void;
+  setBrushSize: (px: number) => void;
 }
 
-interface DrawingCanvasProps {
+interface GarticCanvasProps {
   className?: string;
   disabled?: boolean;
-  onDrawEnd?: (dataUrl: string, historyState: { canUndo: boolean; canRedo: boolean }) => void;
-  initialImage?: string | null;
+  onDrawEnd?: (dataUrl: string, history: { canUndo: boolean }) => void;
 }
 
-/* ----------------------------- Utilities ----------------------------- */
-const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
-const withAlphaHex = (hex: string, alpha01: number) =>
-  hex + Math.round(clamp(alpha01, 0, 1) * 255).toString(16).padStart(2, '0');
-
-const PALETTE = [
-  '#000000', '#1f2937', '#4b5563', '#9ca3af', '#ffffff',
+const PALETTE: string[] = [
+  '#000000', '#3f3f46', '#71717a', '#a1a1aa', '#ffffff',
   '#ef4444', '#f97316', '#f59e0b', '#eab308',
   '#22c55e', '#10b981', '#06b6d4', '#3b82f6',
   '#6366f1', '#8b5cf6', '#a855f7', '#ec4899',
@@ -79,1004 +67,739 @@ const PALETTE = [
   '#b45309', '#7c3aed', '#0ea5e9', '#0891b2',
 ];
 
-/* ----------------------------- Component ----------------------------- */
-const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
-  ({ className, disabled = false, onDrawEnd, initialImage = null }, ref) => {
-    /* DOM refs */
-    const wrapperRef = useRef<HTMLDivElement>(null);
-    const viewRef = useRef<HTMLCanvasElement>(null);     // ما يُعرض للمستخدم
-    const overlayRef = useRef<HTMLCanvasElement>(null);  // للمعاينة فقط
-    const contentRef = useRef<HTMLCanvasElement | null>(null); // الرسم الحقيقي
-    const fileInputRef = useRef<HTMLInputElement>(null);
+const BRUSH_SIZES = [2, 4, 10, 18] as const; // XS / S / M / L
+const ERASER_SIZES = [8, 16, 28, 40] as const; // Larger for eraser
+const MAX_HISTORY = 24;
 
-    const paletteWrapRef = useRef<HTMLDivElement>(null);
-    const shapesWrapRef = useRef<HTMLDivElement>(null);
+const GarticLikeCanvas = React.forwardRef<GarticCanvasRef, GarticCanvasProps>(
+  ({ className, disabled = false, onDrawEnd }, ref) => {
+    const wrapRef = useRef<HTMLDivElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const overlayRef = useRef<HTMLCanvasElement>(null);
 
-    /* Sizes / DPR */
-    const cssSizeRef = useRef({ w: 0, h: 0 });
     const dprRef = useRef<number>(1);
-    const boardSizeRef = useRef({ w: 0, h: 0 });
+    const cssSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
 
-    /* View state (pan/zoom) */
-    const [scale, setScale] = useState(1);
-    const [offset, setOffset] = useState<Point>({ x: 0, y: 0 });
+    const [tool, setToolState] = useState<GarticTool>('brush');
+    const [color, setColorState] = useState<string>('#000000');
+    const [brushSize, setBrushSizeState] = useState<number>(BRUSH_SIZES[1]);
+    const [eraserSize, setEraserSize] = useState<number>(ERASER_SIZES[1]);
 
-    /* Tools state */
-    const [tool, setTool] = useState<Tool>('pen');
-    const [color, setColor] = useState<string>('#000000');
-    const [thickness, setThickness] = useState<number>(5);
-    const [opacity, setOpacity] = useState<number>(1);
-    const [shapeMode, setShapeMode] = useState<'stroke' | 'fill' | 'both'>('stroke');
-    const cycleShapeMode = () =>
-      setShapeMode((m) => (m === 'stroke' ? 'fill' : m === 'fill' ? 'both' : 'stroke'));
+    const activeSize = tool === 'eraser' ? eraserSize : brushSize;
 
-    const [fillTolerance, setFillTolerance] = useState<number>(24);
+    // tolerance for flood-fill (0..255)
+    const [fillTolerance] = useState<number>(32);
+
     const [showPalette, setShowPalette] = useState<boolean>(false);
     const [showShapes, setShowShapes] = useState<boolean>(false);
 
-    /* Drawing state */
-    const isDrawingRef = useRef(false);
-    const startWorldRef = useRef<Point | null>(null);
-    const lastWorldRef = useRef<Point | null>(null);
-    const movedRef = useRef<boolean>(false); // لمعالجة “نقرة بدون حركة”
+    const isDownRef = useRef(false);
+    const startRef = useRef<{ x: number; y: number } | null>(null);
+    const lastRef = useRef<{ x: number; y: number } | null>(null);
+    const movedRef = useRef(false);
 
-    /* Placing image state */
-    const [placingImage, setPlacingImage] = useState<{
-      img: HTMLImageElement;
-      x: number; y: number; w: number; h: number; dragging: boolean;
-    } | null>(null);
-
-    /* History */
     const [history, setHistory] = useState<string[]>([]);
-    const idxRef = useRef(-1);
+    const idxRef = useRef<number>(-1);
     const [canUndo, setCanUndo] = useState(false);
-    const [canRedo, setCanRedo] = useState(false);
 
-    /* --------------------------- Coord helpers --------------------------- */
-    const screenToWorld = useCallback((p: Point): Point => {
-      return { x: (p.x - offset.x) / scale, y: (p.y - offset.y) / scale };
-    }, [offset, scale]);
+    // Anchors for portals
+    const shapesBtnRef = useRef<HTMLButtonElement | null>(null);
+    const paletteBtnRef = useRef<HTMLButtonElement | null>(null);
 
-    const clampToBoard = (p: Point): Point => {
-      const { w, h } = boardSizeRef.current;
-      return { x: clamp(p.x, 0, w), y: clamp(p.y, 0, h) };
+    // Helpers: transforms
+    const setCtxToCSS = (ctx: CanvasRenderingContext2D) => {
+      const dpr = dprRef.current;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    const setCtxToDevice = (ctx: CanvasRenderingContext2D) => {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
     };
 
-    const applyPanClamp = (nextScale: number, nextOffset: Point) => {
-      // إبقاء اللوحة داخل الإطار
-      const vw = cssSizeRef.current.w;
-      const vh = cssSizeRef.current.h;
-      const bw = boardSizeRef.current.w * nextScale;
-      const bh = boardSizeRef.current.h * nextScale;
+    const snapshot = () => canvasRef.current?.toDataURL('image/png');
 
-      const minX = Math.min(0, vw - bw);
-      const minY = Math.min(0, vh - bh);
-
-      // إذا كانت اللوحة أصغر من الإطار، نوسّطها
-      const cx = bw < vw ? (vw - bw) / 2 : clamp(nextOffset.x, minX, 0);
-      const cy = bh < vh ? (vh - bh) / 2 : clamp(nextOffset.y, minY, 0);
-      return { x: cx, y: cy };
+    const pushHistory = (from?: string) => {
+      const img = from ?? snapshot();
+      if (!img) return;
+      setHistory((prev) => {
+        const base = [...prev.slice(0, idxRef.current + 1), img];
+        const next = base.slice(-MAX_HISTORY);
+        idxRef.current = next.length - 1;
+        const can = idxRef.current > 0;
+        setCanUndo(can);
+        onDrawEnd?.(img, { canUndo: can });
+        return next;
+      });
     };
 
-    /* ---------------------------- Canvas setup --------------------------- */
-    const resizeAll = useCallback(() => {
-      const wrap = wrapperRef.current;
-      const view = viewRef.current;
+    const restoreFromDataUrl = (dataUrl: string) => {
+      const canvas = canvasRef.current!;
+      const ctx = canvas.getContext('2d')!;
+      const { w, h } = cssSizeRef.current;
+      const img = new Image();
+      img.onload = () => {
+        setCtxToCSS(ctx);
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+      };
+      img.src = dataUrl;
+    };
+
+    const resizeAll = () => {
+      const wrap = wrapRef.current;
+      const canvas = canvasRef.current;
       const overlay = overlayRef.current;
-      if (!wrap || !view || !overlay) return;
+      if (!wrap || !canvas || !overlay) return;
 
-      const { width, height } = wrap.getBoundingClientRect();
+      const rect = wrap.getBoundingClientRect();
       const dpr = Math.max(1, window.devicePixelRatio || 1);
       dprRef.current = dpr;
 
-      cssSizeRef.current = { w: Math.floor(width), h: Math.floor(height) };
-      boardSizeRef.current = { w: Math.floor(width), h: Math.floor(height) };
+      const w = Math.max(1, Math.floor(rect.width));
+      const h = Math.max(1, Math.floor(rect.height));
+      cssSizeRef.current = { w, h };
 
-      [view, overlay].forEach((c) => {
-        c.width = Math.max(1, Math.floor(width * dpr));
-        c.height = Math.max(1, Math.floor(height * dpr));
-        c.style.width = `${Math.floor(width)}px`;
-        c.style.height = `${Math.floor(height)}px`;
-        const ctx = c.getContext('2d')!;
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, c.width, c.height);
-      });
+      const snap = snapshot();
 
-      // Canvas المحتوى (خلفي) بوحدات CSS عبر مقياس DPR
-      const old = contentRef.current;
-      const newCan = document.createElement('canvas');
-      newCan.width = Math.max(1, Math.floor(width * dpr));
-      newCan.height = Math.max(1, Math.floor(height * dpr));
-      const nctx = newCan.getContext('2d')!;
-      nctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Canvas backing store in device pixels
+      canvas.width = Math.max(1, Math.floor(w * dpr));
+      canvas.height = Math.max(1, Math.floor(h * dpr));
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      const cctx = canvas.getContext('2d')!;
+      setCtxToCSS(cctx);
 
-      if (old && old.width > 0 && old.height > 0) {
-        // نسخ آمن للمحتوى السابق
-        const temp = new Image();
-        temp.src = old.toDataURL('image/png');
-        temp.onload = () => {
-          nctx.setTransform(1, 0, 0, 1, 0, 0);
-          nctx.drawImage(temp, 0, 0, newCan.width, newCan.height);
-          nctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          contentRef.current = newCan;
-          drawView();
-        };
+      overlay.width = Math.max(1, Math.floor(w * dpr));
+      overlay.height = Math.max(1, Math.floor(h * dpr));
+      overlay.style.width = `${w}px`;
+      overlay.style.height = `${h}px`;
+      const octx = overlay.getContext('2d')!;
+      setCtxToCSS(octx);
+      // Clear fully in device space to avoid ghosting
+      setCtxToDevice(octx);
+      octx.clearRect(0, 0, overlay.width, overlay.height);
+      setCtxToCSS(octx);
+
+      const ctx = canvas.getContext('2d')!;
+      if (!snap) {
+        setCtxToCSS(ctx);
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        pushHistory();
       } else {
-        contentRef.current = newCan;
-        drawView();
+        const img = new Image();
+        img.onload = () => {
+          setCtxToCSS(ctx);
+          ctx.clearRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+        };
+        img.src = snap;
       }
-
-      setOffset((o) => applyPanClamp(scale, o));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    };
 
     useEffect(() => {
       resizeAll();
       const ro = new ResizeObserver(() => resizeAll());
-      if (wrapperRef.current) ro.observe(wrapperRef.current);
-      return () => ro.disconnect();
-    }, [resizeAll]);
-
-    /* ------------------------ Drawing / Rendering ------------------------ */
-    const drawBoardFrame = (ctx: CanvasRenderingContext2D) => {
-      const dpr = dprRef.current;
-      const { w, h } = cssSizeRef.current;
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.lineWidth = 2 * dpr;
-      ctx.strokeStyle = '#e5e7eb';
-      ctx.strokeRect(0.5 * dpr, 0.5 * dpr, w * dpr - 1 * dpr, h * dpr - 1 * dpr);
-      ctx.restore();
-    };
-
-    const drawView = useCallback(() => {
-      const view = viewRef.current;
-      const content = contentRef.current;
-      if (!view || !content) return;
-
-      const vctx = view.getContext('2d')!;
-      const dpr = dprRef.current;
-
-      vctx.setTransform(1, 0, 0, 1, 0, 0);
-      vctx.clearRect(0, 0, view.width, view.height);
-
-      vctx.setTransform(scale * dpr, 0, 0, scale * dpr, offset.x * dpr, offset.y * dpr);
-      vctx.drawImage(content, 0, 0, content.width / dpr, content.height / dpr);
-
-      drawBoardFrame(vctx);
-    }, [offset.x, offset.y, scale]);
-
-    const clearOverlay = () => {
-      const overlay = overlayRef.current;
-      if (!overlay) return;
-      const octx = overlay.getContext('2d')!;
-      octx.setTransform(1, 0, 0, 1, 0, 0);
-      octx.clearRect(0, 0, overlay.width, overlay.height);
-    };
-
-    const previewOnOverlay = (draw: (octx: CanvasRenderingContext2D) => void) => {
-      const overlay = overlayRef.current;
-      if (!overlay) return;
-      const octx = overlay.getContext('2d')!;
-      const dpr = dprRef.current;
-      clearOverlay();
-      octx.setTransform(scale * dpr, 0, 0, scale * dpr, offset.x * dpr, offset.y * dpr);
-      draw(octx);
-    };
-
-    const commitToContent = (draw: (cctx: CanvasRenderingContext2D) => void) => {
-      const content = contentRef.current;
-      if (!content) return;
-      const dpr = dprRef.current;
-      const cctx = content.getContext('2d')!;
-      cctx.save();
-      cctx.setTransform(dpr, 0, 0, dpr, 0, 0); // نرسم بوحدات CSS
-      cctx.beginPath();
-      cctx.rect(0, 0, content.width / dpr, content.height / dpr);
-      cctx.clip(); // ممنوع الخروج خارج اللوحة
-      draw(cctx);
-      cctx.restore();
-      drawView();
-    };
-
-    const pushHistory = useCallback(() => {
-      const content = contentRef.current;
-      if (!content) return;
-      const dataUrl = content.toDataURL('image/png');
-      setHistory((prev) => {
-        const trimmed = prev.slice(0, idxRef.current + 1);
-        const next = [...trimmed, dataUrl];
-        idxRef.current = next.length - 1;
-        setCanUndo(idxRef.current > 0);
-        setCanRedo(false);
-        onDrawEnd?.(dataUrl, { canUndo: idxRef.current > 0, canRedo: false });
-        return next;
-      });
-    }, [onDrawEnd]);
-
-    /* --------------------------- Initial image --------------------------- */
-    useEffect(() => {
-      if (!initialImage) return;
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = initialImage;
-      img.onload = () => {
-        commitToContent((cctx) => {
-          const { w, h } = boardSizeRef.current;
-          cctx.clearRect(0, 0, w, h);
-          const ratio = Math.min(w / img.width, h / img.height);
-          const iw = img.width * ratio;
-          const ih = img.height * ratio;
-          cctx.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);
-        });
-        pushHistory();
+      if (wrapRef.current) ro.observe(wrapRef.current);
+      const onWin = () => resizeAll();
+      window.addEventListener('resize', onWin);
+      window.addEventListener('orientationchange', onWin);
+      return () => {
+        ro.disconnect();
+        window.removeEventListener('resize', onWin);
+        window.removeEventListener('orientationchange', onWin);
       };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialImage]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-    /* ---------------------------- Pointer logic -------------------------- */
-    const getLocalPoint = (e: React.PointerEvent): Point => {
+    /* Drawing primitives */
+    const beginStroke = (x: number, y: number) => {
+      const ctx = canvasRef.current!.getContext('2d')!;
+      setCtxToCSS(ctx);
+      ctx.beginPath();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+      if (tool !== 'eraser') ctx.strokeStyle = color;
+      ctx.lineWidth = activeSize;
+      ctx.moveTo(x, y);
+    };
+
+    const continueStroke = (x: number, y: number) => {
+      const ctx = canvasRef.current!.getContext('2d')!;
+      setCtxToCSS(ctx);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    };
+
+    const endStroke = (x: number, y: number) => {
+      const ctx = canvasRef.current!.getContext('2d')!;
+      setCtxToCSS(ctx);
+      if (!movedRef.current) {
+        if (tool === 'eraser') {
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.beginPath();
+          ctx.arc(x, y, Math.max(1, activeSize / 2), 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(x, y, Math.max(1, activeSize / 2), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      pushHistory();
+    };
+
+    /* Flood Fill */
+    const hexToRgba = (hex: string) => {
+      const h = hex.replace('#', '');
+      const r = parseInt(h.slice(0, 2), 16);
+      const g = parseInt(h.slice(2, 4), 16);
+      const b = parseInt(h.slice(4, 6), 16);
+      return [r, g, b, 255] as const;
+    };
+
+    const floodFill = (sx: number, sy: number) => {
+      const canvas = canvasRef.current!;
+      const ctx = canvas.getContext('2d')!;
+      const dpr = dprRef.current;
+      const W = canvas.width;
+      const H = canvas.height;
+      const startX = Math.floor(sx * dpr);
+      const startY = Math.floor(sy * dpr);
+      if (startX < 0 || startY < 0 || startX >= W || startY >= H) return;
+
+      setCtxToDevice(ctx);
+      const img = ctx.getImageData(0, 0, W, H);
+      const data = img.data;
+
+      const idx = (x: number, y: number) => (y * W + x) * 4;
+      const sPos = idx(startX, startY);
+      const sr = data[sPos], sg = data[sPos + 1], sb = data[sPos + 2], sa = data[sPos + 3];
+      const [tr, tg, tb, ta] = hexToRgba(color);
+      const tol = Math.max(0, Math.min(255, Math.round(fillTolerance)));
+      const distSq = (r1: number, g1: number, b1: number, a1: number, r2: number, g2: number, b2: number, a2: number) => {
+        const dr = r1 - r2, dg = g1 - g2, db = b1 - b2, da = a1 - a2;
+        return dr * dr + dg * dg + db * db + da * da;
+      };
+      const tolSq = tol * tol;
+      if (distSq(sr, sg, sb, sa, tr, tg, tb, ta) <= tolSq) return;
+
+      const match = (x: number, y: number) => {
+        if (x < 0 || y < 0 || x >= W || y >= H) return false;
+        const p = idx(x, y);
+        return distSq(data[p], data[p + 1], data[p + 2], data[p + 3], sr, sg, sb, sa) <= tolSq;
+      };
+
+      const stack: [number, number][] = [[startX, startY]];
+      while (stack.length) {
+        const [x0, y0] = stack.pop()!;
+        let xLeft = x0;
+        while (xLeft >= 0 && match(xLeft, y0)) xLeft--;
+        xLeft++;
+        let xRight = x0;
+        while (xRight < W && match(xRight, y0)) xRight++;
+        xRight--;
+        for (let x = xLeft; x <= xRight; x++) {
+          const p = idx(x, y0);
+          data[p] = tr; data[p + 1] = tg; data[p + 2] = tb; data[p + 3] = ta;
+        }
+        const yUp = y0 - 1;
+        if (yUp >= 0) {
+          let x = xLeft;
+          while (x <= xRight) {
+            while (x <= xRight && !match(x, yUp)) x++;
+            if (x <= xRight) {
+              const nx = x;
+              while (x <= xRight && match(x, yUp)) x++;
+              stack.push([Math.max(nx, xLeft), yUp]);
+            }
+          }
+        }
+        const yDn = y0 + 1;
+        if (yDn < H) {
+          let x = xLeft;
+          while (x <= xRight) {
+            while (x <= xRight && !match(x, yDn)) x++;
+            if (x <= xRight) {
+              const nx = x;
+              while (x <= xRight && match(x, yDn)) x++;
+              stack.push([Math.max(nx, xLeft), yDn]);
+            }
+          }
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+      setCtxToCSS(ctx);
+      pushHistory();
+    };
+
+    /* Overlay */
+    const clearOverlay = () => {
+      const o = overlayRef.current!;
+      const octx = o.getContext('2d')!;
+      setCtxToDevice(octx);
+      octx.clearRect(0, 0, o.width, o.height);
+      setCtxToCSS(octx);
+    };
+
+    const drawCursor = (x: number, y: number) => {
+      const o = overlayRef.current!;
+      const octx = o.getContext('2d')!;
+      // full clear in device space (no DPI bugs)
+      setCtxToDevice(octx);
+      octx.clearRect(0, 0, o.width, o.height);
+      setCtxToCSS(octx);
+      octx.save();
+      octx.beginPath();
+      octx.arc(x, y, Math.max(2, activeSize / 2), 0, Math.PI * 2);
+      octx.lineWidth = 1;
+      octx.strokeStyle = tool === 'eraser' ? '#ef4444' : '#111827';
+      octx.stroke();
+      octx.restore();
+    };
+
+    const getLocal = (e: React.PointerEvent): { x: number; y: number } => {
       const rect = overlayRef.current!.getBoundingClientRect();
       return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     };
 
-    const handlePointerDown = (e: React.PointerEvent) => {
+    /* Pointer handlers */
+    const onPointerDown = (e: React.PointerEvent) => {
       if (disabled || e.button !== 0) return;
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-
-      const p = getLocalPoint(e);
-      const world = clampToBoard(screenToWorld(p));
-
-      if (tool === 'hand') {
-        isDrawingRef.current = true;
-        lastWorldRef.current = world;
-        startWorldRef.current = null;
-        movedRef.current = false;
-        return;
-      }
-
-      if (tool === 'image' && placingImage) {
-        setPlacingImage((x) => (x ? { ...x, dragging: true } : x));
-        return;
-      }
+      const p = getLocal(e);
+      isDownRef.current = true;
+      startRef.current = p;
+      lastRef.current = p;
+      movedRef.current = false;
 
       if (tool === 'fill') {
-        floodFill(world);
-        pushHistory();
+        floodFill(Math.floor(p.x), Math.floor(p.y));
+        isDownRef.current = false;
+        (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
         return;
       }
 
-      isDrawingRef.current = true;
-      startWorldRef.current = world;
-      lastWorldRef.current = world;
-      movedRef.current = false;
-
-      if (tool === 'pen' || tool === 'eraser') {
-        // افتح مسار للرسم المتصل
-        commitToContent((cctx) => {
-          cctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
-          cctx.globalAlpha = opacity;
-          cctx.strokeStyle = tool === 'eraser' ? '#000000' : color;
-          cctx.lineWidth = thickness;
-          cctx.lineCap = 'round';
-          cctx.lineJoin = 'round';
-          cctx.beginPath();
-          cctx.moveTo(world.x, world.y);
-        });
+      if (['line','rect','roundedRect','circle','ellipse','triangle','arrow'].includes(tool)) {
+        drawCursor(p.x, p.y);
+        return;
       }
+
+      beginStroke(p.x, p.y);
+      drawCursor(p.x, p.y);
     };
 
-    const handlePointerMove = (e: React.PointerEvent) => {
-      const p = getLocalPoint(e);
-      const world = clampToBoard(screenToWorld(p));
+    const onPointerMove = (e: React.PointerEvent) => {
+      const p = getLocal(e);
+      drawCursor(p.x, p.y);
+      if (!isDownRef.current || !startRef.current) return;
+      if (tool === 'fill') return;
 
-      if (tool === 'hand' && isDrawingRef.current && lastWorldRef.current) {
-        // حرّك الشاشة بمقدار الفارق البصري
-        const prevScreen = {
-          x: lastWorldRef.current.x * scale + offset.x,
-          y: lastWorldRef.current.y * scale + offset.y,
-        };
-        const delta = { x: p.x - prevScreen.x, y: p.y - prevScreen.y };
-        const nextOffset = applyPanClamp(scale, { x: offset.x + delta.x, y: offset.y + delta.y });
-        setOffset(nextOffset);
-        drawView();
-        return;
-      }
-
-      if (!isDrawingRef.current || !startWorldRef.current) return;
-
-      if (tool === 'pen' || tool === 'eraser') {
-        const from = lastWorldRef.current!;
-        const to = world;
-        if (from.x !== to.x || from.y !== to.y) movedRef.current = true;
-        commitToContent((cctx) => {
-          cctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
-          cctx.globalAlpha = opacity;
-          cctx.strokeStyle = tool === 'eraser' ? '#000000' : color;
-          cctx.lineWidth = thickness;
-          cctx.lineCap = 'round';
-          cctx.lineJoin = 'round';
-          cctx.beginPath();
-          cctx.moveTo(from.x, from.y);
-          cctx.lineTo(to.x, to.y);
-          cctx.stroke();
-          cctx.globalCompositeOperation = 'source-over';
-          cctx.globalAlpha = 1;
-        });
-        lastWorldRef.current = to;
-        return;
-      }
-
-      // معاينة للأشكال على overlay
-      const s = startWorldRef.current!;
-      const eW = world;
-      if (s.x !== eW.x || s.y !== eW.y) movedRef.current = true;
-
-      previewOnOverlay((o) => {
-        o.lineCap = 'round';
-        o.lineJoin = 'round';
-        o.strokeStyle = withAlphaHex(color, opacity);
-        o.fillStyle = withAlphaHex(color, opacity);
-        o.lineWidth = Math.max(1, thickness / scale);
-
-        if (tool === 'line') {
-          o.beginPath(); o.moveTo(s.x, s.y); o.lineTo(eW.x, eW.y); o.stroke();
-        } else if (tool === 'rect') {
-          if (shapeMode !== 'fill') o.strokeRect(s.x, s.y, eW.x - s.x, eW.y - s.y);
-          if (shapeMode !== 'stroke') o.fillRect(s.x, s.y, eW.x - s.x, eW.y - s.y);
-        } else if (tool === 'roundedRect') {
-          const r = 12 / scale;
-          const x = Math.min(s.x, eW.x), y = Math.min(s.y, eW.y);
-          const w = Math.abs(eW.x - s.x), h = Math.abs(eW.y - s.y);
-          o.beginPath();
-          o.moveTo(x + r, y);
-          o.lineTo(x + w - r, y);
-          o.quadraticCurveTo(x + w, y, x + w, y + r);
-          o.lineTo(x + w, y + h - r);
-          o.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-          o.lineTo(x + r, y + h);
-          o.quadraticCurveTo(x, y + h, x, y + h - r);
-          o.lineTo(x, y + r);
-          o.quadraticCurveTo(x, y, x + r, y);
-          if (shapeMode !== 'fill') o.stroke();
-          if (shapeMode !== 'stroke') o.fill();
-        } else if (tool === 'circle' || tool === 'ellipse') {
+      if (['line','rect','roundedRect','circle','ellipse','triangle','arrow'].includes(tool)) {
+        const o = overlayRef.current!;
+        const octx = o.getContext('2d')!;
+        setCtxToDevice(octx);
+        octx.clearRect(0, 0, o.width, o.height);
+        setCtxToCSS(octx);
+        octx.save();
+        octx.lineWidth = Math.max(1, activeSize / 3);
+        octx.strokeStyle = color;
+        octx.fillStyle = color;
+        const s = startRef.current!;
+        const eW = p;
+        if (tool === 'line') { octx.beginPath(); octx.moveTo(s.x, s.y); octx.lineTo(eW.x, eW.y); octx.stroke(); }
+        else if (tool === 'rect') { octx.strokeRect(s.x, s.y, eW.x - s.x, eW.y - s.y); }
+        else if (tool === 'roundedRect') {
+          const r = 8; const x = Math.min(s.x, eW.x), y = Math.min(s.y, eW.y);
+          const ww = Math.abs(eW.x - s.x), hh = Math.abs(eW.y - s.y);
+          octx.beginPath();
+          octx.moveTo(x + r, y);
+          octx.lineTo(x + ww - r, y);
+          octx.quadraticCurveTo(x + ww, y, x + ww, y + r);
+          octx.lineTo(x + ww, y + hh - r);
+          octx.quadraticCurveTo(x + ww, y + hh, x + ww - r, y + hh);
+          octx.lineTo(x + r, y + hh);
+          octx.quadraticCurveTo(x, y + hh, x, y + hh - r);
+          octx.lineTo(x, y + r);
+          octx.quadraticCurveTo(x, y, x + r, y);
+          octx.stroke();
+        }
+        else if (tool === 'circle' || tool === 'ellipse') {
           const rx = Math.abs(eW.x - s.x) / 2;
           const ry = tool === 'circle' ? rx : Math.abs(eW.y - s.y) / 2;
+          const cx = (s.x + eW.x) / 2; const cy = (s.y + eW.y) / 2;
+          octx.beginPath(); octx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); octx.stroke();
+        }
+        else if (tool === 'triangle') {
           const cx = (s.x + eW.x) / 2;
-          const cy = (s.y + eW.y) / 2;
-          o.beginPath();
-          o.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-          if (shapeMode !== 'fill') o.stroke();
-          if (shapeMode !== 'stroke') o.fill();
-        } else if (tool === 'triangle') {
-          const cx = (s.x + eW.x) / 2;
-          o.beginPath();
-          o.moveTo(cx, s.y); o.lineTo(eW.x, eW.y); o.lineTo(s.x, eW.y); o.closePath();
-          if (shapeMode !== 'fill') o.stroke();
-          if (shapeMode !== 'stroke') o.fill();
-        } else if (tool === 'arrow') {
-          const head = 12 / scale;
-          const ang = Math.atan2(eW.y - s.y, eW.x - s.x);
+          octx.beginPath(); octx.moveTo(cx, s.y); octx.lineTo(eW.x, eW.y); octx.lineTo(s.x, eW.y); octx.closePath(); octx.stroke();
+        }
+        else if (tool === 'arrow') {
+          octx.beginPath(); octx.moveTo(s.x, s.y); octx.lineTo(eW.x, eW.y); octx.stroke();
+          const head = 8; const ang = Math.atan2(eW.y - s.y, eW.x - s.x);
           const hx = Math.cos(ang) * head, hy = Math.sin(ang) * head;
-          o.beginPath(); o.moveTo(s.x, s.y); o.lineTo(eW.x, eW.y); o.stroke();
-          o.beginPath();
-          o.moveTo(eW.x, eW.y);
-          o.lineTo(eW.x - hx + hy / 2, eW.y - hy - hx / 2);
-          o.lineTo(eW.x - hx - hy / 2, eW.y - hy + hx / 2);
-          o.closePath();
-          if (shapeMode !== 'stroke') o.fill();
-          if (shapeMode !== 'fill') o.stroke();
+          octx.beginPath();
+          octx.moveTo(eW.x, eW.y);
+          octx.lineTo(eW.x - hx + hy / 2, eW.y - hy - hx / 2);
+          octx.lineTo(eW.x - hx - hy / 2, eW.y - hy + hx / 2);
+          octx.closePath(); octx.stroke();
         }
-      });
-      lastWorldRef.current = world;
-    };
-
-    const handlePointerUp = (e: React.PointerEvent) => {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-
-      if (tool === 'hand') {
-        isDrawingRef.current = false;
+        octx.restore();
+        movedRef.current = true;
         return;
       }
 
-      if (tool === 'image' && placingImage?.dragging) {
-        setPlacingImage((img) => (img ? { ...img, dragging: false } : img));
-        return;
-      }
-
-      if (!isDrawingRef.current || !startWorldRef.current) return;
-
-      const s = startWorldRef.current;
-      const eW = lastWorldRef.current ?? s;
-
-      clearOverlay();
-
-      if (tool === 'pen' || tool === 'eraser') {
-        // في حالة نقرة بلا حركة: ارسم نقطة لا تختفي
-        if (!movedRef.current) {
-          commitToContent((c) => {
-            c.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
-            c.globalAlpha = opacity;
-            c.fillStyle = tool === 'eraser' ? '#000000' : color;
-            c.beginPath();
-            c.arc(s.x, s.y, Math.max(1, thickness / 2), 0, Math.PI * 2);
-            c.fill();
-            c.globalCompositeOperation = 'source-over';
-            c.globalAlpha = 1;
-          });
-        }
-        pushHistory();
-      } else if (tool !== 'fill' && tool !== 'image') {
-        // ثبّت الشكل لمرة واحدة فقط
-        commitToContent((c) => {
-          c.globalAlpha = opacity;
-          c.strokeStyle = color;
-          c.fillStyle = color;
-          c.lineWidth = thickness;
-          c.lineCap = 'round';
-          c.lineJoin = 'round';
-          if (tool === 'line') {
-            c.beginPath(); c.moveTo(s.x, s.y); c.lineTo(eW.x, eW.y); c.stroke();
-          } else if (tool === 'rect') {
-            if (shapeMode !== 'fill') c.strokeRect(s.x, s.y, eW.x - s.x, eW.y - s.y);
-            if (shapeMode !== 'stroke') c.fillRect(s.x, s.y, eW.x - s.x, eW.y - s.y);
-          } else if (tool === 'roundedRect') {
-            const r = 12;
-            const x = Math.min(s.x, eW.x), y = Math.min(s.y, eW.y);
-            const w = Math.abs(eW.x - s.x), h = Math.abs(eW.y - s.y);
-            c.beginPath();
-            c.moveTo(x + r, y);
-            c.lineTo(x + w - r, y);
-            c.quadraticCurveTo(x + w, y, x + w, y + r);
-            c.lineTo(x + w, y + h - r);
-            c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-            c.lineTo(x + r, y + h);
-            c.quadraticCurveTo(x, y + h, x, y + h - r);
-            c.lineTo(x, y + r);
-            c.quadraticCurveTo(x, y, x + r, y);
-            if (shapeMode !== 'fill') c.stroke();
-            if (shapeMode !== 'stroke') c.fill();
-          } else if (tool === 'circle' || tool === 'ellipse') {
-            const rx = Math.abs(eW.x - s.x) / 2;
-            const ry = tool === 'circle' ? rx : Math.abs(eW.y - s.y) / 2;
-            const cx = (s.x + eW.x) / 2;
-            const cy = (s.y + eW.y) / 2;
-            c.beginPath(); c.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-            if (shapeMode !== 'fill') c.stroke();
-            if (shapeMode !== 'stroke') c.fill();
-          } else if (tool === 'triangle') {
-            const cx = (s.x + eW.x) / 2;
-            c.beginPath(); c.moveTo(cx, s.y); c.lineTo(eW.x, eW.y); c.lineTo(s.x, eW.y); c.closePath();
-            if (shapeMode !== 'fill') c.stroke();
-            if (shapeMode !== 'stroke') c.fill();
-          } else if (tool === 'arrow') {
-            c.beginPath(); c.moveTo(s.x, s.y); c.lineTo(eW.x, eW.y); c.stroke();
-            const head = 12;
-            const ang = Math.atan2(eW.y - s.y, eW.x - s.x);
-            const hx = Math.cos(ang) * head, hy = Math.sin(ang) * head;
-            c.beginPath();
-            c.moveTo(eW.x, eW.y);
-            c.lineTo(eW.x - hx + hy / 2, eW.y - hy - hx / 2);
-            c.lineTo(eW.x - hx - hy / 2, eW.y - hy + hx / 2);
-            c.closePath();
-            if (shapeMode !== 'stroke') c.fill();
-            if (shapeMode !== 'fill') c.stroke();
-          }
-          c.globalAlpha = 1;
-        });
-        pushHistory();
-      }
-
-      isDrawingRef.current = false;
-      startWorldRef.current = null;
-      lastWorldRef.current = null;
-      movedRef.current = false;
+      const prev = lastRef.current!;
+      if (prev.x !== p.x || prev.y !== p.y) movedRef.current = true;
+      continueStroke(p.x, p.y);
+      lastRef.current = p;
     };
 
-    /* ------------------------------- Wheel/Pan ------------------------------ */
-    const handleWheel = (e: React.WheelEvent) => {
-      if (disabled) return;
-      const rect = overlayRef.current!.getBoundingClientRect();
-      const pScreen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const onPointerUp = (e: React.PointerEvent) => {
+      try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
+      const up = getLocal(e);
+      if (!isDownRef.current || !startRef.current) return;
 
-      const PIXELS_PER_LINE = 16;
-      const PIXELS_PER_PAGE = rect.height;
-      const scaleDelta =
-        e.deltaMode === 1 ? PIXELS_PER_LINE : e.deltaMode === 2 ? PIXELS_PER_PAGE : 1;
+      if (['line','rect','roundedRect','circle','ellipse','triangle','arrow'].includes(tool)) {
+        const ctx = canvasRef.current!.getContext('2d')!;
+        const s = startRef.current!; const eW = up;
+        setCtxToCSS(ctx);
+        ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = Math.max(1, activeSize / 2);
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        const direction = e.deltaY > 0 ? -1 : 1;
-        const factor = 1 + direction * 0.12 * (scaleDelta / 100);
-        const newScale = clamp(scale * factor, 0.25, 8);
-
-        // تكبير حول مؤشر الفأرة
-        const world = screenToWorld(pScreen);
-        const pre = { x: world.x * newScale + offset.x, y: world.y * newScale + offset.y };
-        const nextOffset = applyPanClamp(newScale, {
-          x: pScreen.x - (pre.x - offset.x),
-          y: pScreen.y - (pre.y - offset.y),
-        });
-
-        setScale(newScale);
-        setOffset(nextOffset);
+        if (tool === 'line') { ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(eW.x, eW.y); ctx.stroke(); }
+        else if (tool === 'rect') { ctx.strokeRect(s.x, s.y, eW.x - s.x, eW.y - s.y); }
+        else if (tool === 'roundedRect') {
+          const r = 8; const x = Math.min(s.x, eW.x), y = Math.min(s.y, eW.y);
+          const ww = Math.abs(eW.x - s.x), hh = Math.abs(eW.y - s.y);
+          ctx.beginPath();
+          ctx.moveTo(x + r, y);
+          ctx.lineTo(x + ww - r, y);
+          ctx.quadraticCurveTo(x + ww, y, x + ww, y + r);
+          ctx.lineTo(x + ww, y + hh - r);
+          ctx.quadraticCurveTo(x + ww, y + hh, x + ww - r, y + hh);
+          ctx.lineTo(x + r, y + hh);
+          ctx.quadraticCurveTo(x, y + hh, x, y + hh - r);
+          ctx.lineTo(x, y + r);
+          ctx.quadraticCurveTo(x, y, x + r, y);
+          ctx.stroke();
+        }
+        else if (tool === 'circle' || tool === 'ellipse') {
+          const rx = Math.abs(eW.x - s.x) / 2; const ry = tool === 'circle' ? rx : Math.abs(eW.y - s.y) / 2;
+          const cx = (s.x + eW.x) / 2; const cy = (s.y + eW.y) / 2;
+          ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+        }
+        else if (tool === 'triangle') {
+          const cx = (s.x + eW.x) / 2; ctx.beginPath(); ctx.moveTo(cx, s.y); ctx.lineTo(eW.x, eW.y); ctx.lineTo(s.x, eW.y); ctx.closePath(); ctx.stroke();
+        }
+        else if (tool === 'arrow') {
+          ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(eW.x, eW.y); ctx.stroke();
+          const head = 8; const ang = Math.atan2(eW.y - s.y, eW.x - s.x);
+          const hx = Math.cos(ang) * head, hy = Math.sin(ang) * head;
+          ctx.beginPath(); ctx.moveTo(eW.x, eW.y);
+          ctx.lineTo(eW.x - hx + hy / 2, eW.y - hy - hx / 2);
+          ctx.lineTo(eW.x - hx - hy / 2, eW.y - hy + hx / 2);
+          ctx.closePath(); ctx.stroke();
+        }
         clearOverlay();
-        drawView();
-      } else {
-        // تمرير
-        e.preventDefault();
-        const dx = -e.deltaX * (scaleDelta === 1 ? 1 : scaleDelta / 100);
-        const dy = -e.deltaY * (scaleDelta === 1 ? 1 : scaleDelta / 100);
-        const nextOffset = applyPanClamp(scale, { x: offset.x + dx, y: offset.y + dy });
-        setOffset(nextOffset);
-        clearOverlay();
-        drawView();
-      }
-    };
-
-    /* ------------------------------ Image place ----------------------------- */
-    const triggerImagePicker = () => fileInputRef.current?.click();
-    const handleFile = (f: File) => {
-      if (!f) return;
-      const url = URL.createObjectURL(f);
-      const img = new Image();
-      img.onload = () => {
-        const { w, h } = boardSizeRef.current;
-        const maxW = w * 0.6;
-        const maxH = h * 0.6;
-        const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
-        const iw = img.width * ratio, ih = img.height * ratio;
-        setPlacingImage({ img, x: (w - iw) / 2, y: (h - ih) / 2, w: iw, h: ih, dragging: false });
-        setTool('image');
-        URL.revokeObjectURL(url);
-        drawView();
-        previewOnOverlay((o) => {
-          o.globalAlpha = 0.9;
-          o.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);
-          o.globalAlpha = 1;
-        });
-      };
-      img.src = url;
-    };
-
-    const commitPlacedImage = () => {
-      if (!placingImage) return;
-      commitToContent((c) => c.drawImage(placingImage.img, placingImage.x, placingImage.y, placingImage.w, placingImage.h));
-      setPlacingImage(null);
-      clearOverlay();
-      pushHistory();
-    };
-
-    const cancelPlacedImage = () => {
-      setPlacingImage(null);
-      clearOverlay();
-    };
-
-    /* ------------------------------- Flood fill ----------------------------- */
-    const floodFill = (world: Point) => {
-      const content = contentRef.current;
-      if (!content) return;
-      const dpr = dprRef.current;
-      const cctx = content.getContext('2d')!;
-
-      const px = Math.floor(world.x * dpr);
-      const py = Math.floor(world.y * dpr);
-
-      const W = content.width;
-      const H = content.height;
-      if (px < 0 || py < 0 || px >= W || py >= H) return;
-
-      const img = cctx.getImageData(0, 0, W, H);
-      const data = img.data;
-
-      const idx = (x: number, y: number) => (y * W + x) * 4;
-      const s = idx(px, py);
-      const sr = data[s], sg = data[s + 1], sb = data[s + 2], sa = data[s + 3];
-
-      const rgb = color.replace('#', '');
-      const r = parseInt(rgb.slice(0, 2), 16);
-      const g = parseInt(rgb.slice(2, 4), 16);
-      const b = parseInt(rgb.slice(4, 6), 16);
-      const a = Math.round(opacity * 255);
-
-      const tol = clamp(fillTolerance, 0, 255);
-      const match = (x: number, y: number) => {
-        const i = idx(x, y);
-        return Math.abs(data[i] - sr) <= tol &&
-               Math.abs(data[i + 1] - sg) <= tol &&
-               Math.abs(data[i + 2] - sb) <= tol &&
-               Math.abs(data[i + 3] - sa) <= tol;
-      };
-
-      const stack: [number, number][] = [[px, py]];
-      while (stack.length) {
-        const [x0, y0] = stack.pop()!;
-        let xl = x0;
-        while (xl >= 0 && match(xl, y0)) xl--;
-        xl++;
-        let xr = x0;
-        while (xr < W && match(xr, y0)) xr++;
-        for (let x = xl; x < xr; x++) {
-          const i = idx(x, y0);
-          data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = a;
-        }
-        const yUp = y0 - 1, yDn = y0 + 1;
-        if (yUp >= 0) {
-          let x = xl;
-          while (x < xr) {
-            let inSpan = false;
-            while (x < xr && match(x, yUp)) { inSpan = true; x++; }
-            if (inSpan) stack.push([x - 1, yUp]);
-            while (x < xr && !match(x, yUp)) x++;
-          }
-        }
-        if (yDn < H) {
-          let x = xl;
-          while (x < xr) {
-            let inSpan = false;
-            while (x < xr && match(x, yDn)) { inSpan = true; x++; }
-            if (inSpan) stack.push([x - 1, yDn]);
-            while (x < xr && !match(x, yDn)) x++;
-          }
-        }
+        pushHistory();
+        isDownRef.current = false; startRef.current = null; lastRef.current = null; movedRef.current = false; return;
       }
 
-      cctx.putImageData(img, 0, 0);
-      drawView();
+      if (tool !== 'fill') endStroke(up.x, up.y);
+
+      isDownRef.current = false; startRef.current = null; lastRef.current = null; movedRef.current = false;
     };
 
-    /* ------------------------------- Commands ------------------------------ */
+    const onLeave = () => clearOverlay();
+
+    /* Keyboard */
+    useEffect(() => {
+      const onKey = (e: KeyboardEvent) => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+          e.preventDefault();
+          doUndo();
+        } else if (!e.ctrlKey && !e.metaKey) {
+          if (e.key === 'b' || e.key === 'B') setToolState('brush');
+          if (e.key === 'e' || e.key === 'E') setToolState('eraser');
+          if (e.key === 'f' || e.key === 'F') setToolState('fill');
+          if (e.key === '1') setBrushSizeState(BRUSH_SIZES[0]);
+          if (e.key === '2') setBrushSizeState(BRUSH_SIZES[1]);
+          if (e.key === '3') setBrushSizeState(BRUSH_SIZES[2]);
+          if (e.key === '4') setBrushSizeState(BRUSH_SIZES[3]);
+        }
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }, []);
+
+    /* Undo / Clear */
     const doUndo = () => {
       if (idxRef.current <= 0) return;
       const i = idxRef.current - 1;
-      const img = new Image();
-      img.src = history[i]!;
-      img.onload = () => {
-        commitToContent((c) => {
-          const { w, h } = boardSizeRef.current;
-          c.clearRect(0, 0, w, h);
-          c.drawImage(img, 0, 0, w, h);
-        });
-        idxRef.current = i;
-        setCanUndo(i > 0);
-        setCanRedo(true);
-        onDrawEnd?.(history[i]!, { canUndo: i > 0, canRedo: true });
-      };
-    };
-
-    const doRedo = () => {
-      if (idxRef.current >= history.length - 1) return;
-      const i = idxRef.current + 1;
-      const img = new Image();
-      img.src = history[i]!;
-      img.onload = () => {
-        commitToContent((c) => {
-          const { w, h } = boardSizeRef.current;
-          c.clearRect(0, 0, w, h);
-          c.drawImage(img, 0, 0, w, h);
-        });
-        idxRef.current = i;
-        setCanUndo(true);
-        setCanRedo(i < history.length - 1);
-        onDrawEnd?.(history[i]!, { canUndo: true, canRedo: i < history.length - 1 });
-      };
+      const img = history[i]!;
+      restoreFromDataUrl(img);
+      idxRef.current = i;
+      setCanUndo(i > 0);
+      onDrawEnd?.(img, { canUndo: i > 0 });
     };
 
     const doClear = () => {
-      commitToContent((c) => {
-        const { w, h } = boardSizeRef.current;
-        c.clearRect(0, 0, w, h);
-      });
+      const ctx = canvasRef.current!.getContext('2d')!;
+      const { w, h } = cssSizeRef.current;
+      setCtxToCSS(ctx);
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
       pushHistory();
     };
 
-    const getDataUrl = () => contentRef.current?.toDataURL('image/png');
-
-    const resetView = () => {
-      const nextOffset = applyPanClamp(1, { x: 0, y: 0 });
-      setScale(1);
-      setOffset(nextOffset);
-      drawView();
-    };
+    const getDataUrl = () => snapshot();
 
     useImperativeHandle(ref, () => ({
       undo: doUndo,
-      redo: doRedo,
       clearAll: doClear,
       getDrawingDataUrl: getDataUrl,
-      setTool: (t: Tool) => setTool(t),
-      setZoom: (z: number) => {
-        const nz = clamp(z, 0.25, 8);
-        const nextOffset = applyPanClamp(nz, offset);
-        setScale(nz);
-        setOffset(nextOffset);
-        drawView();
-      },
-      resetView,
+      setTool: (t: GarticTool) => setToolState(t),
+      setColor: (hex: string) => setColorState(hex),
+      setBrushSize: (px: number) => setBrushSizeState(px),
     }));
 
-    /* ----------------------- Close popovers on outside ---------------------- */
-    useEffect(() => {
-      const handler = (e: MouseEvent) => {
-        const node = e.target as Node;
-        if (showPalette && paletteWrapRef.current && !paletteWrapRef.current.contains(node)) {
-          setShowPalette(false);
-        }
-        if (showShapes && shapesWrapRef.current && !shapesWrapRef.current.contains(node)) {
-          setShowShapes(false);
-        }
-      };
-      document.addEventListener('mousedown', handler);
-      return () => document.removeEventListener('mousedown', handler);
-    }, [showPalette, showShapes]);
+    /* ---- UI helpers (Portals) ---- */
+    const useFloating = (anchorRef: React.RefObject<HTMLElement>, deps: any[] = []) => {
+      const [style, setStyle] = useState<React.CSSProperties>({});
+      useEffect(() => {
+        const el = anchorRef.current;
+        if (!el) return;
+        const update = () => {
+          const r = el.getBoundingClientRect();
+          setStyle({ position: 'fixed', top: r.bottom + 8, left: r.left + r.width / 2, transform: 'translateX(-50%)' });
+        };
+        update();
+        window.addEventListener('scroll', update, true);
+        window.addEventListener('resize', update);
+        return () => {
+          window.removeEventListener('scroll', update, true);
+          window.removeEventListener('resize', update);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, deps);
+      return style;
+    };
 
-    /* -------------------------------- Render ------------------------------- */
+    const shapesStyle = useFloating(shapesBtnRef, [showShapes]);
+    const paletteStyle = useFloating(paletteBtnRef, [showPalette]);
+
+    // Close popovers on outside click
+    useEffect(() => {
+      const onDown = (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (showShapes && !target.closest('#shapes-popover') && !target.closest('#shapes-anchor')) setShowShapes(false);
+        if (showPalette && !target.closest('#palette-popover') && !target.closest('#palette-anchor')) setShowPalette(false);
+      };
+      document.addEventListener('mousedown', onDown);
+      return () => document.removeEventListener('mousedown', onDown);
+    }, [showShapes, showPalette]);
+
     return (
-      <div className={cn('relative h-[78vh] min-h-[360px] w-full', className)}>
-        {/* منطقة اللوحة */}
-        <div
-          ref={wrapperRef}
-          className="relative h-full w-full overflow-hidden rounded-lg border bg-white"
-        >
-          {/* Canvas العرض */}
+      <div className={cn('relative h-[70vh] min-h-[360px] w-full', className)}>
+        {/* Drawing area */}
+        <div ref={wrapRef} className="relative h-full w-full overflow-hidden rounded-lg border bg-white">
           <canvas
-            ref={viewRef}
+            ref={canvasRef}
             className={cn('absolute inset-0 z-0 block h-full w-full touch-none', disabled && 'pointer-events-none opacity-60')}
+            onContextMenu={(e) => e.preventDefault()}
           />
-          {/* Canvas المعاينة */}
+
           <canvas
             ref={overlayRef}
             className={cn('absolute inset-0 z-10 block h-full w-full touch-none', disabled && 'pointer-events-none')}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            onWheel={handleWheel}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerLeave={onLeave}
+            onPointerCancel={onPointerUp}
           />
-
-          {/* شريط أدوات عائم بصفّين، مثبت أعلى اليمين */}
-          <div
-            className="
-              pointer-events-auto absolute right-2 top-2 z-30
-              grid grid-rows-2 grid-flow-col auto-cols-max justify-end
-              gap-1 rounded-2xl border bg-background/90 p-1 shadow backdrop-blur-sm
-              max-w-[calc(100%-1rem)] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden
-            "
-          >
-            {/* سماكة + شفافية في بداية الصف من اليمين */}
-            <div className="flex items-center gap-1 rounded-xl border bg-white/70 px-2 py-1">
-              <Minus className="h-4 w-4 opacity-70" />
-              <div className="w-24">
-                <Slider value={[thickness]} onValueChange={([v]) => setThickness(v)} max={50} step={1} />
-              </div>
-              <div className="w-8 text-center text-xs tabular-nums">{thickness}</div>
-            </div>
-
-            <div className="flex items-center gap-1 rounded-xl border bg-white/70 px-2 py-1">
-              <Circle className="h-4 w-4 opacity-70" />
-              <div className="w-24">
-                <Slider value={[Math.round(opacity * 100)]} onValueChange={([v]) => setOpacity(v / 100)} max={100} step={1} />
-              </div>
-              <div className="w-10 text-center text-xs">{Math.round(opacity * 100)}%</div>
-            </div>
-
-            {/* لون + لوحة منسدلة */}
-            <div ref={paletteWrapRef} className="relative">
-              <button
-                title="اختر اللون"
-                onClick={() => setShowPalette((s) => !s)}
-                className="h-8 w-8 rounded-full border"
-                style={{ backgroundColor: color }}
-              />
-              {showPalette && (
-                <div className="absolute right-0 top-[calc(100%+6px)] z-[60] rounded-xl border bg-white p-3 shadow-lg">
-                  <div className="grid grid-cols-12 gap-2 max-w-[72vw] sm:max-w-[520px]">
-                    {PALETTE.map((c) => (
-                      <button
-                        key={c}
-                        title={c}
-                        onClick={() => {
-                          setColor(c);
-                          setShowPalette(false); // يغلق تلقائيًا بعد الاختيار
-                        }}
-                        className={cn('h-6 w-6 rounded-full border', color === c ? 'border-primary ring-2 ring-primary/50' : 'border-gray-200')}
-                        style={{ backgroundColor: c }}
-                      />
-                    ))}
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <Input
-                      type="color"
-                      value={color}
-                      onChange={(e) => {
-                        setColor(e.target.value);
-                        setShowPalette(false);
-                      }}
-                      className="h-9 w-14 p-1"
-                    />
-                    <Input
-                      type="text"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      onBlur={() => setShowPalette(false)}
-                      className="h-9 w-28"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* نمط الشكل حدود/تعبئة/كلاهما */}
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={cycleShapeMode}
-              title={`نمط الشكل: ${shapeMode === 'stroke' ? 'حدود' : shapeMode === 'fill' ? 'تعبئة' : 'كلاهما'}`}
-            >
-              <Type className="h-4 w-4" />
-            </Button>
-
-            <div className="mx-1 h-5 w-px self-center bg-border" />
-
-            {/* أدوات رئيسية */}
-            <Button
-              key="pen"
-              title="قلم"
-              variant={tool === 'pen' ? 'secondary' : 'outline'}
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => { setTool('pen'); clearOverlay(); }}
-            >
-              <Pen className="h-4 w-4" />
-            </Button>
-
-            <Button
-              key="eraser"
-              title="ممحاة"
-              variant={tool === 'eraser' ? 'secondary' : 'outline'}
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => { setTool('eraser'); clearOverlay(); }}
-            >
-              <Eraser className="h-4 w-4" />
-            </Button>
-
-            {/* مجموعة الأشكال المنسدلة عموديًا */}
-            <div ref={shapesWrapRef} className="relative">
-              <Button
-                title="أشكال"
-                variant={['line','rect','roundedRect','circle','ellipse','triangle','arrow'].includes(tool) ? 'secondary' : 'outline'}
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setShowShapes((s) => !s)}
-              >
-                <SquareDashed className="h-4 w-4" />
-              </Button>
-              {showShapes && (
-                <div className="absolute right-0 top-[calc(100%+6px)] z-[60] flex flex-col gap-1 rounded-xl border bg-white p-2 shadow-lg">
-                  {([
-                    { t: 'line', I: Minus, label: 'خط' },
-                    { t: 'rect', I: Square, label: 'مستطيل' },
-                    { t: 'roundedRect', I: SquareDashed, label: 'مستطيل مستدير' },
-                    { t: 'circle', I: Circle, label: 'دائرة' },
-                    { t: 'ellipse', I: Circle, label: 'بيضاوي' },
-                    { t: 'triangle', I: Triangle, label: 'مثلث' },
-                    { t: 'arrow', I: ArrowRight, label: 'سهم' },
-                  ] as { t: Tool; I: any; label: string }[]).map(({ t, I, label }) => (
-                    <Button
-                      key={t}
-                      variant={tool === t ? 'secondary' : 'ghost'}
-                      size="sm"
-                      className="justify-start gap-2"
-                      onClick={() => {
-                        setTool(t);
-                        clearOverlay();
-                        setShowShapes(false); // يغلق بعد الاختيار
-                      }}
-                    >
-                      <I className="h-4 w-4" />
-                      <span className="text-sm">{label}</span>
-                    </Button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* أدوات إضافية */}
-            <Button
-              key="fill"
-              title="تعبئة"
-              variant={tool === 'fill' ? 'secondary' : 'outline'}
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => { setTool('fill'); clearOverlay(); }}
-            >
-              <PaintBucket className="h-4 w-4" />
-            </Button>
-
-            <Button
-              key="image"
-              title="إدراج صورة"
-              variant={tool === 'image' ? 'secondary' : 'outline'}
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => { triggerImagePicker(); setTool('image'); clearOverlay(); }}
-            >
-              <ImageIcon className="h-4 w-4" />
-            </Button>
-
-            <Button
-              key="hand"
-              title="تحريك/تكبير"
-              variant={tool === 'hand' ? 'secondary' : 'outline'}
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => { setTool('hand'); clearOverlay(); }}
-            >
-              <Move className="h-4 w-4" />
-            </Button>
-
-            <div className="mx-1 h-5 w-px self-center bg-border" />
-
-            <Button variant="outline" size="icon" onClick={doUndo} disabled={!canUndo} className="h-8 w-8" title="تراجع"><Undo2 className="h-4 w-4" /></Button>
-            <Button variant="outline" size="icon" onClick={doRedo} disabled={!canRedo} className="h-8 w-8" title="إعادة"><Redo className="h-4 w-4" /></Button>
-            <Button variant="destructive" size="icon" onClick={doClear} className="h-8 w-8" title="مسح الكل"><Trash2 className="h-4 w-4" /></Button>
-
-            <div className="mx-1 h-5 w-px self-center bg-border" />
-
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => {
-                const nz = clamp(scale * 0.9, 0.25, 8);
-                const nextOffset = applyPanClamp(nz, offset);
-                setScale(nz); setOffset(nextOffset); clearOverlay(); drawView();
-              }}
-              className="h-8 w-8"
-              title="تصغير"
-            ><ZoomOut className="h-4 w-4" /></Button>
-            <div className="min-w-[48px] px-1 text-center text-xs tabular-nums self-center">{Math.round(scale * 100)}%</div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => {
-                const nz = clamp(scale * 1.1, 0.25, 8);
-                const nextOffset = applyPanClamp(nz, offset);
-                setScale(nz); setOffset(nextOffset); clearOverlay(); drawView();
-              }}
-              className="h-8 w-8"
-              title="تكبير"
-            ><ZoomIn className="h-4 w-4" /></Button>
-          </div>
-
-          {/* التحكم في وضع الصورة */}
-          {placingImage && (
-            <div className="pointer-events-auto absolute bottom-3 left-1/2 z-50 flex -translate-x-1/2 gap-2 rounded-xl bg-background/90 p-2 shadow">
-              <Button size="sm" variant="secondary" onClick={commitPlacedImage}>تثبيت الصورة</Button>
-              <Button size="sm" variant="outline" onClick={cancelPlacedImage}>إلغاء</Button>
-            </div>
-          )}
         </div>
 
-        {/* ملف الصورة المخفي */}
-        <input
-          ref={fileInputRef}
-          className="hidden"
-          type="file"
-          accept="image/*"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleFile(f);
-            e.currentTarget.value = '';
-          }}
-        />
+        {/* ==== UI OUTSIDE THE WRAP (so overlay never covers it) ==== */}
+        {/* Toolbar */}
+        <div
+          data-ui
+          onPointerDown={(e) => e.stopPropagation()}
+          className="pointer-events-auto absolute left-2 top-1/2 -translate-y-1/2 z-[1000] select-none"
+        >
+          <div
+            className="max-h-[72vh] md:max-h-[86vh] overflow-auto py-2 px-1 -webkit-overflow-scrolling-touch rounded-2xl border bg-white/90 backdrop-blur"
+          >
+            <div className="flex flex-col items-center gap-2 p-2">
+              <button
+                id="brush-btn"
+                data-ui
+                type="button"
+                title="فرشاة (B)"
+                onClick={() => { setToolState('brush'); setShowShapes(false); }}
+                className={cn('grid place-items-center rounded-lg border h-10 w-10', tool === 'brush' ? 'bg-zinc-100 border-zinc-400' : 'bg-white hover:bg-zinc-50')}
+                aria-pressed={tool === 'brush'}
+              >
+                <Pen className="h-4 w-4" />
+              </button>
+
+              <button
+                id="eraser-btn"
+                data-ui
+                type="button"
+                title="ممحاة (E)"
+                onClick={() => { setToolState('eraser'); setShowShapes(false); }}
+                className={cn('grid place-items-center rounded-lg border h-10 w-10', tool === 'eraser' ? 'bg-zinc-100 border-zinc-400' : 'bg-white hover:bg-zinc-50')}
+                aria-pressed={tool === 'eraser'}
+              >
+                <Eraser className="h-4 w-4" />
+              </button>
+
+              <button
+                id="fill-btn"
+                data-ui
+                type="button"
+                title="دلو تعبئة (F)"
+                onClick={() => { setToolState('fill'); setShowShapes(false); }}
+                className={cn('grid place-items-center rounded-lg border h-10 w-10', tool === 'fill' ? 'bg-zinc-100 border-zinc-400' : 'bg-white hover:bg-zinc-50')}
+                aria-pressed={tool === 'fill'}
+              >
+                <PaintBucket className="h-4 w-4" />
+              </button>
+
+              {/* Shapes trigger */}
+              <div className="relative">
+                <button
+                  id="shapes-anchor"
+                  ref={shapesBtnRef}
+                  data-ui
+                  type="button"
+                  title="أدوات هندسية"
+                  onClick={() => setShowShapes((s) => !s)}
+                  className={cn('grid place-items-center rounded-lg border h-10 w-10', showShapes ? 'bg-zinc-100 border-zinc-400' : 'bg-white hover:bg-zinc-50')}
+                >
+                  <Square className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Divider */}
+              <div className="h-px w-full bg-zinc-100 my-1" />
+
+              <button
+                data-ui
+                type="button"
+                title="تراجع (Ctrl+Z)"
+                onClick={doUndo}
+                disabled={!canUndo}
+                className={cn('grid place-items-center rounded-lg border h-10 w-10 disabled:opacity-40', canUndo ? 'bg-white hover:bg-zinc-50' : 'bg-white')}
+              >
+                <Undo2 className="h-4 w-4" />
+              </button>
+
+              <button
+                data-ui
+                type="button"
+                title="مسح الكل"
+                onClick={doClear}
+                className="grid place-items-center rounded-lg border h-10 w-10 bg-white hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+
+              {/* Size controls (depend on tool) */}
+              <div className="flex flex-col gap-2 mt-1" data-ui>
+                {(tool === 'eraser' ? ERASER_SIZES : BRUSH_SIZES).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    title={`سماكة ${s}px`}
+                    onClick={() => tool === 'eraser' ? setEraserSize(s) : setBrushSizeState(s)}
+                    className={cn('grid place-items-center rounded-lg border h-9 w-9', (tool === 'eraser' ? eraserSize : brushSize) === s ? 'bg-zinc-100 border-zinc-400' : 'bg-white hover:bg-zinc-50')}
+                  >
+                    <div className="rounded-full bg-zinc-800" style={{ width: Math.max(2, s), height: Math.max(2, s) }} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom palette toggle */}
+        <div
+          data-ui
+          onPointerDown={(e) => e.stopPropagation()}
+          className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2 z-[1000]"
+        >
+          <div className="flex items-center gap-2">
+            <button
+              id="palette-anchor"
+              ref={paletteBtnRef}
+              data-ui
+              type="button"
+              title="اختر اللون"
+              onClick={() => setShowPalette((s) => !s)}
+              className="h-10 w-10 rounded-full border grid place-items-center bg-white shadow"
+              aria-expanded={showPalette}
+            >
+              <Palette className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* SHAPES POPOVER (Portal) */}
+        {showShapes && typeof window !== 'undefined' && createPortal(
+          <div id="shapes-popover" data-ui style={shapesStyle} className="z-[1200] flex flex-col gap-1 bg-white rounded-xl border p-2 shadow w-40">
+            {([
+              { t: 'line', I: ArrowRight, label: 'خط' },
+              { t: 'rect', I: Square, label: 'مستطيل' },
+              { t: 'roundedRect', I: Square, label: 'مستطيل مستدير' },
+              { t: 'circle', I: Circle, label: 'دائرة' },
+              { t: 'ellipse', I: Circle, label: 'بيضاوي' },
+              { t: 'triangle', I: Triangle, label: 'مثلث' },
+              { t: 'arrow', I: ArrowRight, label: 'سهم' },
+            ] as { t: GarticTool; I: any; label: string }[]).map(({ t, I, label }) => (
+              <button
+                key={label}
+                data-ui
+                type="button"
+                onClick={() => { setToolState(t); setShowShapes(false); }}
+                className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-zinc-50"
+              >
+                <I className="h-4 w-4" />
+                <span className="text-sm">{label}</span>
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
+
+        {/* PALETTE POPOVER (Portal) */}
+        {showPalette && typeof window !== 'undefined' && createPortal(
+          <div id="palette-popover" data-ui style={paletteStyle} className="z-[1200] rounded-xl border bg-white p-3 shadow w-[90vw] max-w-[520px] max-h-[40vh] overflow-auto">
+            <div className="grid grid-cols-12 gap-2">
+              {PALETTE.map((c) => (
+                <button
+                  key={c}
+                  data-ui
+                  type="button"
+                  title={c}
+                  onClick={() => { setColorState(c); if (tool === 'eraser') setToolState('brush'); setShowPalette(false); }}
+                  className={cn('h-8 w-8 rounded-full border', color === c ? 'ring-2 ring-zinc-800 border-zinc-400' : 'border-zinc-200 hover:scale-105 transition')}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>,
+          document.body
+        )}
       </div>
     );
   }
 );
 
-DrawingCanvas.displayName = 'DrawingCanvas';
-export default DrawingCanvas;
+GarticLikeCanvas.displayName = 'GarticLikeCanvas';
+export default GarticLikeCanvas;
