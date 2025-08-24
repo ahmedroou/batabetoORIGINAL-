@@ -64,8 +64,8 @@ export async function requestAllegiance(actorId: string, targetId: string, durat
 }
 
 export async function respondToAllegianceRequest(actorId: string, request: AllegianceRequest, response: 'accepted' | 'rejected'): Promise<{ success: boolean; error?: string }> {
-    const actorRef = doc(db, 'users', actorId); // The one accepting/rejecting (the liege lord)
-    const requesterRef = doc(db, 'users', request.fromId); // The one who sent the request
+    const actorRef = doc(db, "users", actorId); // The one accepting/rejecting (the liege lord)
+    const requesterRef = doc(db, "users", request.fromId); // The one who sent the request
 
     const loyaltyCost = LOYALTY_COST_MAP[request.durationInDays] || 3;
 
@@ -75,18 +75,25 @@ export async function respondToAllegianceRequest(actorId: string, request: Alleg
         if (!actorDoc.exists() || !requesterDoc.exists()) throw new Error("لم يتم العثور على أحد اللاعبين.");
 
         const actorData = actorDoc.data() as UserProfile;
-        let requesterData = requesterDoc.data() as UserProfile;
+        const requesterData = requesterDoc.data() as UserProfile;
         
         // Find and remove the request from the actor's list
         const requests = actorData.allegianceRequests || [];
-        const requestIndex = requests.findIndex(r => r.fromId === request.fromId && r.createdAt.toString() === request.createdAt.toString());
-        if (requestIndex === -1) throw new Error("لم يتم العثور على طلب الولاء هذا.");
+        const requestTimestamp = (request.createdAt as any)?.toDate?.().getTime() || new Date(request.createdAt).getTime();
+
+        const requestIndex = requests.findIndex(r => 
+            r.fromId === request.fromId &&
+            ((r.createdAt as any)?.toDate?.().getTime() || new Date(r.createdAt).getTime()) === requestTimestamp
+        );
+
+        if (requestIndex === -1) throw new Error("لم يتم العثور على طلب الولاء هذا. ربما تم التفاعل معه بالفعل.");
+
         const updatedRequests = [...requests];
         updatedRequests.splice(requestIndex, 1);
         
         if (response === 'rejected') {
             await sendSystemMail(request.fromId, { subject: 'تم رفض طلب الولاء', body: `للأسف، قام اللاعب ${actorData.name} برفض طلب ولائك.` }, transaction);
-            transaction.update(actorRef, { allegianceRequests: updatedRequests }); // Keep the update for rejection as well
+            transaction.update(actorRef, { allegianceRequests: updatedRequests });
             return { success: true };
         }
         
