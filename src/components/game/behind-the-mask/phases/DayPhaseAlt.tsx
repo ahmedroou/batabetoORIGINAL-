@@ -288,17 +288,8 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
               {headerTitle} ({formatTime(timeLeft)})
             </h1>
             <div className="flex items-center gap-2">
-              {isHost && !isVotingPhase && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => transitionToVoting(game.id, self.id).catch(err => toast({ title: 'تعذر بدء التصويت', description: err?.message, variant: 'destructive' }))}
-                  disabled={hostActionPending}
-                >
-                  ابدأ التصويت الآن
-                </Button>
-              )}
-              {isHost && isVotingPhase && (
+              
+              {isHost && (
                 <Button
                   size="sm"
                   onClick={() => {
@@ -373,25 +364,27 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
 
               {/* Chat */}
               <TabsContent value="chat" className="flex-grow flex flex-col min-h-0 p-2">
-                <ScrollArea className="flex-grow h-full pr-2" viewportRef={scrollViewportRef}>
-                  <div className="space-y-4">
-                    {allMessages.map((msg, i) => {
-                      const isQuickReaction = QUICK_REACTIONS.includes(msg.message as QuickReaction);
-                      const millis = isTimestamp(msg.timestamp) ? msg.timestamp.toMillis() : Number(msg.timestamp ?? 0);
-                      const key = `${msg.senderId}-${millis}-${i}`;
-                      const fromSelf = msg.senderId === self.id;
-                      return (
-                        <div key={key} className={cn("flex items-start gap-3 w-full transition-opacity", fromSelf ? "flex-row-reverse" : "", msg.pending ? "opacity-60" : "opacity-100")}> 
-                          <PlayerAvatar avatarId={game.players.find(p => p.id === msg.senderId)?.avatarId || 'Avatar01.png'} className="w-10 h-10 shrink-0 mt-1"/>
-                          <div className={cn("p-3 rounded-xl max-w-[80%]", fromSelf ? "bg-primary rounded-br-none" : "bg-slate-700 rounded-bl-none", isQuickReaction ? "bg-transparent shadow-none" : "")}> 
-                            {!isQuickReaction && <p className={cn("font-bold text-sm mb-1", playerColors[msg.senderId])}>{msg.senderName}</p>}
-                            <p className={cn("text-base text-slate-100 whitespace-pre-wrap", isQuickReaction ? "text-5xl" : "")}>{msg.message}</p>
+                <div className="flex-grow h-full relative">
+                  <ScrollArea className="absolute inset-0 pr-2" viewportRef={scrollViewportRef}>
+                    <div className="space-y-4">
+                      {allMessages.map((msg, i) => {
+                        const isQuickReaction = QUICK_REACTIONS.includes(msg.message as QuickReaction);
+                        const millis = isTimestamp(msg.timestamp) ? msg.timestamp.toMillis() : Number(msg.timestamp ?? 0);
+                        const key = `${msg.senderId}-${millis}-${i}`;
+                        const fromSelf = msg.senderId === self.id;
+                        return (
+                          <div key={key} className={cn("flex items-start gap-3 w-full transition-opacity", fromSelf ? "flex-row-reverse" : "", msg.pending ? "opacity-60" : "opacity-100")}> 
+                            <PlayerAvatar avatarId={game.players.find(p => p.id === msg.senderId)?.avatarId || 'Avatar01.png'} className="w-10 h-10 shrink-0 mt-1"/>
+                            <div className={cn("p-3 rounded-xl max-w-[80%]", fromSelf ? "bg-primary rounded-br-none" : "bg-slate-700 rounded-bl-none", isQuickReaction ? "bg-transparent shadow-none" : "")}> 
+                              {!isQuickReaction && <p className={cn("font-bold text-sm mb-1", playerColors[msg.senderId])}>{msg.senderName}</p>}
+                              <p className={cn("text-base text-slate-100 whitespace-pre-wrap", isQuickReaction ? "text-5xl" : "")}>{msg.message}</p>
+                            </div>
                           </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </ScrollArea>
+                        )
+                      })}
+                    </div>
+                  </ScrollArea>
+                </div>
 
                 <div className="shrink-0 pt-4 space-y-2">
                   <div className="flex justify-center gap-2">
