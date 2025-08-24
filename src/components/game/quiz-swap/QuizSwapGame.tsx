@@ -1,1 +1,6 @@
-// This file is now empty after the removal of the QuizSwap game.
+
+'use server';
+
+/**
+ * @fileoverview This file has been cleared as the game is no longer supported.
+ */
