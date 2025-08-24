@@ -26,8 +26,8 @@ import {
 } from './user/leagues';
 import { giveReward, applyPunishment, humiliatePlayer, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax, liftPunishment } from './user/social';
 import { requestAllegiance, respondToAllegianceRequest } from './user/allegiance';
-import { joinChallenge } from './challenges';
-import { distributeEndOfGameAwards } from './admin/users';
+import { joinChallenge, finalizeChallenge } from '../challenges';
+import { distributeEndOfGameAwards } from '@/lib/actions/admin/users';
 
 
 export {
@@ -81,5 +81,6 @@ export {
     getKingsPageData,
     recordMatchHistory,
     distributeEndOfGameAwards,
-    updateLeagueScoresForGameEnd
+    updateLeagueScoresForGameEnd,
+    finalizeChallenge,
 };

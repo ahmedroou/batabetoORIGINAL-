@@ -33,12 +33,13 @@ import type { Game, Player, TrapQuestion, EmojiReactionType } from '@/types';
 import { isFirebaseError, safeCompareStrings, shuffle } from './helpers';
 import { calculateTrapAnswerScores } from './helpers/trap-answer-helpers';
 import { getTrapAnswerCategories } from './admin/settings';
-import { distributeEndOfGameAwards } from './admin/users';
+import { distributeEndOfGameAwards } from '@/lib/actions/admin/users';
 
 // -----------------------------------------------------------------------------
 // Constants & small helpers
 // -----------------------------------------------------------------------------
-const SIMILARITY_BLOCK = 0.70 as const;
+const SIMILARITY_THRESHOLD = 0.75 as const;
+const SIMILARITY_BLOCK = 0.95 as const; // block traps/dummies too similar to the real answer
 const CATEGORY_SELECTION_TIME_S = 30 as const;
 const DEFAULT_TRAP_TIME_S = 35 as const;
 const DEFAULT_GUESSING_TIME_S = 25 as const;
@@ -328,7 +329,7 @@ export async function nextTrapAnswerRound(gameId: string, hostId: string): Promi
 // -----------------------------------------------------------------------------
 // Timeout & Reactions
 // -----------------------------------------------------------------------------
-export async function handleTimeout(gameId: string, callerId: string) {
+export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
   let isGameOver = false;
 
@@ -342,7 +343,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
 
     if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
 
-    // Caller doesn't have to be host, but we only run logic if timer is actually expired.
+    if (game.hostId !== hostId) return;
 
     tx.update(gameRef, { [`${FIELD_TRAP_STATE}.roundEndTime`]: deleteField() });
 

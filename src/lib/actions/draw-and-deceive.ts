@@ -2,10 +2,10 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, type Transaction, updateDoc } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, type Transaction, updateDoc, deleteField, arrayUnion } from 'firebase/firestore';
 import type { Game, Player, DrawAndDeceiveState, DrawAndDeceiveRoundResult } from '@/types';
-import { shuffle, safeCompareStrings } from '../helpers';
-import { distributeEndOfGameAwards } from './admin/users';
+import { shuffle, safeCompareStrings } from './helpers';
+import { distributeEndOfGameAwards } from '@/lib/actions/admin/users';
 
 /* ----------------------------- Constants ----------------------------- */
 const DEFAULT_SETTINGS = {
@@ -395,7 +395,7 @@ export async function submitTrap(gameId: string, playerId: string, trap: string)
       // Prevent traps too similar to the correct answer
       if (state.correctAnswer) {
         const sim = safeCompareStrings(state.correctAnswer, norm);
-        if (state.correctAnswer === norm || sim >= SIMILARITY_BLOCK_THRESHOLD) {
+        if (state.correctAnswer === norm || sim >= SIMILARITY_BLOCK) {
           throw new Error('الفخ مشابه جدًا للإجابة الصحيحة.');
         }
       }
@@ -441,7 +441,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 
     const activeNonArtists = getActiveNonArtistPlayers(game, state.artistId!);
     const everyoneGuessed = activeNonArtists.every(p => Object.prototype.hasOwnProperty.call(currentGuesses, p.id));
-
+    
     if (everyoneGuessed) {
       computeAndEnterResults(tx, gameRef, { ...game, drawAndDeceiveState: { ...state, playerGuesses: currentGuesses } });
     } else {
@@ -451,7 +451,7 @@ export async function submitGuess(gameId: string, playerId: string, guess: strin
 }
 
 /* ---------------------- Timeout & Round Progression ------------------ */
-function startNextTurnTx(
+function _startNextRound(
   tx: Transaction,
   gameRef: ReturnType<typeof doc>,
   game: Game
@@ -494,93 +494,68 @@ function startNextTurnTx(
   return { isGameOver: false };
 }
 
-export async function handleTimeout(gameId: string, _callerId: string) {
+
+export async function nextRound(gameId: string, hostId: string): Promise<void> {
+    const gameRef = doc(db, 'games', gameId);
+    let isGameOver = false;
+
+    await runTransaction(db, async (tx) => {
+        const snap = await tx.get(gameRef);
+        ensure(snap.exists(), 'اللعبة غير موجودة.');
+        const game = snap.data() as Game;
+        ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
+        if (game.gameState !== 'results') return;
+        const result = await _startNextRound(tx, gameRef, game);
+        isGameOver = result.isGameOver;
+    });
+
+    if (isGameOver) {
+        const res = await distributeEndOfGameAwards(gameId);
+        if (!res.success) {
+            console.error(`Failed to distribute awards for game ${gameId}:`, res.error);
+            await updateDoc(gameRef, { 'gameResult.error': res.error });
+        }
+    }
+}
+
+export async function handleTimeout(gameId: string, callerId: string) {
   const gameRef = doc(db, 'games', gameId);
   let isGameOver = false;
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
+
     const game = snap.data() as Game;
     const state = game.drawAndDeceiveState;
-    if (!state?.timerEndsAt) return;
-    if (state.timerEndsAt.toMillis() > nowMs()) return; // not yet
+    const timerEndsAt = state?.timerEndsAt as Timestamp | undefined;
 
-    if (state.phase === 'drawing') {
-      if (!state.correctAnswer) {
-        // writing sub-phase timed out before answer → skip artist
-        const res = startNextTurnTx(tx, gameRef, game);
-        isGameOver = res.isGameOver;
-        return;
-      }
-      // drawing timed out → move to trapping with whatever exists
-      const trappingTime = state.settings?.trappingTime ?? DEFAULT_SETTINGS.trappingTime;
-      tx.update(gameRef, {
-        [F.gameState]: 'trapping',
-        [F.s_phase]: 'trapping',
-        [F.s_timer]: inSec(trappingTime),
-      });
-      return;
-    }
+    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
 
-    if (state.phase === 'trapping') {
-      // move to guessing with available traps
-      beginGuessingPhase(tx, gameRef, state);
-      return;
-    }
-
-    if (state.phase === 'guessing') {
-      // fill missing guesses with TIMEOUT_TOKEN, then compute results
-      const withTimeouts: Record<string, string> = { ...(state.playerGuesses || {}) };
-      const nonArtists = getActiveNonArtistPlayers(game, state.artistId!);
-      nonArtists.forEach((p) => {
-        if (!Object.prototype.hasOwnProperty.call(withTimeouts, p.id)) {
-          withTimeouts[p.id] = TIMEOUT_TOKEN;
-        }
-      });
-      const gameWithFilled = {
-        ...game,
-        drawAndDeceiveState: { ...state, playerGuesses: withTimeouts },
-      } as Game;
-      computeAndEnterResults(tx, gameRef, gameWithFilled);
-      return;
-    }
-
-    if (state.phase === 'results') {
-      const res = startNextTurnTx(tx, gameRef, game);
-      isGameOver = res.isGameOver;
-      return;
+    tx.update(gameRef, { [`${F.s_timer}`]: deleteField() });
+    
+    switch(game.gameState) {
+        case 'drawing':
+            await endArtistTurn(gameId, state!.artistId!);
+            break;
+        case 'trapping':
+            beginGuessingPhase(tx, gameRef, state!);
+            break;
+        case 'guessing':
+            computeAndEnterResults(tx, gameRef, game);
+            break;
+        case 'results':
+            const result = await _startNextRound(tx, gameRef, game);
+            isGameOver = result.isGameOver;
+            break;
     }
   });
 
-  if (isGameOver) {
-    await distributeEndOfGameAwards(gameId);
+  if(isGameOver) {
+      await distributeEndOfGameAwards(gameId);
   }
 }
 
-export async function nextRound(gameId: string, hostId: string): Promise<void> {
-  const gameRef = doc(db, 'games', gameId);
-  let isGameOver = false;
-
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(gameRef);
-    ensure(snap.exists(), 'اللعبة غير موجودة.');
-    const game = snap.data() as Game;
-    ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
-    ensure(game.drawAndDeceiveState?.phase === 'results', 'لا يمكنك بدء جولة جديدة الآن.');
-
-    const res = await startNextTurnTx(tx, gameRef, game);
-    isGameOver = res.isGameOver;
-  });
-
-  if (isGameOver) {
-    const res = await distributeEndOfGameAwards(gameId);
-    if (!res.success) {
-      console.error(`Failed to distribute awards for game ${gameId}:`, res.error);
-      await updateDoc(doc(db, 'games', gameId), { 'gameResult.error': res.error });
-    }
-  }
-}
 
 function pickWinnerId(scores: Record<string, number>): string {
   const entries = Object.entries(scores);
