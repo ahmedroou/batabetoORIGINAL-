@@ -15,7 +15,7 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Award, Star, ArrowLeft, Plus, RefreshCcw } from 'lucide-react';
+import { Award, Star, ArrowLeft, Plus, RefreshCcw, Loader2 } from 'lucide-react';
 import { handleTimeout } from '@/lib/actions/king-of-genius';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { useAuth } from '@/hooks/useAuth';
@@ -27,6 +27,8 @@ interface RoundResultsProps {
   challenge: GeniusChallenge;
 }
 
+const RESULTS_DISPLAY_DURATION_S = 60; // 1 minute as requested
+
 export function RoundResults({
   game,
   self,
@@ -35,31 +37,38 @@ export function RoundResults({
 }: RoundResultsProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const timeoutCalledRef = useRef(false);
   const { user } = useAuth();
+  const [timeLeft, setTimeLeft] = useState(RESULTS_DISPLAY_DURATION_S);
+  
+  const allPlayersFinished = (game.challengeState?.results?.length ?? 0) >= (game.players?.filter(p => p.status === 'alive').length ?? 0);
 
+  const canHostProceed = isHost && (allPlayersFinished || timeLeft <= 0);
 
-  // Automatically proceed after a delay, only by host
+  // Countdown timer effect
   useEffect(() => {
-    if (isHost && user && game.challengeState?.timerEndsAt) {
-      const endTime = game.challengeState.timerEndsAt.toMillis();
-      const delay = endTime - Date.now();
-      
-      const triggerTimeout = () => {
-        if (!timeoutCalledRef.current) {
-          timeoutCalledRef.current = true;
-          handleTimeout(game.id, user.uid).catch(e => console.error("Error in timeout handler:", e));
-        }
-      };
-
-      if (delay <= 0) {
-        triggerTimeout();
-      } else {
-        const timer = setTimeout(triggerTimeout, delay);
-        return () => clearTimeout(timer);
-      }
+    if (game.challengeState?.timerEndsAt) {
+        const endTime = game.challengeState.timerEndsAt.toMillis();
+        const updateTimer = () => {
+            const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+            setTimeLeft(remaining);
+        };
+        updateTimer(); // Initial call
+        const interval = setInterval(updateTimer, 1000);
+        return () => clearInterval(interval);
     }
-  }, [isHost, game.id, user, game.challengeState?.timerEndsAt]);
+  }, [game.challengeState?.timerEndsAt]);
+
+  const handleProceed = async () => {
+      if (!isHost) return;
+      setIsSubmitting(true);
+      try {
+          await handleTimeout(game.id, self.id);
+      } catch (e: any) {
+          toast({title: "خطأ", description: e.message, variant: "destructive"});
+          setIsSubmitting(false); // Allow retry
+      }
+  };
+
 
   const results = game.challengeState?.results || [];
 
@@ -85,7 +94,9 @@ export function RoundResults({
             نتائج جولة: {challenge.name}
           </CardTitle>
           <CardDescription className="text-muted-foreground">
-            لنرى من هم العباقرة الحقيقيون!
+            {isHost && !canHostProceed && !allPlayersFinished && <span className="animate-pulse">في انتظار انتهاء بقية اللاعبين...</span>}
+            {isHost && allPlayersFinished && <span className="text-green-600 font-bold">اكتملت أدوار اللاعبين! يمكنك المتابعة.</span>}
+            {isHost && !allPlayersFinished && timeLeft <= 0 && <span className="text-red-600 font-bold">انتهى الوقت! يمكنك المتابعة.</span>}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
@@ -168,12 +179,19 @@ export function RoundResults({
             </div>
           </div>
         </CardContent>
-         <CardFooter>
-           <p className="w-full text-center text-muted-foreground animate-pulse">
-            في انتظار الانتقال للجولة التالية...
-           </p>
+         <CardFooter className="pt-6">
+           {isHost ? (
+               <Button onClick={handleProceed} disabled={!canHostProceed || isSubmitting} className="w-full">
+                   {isSubmitting ? <Loader2 className="animate-spin" /> : 'الجولة التالية'}
+               </Button>
+           ) : (
+                <p className="w-full text-center text-muted-foreground animate-pulse">
+                    في انتظار المضيف للانتقال للجولة التالية...
+                </p>
+           )}
         </CardFooter>
       </Card>
     </div>
   );
 }
+```,

@@ -1,3 +1,5 @@
+
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -10,6 +12,7 @@ import {
   arrayUnion,
   FieldPath,
   serverTimestamp,
+  increment,
 } from 'firebase/firestore';
 import type { Game, Player, ChallengeResult, PlayerProgress } from '@/types';
 import { shuffle, safeCompareStrings } from './helpers';
@@ -29,7 +32,7 @@ import { updateLeagueScoresForGameEnd } from './user';
 
 // --- Constants ---
 const INTRO_DURATION_S = 5;
-const RESULTS_DISPLAY_DURATION_S = 10;
+const RESULTS_DISPLAY_DURATION_S = 60; // 1 minute as requested
 const FORFEIT_TIME = 999; // sentinel time for forfeit (not used for ordering in correct-only)
 const DEFAULT_POINTS_MAP = [10, 5, 3, 1];
 
@@ -226,11 +229,16 @@ export async function handleTimeout(gameId: string, hostId: string) {
     const game = snap.data() as Game;
 
     if (game.hostId !== hostId) return;
-    if (!hasExpired(game.challengeState?.timerEndsAt)) return;
 
     // Guard against double-advance with phase + version
     const phase = game.challengeState?.phase as 'intro' | 'active' | 'results' | undefined;
     const phaseVersion = Number(game.challengeState?.phaseVersion ?? 0);
+    const allPlayersDone = (game.challengeState?.results?.length ?? 0) >= (game.players?.filter(p => p.status === 'alive').length ?? 0);
+    
+    // Only proceed if timer expired OR all players are done in results phase
+    const canProceed = hasExpired(game.challengeState?.timerEndsAt) || (game.gameState === 'challenge_results' && allPlayersDone);
+    if (!canProceed) return;
+
 
     switch (game.gameState) {
       case 'challenge_intro': {
@@ -409,7 +417,7 @@ export async function submitChallengeResult(
   });
 }
 
-export async function updateKingOfGeniusProgress(
+export async function updateChallengeProgress(
   gameId: string,
   playerId: string,
   progress: Partial<PlayerProgress>
@@ -427,3 +435,5 @@ export async function updateKingOfGeniusProgress(
  * Optional: helper to safely compare strings (if you use it in UI)
  * Keeping import for safeCompareStrings from './helpers' if needed
  * ------------------------------------------------------------------ */
+
+```
