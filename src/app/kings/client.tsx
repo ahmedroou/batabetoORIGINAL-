@@ -373,5 +373,4 @@ export default function KingsClient() {
       </div>
     </div>
   );
-
-    
+}
