@@ -85,7 +85,7 @@ const canAct = (actor: Player | undefined, action: NightAction['action']) => {
   return ROLES[actor.role]?.nightAction === action;
 };
 
-export function checkForWinner(players: Player[]): MafiaGameResult | null {
+export async function checkForWinner(players: Player[]): Promise<MafiaGameResult | null> {
   const alive = players.filter((p) => p.status === 'alive');
   const good = alive.filter((p) => p.team === 'good').length;
   const mafia = alive.filter((p) => p.team === 'mafia').length;
@@ -127,13 +127,13 @@ const requirePhaseAndTimerOrHost = (game: Game, phases: string[], callerHostId?:
 // -----------------------------
 // Process night internal (pure)
 // -----------------------------
-export function processNightInternal(game: Game): {
+export async function processNightInternal(game: Game): Promise<{
   updatedPlayers: Player[];
   newEvents: DayEvent[];
   newPrivateEvents: Record<string, PrivateEvent[]>;
   newPrivateChats: Record<string, any>;
   newLastHealedPlayerId: string | null;
-} {
+}> {
   const players = game.players.map((p) => ({ ...p }));
   const nightActions = game.mafiaState?.nightActions || {};
   const newEvents: DayEvent[] = [];
@@ -306,7 +306,7 @@ export async function processDayInternal(game: Game): Promise<{
     events.push({ type: 'no_execution', message: 'لم يتمكن أهل المدينة من الاتفاق على إعدام أحد.' });
   }
 
-  const winner = checkForWinner(players);
+  const winner = await checkForWinner(players);
   const lastExecutedPlayer = executed ? { name: executed.name, avatarId: executed.avatarId, temporaryTitle: (executed as any).temporaryTitle } : null;
 
   return { updatedGame: { players, events, lastExecutedPlayer }, winner };
@@ -401,8 +401,10 @@ export async function submitNightAction(
       const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
 
       requirePhase(game, ['night']);
+      // This is now more lenient to avoid throwing on client-side race conditions
       if (!timerActive(game)) {
-        throw new Error('انتهى الوقت لهذه المرحلة.');
+        console.warn(`Night action for ${action.actorId} submitted after deadline.`);
+        return;
       }
 
       const actor = safeGetPlayer(game, action.actorId);
@@ -456,9 +458,9 @@ export async function processNight(gameId: string, hostId: string): Promise<void
     requirePhaseAndTimerOrHost(game, ['night'], hostId);
 
     const { updatedPlayers, newEvents, newPrivateEvents, newPrivateChats, newLastHealedPlayerId } =
-      processNightInternal(game);
+      await processNightInternal(game);
 
-    const winner = checkForWinner(updatedPlayers);
+    const winner = await checkForWinner(updatedPlayers);
 
     const update: FSUpdate = {
       players: updatedPlayers,
@@ -539,7 +541,7 @@ export async function submitVote(
       const newVotes = { ...(game.mafiaState?.votes || {}), [voterId]: targetId };
       const aliveCount = game.players.filter((p) => p.status === 'alive').length;
       if (Object.keys(newVotes).length === aliveCount) {
-        const remaining = (game.mafiaState?.timerEndsAt?.toMillis() || Date.now()) - nowMs();
+        const remaining = (game.mafiaState?.timerEndsAt?.toMillis() || nowMs()) - nowMs();
         if (remaining > 20_000) (update as any)['mafiaState.timerEndsAt'] = deadline(20);
       }
 
@@ -692,5 +694,3 @@ export async function updateMafiaSettings(
     tx.update(gameRef, { 'mafiaState.settings': { nightTime, dayTime } });
   });
 }
-
-      
