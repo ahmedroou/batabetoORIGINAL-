@@ -123,14 +123,20 @@ export default function ProfilePage() {
 
   const currentPunishment = useMemo(() => {
     if (!userProfile) return null;
-    const avUntil = toDate(userProfile.originalAvatarToRevert?.until);
-    if (avUntil && avUntil > new Date()) {
-      return { type: "avatar" as const, details: userProfile.originalAvatarToRevert };
-    }
+    const now = new Date();
+    
+    // Check for humiliation punishment
     const humUntil = toDate(userProfile.humiliation?.until);
-    if (humUntil && humUntil > new Date()) {
+    if (humUntil && humUntil > now) {
       return { type: "humiliation" as const, details: userProfile.humiliation };
     }
+  
+    // Check for avatar punishment
+    const avUntil = toDate(userProfile.originalAvatarToRevert?.until);
+    if (avUntil && avUntil > now) {
+      return { type: "avatar" as const, details: userProfile.originalAvatarToRevert };
+    }
+  
     return null;
   }, [userProfile]);
 
@@ -547,5 +553,3 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
     </div>
   );
 }
-
-    

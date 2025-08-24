@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -86,6 +87,7 @@ function ChallengeRow({
   const [now, setNow] = React.useState<number>(0);
   
   React.useEffect(() => {
+    // Set initial time on client mount to avoid hydration mismatch
     setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
