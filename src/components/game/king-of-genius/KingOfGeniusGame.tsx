@@ -43,7 +43,7 @@ export function KingOfGeniusGame({
       : null;
 
     switch (game.gameState) {
-      case 'lobby': // Fallback to team selection
+      case 'lobby':
       case 'team_selection':
         return <TeamSelection game={game} self={self} isHost={isHost} />;
 

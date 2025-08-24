@@ -147,7 +147,7 @@ export async function createGameRoom(
     const expiresAt = expiresAtFromNow(LOBBY_TTL_MS);
 
     // Determine initial game state
-    const initialGameState: GameState = gameType === 'king-of-genius' ? 'team_selection' : 'lobby';
+    const initialGameState: GameState = 'lobby';
 
     const baseGame: Game = {
       id: gameId,
@@ -212,26 +212,9 @@ export async function createGameRoom(
         currentTurnIndex: 0,
         activityLog: [],
       };
-    } else if (gameType === 'quiz-swap') {
-        newGame.quizSwapState = {
-            players: [],
-            drawPile: [],
-            discardPile: [],
-            round: 1,
-            turnIndex: 0,
-            phase: 'peek',
-            settings: {
-                turnSeconds: 30,
-                peekPhaseSeconds: 20,
-                answerSeconds: 20,
-                endAfterRounds: 5,
-                penalty: { easy: 3, medium: 2, hard: 1 },
-            },
-            log: [],
-        }
     } else if (gameType === 'draw-and-deceive') {
         newGame.drawAndDeceiveState = {
-            settings: { drawingTime: 120, trappingTime: 45, guessingTime: 35, resultsTime: 20, rounds: 3 },
+            settings: { drawingTime: 120, trappingTime: 45, guessingTime: 35, resultsTime: 20, rounds: 3, writingTime: 20 },
             turnOrder: [],
             currentTurnIndex: 0,
             round: 1,
@@ -513,4 +496,3 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
   });
 }
 
-    
