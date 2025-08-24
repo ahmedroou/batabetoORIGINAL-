@@ -506,7 +506,7 @@ export async function nextRound(gameId: string, hostId: string): Promise<void> {
         const game = snap.data() as Game;
         ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
         if (game.gameState !== 'results') return;
-        const result = await _startNextRound(tx, gameRef, game);
+        const result = _startNextRound(tx, gameRef, game);
         isGameOver = result.isGameOver;
     });
 
@@ -546,7 +546,7 @@ export async function handleTimeout(gameId: string, callerId: string) {
             await _advanceToResults(tx, gameRef, game, true);
             break;
         case 'results':
-            const result = await _startNextRound(tx, gameRef, game);
+            const result = _startNextRound(tx, gameRef, game);
             isGameOver = result.isGameOver;
             break;
     }
@@ -565,23 +565,21 @@ function pickWinnerId(scores: Record<string, number>): string {
 }
 
 async function _advanceToGuessing(tx: any, gameRef: any, game: Game, isTimeout = false) {
-  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const state = game.drawAndDeceiveState || {};
   const playerAnswers = { ...(state.playerAnswers || {}) };
   if (isTimeout) {
     getActivePlayers(game).forEach(p => { if (!hasOwn(playerAnswers, p.id)) playerAnswers[p.id] = null; });
   }
-  const { updates } = _getGuessingPhaseUpdates(game, playerAnswers);
+  const updates = _getGuessingPhaseUpdates(game, playerAnswers);
   tx.update(gameRef, updates);
 }
 
 async function _advanceToResults(tx: any, gameRef: any, game: Game, isTimeout = false) {
-  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const state = game.drawAndDeceiveState || {};
   const playerGuesses = { ...(state.playerGuesses || {}) };
   if (isTimeout) {
     getActivePlayers(game).forEach(p => { if (!hasOwn(playerGuesses, p.id)) playerGuesses[p.id] = TIMEOUT_TOKEN; });
   }
-  const { updates } = _getResultsPhaseUpdates(game, playerGuesses);
+  const updates = _getResultsPhaseUpdates(game, playerGuesses);
   tx.update(gameRef, updates);
 }
-
-```
