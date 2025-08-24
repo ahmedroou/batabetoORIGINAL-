@@ -1,5 +1,3 @@
-
-
 import type { Game, SocialRank, PermissionId } from '@/types';
 import { recordGamePointsScoredEvent } from '../events';
 

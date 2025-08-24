@@ -33,7 +33,7 @@ import type {
 } from '@/types';
 
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
-import { updateLeagueScoresForGameEnd } from './user';
+import { distributeEndOfGameAwards, updateLeagueScoresForGameEnd } from './user';
 
 // -----------------------------
 // ثوابت ومساعدات
@@ -90,8 +90,10 @@ export async function checkForWinner(players: Player[]): Promise<MafiaGameResult
   const good = alive.filter((p) => p.team === 'good').length;
   const mafia = alive.filter((p) => p.team === 'mafia').length;
 
-  if (mafia === 0) return { winner: 'good', message: 'لقد قضى فريق الخير على كل الأشرار!' };
+  if (mafia === 0 && good > 0) return { winner: 'good', message: 'لقد قضى فريق الخير على كل الأشرار!' };
+  if (mafia > 0 && good === 0) return { winner: 'mafia', message: 'لقد سيطر فريق الشر على المدينة!' };
   if (mafia >= good) return { winner: 'mafia', message: 'لقد سيطر فريق الشر على المدينة!' };
+
 
   return null;
 };
@@ -289,7 +291,7 @@ export async function processDayInternal(game: Game): Promise<{
   
       if (targetId === null) {
         skipVotes += 1;
-      } else {
+      } else if(targetId) {
         const target = players.find((p) => p.id === targetId);
         if (isAlive(target)) {
           playerVoteCounts[targetId] = (playerVoteCounts[targetId] || 0) + 1;
@@ -300,7 +302,7 @@ export async function processDayInternal(game: Game): Promise<{
     const maxPlayerVotes = Math.max(0, ...Object.values(playerVoteCounts));
   
     // Only execute if a player has strictly more votes than the skip option
-    if (maxPlayerVotes > skipVotes) {
+    if (maxPlayerVotes > 0 && maxPlayerVotes > skipVotes) {
       const topIds = Object.keys(playerVoteCounts).filter((id) => playerVoteCounts[id] === maxPlayerVotes);
   
       // And only if there's no tie for the most votes
@@ -419,13 +421,11 @@ export async function submitNightAction(
       const snap = await tx.get(gameRef);
       const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
 
-      requirePhase(game, ['night']);
-      // This is now more lenient to avoid throwing on client-side race conditions
-      if (!timerActive(game)) {
-        console.warn(`Night action for ${action.actorId} submitted after deadline.`);
+      if (game.mafiaState?.phase !== 'night') {
+        // Silently fail if phase moved on.
         return;
       }
-
+      
       const actor = safeGetPlayer(game, action.actorId);
       if (!isAlive(actor)) throw new Error('Only living players can perform night actions.');
 
@@ -443,9 +443,9 @@ export async function submitNightAction(
         if (!disguise || !(disguise in ROLES)) throw new Error('دور التنكّر غير صالح.');
       }
 
-      // Correct cooldown logic
       const currentNight = game.mafiaState?.night || 1;
       const lastUsed = game.mafiaState?.lastAbilityUse?.[action.actorId!];
+      // FIX: Ensure lastUsed is a number before check
       if ((action.action === 'kill' || action.action === 'investigate') && typeof lastUsed === 'number' && currentNight === lastUsed + 1) {
           throw new Error('يجب أن ترتاح لليلة واحدة قبل استخدام قدرتك مرة أخرى.');
       }
@@ -467,7 +467,7 @@ export async function submitNightAction(
 /** معالجة الليل والانتقال تلقائيًا إلى النهار أو النتائج. (host may override expired timer) */
 export async function processNight(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
-  let postCommit: null | (() => Promise<void>) = null;
+  let finalGameDataForAwards: Game | null = null;
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -495,11 +495,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
       update['mafiaState.phase'] = 'final_results';
       update['gameResult'] = winner;
       update['mafiaState.timerEndsAt'] = deleteField();
-
-      const payloadForLeague = { ...game, players: updatedPlayers, gameResult: winner };
-      postCommit = async () => {
-        await updateLeagueScoresForGameEnd(payloadForLeague as any);
-      };
+      finalGameDataForAwards = { ...game, players: updatedPlayers, gameResult: winner };
     } else {
       const { day } = getSettings(game);
       update['mafiaState.phase'] = 'day';
@@ -508,8 +504,11 @@ export async function processNight(gameId: string, hostId: string): Promise<void
 
     tx.update(gameRef, update);
   });
-
-  if (postCommit) await postCommit();
+  
+  if (finalGameDataForAwards) {
+      await updateLeagueScoresForGameEnd(finalGameDataForAwards as any);
+      await distributeEndOfGameAwards(gameId);
+  }
 }
 
 /** الانتقال من النقاش إلى التصويت. (host may override expired timer) */
@@ -520,9 +519,7 @@ export async function transitionToVoting(gameId: string, hostId: string): Promis
     const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
 
     requireHost(game, hostId);
-    requirePhaseAndTimerOrHost(game, ['day'], hostId);
-
-    if (game.mafiaState?.phase !== 'day') return;
+    if(game.mafiaState?.phase !== 'day') return; // Do not use requirePhase here, to avoid throwing error in a loop
 
     tx.update(gameRef, {
       'mafiaState.phase': 'voting',
@@ -575,7 +572,7 @@ export async function submitVote(
 /** معالجة التصويت في نهاية النهار/التصويت والانتقال لمرحلة التنفيذ أو إنهاء اللعبة. (host may override expired timer) */
 export async function processDay(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
-  let postCommit: null | (() => Promise<void>) = null;
+  let finalGameDataForAwards: Game | null = null;
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -594,10 +591,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
       (update as any).gameResult = winner;
       (update as any)['mafiaState.timerEndsAt'] = deleteField();
 
-      const payloadForLeague = { ...game, players: updatedGame.players, gameResult: winner };
-      postCommit = async () => {
-        await updateLeagueScoresForGameEnd(payloadForLeague as any);
-      };
+      finalGameDataForAwards = { ...game, players: updatedGame.players, gameResult: winner };
     } else {
       (update as any)['mafiaState.phase'] = 'execution';
       (update as any)['mafiaState.events'] = updatedGame.events;
@@ -607,8 +601,11 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
 
     tx.update(gameRef, update);
   });
-
-  if (postCommit) await postCommit();
+  
+  if (finalGameDataForAwards) {
+      await updateLeagueScoresForGameEnd(finalGameDataForAwards as any);
+      await distributeEndOfGameAwards(gameId);
+  }
 }
 
 /** إرسال رسالة عامة أثناء النهار. */
@@ -713,3 +710,5 @@ export async function updateMafiaSettings(
     tx.update(gameRef, { 'mafiaState.settings': { nightTime, dayTime } });
   });
 }
+
+    
