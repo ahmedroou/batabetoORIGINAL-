@@ -48,9 +48,6 @@ Write a comprehensive news article based on the provided JSON data. The article 
 - \`date\`: Today's date for the byline.
 - \`directive\`: An optional hint from the admin. Give it high priority.
 
-**Example Snippet of Your Tone:**
-"While the masses were distracted by the gaudy spectacle of the 'Eid Tournament', the real shift in power occurred in the dimly lit back-alleys of the social sphere. The so-called 'King of Games', once thought untouchable, saw his lead narrow, not by a challenger's prowess, but by the slow, grinding machinery of public humiliation..."
-
 **Final Output:**
 You must provide your response in a valid JSON object with a "headline" and a "body".
 `;
@@ -68,7 +65,7 @@ const generateArticleFlow = ai.defineFlow(
       prompt: generationPrompt,
       config: {
         // Specify JSON output mode for reliable parsing
-        responseFormat: 'json',
+        responseMimeType: 'application/json',
       },
       context: [
         {
