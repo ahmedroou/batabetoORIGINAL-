@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -366,10 +365,11 @@ export async function recordMatchHistory(game: Game, gameId: string): Promise<vo
       return;
     }
   
-    // Use playerScores keys as the definitive list of participants for this match.
-    const playersToRecord = Object.keys(game.playerScores || {});
+    // Use playerUids as the definitive list of participants for this match.
+    // This is more reliable than playerScores keys, especially for team games.
+    const playersToRecord = game.playerUids || [];
     if (playersToRecord.length === 0) {
-      console.warn(`No players with scores found for game ${gid}. Skipping match history.`);
+      console.warn(`No playerUids found for game ${gid}. Skipping match history.`);
       return;
     }
 
