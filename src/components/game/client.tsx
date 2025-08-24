@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -196,7 +195,7 @@ function GameTopBar({
             <div className="flex items-center gap-2 sm:gap-3 text-center">
               <Gamepad2 className={cn('h-4 w-4 sm:h-5 sm:w-5', t.title)} />
               <h1 className={cn('text-sm sm:text-base font-semibold', t.title)}>
-                {GAME_TYPE_NAMES[game.gameType] ?? 'لعبة'}
+                {GAME_TYPE_NAMES[game.gameType as keyof typeof GAME_TYPE_NAMES] ?? 'لعبة'}
               </h1>
               <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] sm:text-xs', t.chip)}>
                 <Timer className="h-3.5 w-3.5" /> {stateLabel[game.gameState] ?? '...'}
@@ -380,7 +379,7 @@ export default function GameClient() {
     }
   };
 
-  const tone = (game.gameType ?? 'default') as keyof typeof THEME;
+  const tone = (game.gameType && game.gameType in THEME) ? game.gameType as keyof typeof THEME : 'default';
 
   return (
     <main className={cn('relative flex min-h-screen flex-col items-center justify-center p-2 md:p-4')}> 

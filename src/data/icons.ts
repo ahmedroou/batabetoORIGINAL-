@@ -1,7 +1,3 @@
-
-
-      
-
 import { BrainCircuit, Bomb, VenetianMask, Swords, Palette, TestTube, Dices, LandPlot, Building2, HelpCircle, Brush } from "lucide-react";
 import type { Game } from "@/types";
 
@@ -24,6 +20,3 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'educated-merchant': 'التاجر المتعلم',
     'draw-and-deceive': 'ارسم واخدع'
 };
-
-
-    
