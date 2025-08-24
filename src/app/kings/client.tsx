@@ -122,8 +122,10 @@ const KingsCountdown = ({ onReachedZero }: { onReachedZero?: () => void }) => {
     return () => clearInterval(id);
   }, []);
 
-  const { total, days, hours, minutes, seconds } = now ? getCountdown(now) : { total: -1, days: 0, hours: 0, minutes: 0, seconds: 0 };
-
+  const { total, days, hours, minutes, seconds, target } = useMemo(() => {
+    return now ? getCountdown(now) : { total: -1, days: 0, hours: 0, minutes: 0, seconds: 0, target: new Date() };
+  }, [now]);
+  
   useEffect(() => {
     if (total <= 0 && !firedRef.current) {
       firedRef.current = true;
@@ -131,10 +133,10 @@ const KingsCountdown = ({ onReachedZero }: { onReachedZero?: () => void }) => {
     }
   }, [total, onReachedZero]);
 
-  if (!now) return null; // Avoid rendering until client-side state is ready
+  if (!now) return null;
 
-  const { next, total: span, elapsed } = getAnchors(now);
-  const pct = 1 - clamp(elapsed / span, 0, 1); // remaining percentage
+  const { elapsed, total: span } = getAnchors(now);
+  const pct = 1 - clamp(elapsed / span, 0, 1);
 
   if (total <= 0) {
     return <div className="text-lg text-green-400 animate-pulse">جاري تحديث الملوك الآن...</div>;
@@ -146,8 +148,8 @@ const KingsCountdown = ({ onReachedZero }: { onReachedZero?: () => void }) => {
   const C = 2 * Math.PI * r;
   const dash = C * pct;
 
-  const localRiyadh = new Intl.DateTimeFormat('ar-SA', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Asia/Riyadh' }).format(next);
-  const localDevice = new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium', timeStyle: 'short' }).format(next);
+  const localRiyadh = new Intl.DateTimeFormat('ar-SA', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Asia/Riyadh' }).format(target);
+  const localDevice = new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium', timeStyle: 'short' }).format(target);
 
   return (
     <div className="flex flex-col items-center gap-2">

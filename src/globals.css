@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -298,6 +299,94 @@
 .news-scope .paper-card:hover { box-shadow: 0 10px 28px rgba(0,0,0,0.1); }
 .news-scope .paper-bg { background: radial-gradient(1600px 600px at 50% -20%, rgba(0,0,0,0.06), transparent), #fafaf9; }
 .news-scope .ticker-mask { mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
+
+/* Print styles for articles */
+@media print {
+  body {
+    background: white !important;
+  }
+  .printable-article-content {
+    columns: 2;
+    column-gap: 2.5rem;
+  }
+}
+
+/* Lux Light Gold — King of Games */
+.king-of-games-name {
+  @apply bg-clip-text text-transparent select-none;
+
+  /* تدرّج أساسي ذهبي فاتح + لمعة مائلة */
+  background-image:
+    linear-gradient(100deg,
+      #fff8dc 0%,
+      #ffefbf 18%,
+      #ffe395 35%,
+      #f8cf63 55%,
+      #efba3a 72%,
+      #ffe395 85%,
+      #fff4cf 100%
+    ),
+    /* شريط لمعان يمر */
+    linear-gradient(120deg,
+      rgba(255,255,255,0) 35%,
+      rgba(255,255,255,0.95) 48%,
+      rgba(255,255,255,0) 52%
+    ),
+    /* توهج ذهبي ناعم */
+    radial-gradient(900px 60px at 0% 50%, rgba(255,215,128,0.28), transparent 60%);
+  background-size: 220% 100%, 260% 100%, 300% 100%;
+  background-position: 0% 0%, -140% 0%, 0 0;
+  background-clip: text;
+  -webkit-background-clip: text;
+
+  /* توهج حول الحروف */
+  text-shadow:
+    0 1px 0 rgba(255,255,255,0.45),
+    0 2px 12px rgba(245,190,70,0.26),
+    0 6px 32px rgba(245,200,90,0.25);
+
+  /* حركة ناعمة للتدرّج واللمعة */
+  animation: gold-shift 7s ease-in-out infinite alternate,
+             gold-sheen 3.2s linear infinite;
+}
+
+/* حافة رفيعة تزيد الحدة على الخلفيات الفاتحة */
+@supports (-webkit-text-stroke: 1px transparent) {
+  .king-of-games-name {
+    -webkit-text-stroke: 0.5px rgba(120,82,10,0.35);
+  }
+}
+/* الحركات */
+@keyframes gold-shift {
+  to { background-position: 100% 0, 140% 0, 100% 0; }
+}
+
+@keyframes gold-sheen {
+  0%   { filter: brightness(1) contrast(1); }
+  35%  { filter: brightness(1.08) contrast(1.02); }
+  70%  { filter: brightness(1.03) contrast(1.01); }
+  100% { filter: brightness(1) contrast(1); }
+}
+
+.king-of-games-name.shimmer {
+  background-size: 220% 100%;
+  animation: gold-shimmer 3.5s linear infinite;
+}
+
+@keyframes gold-shimmer {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .king-of-games-name {
+    color: #d4af37; /* classic gold fallback */
+    text-shadow: 0 1px 0 rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.35);
+    -webkit-text-fill-color: initial;
+  }
+}
+
+
 
 /* Print styles for articles */
 @media print {
