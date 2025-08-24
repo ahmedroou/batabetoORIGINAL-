@@ -1,15 +1,14 @@
-
 "use client";
 
 import type { Game, Player, PublicChatMessage, PrivateEvent } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Gavel, ShieldCheck, FileText, Send, Ban, X, VenetianMask, User } from 'lucide-react';
+import { Gavel, ShieldCheck, FileText, Send, Ban, X, VenetianMask, User, ArrowDown } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { processDay, sendPublicMessage, submitVote, transitionToVoting } from '@/lib/actions/behind-the-mask';
+import { processDay, sendPublicMessage, submitVote } from '@/lib/actions/behind-the-mask';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { PlayerAvatar } from '../../PlayerAvatar';
@@ -127,6 +126,10 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
   const [hostActionPending, setHostActionPending] = useState(false);
   const [selectedReport, setSelectedReport] = useState<PrivateEvent | null>(null);
 
+  // NEW: حالات للتحكم في الصندوق الثابت للمحادثة
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+
   const privateEvents = game.mafiaState?.privateEvents?.[self.id] || [];
   const publicChat = game.mafiaState?.publicChat || [];
   const isHost = game.hostId === self.id;
@@ -136,9 +139,10 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
   const isDayPhase = phase === 'day';
   const isVotingPhase = phase === 'voting';
 
-  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement | null>(null);
   const processedRef = useRef(false); // يمنع تكرار processDay عند انتهاء الوقت
   const lastSendAtRef = useRef<number>(0);
+  const msgCountRef = useRef<number>(0);
 
   // Keep selected vote in sync with server state
   useEffect(() => {
@@ -152,14 +156,13 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
       await processDay(game.id, self.id);
       processedRef.current = true;
     } catch (e: any) {
-      // لا نعرض toast لكل المستخدمين غير المضيفين
       console.error('Host failed to process day on timeout', e);
     } finally {
       setHostActionPending(false);
     }
   }, [isHost, game.id, self.id]);
 
-  // Global timer for both day & voting — يحدّث كل ثانية، وينادي processDay مرة واحدة عند انتهاء العداد
+  // Global timer for both day & voting
   useEffect(() => {
     processedRef.current = false; // إعادة الضبط عندما يتغيّر مؤقّت السيرفر
     if (!game.mafiaState?.timerEndsAt) return;
@@ -174,19 +177,51 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
     return () => clearInterval(timer);
   }, [game.mafiaState?.timerEndsAt, handleProcessDay]);
 
-  // Auto-scroll chat — لا نُجبر المستخدم إذا كان يقرأ أعلى
-  const maybeScrollToBottom = useCallback((smooth: boolean) => {
+  // NEW: راقب التمرير لتحديد هل نحن في أسفل الصندوق أم لا
+  useEffect(() => {
     const el = scrollViewportRef.current;
     if (!el) return;
-    const threshold = 120; // px
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
-    if (atBottom || smooth) {
-      el.scrollTo({ top: el.scrollHeight, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
-    }
+
+    const onScroll = () => {
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+      setIsAtBottom(atBottom);
+      if (atBottom) setUnreadCount(0);
+    };
+
+    el.addEventListener('scroll', onScroll, { passive: true });
+    // شغّل الحساب أول مرة
+    onScroll();
+    return () => el.removeEventListener('scroll', onScroll as any);
+  }, []);
+
+  // Scroll helper (ثابت الارتفاع + نزول تلقائي عند وصول آخر رسالة)
+  const scrollToBottom = useCallback((smooth: boolean) => {
+    const el = scrollViewportRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth && !prefersReducedMotion ? 'smooth' : 'auto' });
   }, [prefersReducedMotion]);
 
-  useEffect(() => { maybeScrollToBottom(false); }, [publicChat, maybeScrollToBottom]);
-  useEffect(() => { maybeScrollToBottom(true); }, [optimisticMessages, maybeScrollToBottom]);
+  // Auto-scroll على كل دفعة رسائل جديدة + عداد الرسائل غير المقروءة عندما لا نكون في الأسفل
+  const allMessages: DisplayMessage[] = useMemo(() => (
+    [...publicChat, ...optimisticMessages]
+  ), [publicChat, optimisticMessages]);
+
+  useEffect(() => {
+    const total = allMessages.length;
+    const delta = Math.max(0, total - msgCountRef.current);
+    msgCountRef.current = total;
+
+    // نزول تلقائي دائمًا حسب طلبك
+    scrollToBottom(true);
+
+    // لو المستخدم ليس في الأسفل، زوّد العداد
+    if (!isAtBottom && delta > 0) setUnreadCount((c) => c + delta);
+  }, [allMessages, isAtBottom, scrollToBottom]);
+
+  const maybeScrollToBottom = useCallback((smooth: boolean) => {
+    // إبقاء الدالة القديمة متاحة لمناداة اختيارية
+    scrollToBottom(smooth);
+  }, [scrollToBottom]);
 
   // Clear optimistic when server pushes latest (كي لا تتكرر)
   useEffect(() => { setOptimisticMessages([]); }, [publicChat]);
@@ -256,10 +291,6 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
     acc[player.id] = PLAYER_COLORS[index % PLAYER_COLORS.length];
     return acc;
   }, {} as Record<string, string>), [game.players]);
-
-  const allMessages: DisplayMessage[] = useMemo(() => (
-    [...publicChat, ...optimisticMessages]
-  ), [publicChat, optimisticMessages]);
 
   const alivePlayers = useMemo(() => (
     game.players.filter(p => p.status === 'alive')
@@ -345,47 +376,80 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
               </TabsList>
 
               {/* Chat */}
-              <TabsContent value="chat" className="flex-grow flex flex-col min-h-0 p-2">
-                <div className="flex-grow h-full relative">
-                  <ScrollArea className="absolute inset-0 pr-2" viewportRef={scrollViewportRef}>
-                    <div className="space-y-4">
-                      {allMessages.map((msg, i) => {
-                        const isQuickReaction = QUICK_REACTIONS.includes(msg.message as QuickReaction);
-                        const millis = isTimestamp(msg.timestamp) ? msg.timestamp.toMillis() : Number(msg.timestamp ?? 0);
-                        const key = `${msg.senderId}-${millis}-${i}`;
-                        const fromSelf = msg.senderId === self.id;
-                        return (
-                          <div key={key} className={cn("flex items-start gap-3 w-full transition-opacity", fromSelf ? "flex-row-reverse" : "", msg.pending ? "opacity-60" : "opacity-100")}> 
-                            <PlayerAvatar avatarId={game.players.find(p => p.id === msg.senderId)?.avatarId || 'Avatar01.png'} className="w-10 h-10 shrink-0 mt-1"/>
-                            <div className={cn("p-3 rounded-xl max-w-[80%]", fromSelf ? "bg-primary rounded-br-none" : "bg-slate-700 rounded-bl-none", isQuickReaction ? "bg-transparent shadow-none" : "")}> 
-                              {!isQuickReaction && <p className={cn("font-bold text-sm mb-1", playerColors[msg.senderId])}>{msg.senderName}</p>}
-                              <p className={cn("text-base text-slate-100 whitespace-pre-wrap", isQuickReaction ? "text-5xl" : "")}>{msg.message}</p>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </ScrollArea>
-                </div>
+              <TabsContent value="chat" className="flex-grow min-h-0 p-2">
+                {/* صندوق محادثة ثابت الارتفاع */}
+                <Card className="bg-gradient-to-br from-slate-900/60 to-slate-800/40 border-slate-700/60 shadow-xl rounded-2xl flex h-[60vh] md:h-[68vh]">
+                  <div className="flex-1 flex flex-col min-h-0">
+                    {/* منطقة الرسائل */}
+                    <CardContent className="p-0 flex-1 min-h-0 relative overflow-hidden">
+                      <ScrollArea className="h-full pr-2" viewportRef={scrollViewportRef}>
+                        <div className="p-3 space-y-4">
+                          {allMessages.map((msg, i) => {
+                            const isQuickReaction = QUICK_REACTIONS.includes(msg.message as QuickReaction);
+                            const millis = isTimestamp(msg.timestamp) ? msg.timestamp.toMillis() : Number(msg.timestamp ?? 0);
+                            const key = `${msg.senderId}-${millis}-${i}`;
+                            const fromSelf = msg.senderId === self.id;
+                            return (
+                              <div key={key} className={cn("flex items-start gap-3 w-full transition-opacity", fromSelf ? "flex-row-reverse" : "", msg.pending ? "opacity-60" : "opacity-100")}> 
+                                <PlayerAvatar avatarId={game.players.find(p => p.id === msg.senderId)?.avatarId || 'Avatar01.png'} className="w-9 h-9 shrink-0 mt-1 ring-2 ring-slate-700 rounded-full"/>
+                                <div className={cn(
+                                  "max-w-[78%] rounded-2xl px-3 py-2 shadow",
+                                  fromSelf ? "bg-primary/90 rounded-br-none" : "bg-slate-700/80 rounded-bl-none",
+                                  isQuickReaction ? "bg-transparent shadow-none px-1 py-1" : ""
+                                )}> 
+                                  {!isQuickReaction && <p className={cn("font-bold text-[11px] mb-1 tracking-wide", playerColors[msg.senderId])}>{msg.senderName}</p>}
+                                  <p className={cn("text-[15px] leading-6 text-slate-100 break-words whitespace-pre-wrap", isQuickReaction ? "text-4xl" : "")}>{msg.message}</p>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </ScrollArea>
 
-                <div className="shrink-0 pt-4 space-y-2">
-                  <div className="flex justify-center gap-2">
-                    {QUICK_REACTIONS.map(r => (
-                      <Button key={r} aria-label={`تفاعل ${r}`} variant="outline" size="icon" onClick={() => handleQuickReaction(r)} disabled={!canVote || !isDayPhase} className="bg-slate-800 border-slate-600 hover:bg-slate-700 text-2xl">{r}</Button>
-                    ))}
+                      {/* زر القفز لآخر الرسائل + عداد غير المقروء */}
+                      <AnimatePresence>
+                        {!isAtBottom && unreadCount > 0 && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 20 }}
+                            className="absolute bottom-4 inset-x-0 flex justify-center pointer-events-none"
+                          >
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="pointer-events-auto bg-slate-900/80 border border-slate-700 hover:bg-slate-800 rounded-full backdrop-blur flex items-center gap-2"
+                              onClick={() => scrollToBottom(true)}
+                            >
+                              <ArrowDown className="w-4 h-4"/>
+                              <span>انتقال لآخر {unreadCount} رسالة</span>
+                            </Button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </CardContent>
+
+                    {/* أسفل الصندوق: تفاعلات سريعة + إدخال */}
+                    <CardFooter className="border-t border-slate-700/60 p-3 space-y-2">
+                      <div className="flex justify-center gap-2">
+                        {QUICK_REACTIONS.map(r => (
+                          <Button key={r} aria-label={`تفاعل ${r}`} variant="outline" size="icon" onClick={() => handleQuickReaction(r)} disabled={!canVote || !isDayPhase} className="bg-slate-800 border-slate-600 hover:bg-slate-700 text-2xl rounded-xl h-10 w-10">{r}</Button>
+                        ))}
+                      </div>
+                      <form onSubmit={handleSendMessage} className="flex gap-2">
+                        <Input
+                          placeholder={isDayPhase ? (canVote ? "اكتب رسالتك..." : "لا يمكنك الحديث وأنت ميت.") : "الدردشة مغلقة أثناء التصويت"}
+                          value={message}
+                          onChange={(e) => setMessage(e.target.value)}
+                          disabled={!canVote || !isDayPhase}
+                          className="bg-slate-900/70 border-slate-600 focus:ring-primary text-base text-white rounded-xl"
+                          aria-label="اكتب رسالتك"
+                        />
+                        <Button type="submit" size="icon" disabled={!message.trim() || !canVote || !isDayPhase} aria-label="إرسال" className="rounded-xl"><Send /></Button>
+                      </form>
+                    </CardFooter>
                   </div>
-                  <form onSubmit={handleSendMessage} className="flex gap-2">
-                    <Input
-                      placeholder={isDayPhase ? (canVote ? "اكتب رسالتك..." : "لا يمكنك الحديث وأنت ميت.") : "الدردشة مغلقة أثناء التصويت"}
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      disabled={!canVote || !isDayPhase}
-                      className="bg-slate-800 border-slate-600 focus:ring-primary text-base text-white"
-                      aria-label="اكتب رسالتك"
-                    />
-                    <Button type="submit" size="icon" disabled={!message.trim() || !canVote || !isDayPhase} aria-label="إرسال"><Send /></Button>
-                  </form>
-                </div>
+                </Card>
               </TabsContent>
 
               {/* Events */}
@@ -451,5 +515,3 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
     </>
   );
 }
-
-      

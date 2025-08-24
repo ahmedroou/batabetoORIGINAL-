@@ -274,42 +274,61 @@ export async function processDayInternal(game: Game): Promise<{
   };
   winner: MafiaGameResult | null;
 }> {
-  const players = [...game.players];
-  const votes = game.mafiaState?.votes || {};
-  const counts: Record<string, number> = {};
-  const events: DayEvent[] = [];
-  let executed: Player | null = null;
-
-  const aliveIds = new Set(game.players.filter(isAlive).map((p) => p.id));
-
-  Object.entries(votes).forEach(([voterId, targetId]) => {
-    if (!targetId || !aliveIds.has(voterId)) return;
-    const target = players.find((p) => p.id === targetId);
-    if (isAlive(target)) counts[targetId] = (counts[targetId] || 0) + 1;
-  });
-
-  const maxVotes = Math.max(0, ...Object.values(counts));
-  const topIds = Object.keys(counts).filter((id) => counts[id] === maxVotes);
-
-  if (topIds.length === 1 && maxVotes > 0) {
-    const idx = players.findIndex((p) => p.id === topIds[0]);
-    if (idx !== -1) {
-      players[idx].status = 'voted_out';
-      executed = players[idx];
-      events.push({
-        type: 'execution',
-        message: `بعد نقاش حاد، قرر أهل المدينة إعدام ${executed.name}!`,
-        executedPlayer: { name: executed.name, avatarId: executed.avatarId, temporaryTitle: (executed as any).temporaryTitle },
-      });
+    const players = [...game.players];
+    const votes = game.mafiaState?.votes || {};
+    const playerVoteCounts: Record<string, number> = {};
+    let skipVotes = 0;
+    const events: DayEvent[] = [];
+    let executed: Player | null = null;
+  
+    const aliveIds = new Set(game.players.filter(isAlive).map((p) => p.id));
+  
+    // Tally votes for players and for skipping
+    Object.entries(votes).forEach(([voterId, targetId]) => {
+      if (!aliveIds.has(voterId)) return;
+  
+      if (targetId === null) {
+        skipVotes += 1;
+      } else {
+        const target = players.find((p) => p.id === targetId);
+        if (isAlive(target)) {
+          playerVoteCounts[targetId] = (playerVoteCounts[targetId] || 0) + 1;
+        }
+      }
+    });
+  
+    const maxPlayerVotes = Math.max(0, ...Object.values(playerVoteCounts));
+  
+    // Only execute if a player has strictly more votes than the skip option
+    if (maxPlayerVotes > skipVotes) {
+      const topIds = Object.keys(playerVoteCounts).filter((id) => playerVoteCounts[id] === maxPlayerVotes);
+  
+      // And only if there's no tie for the most votes
+      if (topIds.length === 1) {
+        const executedId = topIds[0];
+        const idx = players.findIndex((p) => p.id === executedId);
+        if (idx !== -1) {
+          players[idx].status = 'voted_out';
+          executed = players[idx];
+          events.push({
+            type: 'execution',
+            message: `بعد نقاش حاد، قرر أهل المدينة إعدام ${executed.name}!`,
+            executedPlayer: { name: executed.name, avatarId: executed.avatarId, temporaryTitle: (executed as any).temporaryTitle },
+          });
+        }
+      } else {
+        // Tie among players
+        events.push({ type: 'no_execution', message: 'لم يتمكن أهل المدينة من الاتفاق على إعدام أحد بسبب تساوي الأصوات.' });
+      }
+    } else {
+      // Skip wins or is tied with the max player votes
+      events.push({ type: 'no_execution', message: 'قرر أهل المدينة تخطي الإعدام هذه المرة.' });
     }
-  } else {
-    events.push({ type: 'no_execution', message: 'لم يتمكن أهل المدينة من الاتفاق على إعدام أحد.' });
-  }
-
-  const winner = await checkForWinner(players);
-  const lastExecutedPlayer = executed ? { name: executed.name, avatarId: executed.avatarId, temporaryTitle: (executed as any).temporaryTitle } : null;
-
-  return { updatedGame: { players, events, lastExecutedPlayer }, winner };
+  
+    const winner = await checkForWinner(players);
+    const lastExecutedPlayer = executed ? { name: executed.name, avatarId: executed.avatarId, temporaryTitle: (executed as any).temporaryTitle } : null;
+  
+    return { updatedGame: { players, events, lastExecutedPlayer }, winner };
 }
 
 // -----------------------------
