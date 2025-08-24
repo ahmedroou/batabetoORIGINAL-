@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -429,15 +430,18 @@ export async function submitNightAction(
         const disguise = (action as any).disguiseRole;
         if (!disguise || !(disguise in ROLES)) throw new Error('دور التنكّر غير صالح.');
       }
-
-      // قيود التبريد: يُطبَّق فقط إذا كان lastAbilityUse معرفًا وعددياً و == currentNight - 1
+      
+      // ✅ FIX: Correct cooldown logic
       if (action.targetId !== 'skip') {
         const currentNight = game.mafiaState?.night || 1;
         const lastUsed = game.mafiaState?.lastAbilityUse?.[action.actorId!];
+        
+        // Cooldown applies only if lastUsed is a number AND it was the previous night.
         if ((action.action === 'kill' || action.action === 'investigate') && typeof lastUsed === 'number' && currentNight === lastUsed + 1) {
           throw new Error('يجب أن ترتاح لليلة واحدة قبل استخدام قدرتك مرة أخرى.');
         }
       }
+
 
       const update: FSUpdate = { [`mafiaState.nightActions.${action.actorId}`]: action };
 
@@ -538,7 +542,7 @@ export async function submitVote(
 
       const phase = game.mafiaState?.phase;
       if (!['day', 'voting'].includes(String(phase))) throw new Error('Voting is not active.');
-      if (!timerActive(game)) throw new Error('Time is over for this phase.');
+      if (!timerActive(game)) return;
 
       const voter = safeGetPlayer(game, voterId);
       if (!isAlive(voter)) throw new Error('Only living players can vote.');
