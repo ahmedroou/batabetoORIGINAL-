@@ -443,7 +443,7 @@ export default function MatchHistoryPage() {
                   )}
                   <li>
                     <span className="text-slate-500 dark:text-violet-200/70">آخر مباراة: </span>
-                    <strong>{fmtDate(summary.lastPlayed!)}</strong>
+                    <strong>{summary.lastPlayed ? fmtDate(summary.lastPlayed) : '—'}</strong>
                   </li>
                 </ul>
               ) : (
@@ -477,6 +477,11 @@ export default function MatchHistoryPage() {
               const GameIcon = GAME_ICONS[match.gameType] || Trophy;
               const { myRank, myScore, top } = getUserRankInMatch(match, user?.uid);
               const topPlayerName = match.players?.find((p) => p.id === top?.playerId)?.name;
+              const isTeamGame = ['word_war', 'king-of-genius', 'behind-the-mask'].includes(match.gameType);
+              const myPlayer = match.players?.find(p => p.id === user?.uid);
+              const myTeamWon = isTeamGame && myPlayer?.team && myPlayer.team === match.winner;
+              const myTeamLost = isTeamGame && myPlayer?.team && match.winner !== 'draw' && myPlayer.team !== match.winner;
+
               return (
                 <motion.div
                   key={match.id}
@@ -505,7 +510,13 @@ export default function MatchHistoryPage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-3 shrink-0">
-                              {typeof myRank === "number" && <RankChip rank={myRank} />}
+                              {match.gameType === 'word_war' ? (
+                                myTeamWon ? <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600">منتصر</Badge> :
+                                myTeamLost ? <Badge variant="destructive">مهزوم</Badge> :
+                                <Badge variant="secondary">تعادل</Badge>
+                              ) : (
+                                typeof myRank === "number" && <RankChip rank={myRank} />
+                              )}
                               <div className="hidden md:flex items-center gap-1 text-xs text-slate-600 dark:text-violet-200/70">
                                 <span>أعلى لاعب:</span>
                                 <strong className="truncate max-w-[120px]">{topPlayerName || "—"}</strong>

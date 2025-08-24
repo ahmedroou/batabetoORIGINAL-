@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RANK_ICON_MAP } from '@/data/social-ranks';
 import { Trophy } from 'lucide-react';
+import AllegianceRequestsBubble from '../../components/home/AllegianceRequests';
 
 
 /**
@@ -594,6 +595,7 @@ export default function SocietyPyramid({ searchTerm }: { searchTerm: string }) {
   return (
     <>
       <div className="space-y-8" aria-live="polite" aria-busy={isSearching}>
+      <AllegianceRequestsBubble />
         {searchTerm.trim().length > 1 ? (
           <Card className="bg-common-card">
             <CardHeader>
