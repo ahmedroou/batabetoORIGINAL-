@@ -1,10 +1,11 @@
+
 'use server';
 
 import { db } from '@/lib/firebase';
 import { doc, runTransaction, Timestamp, type Transaction, updateDoc } from 'firebase/firestore';
 import type { Game, Player, DrawAndDeceiveState, DrawAndDeceiveRoundResult } from '@/types';
-import { shuffle, safeCompareStrings } from './helpers';
-import { distributeEndOfGameAwards } from '../actions/admin/users';
+import { shuffle, safeCompareStrings } from '../helpers';
+import { distributeEndOfGameAwards } from './admin/users';
 
 /* ----------------------------- Constants ----------------------------- */
 const DEFAULT_SETTINGS = {
@@ -12,7 +13,7 @@ const DEFAULT_SETTINGS = {
   trappingTime: 45,
   guessingTime: 35,
   resultsTime: 20,
-  rounds: 3,
+  rounds: 8, // <--- تم تغيير عدد الجولات هنا
   writingTime: 20, // time for artist to write description
 } as const;
 
@@ -568,7 +569,7 @@ export async function nextRound(gameId: string, hostId: string): Promise<void> {
     ensure(game.hostId === hostId, 'فقط المضيف يستطيع تنفيذ هذا الإجراء.');
     ensure(game.drawAndDeceiveState?.phase === 'results', 'لا يمكنك بدء جولة جديدة الآن.');
 
-    const res = startNextTurnTx(tx, gameRef, game);
+    const res = await startNextTurnTx(tx, gameRef, game);
     isGameOver = res.isGameOver;
   });
 

@@ -477,10 +477,10 @@ export default function MatchHistoryPage() {
               const GameIcon = GAME_ICONS[match.gameType] || Trophy;
               const { myRank, myScore, top } = getUserRankInMatch(match, user?.uid);
               const topPlayerName = match.players?.find((p) => p.id === top?.playerId)?.name;
-              const isTeamGame = ['word_war', 'king-of-genius', 'behind-the-mask'].includes(match.gameType);
+              
+              const isTeamGame = match.gameType === 'word_war' || match.gameType === 'king-of-genius' || match.gameType === 'behind-the-mask';
               const myPlayer = match.players?.find(p => p.id === user?.uid);
               const myTeamWon = isTeamGame && myPlayer?.team && myPlayer.team === match.winner;
-              const myTeamLost = isTeamGame && myPlayer?.team && match.winner !== 'draw' && myPlayer.team !== match.winner;
 
               return (
                 <motion.div
@@ -510,10 +510,9 @@ export default function MatchHistoryPage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-3 shrink-0">
-                              {match.gameType === 'word_war' ? (
+                              {isTeamGame ? (
                                 myTeamWon ? <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600">منتصر</Badge> :
-                                myTeamLost ? <Badge variant="destructive">مهزوم</Badge> :
-                                <Badge variant="secondary">تعادل</Badge>
+                                <Badge variant="destructive">مهزوم</Badge>
                               ) : (
                                 typeof myRank === "number" && <RankChip rank={myRank} />
                               )}

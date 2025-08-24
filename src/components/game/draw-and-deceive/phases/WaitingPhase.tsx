@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -6,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Brain, Timer, PenSquare, HelpCircle, Loader2 } from 'lucide-react';
 import { handleTimeout } from '@/lib/actions/draw-and-deceive';
 import { Button } from '@/components/ui/button';
-import { PlayerAvatar } from '@/components/game/PlayerAvatar';
+import { PlayerAvatar } from '../../PlayerAvatar';
 
 interface WaitingPhaseProps {
     game: Game;
@@ -21,6 +22,7 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
     });
 
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isArtist = state.artistId === self.id;
 
     useEffect(() => {
         const ends = state.timerEndsAt?.toMillis();
@@ -90,7 +92,7 @@ export function WaitingPhase({ game, self }: WaitingPhaseProps) {
                 <div className="flex items-center justify-center gap-2 font-mono text-xl">
                     <Timer /> {timeLeft > 0 ? `${timeLeft}s` : "انتهى الوقت"}
                 </div>
-                {timeLeft === 0 && (
+                {timeLeft === 0 && isArtist && (
                     <div className="p-4 border-t space-y-3">
                         <p className="text-sm text-muted-foreground">انتهى الوقت المخصص لهذه المرحلة!</p>
                         <div className="flex justify-center gap-2">
