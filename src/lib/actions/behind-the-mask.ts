@@ -1,5 +1,5 @@
 
-
+      
 'use server';
 
 /**
@@ -19,6 +19,7 @@ import {
   Timestamp,
   deleteField,
   arrayUnion,
+  updateDoc,
 } from 'firebase/firestore';
 
 import type {
@@ -104,7 +105,7 @@ const canAct = (actor: Player | undefined, action: NightAction['action']) => {
   return acts.includes(action);
 };
 
-export const checkForWinner = (players: Player[]): MafiaGameResult | null => {
+export async function checkForWinner(players: Player[]): Promise<MafiaGameResult | null> {
   const alive = players.filter((p) => p.status === 'alive');
   const good = alive.filter((p) => p.team === 'good').length;
   const mafia = alive.filter((p) => p.team === 'mafia').length;
@@ -127,6 +128,20 @@ const timerActive = (game: Game) => {
   if (!ends) return true;
   const ms = typeof ends?.toMillis === 'function' ? ends.toMillis() : Number(ends) || 0;
   return nowMs() <= ms;
+};
+
+/**
+ * Require phase and timer, but allow host override if callerHostId === game.hostId.
+ * Use this in actions the host may force (processNight, transitionToNight, transitionToVoting, processDay).
+ */
+const requirePhaseAndTimerOrHost = (game: Game, phases: string[], callerHostId?: string) => {
+  requirePhase(game, phases);
+  const active = timerActive(game);
+  if (!active) {
+    if (!callerHostId || callerHostId !== game.hostId) {
+      throw new Error('Time is over for this phase.');
+    }
+  }
 };
 
 // -----------------------------
@@ -311,7 +326,7 @@ export async function processDayInternal(game: Game): Promise<{
     events.push({ type: 'no_execution', message: 'لم يتمكن أهل المدينة من الاتفاق على إعدام أحد.' });
   }
 
-  const winner = checkForWinner(players);
+  const winner = await checkForWinner(players);
   const lastExecutedPlayer = executed ? { name: executed.name, avatarId: executed.avatarId, temporaryTitle: (executed as any).temporaryTitle } : null;
 
   return { updatedGame: { players, events, lastExecutedPlayer }, winner };
@@ -350,7 +365,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
       'mafiaState.rolesInGame': roles,
       'mafiaState.night': 1,
       'mafiaState.events': [],
-      // مُفضَّل تخزين الدردشات/الأحداث الخاصة كمجموعات فرعية — لكن للحفاظ على توافق الواجهات:
+      // kept for compatibility; consider moving chats/events to subcollections in future
       'mafiaState.publicChat': [],
       'mafiaState.privateEvents': {},
       'mafiaState.privateChats': {},
@@ -364,7 +379,7 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
   });
 }
 
-/** انتقال من كشف الأدوار/التنفيذ إلى الليل. */
+/** انتقال من كشف الأدوار/التنفيذ إلى الليل. (host may override expired timer) */
 export async function transitionToNight(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (tx) => {
@@ -372,10 +387,13 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
     const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
 
     requireHost(game, hostId);
+    // allow host to transition even if timer expired
+    requirePhaseAndTimerOrHost(game, ['role_reveal', 'execution'], hostId);
+
     const phase = game.mafiaState?.phase || '';
     if (!['role_reveal', 'execution'].includes(phase)) return;
 
-    // تصحيح عدّاد الليالي
+    // increment night correctly
     const nextNight = phase === 'role_reveal' ? 1 : (game.mafiaState?.night || 0) + 1;
     const { night } = getSettings(game);
 
@@ -405,10 +423,13 @@ export async function submitNightAction(
       const snap = await tx.get(gameRef);
       const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
 
-      // If time is up, silently fail to prevent errors on the client from race conditions.
-      if (!timerActive(game)) return;
-      
+      // players cannot submit after timer end
       requirePhase(game, ['night']);
+      if (!timerActive(game)) {
+        // This is not a fatal error; client might be lagging.
+        // Silently fail to prevent user-facing errors on close calls.
+        return;
+      }
 
       const actor = safeGetPlayer(game, action.actorId);
       if (!isAlive(actor)) throw new Error('Only living players can perform night actions.');
@@ -430,18 +451,16 @@ export async function submitNightAction(
         const disguise = (action as any).disguiseRole;
         if (!disguise || !(disguise in ROLES)) throw new Error('دور التنكّر غير صالح.');
       }
-      
+
       // ✅ FIX: Correct cooldown logic
       if (action.targetId !== 'skip') {
         const currentNight = game.mafiaState?.night || 1;
         const lastUsed = game.mafiaState?.lastAbilityUse?.[action.actorId!];
-        
         // Cooldown applies only if lastUsed is a number AND it was the previous night.
-        if ((action.action === 'kill' || action.action === 'investigate') && typeof lastUsed === 'number' && currentNight === lastUsed + 1) {
+        if ((action.action === 'kill' || action.action === 'investigate') && typeof lastUsed === 'number' && lastUsed > 0 && currentNight === lastUsed + 1) {
           throw new Error('يجب أن ترتاح لليلة واحدة قبل استخدام قدرتك مرة أخرى.');
         }
       }
-
 
       const update: FSUpdate = { [`mafiaState.nightActions.${action.actorId}`]: action };
 
@@ -458,7 +477,7 @@ export async function submitNightAction(
   }
 }
 
-/** معالجة الليل والانتقال تلقائيًا إلى النهار أو النتائج. */
+/** معالجة الليل والانتقال تلقائيًا إلى النهار أو النتائج. (host may override expired timer) */
 export async function processNight(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
   let postCommit: null | (() => Promise<void>) = null;
@@ -468,12 +487,13 @@ export async function processNight(gameId: string, hostId: string): Promise<void
     const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
 
     requireHost(game, hostId);
-    requirePhase(game, ['night']);
+    // allow host to process even if timer expired
+    requirePhaseAndTimerOrHost(game, ['night'], hostId);
 
     const { updatedPlayers, newEvents, newPrivateEvents, newPrivateChats, newLastHealedPlayerId } =
       await processNightInternal(game);
 
-    const winner = checkForWinner(updatedPlayers);
+    const winner = await checkForWinner(updatedPlayers);
 
     const update: FSUpdate = {
       players: updatedPlayers,
@@ -501,7 +521,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
       update['mafiaState.timerEndsAt'] = deadline(day);
 
       postCommit = async () => {
-        // يمكن هنا تنفيذ post-commit آخر (إنشاء محادثات فرعية، كتابة أحداث خاصة كمستندات)
+        // post-commit effects (subcollections writes...) can go here
       };
     }
 
@@ -511,7 +531,7 @@ export async function processNight(gameId: string, hostId: string): Promise<void
   if (postCommit) await postCommit();
 }
 
-/** الانتقال من النقاش إلى التصويت. */
+/** الانتقال من النقاش إلى التصويت. (host may override expired timer) */
 export async function transitionToVoting(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
   await runTransaction(db, async (tx) => {
@@ -519,6 +539,9 @@ export async function transitionToVoting(gameId: string, hostId: string): Promis
     const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
 
     requireHost(game, hostId);
+    // allow host to transition even if timer expired
+    requirePhaseAndTimerOrHost(game, ['day'], hostId);
+
     if (game.mafiaState?.phase !== 'day') return;
 
     tx.update(gameRef, {
@@ -542,7 +565,7 @@ export async function submitVote(
 
       const phase = game.mafiaState?.phase;
       if (!['day', 'voting'].includes(String(phase))) throw new Error('Voting is not active.');
-      if (!timerActive(game)) return;
+      if (!timerActive(game)) throw new Error('Time is over for this phase.');
 
       const voter = safeGetPlayer(game, voterId);
       if (!isAlive(voter)) throw new Error('Only living players can vote.');
@@ -570,7 +593,7 @@ export async function submitVote(
   }
 }
 
-/** معالجة التصويت في نهاية النهار/التصويت والانتقال لمرحلة التنفيذ أو إنهاء اللعبة. */
+/** معالجة التصويت في نهاية النهار/التصويت والانتقال لمرحلة التنفيذ أو إنهاء اللعبة. (host may override expired timer) */
 export async function processDay(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
   let postCommit: null | (() => Promise<void>) = null;
@@ -580,8 +603,8 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
     const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
 
     requireHost(game, hostId);
-    const phase = game.mafiaState?.phase || '';
-    if (!['day', 'voting'].includes(phase)) return;
+    // allow host to process even if timer expired
+    requirePhaseAndTimerOrHost(game, ['day', 'voting'], hostId);
 
     const { updatedGame, winner } = await processDayInternal(game);
 
@@ -629,6 +652,7 @@ export async function sendPublicMessage(
     const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
 
     if (game.mafiaState?.phase !== 'day') throw new Error('Can only send messages during the day.');
+    if (!timerActive(game)) throw new Error('Time is over for this phase.');
 
     const sender = safeGetPlayer(game, message.senderId);
     if (!isAlive(sender)) throw new Error('Only living players can send messages.');
@@ -666,6 +690,8 @@ export async function sendPrivateMessage(
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
+
+    if (!timerActive(game)) throw new Error('Time is over for this phase.');
 
     const sender = safeGetPlayer(game, message.senderId);
     if (!isAlive(sender)) throw new Error('Only living players can send private messages.');
@@ -712,3 +738,5 @@ export async function updateMafiaSettings(
     tx.update(gameRef, { 'mafiaState.settings': { nightTime, dayTime } });
   });
 }
+
+    
