@@ -46,6 +46,12 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
     chip: 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-400/30',
     title: 'text-fuchsia-200',
   },
+   'quiz-swap': {
+    bg: 'from-teal-900/60 via-cyan-900/40 to-slate-900/70',
+    ring: 'ring-teal-500/40',
+    chip: 'bg-teal-500/15 text-teal-200 border-teal-400/30',
+    title: 'text-teal-200',
+  },
   'behind-the-mask': {
     bg: 'from-rose-900/60 via-indigo-900/40 to-slate-900/70',
     ring: 'ring-rose-500/40',
@@ -195,7 +201,7 @@ function GameTopBar({
             <div className="flex items-center gap-2 sm:gap-3 text-center">
               <Gamepad2 className={cn('h-4 w-4 sm:h-5 sm:w-5', t.title)} />
               <h1 className={cn('text-sm sm:text-base font-semibold', t.title)}>
-                {GAME_TYPE_NAMES[game.gameType as keyof typeof GAME_TYPE_NAMES] ?? 'لعبة'}
+                {GAME_TYPE_NAMES[game.gameType] ?? 'لعبة'}
               </h1>
               <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] sm:text-xs', t.chip)}>
                 <Timer className="h-3.5 w-3.5" /> {stateLabel[game.gameState] ?? '...'}
