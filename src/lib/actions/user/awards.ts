@@ -56,6 +56,9 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             updates[player.id].leaderboardPoints = points;
             updates[player.id].coins = isWinner ? 2 : 0;
             updates[player.id].challengePoints = points;
+            if (isWinner) {
+              updates[player.id].winCounts = { [game.gameType]: 1 };
+            }
         });
     } else if (!isShortTrapAnswerGame) { 
         const sortedPlayerIds = Object.keys(finalScores).sort((a, b) => (finalScores[b] || 0) - (finalScores[a] || 0));
