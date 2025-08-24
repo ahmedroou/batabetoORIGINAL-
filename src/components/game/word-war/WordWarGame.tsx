@@ -851,7 +851,11 @@ export default function WordWarGame({ game, self }: { game: Game; self: Player }
                       <TooltipProvider key={pid}>
                         <Tooltip>
                           <TooltipTrigger>
-                            <PlayerAvatar avatarId={sp.avatarId} className="w-5 h-5 rounded-full border border-white" />
+                            <PlayerAvatar
+                              avatarId={sp.avatarId}
+                              size="xs"
+                              className="border-2 border-white/50"
+                            />
                           </TooltipTrigger>
                           <TooltipContent>
                             <p>{sp.name} يشك في هذه الكلمة</p>
