@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
@@ -65,22 +66,8 @@ const PRIVATE_CHAT_MIN_INTERVAL = 900;
 // Helpers
 // -----------------------------------------------------------------------------
 const getActionForRole = (role: PlayerRole | undefined | null): NightAction["action"] | null => {
-  switch (role) {
-    case "killer":
-      return "kill";
-    case "doctor":
-      return "heal";
-    case "detective":
-      return "investigate";
-    case "spy":
-      return "spy";
-    case "bomber":
-      return "bomb";
-    case "shapeshifter":
-      return "shapeshift";
-    default:
-      return null;
-  }
+  if (!role) return null;
+  return ROLES[role]?.nightAction ?? null;
 };
 
 const formatClock = (totalSeconds: number) => {
@@ -116,8 +103,8 @@ export function NightPhase({ game, self }: NightPhaseProps) {
   const hasSubmittedAction = Boolean(game.mafiaState?.nightActions?.[self.id]);
 
   const currentNight = game.mafiaState?.night || 1;
-  const lastUsedNight = game.mafiaState?.lastAbilityUse?.[self.id] || 0;
-  const isOnCooldown = (myAction === "kill" || myAction === "investigate") && currentNight === lastUsedNight + 1;
+  const lastUsedNight = game.mafiaState?.lastAbilityUse?.[self.id];
+  const isOnCooldown = (myAction === "kill" || myAction === "investigate") && typeof lastUsedNight === 'number' && currentNight === lastUsedNight + 1;
 
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [selectedDisguise, setSelectedDisguise] = useState<PlayerRole | null>(null);
@@ -521,3 +508,5 @@ export function NightPhase({ game, self }: NightPhaseProps) {
     </div>
   );
 }
+
+      

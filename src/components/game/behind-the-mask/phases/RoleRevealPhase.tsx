@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -67,7 +68,7 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
 
   // بدء الليل تلقائيًا للمضيف عند انتهاء المؤقّت
   useEffect(() => {
-    if (timeLeft === 0 && isHost) {
+    if (timeLeft <= 0 && isHost) {
       handleStartNight();
     }
   }, [timeLeft, isHost, handleStartNight]);
@@ -202,3 +203,5 @@ export function RoleRevealPhase({ game, self }: RoleRevealPhaseProps) {
     </div>
   );
 }
+
+      

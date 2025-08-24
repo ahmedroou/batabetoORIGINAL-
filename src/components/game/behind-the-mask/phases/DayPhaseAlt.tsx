@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Game, Player, PublicChatMessage, PrivateEvent } from '@/types';
@@ -121,7 +122,7 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
   const [message, setMessage] = useState("");
   const [timeLeft, setTimeLeft] = useState(180);
   const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
-  const [selectedVote, setSelectedVote] = useState<string | null>(game.mafiaState?.votes?.[self.id] ?? null);
+  const [selectedVote, setSelectedVote] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hostActionPending, setHostActionPending] = useState(false);
   const [selectedReport, setSelectedReport] = useState<PrivateEvent | null>(null);
@@ -475,3 +476,5 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
     </>
   );
 }
+
+      
