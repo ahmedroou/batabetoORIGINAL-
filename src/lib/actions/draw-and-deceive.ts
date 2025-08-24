@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -539,10 +540,10 @@ export async function handleTimeout(gameId: string, callerId: string) {
             await endArtistTurn(gameId, state!.artistId!);
             break;
         case 'trapping':
-            beginGuessingPhase(tx, gameRef, state!);
+            await _advanceToGuessing(tx, gameRef, game, true);
             break;
         case 'guessing':
-            computeAndEnterResults(tx, gameRef, game);
+            await _advanceToResults(tx, gameRef, game, true);
             break;
         case 'results':
             const result = await _startNextRound(tx, gameRef, game);
@@ -562,3 +563,25 @@ function pickWinnerId(scores: Record<string, number>): string {
   if (!entries.length) return '';
   return entries.sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))[0]![0];
 }
+
+async function _advanceToGuessing(tx: any, gameRef: any, game: Game, isTimeout = false) {
+  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const playerAnswers = { ...(state.playerAnswers || {}) };
+  if (isTimeout) {
+    getActivePlayers(game).forEach(p => { if (!hasOwn(playerAnswers, p.id)) playerAnswers[p.id] = null; });
+  }
+  const { updates } = _getGuessingPhaseUpdates(game, playerAnswers);
+  tx.update(gameRef, updates);
+}
+
+async function _advanceToResults(tx: any, gameRef: any, game: Game, isTimeout = false) {
+  const state = (game as any)[FIELD_TRAP_STATE] || {};
+  const playerGuesses = { ...(state.playerGuesses || {}) };
+  if (isTimeout) {
+    getActivePlayers(game).forEach(p => { if (!hasOwn(playerGuesses, p.id)) playerGuesses[p.id] = TIMEOUT_TOKEN; });
+  }
+  const { updates } = _getResultsPhaseUpdates(game, playerGuesses);
+  tx.update(gameRef, updates);
+}
+
+```

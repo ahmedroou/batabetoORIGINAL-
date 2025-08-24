@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -11,7 +12,6 @@ import {
   uploadTrapAnswerQuestionsFromJson,
   uploadPrisonQuestionsFromJson,
   uploadWordWarWordsFromJson,
-  uploadQuizSwapQuestionsFromJson,
   countQuestions,
   deleteQuestions,
   deleteDuplicateWords,
@@ -60,7 +60,6 @@ export {
   uploadTrapAnswerQuestionsFromJson,
   uploadPrisonQuestionsFromJson,
   uploadWordWarWordsFromJson,
-  uploadQuizSwapQuestionsFromJson,
   countQuestions,
   deleteQuestions,
   deleteDuplicateWords,

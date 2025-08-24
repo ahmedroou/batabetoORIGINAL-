@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -16,7 +17,6 @@ import WordWarGame from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { EducatedMerchantGame } from '@/components/game/educated-merchant/EducatedMerchantGame';
-import { QuizSwapGame } from '@/components/game/quiz-swap/QuizSwapGame';
 import { DrawAndDeceiveGame } from '@/components/game/draw-and-deceive/DrawAndDeceiveGame';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -46,12 +46,6 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
     ring: 'ring-fuchsia-500/40',
     chip: 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-400/30',
     title: 'text-fuchsia-200',
-  },
-   'quiz-swap': {
-    bg: 'from-teal-900/60 via-cyan-900/40 to-slate-900/70',
-    ring: 'ring-teal-500/40',
-    chip: 'bg-teal-500/15 text-teal-200 border-teal-400/30',
-    title: 'text-teal-200',
   },
   'behind-the-mask': {
     bg: 'from-rose-900/60 via-indigo-900/40 to-slate-900/70',
@@ -131,11 +125,6 @@ const stateLabel: Record<NonNullable<Game['gameState']>, string> = {
   property_action: 'قرار الملكية',
   question: 'سؤال',
   turn_end: 'نهاية الدور',
-  // QuizSwap
-  peek: 'نظرة خاطفة',
-  playing: 'اللعب',
-  answering: 'الإجابة',
-  ended: 'انتهت',
   // Draw and Deceive
   drawing: 'الرسم',
   trapping: 'وضع الفخاخ',
@@ -384,8 +373,6 @@ export default function GameClient() {
         return <PrisonGame game={game} self={self} />;
       case 'educated-merchant':
         return <EducatedMerchantGame game={game} self={self} />;
-      case 'quiz-swap':
-        return <QuizSwapGame game={game} self={self} />;
       case 'draw-and-deceive':
         return <DrawAndDeceiveGame game={game} self={self} />;
       default:

@@ -80,8 +80,4 @@ export {
     liftPunishment,
     getKingsPageData,
     recordMatchHistory,
-    distributeEndOfGameAwards,
-    updateLeagueScoresForGameEnd,
-    finalizeChallenge,
-};
-
+    distributeEndOfGame

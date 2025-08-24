@@ -1,4 +1,5 @@
 
+
       
 
 import { BrainCircuit, Bomb, VenetianMask, Swords, Palette, TestTube, Dices, LandPlot, Building2, HelpCircle, Brush } from "lucide-react";
@@ -11,7 +12,6 @@ export const GAME_ICONS: Record<string, React.ElementType> = {
     'word_war': Swords,
     'prison': TestTube,
     'educated-merchant': Building2,
-    'quiz-swap': HelpCircle,
     'draw-and-deceive': Brush,
 };
 
@@ -22,7 +22,6 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'prison': 'السجن',
     'educated-merchant': 'التاجر المتعلم',
-    'quiz-swap': 'تبديل الأسئلة',
     'draw-and-deceive': 'ارسم واخدع'
 };
 

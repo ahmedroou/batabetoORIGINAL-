@@ -70,11 +70,9 @@ import {
     deleteDuplicateWords,
     deleteSimilarQuestions,
     uploadTrapAnswerQuestionsFromJson,
-    uploadQuizSwapQuestionsFromJson
 } from "@/lib/actions/admin/content";
 
 
-import type { Game, QuizSwapQuestionCard } from "@/types";
 import { Info, Upload, Trash2, Sparkles, Edit, Save, Loader2, FileUp, FileX2, X, RefreshCw, Filter, Download, Check } from "lucide-react";
 
 /* -------------------------------------------------------------
@@ -94,17 +92,9 @@ const PrisonSchema = z.object({
   text: z.string().min(1, "النص مطلوب"),
 });
 
-const QuizSwapSchema = z.object({
-    name: z.string().min(1),
-    question: z.string().min(1),
-    answer: z.string().min(1),
-    difficulty: z.enum(['easy', 'medium', 'hard']),
-});
-
 const TrapMerchantArraySchema = z.array(TrapOrMerchantSchema);
 const PrisonArraySchema = z.array(PrisonSchema);
 const WordWarArraySchema = z.array(z.string().min(1));
-const QuizSwapArraySchema = z.array(QuizSwapSchema);
 
 
 // يَقبل أيضاً ملفات على هيئة: { questions: [...] } أو { words: [...] }
@@ -142,7 +132,7 @@ function dedupeLocal<T>(arr: T[], keyer: (t: T) => string) {
  * أنواع داخلية
  * ----------------------------------------------------------- */
 
-type GameKey = "trap-answer" | "educated-merchant" | "word_war" | "prison" | "quiz-swap" | "";
+type GameKey = "trap-answer" | "educated-merchant" | "word_war" | "prison" | "";
 
 type DeletionParams = {
   game: Exclude<GameKey, "">;
@@ -443,7 +433,6 @@ const QuestionManagementTab: React.FC = () => {
     "educated-merchant": 0,
     "word_war": 0,
     "prison": 0,
-    "quiz-swap": 0,
   });
 
   // لعرض مدير الأقسام
@@ -453,19 +442,17 @@ const QuestionManagementTab: React.FC = () => {
   );
 
   const fetchGlobalCounts = useCallback(async () => {
-      const [ta, em, ww, pr, qs] = await Promise.all([
+      const [ta, em, ww, pr] = await Promise.all([
         countQuestions({ game: "trap-answer", all: true }),
         countQuestions({ game: "educated-merchant", all: true }),
         countQuestions({ game: "word_war", all: true }),
         countQuestions({ game: "prison", all: true }),
-        countQuestions({ game: "quiz-swap", all: true }),
       ]);
       setGlobalCounts({
         "trap-answer": ta?.count ?? 0,
         "educated-merchant": em?.count ?? 0,
         word_war: ww?.count ?? 0,
         prison: pr?.count ?? 0,
-        "quiz-swap": qs?.count ?? 0,
       });
   }, []);
   
@@ -512,9 +499,6 @@ const QuestionManagementTab: React.FC = () => {
       } else if (selectedGame === "prison") {
         schema = PrisonArraySchema;
         arr = asQuestionsArray(json);
-      } else if (selectedGame === 'quiz-swap') {
-        schema = QuizSwapArraySchema;
-        arr = asQuestionsArray(json);
       } else {
         return;
       }
@@ -547,8 +531,6 @@ const QuestionManagementTab: React.FC = () => {
         return "الملف: مصفوفة من الكائنات بكل عنصر { question, answer, type?, imageUrl?, dummyAnswers? }.";
       case "educated-merchant":
         return "الملف: مصفوفة { question, answer, type?, imageUrl?, dummyAnswers? } (الدمي اختيارية).";
-      case 'quiz-swap':
-        return 'الملف: مصفوفة {name, question, answer, difficulty: "easy"|"medium"|"hard"}';
       case "word_war":
         return "الملف: مصفوفة من الكلمات (strings).";
       case "prison":
@@ -573,9 +555,6 @@ const QuestionManagementTab: React.FC = () => {
         break;
       case "prison":
         data = [{ text: "اعترف بأصعب موقف مررت به." }, { text: "اختر لاعبًا واستبدل معه دورك." }];
-        break;
-      case "quiz-swap":
-        data = [{ name: 'سؤال سهل', question: 'ما هو أكبر كوكب؟', answer: 'المشتري', difficulty: 'easy' }];
         break;
       default:
         data = {};
@@ -621,13 +600,6 @@ const QuestionManagementTab: React.FC = () => {
           const parsed = TrapMerchantArraySchema.parse(arr);
           result = await uploadEducatedMerchantQuestionsFromJson(parsed, selectedCategory);
           break;
-        }
-        case "quiz-swap": {
-            const arr = asQuestionsArray(json);
-            if(!arr) throw new Error("صيغة غير صحيحة. استخدم مصفوفة أو { questions: [...] }.");
-            const parsed = QuizSwapArraySchema.parse(arr);
-            result = await uploadQuizSwapQuestionsFromJson(parsed);
-            break;
         }
         case "word_war": {
           const arr = asWordsArray(json);
@@ -681,7 +653,7 @@ const QuestionManagementTab: React.FC = () => {
         const c = await countQuestions({ game: params.game, searchTerm: params.searchTerm });
         setDeletionCount(c?.count ?? null);
       } else if (params.answerSearchTerm) {
-        const c = await countQuestions({ game: params.game, answerSearchTerm: params.answerSearchTerm });
+        const c = await countQuestions({ game: params.game as 'trap-answer' | 'educated-merchant', answerSearchTerm: params.answerSearchTerm });
         setDeletionCount(c?.count ?? null);
       } else {
         setDeletionCount(null);
@@ -842,29 +814,7 @@ const QuestionManagementTab: React.FC = () => {
       </div>
     </div>
   );
-
-  const renderSimpleDeleteForm = (gameName: string) => (
-    <div className="p-3 border rounded-2xl space-y-2 bg-destructive/10">
-        <h4 className="font-bold text-destructive">حذف كل أسئلة {gameName}</h4>
-        <p className="text-sm text-destructive/80">تحذير! هذا الإجراء سيحذف جميع أسئلة هذه اللعبة.</p>
-        <Button
-            variant="destructive"
-            className="w-full"
-            onClick={() => handleDeleteClick({ game: selectedGame as Exclude<GameKey, ''>, all: true })}
-            disabled={isDeleting}
-        >
-            <Trash2 className="mr-2 h-4 w-4" />
-            {isDeleting ? "جاري حذف الكل..." : `تأكيد حذف جميع الأسئلة`}
-        </Button>
-    </div>
-  );
   
-  const renderQuizSwapDelete = () => (
-    <div className="space-y-4">
-        {renderSimpleDeleteForm("تبديل الأسئلة")}
-    </div>
-  );
-
   const renderPrisonDelete = () => (
     <div className="space-y-4">
       <div className="p-3 border rounded-2xl space-y-2 bg-destructive/10">
@@ -900,7 +850,6 @@ const QuestionManagementTab: React.FC = () => {
               <SelectItem value="educated-merchant">التاجر المتعلم</SelectItem>
               <SelectItem value="word_war">حرب الكلمات</SelectItem>
               <SelectItem value="prison">السجن</SelectItem>
-              <SelectItem value="quiz-swap">تبديل الأسئلة</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -910,7 +859,6 @@ const QuestionManagementTab: React.FC = () => {
     if (selectedGame === "trap-answer" || selectedGame === "educated-merchant") return renderCategorizedGameDelete();
     if (selectedGame === "word_war") return renderWordWarDelete();
     if (selectedGame === "prison") return renderPrisonDelete();
-    if (selectedGame === "quiz-swap") return renderQuizSwapDelete();
     return null;
   };
 
@@ -942,7 +890,6 @@ const QuestionManagementTab: React.FC = () => {
             <SelectItem value="educated-merchant">التاجر المتعلم</SelectItem>
             <SelectItem value="word_war">حرب الكلمات</SelectItem>
             <SelectItem value="prison">السجن</SelectItem>
-            <SelectItem value="quiz-swap">تبديل الأسئلة</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -1028,7 +975,7 @@ const QuestionManagementTab: React.FC = () => {
             <CardDescription>رفع وحذف المحتوى، وإدارة الأقسام. الأرقام أدناه تُحدّث تلقائيًا بعد العمليات.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-2xl p-3 bg-muted/50">
                 <div className="text-xs text-muted-foreground">الجواب المفخخ</div>
                 <div className="text-2xl font-bold">{globalCounts["trap-answer"]}</div>
@@ -1044,10 +991,6 @@ const QuestionManagementTab: React.FC = () => {
               <div className="rounded-2xl p-3 bg-muted/50">
                 <div className="text-xs text-muted-foreground">السجن</div>
                 <div className="text-2xl font-bold">{globalCounts.prison}</div>
-              </div>
-              <div className="rounded-2xl p-3 bg-muted/50">
-                <div className="text-xs text-muted-foreground">تبديل الأسئلة</div>
-                <div className="text-2xl font-bold">{globalCounts["quiz-swap"]}</div>
               </div>
             </div>
           </CardContent>
@@ -1122,5 +1065,3 @@ const QuestionManagementTab: React.FC = () => {
 };
 
 export default QuestionManagementTab;
-
-    
