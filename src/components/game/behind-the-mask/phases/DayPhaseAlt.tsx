@@ -283,28 +283,10 @@ export function DayPhaseAlt({ game, self }: DayPhaseProps) {
 
       <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-day-phase-bg bg-cover bg-center" data-phase={phase}>
         <header className="text-center shrink-0 mb-4 bg-black/40 p-2 rounded-xl text-white w-full max-w-7xl" aria-live="polite">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-center gap-4">
             <h1 className="text-2xl md:text-4xl font-bold">
               {headerTitle} ({formatTime(timeLeft)})
             </h1>
-            <div className="flex items-center gap-2">
-              
-              {isHost && (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    if (hostActionPending) return;
-                    setHostActionPending(true);
-                    processDay(game.id, self.id)
-                      .catch(err => toast({ title: 'تعذر إنهاء اليوم', description: err?.message, variant: 'destructive' }))
-                      .finally(() => setHostActionPending(false));
-                  }}
-                  disabled={hostActionPending}
-                >
-                  إنهاء اليوم
-                </Button>
-              )}
-            </div>
           </div>
         </header>
 
