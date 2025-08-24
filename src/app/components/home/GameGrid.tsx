@@ -105,18 +105,7 @@ const gameCardsData: Array<{
         { rank: 'المركز الثاني', points: 2, coins: 1 },
         { rank: 'المركز الثالث', points: 1, coins: 1 },
     ]
-  },
-  { 
-    type: 'quiz-swap', 
-    title: 'تبديل الأسئلة', 
-    description: 'تخلص من أصعب الأسئلة لديك واستبدلها بأسئلة خصمك.', 
-    accent: { from: 'from-teal-500/25', to: 'to-cyan-500/25' },
-    prizes: [
-        { rank: 'المركز الأول', points: 3, coins: 2 },
-        { rank: 'المركز الثاني', points: 2, coins: 1 },
-        { rank: 'المركز الثالث', points: 1, coins: 0 },
-    ]
-  },
+  }
 ];
 
 interface GameGridProps {

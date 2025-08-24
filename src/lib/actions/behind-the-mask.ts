@@ -1,16 +1,14 @@
+
 'use server';
 
 /**
- * @fileoverview Server actions for the "Behind the Mask" (mafia-style) game.
- *
- * ✅ نفس الواجهات والدوال المصدَّرة — بدون كسر المنطق العام.
- * ✨ تحسينات على الصرامة والمنطق وحماية الحالة من التعارض.
- * 🧩 سلوك محدث حسب طلبك:
- *    - القاتل لديه قتل فردي ليلي + تبريد ليلة بعد كل استخدام (إن قتل في ليلة 1 ⇒ ممنوع في ليلة 2 ⇒ مسموح ليلة 3 ...).
- *    - الطبيب يمنع القتل على الهدف المحمي تلك الليلة فقط.
- *    - الجندي يصد "التجسس فقط" (لا حصانة ضد القتل)، والجاسوس يُبلَّغ أنه كُشف.
- *    - التنكّر يؤثر على ما يراه الجاسوس فقط، ولا يخدع المحقق.
- * ⚠️ ملاحظة: لا نُجري أي نداءات خارجية داخل runTransaction لتفادي إعادة التنفيذ عند إعادة المحاولة — يتم تنفيذها بعد نجاح المعاملة.
+ * Server actions for "Behind the Mask" (mafia-style).
+ * - الحفاظ على واجهات الدوال الأصلية.
+ * - تبريد (cooldown) مُصحَّح: يُطبَّق فقط إذا استُخدمت القدرة فعلاً ليلة سابقة.
+ * - القاتل: قدرة قتل فردية (ليس تصويتاً جماعياً).
+ * - الطبيب يمنع القتل على الهدف المحمي.
+ * - الجندي يصد التجسس فقط (لا حصانة من القتل).
+ * - لا نضع Promise داخل tx.update() — أي عمليات async خارج المعاملة.
  */
 
 import { db } from '@/lib/firebase';
@@ -36,18 +34,11 @@ import type {
 import { getRoleDistribution, ROLES } from '@/data/mafia-roles';
 import { updateLeagueScoresForGameEnd } from './user';
 
-// ---------------------------------------------------------------------------
-// Local types
-// ---------------------------------------------------------------------------
-
-type MafiaGameResult = {
-  winner: 'good' | 'mafia' | 'draw' | 'game_over' | string;
-  message: string;
-};
-
-// ---------------------------------------------------------------------------
-// Constants & Utility helpers
-// ---------------------------------------------------------------------------
+// -----------------------------
+// ثوابت ومساعدات
+// -----------------------------
+type MafiaGameResult = { winner: 'good' | 'mafia' | 'draw' | 'game_over' | string; message: string };
+export type FSUpdate = Record<string, unknown>;
 
 const DEFAULTS = {
   ROLE_REVEAL_SECONDS: 15,
@@ -70,10 +61,10 @@ const FALLBACK_ABILITIES: Record<string, Array<NightAction['action']>> = {
   soldier: [],
 };
 
-export type FSUpdate = Record<string, unknown>;
-
 const deadline = (seconds: number) =>
   Timestamp.fromMillis(Date.now() + Math.max(0, seconds) * 1_000);
+
+const nowMs = () => Date.now();
 
 const isAlive = (p?: Player | null): p is Player => !!p && p.status === 'alive';
 
@@ -130,17 +121,16 @@ const requirePhase = (game: Game, phases: string[]) => {
   }
 };
 
-// ---------------------------------------------------------------------------
-// Night & Day internal processors (pure helpers — لا I/O)
-// ---------------------------------------------------------------------------
+const timerActive = (game: Game) => {
+  const ends = (game.mafiaState?.timerEndsAt as any);
+  if (!ends) return true;
+  const ms = typeof ends?.toMillis === 'function' ? ends.toMillis() : Number(ends) || 0;
+  return nowMs() <= ms;
+};
 
-/**
- * معالج الليل النقي: يقرأ nightActions فقط ولا يكتب إلى Firestore.
- * - لا يلمس players داخل Firestore (كل شيء في نسخة محلية).
- * - التنكّر (shapeshift) يتم تطبيقه مؤقتًا عبر apparentById بدل تعديل اللاعبين.
- * - الطبيب يحمي هدفًا واحدًا (حماية توقف القتل).
- * - الجندي يصد التجسس فقط: إن كان الهدف جنديًا والمهاجم جاسوسًا ⇒ يُحجب التجسس ويُبلَّغ الجاسوس.
- */
+// -----------------------------
+// Process night internal (pure)
+// -----------------------------
 export async function processNightInternal(game: Game): Promise<{
   updatedPlayers: Player[];
   newEvents: DayEvent[];
@@ -155,16 +145,17 @@ export async function processNightInternal(game: Game): Promise<{
   const newPrivateChats: Record<string, any> = { ...(game.mafiaState?.privateChats || {}) };
   let newLastHealedPlayerId: string | null = null;
 
-  // خريطة التنكّر المؤقت: actorId → disguiseRole (تؤثر على ما يراه الجاسوس فقط)
+  // temporary disguise map (affects what spy sees)
   const apparentById: Record<string, string> = {};
   Object.values(nightActions).forEach((a: any) => {
     if (a?.action === 'shapeshift' && a?.actorId && a?.disguiseRole) {
-      apparentById[a.actorId] = a.disguiseRole;
+      // only accept valid role keys
+      if (ROLES[a.disguiseRole as keyof typeof ROLES]) apparentById[a.actorId] = a.disguiseRole;
     }
   });
 
-  // --- 1) Doctor heal (mark protection)
-  const healAction = Object.values(nightActions).find((a) => a.action === 'heal');
+  // 1) Doctor protect
+  const healAction = Object.values(nightActions).find((a: any) => a.action === 'heal');
   if (healAction && healAction.targetId && healAction.targetId !== 'skip') {
     const doctor = players.find((p) => p.id === healAction.actorId);
     const target = players.find((p) => p.id === healAction.targetId);
@@ -174,67 +165,65 @@ export async function processNightInternal(game: Game): Promise<{
     }
   }
 
-  // --- 2) Primary killer action (single killer per تصميمك)
-  const killAction = Object.values(nightActions).find((a) => a.action === 'kill');
-  const killTargetId = killAction && killAction.targetId !== 'skip' ? (killAction.targetId as string) : null;
+  // 2) Killer individual kill (per your design: killer uses single kill action)
+  const killAction = Object.values(nightActions).find((a: any) => a.action === 'kill');
+  const killTargetId = killAction && killAction.targetId !== 'skip' ? killAction.targetId! : null;
 
-  // --- 3) Bomber revenge (إن وجد الدور)
-  const bomberAction = Object.values(nightActions).find((a) => a.action === 'bomb');
+  // 3) Bomber revenge
+  const bomberActions = Object.values(nightActions).filter((a: any) => a.action === 'bomb');
 
-  // --- 4) Resolve deaths
+  // 4) Resolve deaths: killer first, then bombers
   const deaths: Player[] = [];
   const markKilled = (pid: string | null | undefined) => {
     if (!pid) return;
     const idx = players.findIndex((p) => p.id === pid);
-    if (idx !== -1) {
-      const target = players[idx] as any;
-      if (target.isProtected) {
-        newEvents.push({
-          type: 'protection',
-          message: 'لقد حاول القاتل الهجوم، لكن الطبيب أنقذ الهدف في الوقت المناسب!',
-        });
-        if (healAction) {
-          (newPrivateEvents[healAction.actorId] ||= []).push({
-            type: 'doctor_success',
-            message: 'لقد نجحت في إنقاذ هدفك!',
-          } as PrivateEvent);
-        }
-      } else if (players[idx].status === 'alive') {
-        players[idx].status = 'killed';
-        deaths.push(players[idx]);
-        newEvents.push({
-          type: 'death',
-          message: `استيقظ أهل المدينة ليجدوا ${players[idx].name} قد قُتل!`,
-          killedPlayer: { name: players[idx].name, avatarId: players[idx].avatarId },
-        });
+    if (idx === -1) return;
+    const target = players[idx] as any;
+    if (target.isProtected) {
+      newEvents.push({
+        type: 'protection',
+        message: 'لقد حاول القاتل الهجوم، لكن الطبيب أنقذ الهدف في الوقت المناسب!',
+      });
+      if (healAction) {
+        (newPrivateEvents[healAction.actorId] ||= []).push({
+          type: 'doctor_success',
+          message: 'لقد نجحت في إنقاذ هدفك!',
+        } as PrivateEvent);
       }
+    } else if (players[idx].status === 'alive') {
+      players[idx].status = 'killed';
+      deaths.push(players[idx]);
+      newEvents.push({
+        type: 'death',
+        message: `استيقظ أهل المدينة ليجدوا ${players[idx].name} قد قُتل!`,
+        killedPlayer: { name: players[idx].name, avatarId: players[idx].avatarId },
+      });
     }
   };
 
-  // Apply killer's kill (لا حصانة خاصة للجندي — الطبيب فقط يمنع)
   if (killTargetId) markKilled(killTargetId);
 
-  // Bomber revenge: only if bomber was killed and not protected
-  if (bomberAction?.targetId && killTargetId === bomberAction.actorId) {
-    const bomberAfter = players.find((p) => p.id === bomberAction.actorId);
+  // bomber revenge: if bomber was killed and not protected then kill target
+  for (const b of bomberActions as any[]) {
+    if (!b?.actorId || !b?.targetId) continue;
+    const bomberAfter = players.find((p) => p.id === b.actorId);
     const bomberWasKilled = bomberAfter?.status === 'killed';
     const bomberProtected = (bomberAfter as any)?.isProtected === true;
     if (bomberWasKilled && !bomberProtected) {
-      markKilled(bomberAction.targetId);
+      markKilled(b.targetId);
     }
   }
 
-  // --- 5) Info actions (detective/spy)
-  Object.values(nightActions).forEach((action) => {
+  // 5) Info actions
+  Object.values(nightActions).forEach((action: any) => {
     (newPrivateEvents[action.actorId] ||= []);
     const actor = players.find((p) => p.id === action.actorId);
     if (!isAlive(actor)) return;
-
     const target = players.find((p) => p.id === action.targetId);
     if (!target) return;
 
     if (action.action === 'investigate') {
-      // المحقق يرى "الفريق الحقيقي" (التنكر لا يخدعه)
+      // detective sees real team (disguise does not affect)
       const roleInfo = ROLES[target.role! as PlayerRole];
       newPrivateEvents[action.actorId].push({
         type: 'investigation_result',
@@ -242,7 +231,7 @@ export async function processNightInternal(game: Game): Promise<{
         targetPlayer: { id: target.id, name: target.name, avatarId: target.avatarId },
       } as PrivateEvent);
     } else if (action.action === 'spy') {
-      // الجندي يصد التجسس فقط
+      // soldier blocks spy only
       if (target.role === 'soldier') {
         newPrivateEvents[action.actorId].push({
           type: 'spy_result_soldier_block',
@@ -252,7 +241,7 @@ export async function processNightInternal(game: Game): Promise<{
         return;
       }
 
-      // يرى "الدور الظاهري" (قد يكون متنكّرًا)
+      // spy sees apparent role (affected by shapeshift)
       const apparent = apparentById[target.id!] || target.role!;
       const roleInfo = ROLES[apparent as PlayerRole];
 
@@ -262,17 +251,15 @@ export async function processNightInternal(game: Game): Promise<{
         targetPlayer: { id: target.id, name: target.name, avatarId: target.avatarId, role: apparent as PlayerRole },
       } as PrivateEvent);
 
-      // افتح دردشة خاصة تلقائيًا بين الجاسوس والمافيا عند كشف مافيا (في لعبتك المافيا = قاتل + جاسوس)
+      // open private chat if spy discovered mafia (in your design mafia = killer + spy)
       if (roleInfo?.team === 'mafia') {
-        const chatId = [actor.id, target.id].sort().join('-');
-        if (!newPrivateChats[chatId]) {
-          newPrivateChats[chatId] = { participants: [actor.id, target.id], messages: [] };
-        }
+        const chatId = [action.actorId, target.id].sort().join('-');
+        if (!newPrivateChats[chatId]) newPrivateChats[chatId] = { participants: [action.actorId, target.id], messages: [] };
       }
     }
   });
 
-  // Cleanup temp flags (محليًا فقط)
+  // cleanup temp flags
   players.forEach((p: any) => {
     delete p.isProtected;
   });
@@ -280,6 +267,9 @@ export async function processNightInternal(game: Game): Promise<{
   return { updatedPlayers: players, newEvents, newPrivateEvents, newPrivateChats, newLastHealedPlayerId };
 }
 
+// -----------------------------
+// Process day internal (pure)
+// -----------------------------
 export async function processDayInternal(game: Game): Promise<{
   updatedGame: {
     players: Player[];
@@ -294,11 +284,10 @@ export async function processDayInternal(game: Game): Promise<{
   const events: DayEvent[] = [];
   let executed: Player | null = null;
 
-  const alivePlayerIds = new Set(game.players.filter(isAlive).map((p) => p.id));
+  const aliveIds = new Set(game.players.filter(isAlive).map((p) => p.id));
 
-  // Count only votes from living voters targeting living players
   Object.entries(votes).forEach(([voterId, targetId]) => {
-    if (!targetId || !alivePlayerIds.has(voterId)) return;
+    if (!targetId || !aliveIds.has(voterId)) return;
     const target = players.find((p) => p.id === targetId);
     if (isAlive(target)) counts[targetId] = (counts[targetId] || 0) + 1;
   });
@@ -307,8 +296,7 @@ export async function processDayInternal(game: Game): Promise<{
   const topIds = Object.keys(counts).filter((id) => counts[id] === maxVotes);
 
   if (topIds.length === 1 && maxVotes > 0) {
-    const executedId = topIds[0];
-    const idx = players.findIndex((p) => p.id === executedId);
+    const idx = players.findIndex((p) => p.id === topIds[0]);
     if (idx !== -1) {
       players[idx].status = 'voted_out';
       executed = players[idx];
@@ -323,16 +311,14 @@ export async function processDayInternal(game: Game): Promise<{
   }
 
   const winner = checkForWinner(players);
-  const lastExecutedPlayer = executed
-    ? { name: executed.name, avatarId: executed.avatarId, temporaryTitle: (executed as any).temporaryTitle }
-    : null;
+  const lastExecutedPlayer = executed ? { name: executed.name, avatarId: executed.avatarId, temporaryTitle: (executed as any).temporaryTitle } : null;
 
   return { updatedGame: { players, events, lastExecutedPlayer }, winner };
 }
 
-// ---------------------------------------------------------------------------
-// Exported Actions (public API) — preserved names & signatures
-// ---------------------------------------------------------------------------
+// -----------------------------
+// Exported Actions (public API)
+// -----------------------------
 
 /** يبدأ اللعبة: توزيع الأدوار، الانتقال إلى مرحلة كشف الدور. */
 export async function startGame(gameId: string, hostId: string): Promise<void> {
@@ -363,12 +349,13 @@ export async function startGame(gameId: string, hostId: string): Promise<void> {
       'mafiaState.rolesInGame': roles,
       'mafiaState.night': 1,
       'mafiaState.events': [],
+      // مُفضَّل تخزين الدردشات/الأحداث الخاصة كمجموعات فرعية — لكن للحفاظ على توافق الواجهات:
       'mafiaState.publicChat': [],
       'mafiaState.privateEvents': {},
       'mafiaState.privateChats': {},
       'mafiaState.nightActions': {},
       'mafiaState.votes': {},
-      'mafiaState.lastAbilityUse': {}, // يخزن آخر ليلة استُخدمت فيها القدرة لكل لاعب (للتبريد)
+      'mafiaState.lastAbilityUse': {},
       'mafiaState.timerEndsAt': deadline(DEFAULTS.ROLE_REVEAL_SECONDS),
     };
 
@@ -389,7 +376,6 @@ export async function transitionToNight(gameId: string, hostId: string): Promise
 
     // تصحيح عدّاد الليالي
     const nextNight = phase === 'role_reveal' ? 1 : (game.mafiaState?.night || 0) + 1;
-
     const { night } = getSettings(game);
 
     const update: FSUpdate = {
@@ -418,54 +404,44 @@ export async function submitNightAction(
       const snap = await tx.get(gameRef);
       const game = requireGame(snap.exists() ? (snap.data() as Game) : undefined);
 
+      // If time is up, silently fail to prevent errors on the client from race conditions.
+      if (!timerActive(game)) return;
+      
       requirePhase(game, ['night']);
 
       const actor = safeGetPlayer(game, action.actorId);
       if (!isAlive(actor)) throw new Error('Only living players can perform night actions.');
 
-      // تحقق من صلاحية الفعل للدور
-      if (!canAct(actor, action.action)) {
-        throw new Error('دورك لا يملك هذه القدرة.');
-      }
+      // صلاحية الفعل للدور
+      if (!canAct(actor, action.action)) throw new Error('دورك لا يملك هذه القدرة.');
 
       // منع تكرار إرسال لنفس الليلة
-      if (game.mafiaState?.nightActions?.[action.actorId]) {
-        throw new Error('لقد قمت بإرسال قرارك بالفعل لهذه الليلة.');
-      }
+      if (game.mafiaState?.nightActions?.[action.actorId]) throw new Error('لقد قمت بإرسال قرارك بالفعل لهذه الليلة.');
 
-      // صحة الهدف (إن لم يكن skip)
+      // صحة الهدف إن لم يكن skip
       if (action.targetId && action.targetId !== 'skip') {
         const target = safeGetPlayer(game, action.targetId);
-        if (!isAlive(target)) throw new Error('يجب اختيار هدف حي.');
+        if (!isAlive(target)) throw new Error('الهدف غير صالح أو غير حي.');
       }
 
-      // تحقق تنكّر صالح
+      // تنكّر صالح
       if (action.action === 'shapeshift') {
         const disguise = (action as any).disguiseRole;
-        if (!disguise || !(disguise in ROLES)) {
-          throw new Error('دور التنكّر غير صالح.');
-        }
+        if (!disguise || !(disguise in ROLES)) throw new Error('دور التنكّر غير صالح.');
       }
 
-      // قيود قدرات
+      // قيود التبريد: يُطبَّق فقط إذا كان lastAbilityUse معرفًا وعددياً و == currentNight - 1
       if (action.targetId !== 'skip') {
-        // الطبيب: لا يمكن حماية نفس اللاعب ليلتين متتاليتين
-        if (action.action === 'heal' && game.mafiaState?.lastHealedPlayerId === action.targetId) {
-          throw new Error('لا يمكنك حماية نفس اللاعب مرتين على التوالي.');
-        }
-
-        // القاتل والمحقق: تبريد ليلة بين الاستخدامات
-        // (لو قتل في ليلة 1 ⇒ ممنوع ليلة 2 ⇒ مسموح ليلة 3 ...)
         const currentNight = game.mafiaState?.night || 1;
-        const lastUsed = game.mafiaState?.lastAbilityUse?.[action.actorId] || 0;
-        if ((action.action === 'kill' || action.action === 'investigate') && currentNight === lastUsed + 1) {
+        const lastUsed = game.mafiaState?.lastAbilityUse?.[action.actorId!];
+        if ((action.action === 'kill' || action.action === 'investigate') && typeof lastUsed === 'number' && currentNight === lastUsed + 1) {
           throw new Error('يجب أن ترتاح لليلة واحدة قبل استخدام قدرتك مرة أخرى.');
         }
       }
 
       const update: FSUpdate = { [`mafiaState.nightActions.${action.actorId}`]: action };
 
-      // نسجل آخر ليلة استُخدمت فيها القدرة (لو مش skip)
+      // سجل آخر ليلة استخدام للقدرات القابلة للتبريد (لو لم يكن skip)
       if ((action.action === 'kill' || action.action === 'investigate') && action.targetId !== 'skip') {
         update[`mafiaState.lastAbilityUse.${action.actorId}`] = game.mafiaState?.night || 1;
       }
@@ -481,8 +457,6 @@ export async function submitNightAction(
 /** معالجة الليل والانتقال تلقائيًا إلى النهار أو النتائج. */
 export async function processNight(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
-
-  // سنخزن إجراء ما بعد الالتزام هنا لتجنب تنفيذه داخل المعاملة
   let postCommit: null | (() => Promise<void>) = null;
 
   await runTransaction(db, async (tx) => {
@@ -492,13 +466,8 @@ export async function processNight(gameId: string, hostId: string): Promise<void
     requireHost(game, hostId);
     requirePhase(game, ['night']);
 
-    const {
-      updatedPlayers,
-      newEvents,
-      newPrivateEvents,
-      newPrivateChats,
-      newLastHealedPlayerId,
-    } = await processNightInternal(game);
+    const { updatedPlayers, newEvents, newPrivateEvents, newPrivateChats, newLastHealedPlayerId } =
+      await processNightInternal(game);
 
     const winner = checkForWinner(updatedPlayers);
 
@@ -507,19 +476,17 @@ export async function processNight(gameId: string, hostId: string): Promise<void
       'mafiaState.events': newEvents,
       'mafiaState.privateEvents': newPrivateEvents,
       'mafiaState.privateChats': newPrivateChats,
-      // احفظ آخر لاعب تم حمايته (أو احذف الحقل)
       'mafiaState.lastHealedPlayerId': newLastHealedPlayerId ? newLastHealedPlayerId : deleteField(),
-      // مسح قرارات الليل بعد الحسم
+      // تنظيف قرارات الليل
       'mafiaState.nightActions': {},
     };
 
     if (winner) {
       update['gameState'] = 'final_results';
       update['mafiaState.phase'] = 'final_results';
-      update['gameResult'] = winner;
+      update['gameResult'] = winner; // plain object only
       update['mafiaState.timerEndsAt'] = deleteField();
 
-      // نداء الدوري يُنفَّذ بعد نجاح المعاملة
       const payloadForLeague = { ...game, players: updatedPlayers, gameResult: winner };
       postCommit = async () => {
         await updateLeagueScoresForGameEnd(payloadForLeague as any);
@@ -528,15 +495,16 @@ export async function processNight(gameId: string, hostId: string): Promise<void
       const { day } = getSettings(game);
       update['mafiaState.phase'] = 'day';
       update['mafiaState.timerEndsAt'] = deadline(day);
+
+      postCommit = async () => {
+        // يمكن هنا تنفيذ post-commit آخر (إنشاء محادثات فرعية، كتابة أحداث خاصة كمستندات)
+      };
     }
 
     tx.update(gameRef, update);
   });
 
-  // نفّذ التأثيرات الجانبية بعد نجاح المعاملة
-  if (postCommit) {
-    await postCommit();
-  }
+  if (postCommit) await postCommit();
 }
 
 /** الانتقال من النقاش إلى التصويت. */
@@ -570,6 +538,7 @@ export async function submitVote(
 
       const phase = game.mafiaState?.phase;
       if (!['day', 'voting'].includes(String(phase))) throw new Error('Voting is not active.');
+      if (!timerActive(game)) throw new Error('Time is over for this phase.');
 
       const voter = safeGetPlayer(game, voterId);
       if (!isAlive(voter)) throw new Error('Only living players can vote.');
@@ -585,7 +554,7 @@ export async function submitVote(
       const newVotes = { ...(game.mafiaState?.votes || {}), [voterId]: targetId };
       const aliveCount = game.players.filter((p) => p.status === 'alive').length;
       if (Object.keys(newVotes).length === aliveCount) {
-        const remaining = (game.mafiaState?.timerEndsAt?.toMillis() || Date.now()) - Date.now();
+        const remaining = (game.mafiaState?.timerEndsAt?.toMillis() || Date.now()) - nowMs();
         if (remaining > 20_000) (update as any)['mafiaState.timerEndsAt'] = deadline(20);
       }
 
@@ -600,7 +569,6 @@ export async function submitVote(
 /** معالجة التصويت في نهاية النهار/التصويت والانتقال لمرحلة التنفيذ أو إنهاء اللعبة. */
 export async function processDay(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
-
   let postCommit: null | (() => Promise<void>) = null;
 
   await runTransaction(db, async (tx) => {
@@ -618,7 +586,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
     if (winner) {
       (update as any).gameState = 'final_results';
       (update as any)['mafiaState.phase'] = 'final_results';
-      (update as any).gameResult = winner;
+      (update as any).gameResult = winner; // plain object
       (update as any)['mafiaState.timerEndsAt'] = deleteField();
 
       const payloadForLeague = { ...game, players: updatedGame.players, gameResult: winner };
@@ -635,9 +603,7 @@ export async function processDay(gameId: string, hostId: string): Promise<void> 
     tx.update(gameRef, update);
   });
 
-  if (postCommit) {
-    await postCommit();
-  }
+  if (postCommit) await postCommit();
 }
 
 /** إرسال رسالة عامة أثناء النهار. */

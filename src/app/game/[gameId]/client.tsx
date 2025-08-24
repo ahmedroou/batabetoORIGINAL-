@@ -16,7 +16,7 @@ import WordWarGame from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { EducatedMerchantGame } from '@/components/game/educated-merchant/EducatedMerchantGame';
-import { QuizSwapGame } from '@/components/game/quiz-swap/QuizSwapGame';
+
 import { DrawAndDeceiveGame } from '@/components/game/draw-and-deceive/DrawAndDeceiveGame';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -384,8 +384,7 @@ export default function GameClient() {
         return <PrisonGame game={game} self={self} />;
       case 'educated-merchant':
         return <EducatedMerchantGame game={game} self={self} />;
-      case 'quiz-swap':
-        return <QuizSwapGame game={game} self={self} />;
+      
       case 'draw-and-deceive':
         return <DrawAndDeceiveGame game={game} self={self} />;
       default:
