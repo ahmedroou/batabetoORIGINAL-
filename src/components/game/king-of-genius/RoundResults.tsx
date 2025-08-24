@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -194,4 +193,3 @@ export function RoundResults({
     </div>
   );
 }
-```,

@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -42,9 +41,7 @@ const inSec = (seconds: number) => Timestamp.fromMillis(nowMs() + seconds * 1000
 const hasExpired = (ts?: Timestamp | null) => (ts ? ts.toMillis() <= nowMs() : true);
 const findPlayerIndex = (players: Game['players'], playerId: string) =>
   players.findIndex((p) => p.id === playerId);
-const ensure = (condition: any, message: string): asserts condition => {
-  if (!condition) throw new Error(message);
-};
+const ensure: (cond: any, msg: string) => asserts cond = (cond, msg) => { if (!cond) throw new Error(message); };
 const isAlive = (p: Player) => p.status === 'alive';
 const teamOf = (p?: Player | null) => (p?.team ?? undefined) as 'A' | 'B' | undefined;
 
@@ -435,5 +432,3 @@ export async function updateChallengeProgress(
  * Optional: helper to safely compare strings (if you use it in UI)
  * Keeping import for safeCompareStrings from './helpers' if needed
  * ------------------------------------------------------------------ */
-
-```
