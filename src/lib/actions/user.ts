@@ -25,7 +25,7 @@ import {
     updateLeagueScoresForGameEnd
 } from './user/leagues';
 import { giveReward, applyPunishment, humiliatePlayer, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax, liftPunishment } from './user/social';
-import { requestAllegiance, respondToAllegianceRequest } from './user/allegiance';
+import { requestAllegiance, respondToAllegianceRequest, deleteAllegianceRequest } from './user/allegiance';
 import { joinChallenge, finalizeChallenge } from './challenges';
 import { distributeEndOfGameAwards } from '@/lib/actions/admin/users';
 
@@ -77,6 +77,7 @@ export {
     joinChallenge,
     requestAllegiance, 
     respondToAllegianceRequest,
+    deleteAllegianceRequest,
     liftPunishment,
     getKingsPageData,
     recordMatchHistory,
@@ -84,3 +85,4 @@ export {
     updateLeagueScoresForGameEnd,
     finalizeChallenge,
 };
+

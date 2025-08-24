@@ -146,3 +146,33 @@ export async function respondToAllegianceRequest(actorId: string, request: Alleg
         return { success: false, error: error.message };
     });
 }
+
+export async function deleteAllegianceRequest(actorId: string, requestToDelete: AllegianceRequest): Promise<{ success: boolean, error?: string }> {
+    const actorRef = doc(db, 'users', actorId);
+
+    return runTransaction(db, async (tx) => {
+        const actorDoc = await tx.get(actorRef);
+        if (!actorDoc.exists()) throw new Error("لم يتم العثور على المستخدم.");
+
+        const actorData = actorDoc.data() as UserProfile;
+        const requests = actorData.allegianceRequests || [];
+
+        // Find the exact request to delete using a robust comparison
+        const requestTimestampMs = toMs(requestToDelete.createdAt);
+        const updatedRequests = requests.filter(r => 
+            !(r.fromId === requestToDelete.fromId && toMs(r.createdAt) === requestTimestampMs)
+        );
+
+        if (updatedRequests.length === requests.length) {
+            // This case can be treated as a success if the goal is to ensure it's gone
+            return { success: true };
+        }
+
+        tx.update(actorRef, { allegianceRequests: updatedRequests });
+        return { success: true };
+
+    }).catch((error: any) => {
+        console.error("Error deleting allegiance request:", error);
+        return { success: false, error: error.message || 'فشل حذف الطلب.' };
+    });
+}
