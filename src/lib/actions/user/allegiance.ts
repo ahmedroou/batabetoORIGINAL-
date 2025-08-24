@@ -3,12 +3,24 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, runTransaction, increment, arrayUnion, arrayRemove, Timestamp } from 'firebase/firestore';
 import type { UserProfile, SocialRank, AllegianceRequest, ActiveAllegiance } from '@/types';
 import { getRanks } from './queries';
 import { sendSystemMail } from './mail';
 
 const LOYALTY_COST_MAP: Record<number, number> = { 1: 3, 2: 6, 3: 8 };
+
+// Helper to safely convert various date-like types to milliseconds for comparison
+const toMs = (v: any): number => {
+    if (!v) return 0;
+    if (v instanceof Date) return v.getTime();
+    if (v instanceof Timestamp) return v.toMillis();
+    if (typeof v === 'number') return v;
+    if (typeof v.toDate === 'function') return v.toDate().getTime();
+    // Fallback for ISO string etc.
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+}
 
 export async function requestAllegiance(actorId: string, targetId: string, durationInDays: number, offerAmount: number): Promise<{ success: boolean; error?: string }> {
     const allRanks = await getRanks();
@@ -32,8 +44,8 @@ export async function requestAllegiance(actorId: string, targetId: string, durat
             }
             return sortedRanks[sortedRanks.length - 1] || null;
         };
-        const actorRank = getRank(actor.leaderboardPoints, allRanks);
-        const targetRank = getRank(target.leaderboardPoints, allRanks);
+        const actorRank = getRank(actor.leaderboardPoints || 0, allRanks);
+        const targetRank = getRank(target.leaderboardPoints || 0, allRanks);
 
         if (!actorRank || !targetRank) throw new Error("خطأ في تحديد الرتب.");
         if (actorRank.threshold >= targetRank.threshold) throw new Error("لا يمكنك طلب الولاء إلا من لاعب أعلى منك رتبة.");
@@ -77,13 +89,11 @@ export async function respondToAllegianceRequest(actorId: string, request: Alleg
         const actorData = actorDoc.data() as UserProfile;
         const requesterData = requesterDoc.data() as UserProfile;
         
-        // Find and remove the request from the actor's list
         const requests = actorData.allegianceRequests || [];
-        const requestTimestamp = (request.createdAt as any)?.toDate?.().getTime() || new Date(request.createdAt).getTime();
+        const requestTimestampMs = toMs(request.createdAt);
 
         const requestIndex = requests.findIndex(r => 
-            r.fromId === request.fromId &&
-            ((r.createdAt as any)?.toDate?.().getTime() || new Date(r.createdAt).getTime()) === requestTimestamp
+            r.fromId === request.fromId && toMs(r.createdAt) === requestTimestampMs
         );
 
         if (requestIndex === -1) throw new Error("لم يتم العثور على طلب الولاء هذا. ربما تم التفاعل معه بالفعل.");
