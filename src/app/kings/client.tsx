@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -45,7 +46,7 @@ function getAnchors(now = new Date()) {
   const prev = getPrevThursday10UTC(now);
   const total = next.getTime() - prev.getTime();
   const elapsed = now.getTime() - prev.getTime();
-  const remaining = next.getTime() - now.getTime();
+  const remaining = next.getTime() - prev.getTime();
   return { prev, next, total, elapsed, remaining };
 }
 
@@ -121,11 +122,7 @@ const KingsCountdown = ({ onReachedZero }: { onReachedZero?: () => void }) => {
     return () => clearInterval(id);
   }, []);
 
-  if (!now) return null; // avoid hydration mismatch
-
-  const { total, days, hours, minutes, seconds } = getCountdown(now);
-  const { next, total: span, elapsed } = getAnchors(now);
-  const pct = 1 - clamp(elapsed / span, 0, 1); // remaining percentage
+  const { total, days, hours, minutes, seconds } = now ? getCountdown(now) : { total: -1, days: 0, hours: 0, minutes: 0, seconds: 0 };
 
   useEffect(() => {
     if (total <= 0 && !firedRef.current) {
@@ -133,6 +130,11 @@ const KingsCountdown = ({ onReachedZero }: { onReachedZero?: () => void }) => {
       onReachedZero?.();
     }
   }, [total, onReachedZero]);
+
+  if (!now) return null; // Avoid rendering until client-side state is ready
+
+  const { next, total: span, elapsed } = getAnchors(now);
+  const pct = 1 - clamp(elapsed / span, 0, 1); // remaining percentage
 
   if (total <= 0) {
     return <div className="text-lg text-green-400 animate-pulse">جاري تحديث الملوك الآن...</div>;

@@ -498,7 +498,8 @@ const GarticLikeCanvas = React.forwardRef<GarticCanvasRef, GarticCanvasProps>(
           ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(eW.x, eW.y); ctx.stroke();
           const head = 8; const ang = Math.atan2(eW.y - s.y, eW.x - s.x);
           const hx = Math.cos(ang) * head, hy = Math.sin(ang) * head;
-          ctx.beginPath(); ctx.moveTo(eW.x, eW.y);
+          ctx.beginPath();
+          ctx.moveTo(eW.x, eW.y);
           ctx.lineTo(eW.x - hx + hy / 2, eW.y - hy - hx / 2);
           ctx.lineTo(eW.x - hx - hy / 2, eW.y - hy + hx / 2);
           ctx.closePath(); ctx.stroke();
