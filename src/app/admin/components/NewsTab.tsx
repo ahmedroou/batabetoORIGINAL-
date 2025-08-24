@@ -25,7 +25,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 
 // Icons
-import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown, RotateCcw, Image as ImageIcon, Filter, SortAsc, SortDesc, Eye, EyeOff, CheckCircle2, XCircle, RefreshCw, Megaphone, UploadCloud, CheckCheck, Search } from "lucide-react";
+import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown, RotateCcw, Image as ImageIcon, Filter, SortAsc, SortDesc, Eye, EyeOff, CheckCircle2, XCircle, RefreshCw, Megaphone, UploadCloud, CheckCheck, Search, Wand2 } from "lucide-react";
 
 // Types & helpers
 import type { Article, AudienceGroup, UserProfile } from "@/types";
@@ -43,6 +43,7 @@ import {
   deleteAudienceGroup,
   removePlayerFromAudienceGroup,
   adminSearchUsersInNews,
+  generateAndSaveArticle, // Import the new function
 } from "@/lib/actions/news";
 import { Timestamp } from "firebase/firestore";
 
@@ -243,6 +244,7 @@ export default function NewsTab() {
   // UI state
   const [isFetching, setIsFetching] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
   const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
@@ -363,6 +365,18 @@ export default function NewsTab() {
       toast({ title: "خطأ في الحذف", description: result.error, variant: "destructive" });
     }
     setIsSubmitting(false);
+  };
+
+  const handleGenerateArticle = async () => {
+    setIsGenerating(true);
+    const result = await generateAndSaveArticle();
+    if (result.success) {
+      toast({ title: "تم إنشاء المقال بنجاح", description: "المقال الجديد جاهز للمراجعة." });
+      await fetchAllData();
+    } else {
+      toast({ title: "فشل التوليد", description: result.error, variant: "destructive" });
+    }
+    setIsGenerating(false);
   };
 
   const handleCreateGroup = async () => {
@@ -492,6 +506,10 @@ export default function NewsTab() {
               <CardDescription>إنشاء وتعديل المقالات، وإدارة مجموعات الجمهور.</CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <Button onClick={handleGenerateArticle} disabled={isGenerating}>
+                  {isGenerating ? <Loader2 className="animate-spin ml-2" /> : <Wand2 className="ml-2" />}
+                  توليد مقال بالذكاء الاصطناعي
+              </Button>
               <Button variant="secondary" onClick={fetchAllData}>
                 <RefreshCw className="ml-2" /> تحديث
               </Button>

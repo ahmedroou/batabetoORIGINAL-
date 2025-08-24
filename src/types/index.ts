@@ -390,7 +390,7 @@ export interface UserProfile {
   avatarId: string;
   unlockedAvatars: string[];
   unlockedPunishmentAvatars?: string[];
-  leaderboardPoints: number; 
+  leaderboardPoints: number;
   honorPoints: number;
   loyaltyPoints: number;
   rebellionPoints?: number;

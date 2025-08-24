@@ -28,6 +28,7 @@ import {
 import type { Article, AudienceGroup, UserProfile, SocialEvent, Challenge, Game } from '@/types';
 import { getAllUsers, getTopPunisher, getTopUsers } from './user/queries';
 import { getChallenges } from './challenges';
+import { generateNewsArticle } from '@/ai/flows/generate-news-article-flow';
 
 // -----------------------------
 // Types & helpers
@@ -463,5 +464,76 @@ export async function deleteOldArticles(days = 7): Promise<ServiceResult<{ delet
     return { success: true, data: { deletedCount: deleted } };
   } catch (err) {
     return { success: false, error: handleError(err, 'فشل حذف المقالات القديمة') };
+  }
+}
+
+// -----------------------------
+// AI Article Generation
+// -----------------------------
+
+/**
+ * Gathers all necessary data for the AI, generates an article, and saves it as a draft.
+ * Admin-only action.
+ */
+export async function generateAndSaveArticle(): Promise<ServiceResult> {
+  try {
+    const now = new Date();
+    const oneDayAgo = Timestamp.fromMillis(now.getTime() - 24 * 60 * 60 * 1000);
+    const oneWeekAgo = Timestamp.fromMillis(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // Fetch all data in parallel
+    const [
+      leaderboard,
+      punishedPlayers,
+      topPunisher,
+      activeChallenges,
+      previousArticlesSnap,
+      recentGamesSnap,
+      socialEventsSnap,
+    ] = await Promise.all([
+      getTopUsers('leaderboardPoints', 5),
+      getAllUsers('punished', 10),
+      getTopPunisher(),
+      getChallenges(), // Assuming this fetches active challenges
+      getDocs(query(collection(db, ARTICLES_COLLECTION), where('createdAt', '>=', oneWeekAgo), orderBy('createdAt', 'desc'), limit(10))),
+      getDocs(query(collection(db, GAMES_COLLECTION), where('createdAt', '>=', oneDayAgo), orderBy('createdAt', 'desc'), limit(10))),
+      getDocs(query(collection(db, SOCIAL_EVENTS_COLLECTION), where('timestamp', '>=', oneDayAgo), limit(50))),
+    ]);
+
+    // Prepare input for AI
+    const aiInput = {
+      events: socialEventsSnap.docs.map(d => d.data()),
+      previous_articles: previousArticlesSnap.docs.map(d => toArticleDoc(d as any)),
+      leaderboard: leaderboard,
+      punished_players: punishedPlayers,
+      top_punisher: topPunisher,
+      active_challenges: activeChallenges,
+      recent_games: recentGamesSnap.docs.map(d => ({id: d.id, ...d.data()})),
+      date: now.toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+    };
+
+    // Generate the article using the AI flow
+    const generatedArticle = await generateNewsArticle(aiInput);
+    if (!generatedArticle || !generatedArticle.headline) {
+      throw new Error('AI failed to generate a valid article.');
+    }
+
+    // Save as a draft for admin review
+    const articleToSave: Omit<Article, 'id' | 'createdAt'> = {
+      title: generatedArticle.headline,
+      content: generatedArticle.body,
+      imageUrl: generatedArticle.imageUrl,
+      authorName: 'المراسل الذكي',
+      authorId: 'ai_reporter',
+      isPublished: false, // Save as draft
+      category: 'أخبار اللعبة',
+      audience: ['public'],
+    };
+
+    await createArticle(articleToSave);
+    return { success: true };
+
+  } catch (error) {
+    return { success: false, error: handleError(error, 'فشل توليد وحفظ المقال') };
   }
 }
