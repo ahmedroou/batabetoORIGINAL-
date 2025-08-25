@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState, Suspense, useTransition } from 'react';
@@ -13,7 +12,6 @@ import { useToast } from '@/hooks/use-toast';
 
 // UI
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -39,34 +37,34 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { generateGeniusChallenge } from '@/ai/flows/generate-genius-challenge';
 
 /** --------------------------------------------------
- *  Lazy imports (loaded only when tab is active)
+ *  Lazy imports (loaded only when active)
  *  -------------------------------------------------- */
 const SocietyTab = dynamic(() => import('./components/SocietyTab'), {
   ssr: false,
-  loading: () => <TabLoader label="المجتمع" />,
+  loading: () => <SkeletonBlock label="المجتمع" />,
 });
 const QuestionManagementTab = dynamic(() => import('./components/QuestionManagementTab'), {
   ssr: false,
-  loading: () => <TabLoader label="المحتوى" />,
+  loading: () => <SkeletonBlock label="المحتوى" />,
 });
 const NewsTab = dynamic(() => import('./components/NewsTab'), {
   ssr: false,
-  loading: () => <TabLoader label="الأخبار" />,
+  loading: () => <SkeletonBlock label="الأخبار" />,
 });
 const ChallengesTab = dynamic(() => import('./components/ChallengesTab'), {
   ssr: false,
-  loading: () => <TabLoader label="البطولات" />,
+  loading: () => <SkeletonBlock label="البطولات" />,
 });
 const ComplaintsTab = dynamic(() => import('./components/ComplaintsTab'), {
   ssr: false,
-  loading: () => <TabLoader label="الشكاوى" />,
+  loading: () => <SkeletonBlock label="الشكاوى" />,
 });
 const TestingTab = dynamic(() => import('./components/TestingTab'), {
   ssr: false,
-  loading: () => <TabLoader label="الاختبار" />,
+  loading: () => <SkeletonBlock label="الاختبار" />,
 });
 
-// Challenge host remains lazy with a nice loader
+// Challenge host remains lazy with a pleasant loader
 const ChallengeHost = dynamic(
   () => import('@/components/game/king-of-genius/ChallengeHost').then((m) => m.ChallengeHost),
   {
@@ -81,9 +79,11 @@ const ChallengeHost = dynamic(
 );
 
 /** --------------------------------------------------
- *  Constants & helpers
+ *  Helpers & Constants
  *  -------------------------------------------------- */
-const TAB_MAP = [
+const cn = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' ');
+
+const TABS = [
   { value: 'society', label: 'المجتمع', icon: Gavel },
   { value: 'questions', label: 'المحتوى', icon: Puzzle },
   { value: 'news', label: 'الأخبار', icon: Newspaper },
@@ -92,7 +92,7 @@ const TAB_MAP = [
   { value: 'testing', label: 'الاختبار', icon: TestTube2 },
 ] as const;
 
-type TabValue = (typeof TAB_MAP)[number]['value'];
+type TabValue = (typeof TABS)[number]['value'];
 
 const CHALLENGE_DURATIONS: Record<string, number> = {
   quick_math: 60,
@@ -101,17 +101,17 @@ const CHALLENGE_DURATIONS: Record<string, number> = {
   smart_grid_puzzle: 120,
 };
 
-/** Skeleton loader for tabs (lightweight, zero data-fetch) */
-function TabLoader({ label }: { label: string }) {
+/** Skeleton block used while lazy content mounts */
+function SkeletonBlock({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-center h-[40vh] gap-2" aria-live="polite" aria-busy>
-      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+    <div className="flex items-center justify-center h-[40vh] gap-3" aria-live="polite" aria-busy>
+      <Loader2 className="w-6 h-6 animate-spin" />
       <span className="text-muted-foreground">جاري تحميل {label}...</span>
     </div>
   );
 }
 
-/** Real error boundary (prevents entire page crash) */
+/** ErrorBoundary to protect the modal area */
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
@@ -121,23 +121,18 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
     return { hasError: true };
   }
   componentDidCatch(error: unknown) {
-    // Keep it silent for users; log to console for devs
-    console.error('[Modal ErrorBoundary]', error);
+    console.error('[Admin Modal Error]', error);
   }
   render() {
     if (this.state.hasError) {
-      return (
-        <div className="p-6 text-center text-red-600">
-          حدث خطأ غير متوقع أثناء تحميل العرض التجريبي. أعد المحاولة لاحقًا.
-        </div>
-      );
+      return <div className="p-6 text-center text-red-600">حدث خطأ غير متوقع أثناء تحميل العرض التجريبي.</div>;
     }
     return this.props.children as React.ReactElement;
   }
 }
 
 /** --------------------------------------------------
- *  Main content
+ *  New Layout: Sidebar Navigation + Mobile Segmented Bar
  *  -------------------------------------------------- */
 function AdminPageContent() {
   const router = useRouter();
@@ -147,11 +142,14 @@ function AdminPageContent() {
   const prefersReducedMotion = useReducedMotion();
   const [isPending, startTransition] = useTransition();
 
-  /** Data Saver Mode — يقلل التحميل المسبق والحركة ويؤجل المحتوى الثقيل */
+  // Data-saver & density toggles
   const [dataSaver, setDataSaver] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
-    const saved = localStorage.getItem('admin_data_saver');
-    return saved ? JSON.parse(saved) : false;
+    return JSON.parse(localStorage.getItem('admin_data_saver') || 'false');
+  });
+  const [compact, setCompact] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return JSON.parse(localStorage.getItem('admin_compact') || 'false');
   });
 
   const toggleDataSaver = useCallback(() => {
@@ -161,8 +159,15 @@ function AdminPageContent() {
       return next;
     });
   }, []);
+  const toggleCompact = useCallback(() => {
+    setCompact((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') localStorage.setItem('admin_compact', JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
-  // --- Active Tab (URL + LocalStorage persistence) ---
+  // Active Tab (URL + LocalStorage)
   const [activeTab, setActiveTab] = useState<TabValue>(() => {
     const fromQuery = searchParams?.get('tab');
     const fromStorage = typeof window !== 'undefined' ? localStorage.getItem('admin_active_tab') : null;
@@ -173,7 +178,6 @@ function AdminPageContent() {
     (value: TabValue) => {
       setActiveTab(value);
       if (typeof window !== 'undefined') localStorage.setItem('admin_active_tab', value);
-      // Non-blocking URL update to keep UI snappy
       startTransition(() => {
         const params = new URLSearchParams(searchParams?.toString() || '');
         params.set('tab', value);
@@ -183,20 +187,12 @@ function AdminPageContent() {
     [router, searchParams, startTransition],
   );
 
-  // --- Test Modal State ---
-  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
-  const [isGeneratingTest, setIsGeneratingTest] = useState(false);
-  const [testGame, setTestGame] = useState<Game | null>(null);
-  const [testingChallenge, setTestingChallenge] = useState<{ id: string; name: string } | null>(null);
-
   // Guard: redirect if not admin
   useEffect(() => {
-    if (!loading && !userProfile?.isAdmin) {
-      router.push('/');
-    }
+    if (!loading && !userProfile?.isAdmin) router.push('/');
   }, [userProfile, loading, router]);
 
-  // Global hotkeys: Alt+1..6 to switch tabs, Esc to close modal
+  // Hotkeys: Alt+1..6, Esc closes modal
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isTestModalOpen) {
@@ -206,15 +202,21 @@ function AdminPageContent() {
       }
       if (e.altKey) {
         const num = Number(e.key);
-        if (num >= 1 && num <= TAB_MAP.length) {
+        if (num >= 1 && num <= TABS.length) {
           e.preventDefault();
-          setTab(TAB_MAP[num - 1].value as TabValue);
+          setTab(TABS[num - 1].value as TabValue);
         }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isTestModalOpen, setTab]);
+  }, [setTab]);
+
+  // Test Modal State
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+  const [isGeneratingTest, setIsGeneratingTest] = useState(false);
+  const [testGame, setTestGame] = useState<Game | null>(null);
+  const [testingChallenge, setTestingChallenge] = useState<{ id: string; name: string } | null>(null);
 
   const handleTestChallenge = useCallback(
     async (challenge: { id: string; name: string }) => {
@@ -232,9 +234,7 @@ function AdminPageContent() {
           score: 0,
           position: 0,
         };
-
         const durationInSeconds = CHALLENGE_DURATIONS[challenge.id] ?? 90;
-
         const mockGame: Game = {
           id: 'TEST_MODE',
           hostId: 'admin_test',
@@ -246,7 +246,7 @@ function AdminPageContent() {
           challengeState: {
             duration: durationInSeconds,
             challengeEndsAt: Timestamp.fromMillis(Date.now() + durationInSeconds * 1000),
-            puzzle: puzzle,
+            puzzle,
             results: [],
             playerProgress: {},
           },
@@ -254,11 +254,7 @@ function AdminPageContent() {
         setTestGame(mockGame);
         setIsTestModalOpen(true);
       } catch (error: any) {
-        toast({
-          title: 'تعذر إنشاء الاختبار',
-          description: error?.message || 'تعذر إنشاء لغز الاختبار.',
-          variant: 'destructive',
-        });
+        toast({ title: 'تعذر إنشاء الاختبار', description: error?.message || 'تعذر إنشاء لغز الاختبار.', variant: 'destructive' });
       } finally {
         setIsGeneratingTest(false);
       }
@@ -266,152 +262,148 @@ function AdminPageContent() {
     [toast],
   );
 
-  if (loading || !userProfile?.isAdmin) {
-    return (
-      <div className="flex min-h-screen w-full items-center justify-center" aria-live="polite" aria-busy>
-        <Loader2 className="h-10 w-10 animate-spin" />
-      </div>
-    );
-  }
-
-  const gradientClass = dataSaver
+  // Background gradient (calm when dataSaver is on)
+  const bgGradient = dataSaver
     ? 'from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950'
-    : 'from-violet-50 via-fuchsia-50 to-sky-50 dark:from-slate-900 dark:via-violet-950/40 dark:to-slate-950';
+    : 'from-indigo-50 via-fuchsia-50 to-cyan-50 dark:from-slate-950 dark:via-indigo-950/30 dark:to-slate-950';
 
   return (
-    <main className={`min-h-screen w-full bg-gradient-to-br ${gradientClass}`}>
-      <div className="mx-auto w-full max-w-6xl px-4 py-8 space-y-6">
-        {/* Header */}
-        <motion.div
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
-          animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.25 }}
-        >
-          <Card className="supports-[backdrop-filter]:bg-background/70 backdrop-blur border-violet-200/40 dark:border-violet-900/40">
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-2xl md:text-3xl">لوحة تحكم الأدمن</CardTitle>
-                    <Badge variant="secondary" className="rounded-full">
-                      {userProfile?.name ?? 'مشرف'}
-                    </Badge>
-                  </div>
-                  <CardDescription>إدارة محتوى اللعبة وإعداداتها.</CardDescription>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="secondary" asChild>
-                    <Link href="/store" prefetch={!dataSaver} aria-label="عرض متجر اللاعبين">
-                      <Eye className="ml-2 h-4 w-4" /> عرض متجر اللاعبين
-                    </Link>
-                  </Button>
-                  <Button variant="outline" asChild aria-label="إدارة المتجر والألقاب">
-                    <Link href="/admin/store" prefetch={!dataSaver}>
-                      <Store className="mr-2" /> إدارة المتجر والألقاب
-                    </Link>
-                  </Button>
-                  <Button
-                    variant={dataSaver ? 'default' : 'outline'}
-                    onClick={toggleDataSaver}
-                    aria-pressed={dataSaver}
-                    aria-label="تفعيل وضع توفير البيانات"
-                  >
-                    {dataSaver ? 'وضع البيانات: مُفعّل' : 'وضع البيانات: مُغلق'}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => router.push('/')}
-                    aria-label="عودة للرئيسية"
-                  >
-                    <ArrowLeft />
-                  </Button>
-                </div>
-              </div>
+    <main className={cn('min-h-screen w-full bg-gradient-to-br', bgGradient, compact && 'text-sm')}>      
+      {/* Top Bar */}
+      <div className="sticky top-0 z-40 border-b bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <CardTitle className="text-xl md:text-2xl">لوحة تحكم الأدمن</CardTitle>
+            <Badge variant="secondary" className="rounded-full">{userProfile?.username ?? 'مشرف'}</Badge>
+            <Separator orientation="vertical" className="mx-1 hidden sm:block" />
+            <span className="hidden sm:inline text-xs text-muted-foreground">
+              <Keyboard className="inline-block h-3.5 w-3.5 mr-1" /> Alt + [1–6]
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="secondary" size={compact ? 'sm' : 'default'}>
+              <Link href="/store" prefetch={!dataSaver} aria-label="عرض متجر اللاعبين">
+                <Eye className="ml-2 h-4 w-4" /> متجر اللاعبين
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size={compact ? 'sm' : 'default'} aria-label="إدارة المتجر والألقاب">
+              <Link href="/admin/store" prefetch={!dataSaver}>
+                <Store className="mr-2 h-4 w-4" /> المتجر والألقاب
+              </Link>
+            </Button>
+            <Button variant={dataSaver ? 'default' : 'outline'} size={compact ? 'sm' : 'default'} onClick={toggleDataSaver}>
+              {dataSaver ? 'توفير البيانات: شغّال' : 'توفير البيانات: مقفول'}
+            </Button>
+            <Button variant={compact ? 'default' : 'outline'} size={compact ? 'sm' : 'default'} onClick={toggleCompact}>
+              {compact ? 'وضع مضغوط' : 'وضع مريح'}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => router.push('/')} aria-label="عودة للرئيسية">
+              <ArrowLeft />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div className={cn('mx-auto max-w-6xl px-4 py-6 grid gap-6', 'md:grid-cols-[240px_1fr]')}>
+        {/* Sidebar (Desktop) */}
+        <aside className="hidden md:block">
+          <Card className="border-violet-200/40 dark:border-violet-900/30 overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">التنقّل</CardTitle>
+              <CardDescription>اختر القسم المرغوب</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1">
-                  <Keyboard className="h-3.5 w-3.5" /> Alt + [1-6] للتبديل بين التبويبات بسرعة
-                </span>
-                <div className="h-3 w-px bg-border hidden md:block" />
-                <span className="hidden sm:inline">
-                  آخر دخول: {new Date().toLocaleString()}
-                </span>
-                <div className="h-3 w-px bg-border hidden md:block" />
-                <span className="inline-flex items-center gap-1">
-                  {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} تحديث الحالة
-                </span>
-              </div>
+            <CardContent className="p-2">
+              <nav className="relative">
+                <ul className="space-y-1">
+                  <AnimatePresence initial={false}>
+                    {TABS.map(({ value, label, icon: Icon }, idx) => {
+                      const active = activeTab === value;
+                      return (
+                        <li key={value}>
+                          <button
+                            type="button"
+                            onClick={() => setTab(value)}
+                            className={cn(
+                              'relative w-full flex items-center gap-3 rounded-xl px-3 py-2 transition',
+                              'hover:bg-primary/10',
+                              active && 'text-primary'
+                            )}
+                            data-active={active}
+                            aria-current={active ? 'page' : undefined}
+                          >
+                            {/* Animated active indicator */}
+                            {active && !prefersReducedMotion && (
+                              <motion.span
+                                layoutId="nav-active"
+                                className="absolute inset-0 rounded-xl bg-primary/10"
+                                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                                aria-hidden
+                              />
+                            )}
+                            <Icon className="relative z-10 h-4 w-4" />
+                            <span className="relative z-10">{label}</span>
+                            <span className="sr-only">Alt+{idx + 1}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </AnimatePresence>
+                </ul>
+              </nav>
             </CardContent>
           </Card>
-        </motion.div>
 
-        {/* Tabs */}
-        <motion.div
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
-          animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.25 }}
-        >
-          <Tabs value={activeTab} onValueChange={(v) => setTab(v as TabValue)} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
-              {TAB_MAP.map(({ value, label, icon: Icon }, idx) => (
-                <TabsTrigger key={value} value={value} className="group relative">
-                  {/* subtle active indicator */}
-                  <AnimatePresence>
-                    {activeTab === value && !prefersReducedMotion && (
-                      <motion.span
-                        layoutId="tab-pill"
-                        className="absolute inset-0 rounded-md bg-primary/10"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                        aria-hidden
-                      />
-                    )}
-                  </AnimatePresence>
-                  <Icon className="mr-2 h-4 w-4 group-data-[state=active]:scale-110 transition-transform" />
-                  {label}
-                  <span className="sr-only">Alt+{idx + 1}</span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          {/* Quick status */}
+          <Card className="mt-4">
+            <CardContent className="p-3 text-xs text-muted-foreground flex items-center justify-between">
+              <span>آخر دخول</span>
+              <span>{new Date().toLocaleString()}</span>
+            </CardContent>
+          </Card>
+        </aside>
 
-            {/* Render heavy tab contents only when active (REAL data-saver) */}
-            <TabsContent value="society" className="mt-4">
-              {activeTab === 'society' ? <SocietyTab /> : <TabLoader label="المجتمع" />}
-            </TabsContent>
+        {/* Main panel */}
+        <section className="min-h-[60vh]">
+          {/* Mobile segmented nav */}
+          <div className="md:hidden -mt-2">
+            <div className="flex gap-2 overflow-auto no-scrollbar py-1">
+              <AnimatePresence initial={false}>
+                {TABS.map(({ value, label }) => {
+                  const active = activeTab === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setTab(value)}
+                      className={cn(
+                        'relative flex-shrink-0 rounded-full px-3 py-1.5 border',
+                        active ? 'bg-primary text-primary-foreground border-primary' : 'bg-background'
+                      )}
+                      aria-current={active ? 'page' : undefined}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+          </div>
 
-            <TabsContent value="questions" className="mt-4">
-              {activeTab === 'questions' ? <QuestionManagementTab /> : <TabLoader label="المحتوى" />}
-            </TabsContent>
-
-            <TabsContent value="news" className="mt-4">
-              {activeTab === 'news' ? <NewsTab /> : <TabLoader label="الأخبار" />}
-            </TabsContent>
-
-            <TabsContent value="challenges" className="mt-4">
-              {activeTab === 'challenges' ? <ChallengesTab /> : <TabLoader label="البطولات" />}
-            </TabsContent>
-
-            <TabsContent value="complaints" className="mt-4">
-              {activeTab === 'complaints' ? <ComplaintsTab /> : <TabLoader label="الشكاوى" />}
-            </TabsContent>
-
-            <TabsContent value="testing" className="mt-4">
-              {activeTab === 'testing' ? (
-                <TestingTab
-                  onTestChallenge={handleTestChallenge}
-                  isGeneratingTest={isGeneratingTest}
-                  testingChallenge={testingChallenge as any}
-                />
-              ) : (
-                <TabLoader label="الاختبار" />
-              )}
-            </TabsContent>
-          </Tabs>
-        </motion.div>
+          {/* Active content (render only when active for data-saver) */}
+          {activeTab === 'society' && <SocietyTab />}
+          {activeTab === 'questions' && <QuestionManagementTab />}
+          {activeTab === 'news' && <NewsTab />}
+          {activeTab === 'challenges' && <ChallengesTab />}
+          {activeTab === 'complaints' && <ComplaintsTab />}
+          {activeTab === 'testing' && (
+            <TestingTab
+              onTestChallenge={handleTestChallenge}
+              isGeneratingTest={isGeneratingTest}
+              testingChallenge={testingChallenge as any}
+            />
+          )}
+        </section>
       </div>
 
       {/* Test Modal */}
@@ -453,9 +445,7 @@ function AdminPageContent() {
               <Rocket className="h-4 w-4" /> وضع الاختبار لا يحفظ النتائج.
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setIsTestModalOpen(false)}>
-                إغلاق
-              </Button>
+              <Button variant="outline" onClick={() => setIsTestModalOpen(false)}>إغلاق</Button>
               <Button onClick={() => testingChallenge && handleTestChallenge(testingChallenge)} disabled={!testingChallenge}>
                 إعادة تشغيل الاختبار
               </Button>

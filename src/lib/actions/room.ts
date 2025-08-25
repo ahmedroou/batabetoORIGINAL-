@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -31,6 +32,8 @@ import { generateGameId } from '@/lib/actions/helpers';
 import { getTrapAnswerCategories, getEducatedMerchantCategories } from './admin/settings';
 import { getPlayerFromUserId } from './user/queries';
 import { getGamePopularityStats } from './stats';
+import { CATEGORIES, LETTERS } from '@/data/kingdom-of-names';
+import { shuffle } from './helpers';
 
 
 // ============================================================
@@ -223,6 +226,17 @@ export async function createGameRoom(
             playerGuesses: {},
             shuffledAnswers: [],
         }
+    } else if (gameType === 'kingdom-of-names') {
+        newGame.kingdomOfNamesState = {
+            phase: 'lobby',
+            settings: { rounds: 7, roundTime: 60, votingTime: 45, resultsTime: 20 },
+            currentRound: 0,
+            letter: null,
+            categories: [],
+            playerAnswers: {},
+            votes: {},
+            results: {},
+        };
     }
 
 
@@ -323,7 +337,7 @@ export async function joinGameRoom(
       };
 
       if (
-        ['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'educated-merchant'].includes(
+        ['trap-answer', 'prison', 'behind-the-mask', 'word_war', 'educated-merchant', 'kingdom-of-names'].includes(
           game.gameType
         )
       ) {
@@ -495,4 +509,3 @@ export async function setPlayerReady(gameId: string, playerId: string): Promise<
     }
   });
 }
-

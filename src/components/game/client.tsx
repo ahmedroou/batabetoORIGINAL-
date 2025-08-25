@@ -17,6 +17,7 @@ import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMa
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { EducatedMerchantGame } from '@/components/game/educated-merchant/EducatedMerchantGame';
 import { DrawAndDeceiveGame } from '@/components/game/draw-and-deceive/DrawAndDeceiveGame';
+import { KingdomOfNamesGame } from '@/components/game/kingdom-of-names/KingdomOfNamesGame';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { leaveGame } from '@/lib/actions/room';
@@ -81,6 +82,12 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
     ring: 'ring-cyan-500/40',
     chip: 'bg-cyan-500/15 text-cyan-200 border-cyan-400/30',
     title: 'text-cyan-200',
+  },
+    'kingdom-of-names': {
+    bg: 'from-blue-900/60 via-indigo-900/40 to-slate-900/70',
+    ring: 'ring-blue-500/40',
+    chip: 'bg-blue-500/15 text-blue-200 border-blue-400/30',
+    title: 'text-blue-200',
   },
   default: {
     bg: 'from-violet-900/60 via-slate-900/50 to-black',
@@ -380,6 +387,8 @@ export default function GameClient() {
         return <EducatedMerchantGame game={game} self={self} />;
       case 'draw-and-deceive':
         return <DrawAndDeceiveGame game={game} self={self} />;
+    case 'kingdom-of-names':
+        return <KingdomOfNamesGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة للعبة "{game.gameType}"</p>;
     }

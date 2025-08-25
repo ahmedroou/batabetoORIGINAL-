@@ -446,8 +446,9 @@ export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser
 export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
 export type EducatedMerchantGameState = "lobby" | "rolling" | "movement" | "property_action" | "question" | "turn_end" | "final_results";
 export type DrawAndDeceivePhase = 'lobby' | 'drawing' | 'writing' | 'trapping' | 'guessing' | 'results' | 'final_results' | 'kick_vote';
+export type KingdomOfNamesPhase = 'lobby' | 'playing' | 'voting' | 'results' | 'final_results';
 
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState | DrawAndDeceivePhase;
+export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState | DrawAndDeceivePhase | KingdomOfNamesPhase;
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
@@ -607,6 +608,30 @@ export interface DrawAndDeceiveState {
 
 
 // -------------------------------------------------------------
+// Kingdom of Names Game Types
+// -------------------------------------------------------------
+export interface KingdomOfNamesState {
+    settings: {
+        rounds: number;
+        roundTime: number;
+        votingTime: number;
+        resultsTime: number;
+    };
+    phase: KingdomOfNamesPhase;
+    currentRound: number;
+    turnOrder: string[];
+    letter: string | null;
+    categories: string[];
+    playerAnswers: Record<string, Record<string, string>>; // { playerId: { category: answer } }
+    votes: Record<string, Record<string, 'correct' | 'incorrect'>>; // { voterId: { 'targetId-category': vote } }
+    results: {
+        scores?: Record<string, { points: number, breakdown: { reason: string, points: number }[] }>;
+        answers?: { category: string; answer: string; points: number; reason: string }[];
+    };
+    timerEndsAt?: Timestamp;
+}
+
+// -------------------------------------------------------------
 // Game Root Type
 // -------------------------------------------------------------
 export interface Game {
@@ -621,7 +646,7 @@ export interface Game {
           value: number;
       };
   };
-  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'prison' | 'educated-merchant' | 'draw-and-deceive';
+  gameType: 'king-of-genius' | 'trap-answer' | 'behind-the-mask' | 'word_war' | 'prison' | 'educated-merchant' | 'draw-and-deceive' | 'kingdom-of-names';
   players: Player[];
   playerUids: string[];
   gameState: GameState;
@@ -824,6 +849,10 @@ export interface Game {
 
   // "Draw & Deceive" specific state
   drawAndDeceiveState?: DrawAndDeceiveState;
+  
+  // "Kingdom of Names" specific state
+  kingdomOfNamesState?: KingdomOfNamesState;
+
   stateVersion?: number;
 }
 
@@ -834,7 +863,8 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'prison': 'السجن',
     'educated-merchant': 'التاجر المتعلم',
-    'draw-and-deceive': 'ارسم واخدع'
+    'draw-and-deceive': 'ارسم واخدع',
+    'kingdom-of-names': 'مملكة الأسماء',
 };
 
 // -------------------------------------------------------------

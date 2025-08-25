@@ -19,5 +19,6 @@ export const GAME_TYPE_NAMES: Record<Game['gameType'], string> = {
     'word_war': 'حرب الكلمات',
     'prison': 'السجن',
     'educated-merchant': 'التاجر المتعلم',
-    'draw-and-deceive': 'ارسم واخدع'
+    'draw-and-deceive': 'ارسم واخدع',
+    'kingdom-of-names': 'مملكة الأسماء'
 };
