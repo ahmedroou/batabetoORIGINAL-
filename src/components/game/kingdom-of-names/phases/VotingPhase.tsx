@@ -91,36 +91,44 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
                             const player = getPlayer(playerId);
                             if (!player) return null;
                             
+                            const playerAnswersEntries = Object.entries(playerAnswers || {});
+
                             return (
                                 <div key={playerId} className="p-4 rounded-lg bg-muted">
                                     <h3 className="font-bold text-xl mb-3 flex items-center gap-2">
                                         <PlayerAvatar avatarId={player.avatarId} className="w-8 h-8"/>
                                         إجابات {player.name}
                                     </h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {Object.entries(playerAnswers).map(([category, answer]) => (
-                                        <div key={category} className="p-3 bg-background rounded-md space-y-2">
-                                            <p><span className="font-semibold">{category}:</span> <span className="font-mono">{answer || "(فارغ)"}</span></p>
-                                            <div className="flex gap-2">
-                                                <Button 
-                                                    size="sm"
-                                                    variant={votes[`${playerId}-${category}`] === 'correct' ? 'default' : 'outline'}
-                                                    className="bg-green-500 hover:bg-green-600 text-white"
-                                                    onClick={() => handleVote(playerId, category, 'correct')}
-                                                >
-                                                    <ThumbsUp className="w-4 h-4 ml-1" /> صحيحة
-                                                </Button>
-                                                <Button 
-                                                    size="sm"
-                                                    variant={votes[`${playerId}-${category}`] === 'incorrect' ? 'destructive' : 'outline'}
-                                                    onClick={() => handleVote(playerId, category, 'incorrect')}
-                                                >
-                                                     <ThumbsDown className="w-4 h-4 ml-1" /> خاطئة
-                                                </Button>
+                                    {playerAnswersEntries.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {playerAnswersEntries.map(([category, answer]) => (
+                                            <div key={category} className="p-3 bg-background rounded-md space-y-2">
+                                                <p><span className="font-semibold">{category}:</span> <span className="font-mono">{answer || "(فارغ)"}</span></p>
+                                                <div className="flex gap-2">
+                                                    <Button 
+                                                        size="sm"
+                                                        variant={votes[`${playerId}-${category}`] === 'correct' ? 'default' : 'outline'}
+                                                        className="bg-green-500 hover:bg-green-600 text-white"
+                                                        onClick={() => handleVote(playerId, category, 'correct')}
+                                                    >
+                                                        <ThumbsUp className="w-4 h-4 ml-1" /> صحيحة
+                                                    </Button>
+                                                    <Button 
+                                                        size="sm"
+                                                        variant={votes[`${playerId}-${category}`] === 'incorrect' ? 'destructive' : 'outline'}
+                                                        onClick={() => handleVote(playerId, category, 'incorrect')}
+                                                    >
+                                                         <ThumbsDown className="w-4 h-4 ml-1" /> خاطئة
+                                                    </Button>
+                                                </div>
                                             </div>
+                                        ))}
                                         </div>
-                                    ))}
-                                    </div>
+                                    ) : (
+                                        <p className="text-center text-muted-foreground p-4 bg-background rounded-md">
+                                            لم يقدم هذا اللاعب أي إجابات.
+                                        </p>
+                                    )}
                                 </div>
                             )
                         })}
@@ -128,7 +136,7 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
                 </ScrollArea>
             </CardContent>
             <CardFooter>
-                 <Button className="w-full" onClick={handleSubmit} disabled={isSubmitting || Object.keys(votes).length === 0}>
+                 <Button className="w-full" onClick={handleSubmit} disabled={isSubmitting}>
                     <Send className="mr-2" />
                     {isSubmitting ? 'جاري الإرسال...' : 'إرسال تصويتي'}
                 </Button>

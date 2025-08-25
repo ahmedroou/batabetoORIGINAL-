@@ -64,9 +64,8 @@ export async function submitAnswers(gameId: string, playerId: string, answers: R
         
         ensure(state.phase === 'playing', "ليست مرحلة اللعب.");
 
-        // Check if this player has already submitted their final answers
         if (state.playerAnswers && state.playerAnswers[playerId]) {
-            return; // Already submitted, do nothing.
+            return;
         }
 
         const categoriesForRound = state.categories || [];
@@ -76,19 +75,23 @@ export async function submitAnswers(gameId: string, playerId: string, answers: R
 
         const allFinalAnswers = { ...(state.playerAnswers || {}), [playerId]: answers };
         
-        // Lock in answers for all other active players.
-        getActivePlayers(game).forEach(p => {
-            if (!allFinalAnswers[p.id]) { // If they haven't submitted a final answer yet
-                allFinalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
-            }
-        });
-        
-        // Move to voting phase for everyone.
-        tx.update(gameRef, {
-            'kingdomOfNamesState.playerAnswers': allFinalAnswers,
-            'kingdomOfNamesState.phase': 'voting',
-            'kingdomOfNamesState.timerEndsAt': tsFromNowS(state.settings.votingTime),
-        });
+        // This is the first person to submit, end round for everyone else.
+        if (Object.keys(state.playerAnswers || {}).length === 0) {
+            getActivePlayers(game).forEach(p => {
+                if (p.id !== playerId && !allFinalAnswers[p.id]) { // If they haven't submitted yet
+                    allFinalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
+                }
+            });
+             tx.update(gameRef, {
+                'kingdomOfNamesState.playerAnswers': allFinalAnswers,
+                'kingdomOfNamesState.phase': 'voting',
+                'kingdomOfNamesState.timerEndsAt': tsFromNowS(state.settings.votingTime),
+            });
+        } else { // Not the first, just update my own answers
+             tx.update(gameRef, {
+                [`kingdomOfNamesState.playerAnswers.${playerId}`]: answers,
+            });
+        }
     });
 }
 
