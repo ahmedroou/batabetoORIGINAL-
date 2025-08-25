@@ -3,9 +3,9 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, type Transaction, deleteField } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, type Transaction, deleteField, updateDoc } from 'firebase/firestore';
 import type { Game, Player, KingdomOfNamesState } from '@/types';
-import { shuffle, safeCompareStrings } from './helpers';
+import { shuffle } from './helpers';
 import { CATEGORIES, LETTERS } from '@/data/kingdom-of-names';
 import { distributeEndOfGameAwards } from './admin/users';
 
@@ -54,6 +54,13 @@ export async function startGame(gameId: string, hostId: string) {
     });
 }
 
+export async function updatePlayerProgress(gameId: string, playerId: string, answers: Record<string, string>) {
+    const gameRef = doc(db, 'games', gameId);
+    await updateDoc(gameRef, {
+        [`kingdomOfNamesState.playerProgress.${playerId}.answers`]: answers
+    });
+}
+
 export async function submitAnswers(gameId: string, playerId: string, answers: Record<string, string>) {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (tx) => {
@@ -64,34 +71,23 @@ export async function submitAnswers(gameId: string, playerId: string, answers: R
         
         ensure(state.phase === 'playing', "ليست مرحلة اللعب.");
 
-        if (state.playerAnswers && state.playerAnswers[playerId]) {
-            return;
-        }
-
         const categoriesForRound = state.categories || [];
         const isSubmissionComplete = categoriesForRound.every(cat => answers[cat] && answers[cat].trim() !== '');
-
         ensure(isSubmissionComplete, "يجب تعبئة جميع الحقول قبل الإرسال.");
 
-        const allFinalAnswers = { ...(state.playerAnswers || {}), [playerId]: answers };
+        // Capture current progress of all other players
+        const finalAnswers = { ...(state.playerAnswers || {}), [playerId]: answers };
+        getActivePlayers(game).forEach(p => {
+            if (p.id !== playerId && !finalAnswers[p.id]) {
+                finalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
+            }
+        });
         
-        // This is the first person to submit, end round for everyone else.
-        if (Object.keys(state.playerAnswers || {}).length === 0) {
-            getActivePlayers(game).forEach(p => {
-                if (p.id !== playerId && !allFinalAnswers[p.id]) { // If they haven't submitted yet
-                    allFinalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
-                }
-            });
-             tx.update(gameRef, {
-                'kingdomOfNamesState.playerAnswers': allFinalAnswers,
-                'kingdomOfNamesState.phase': 'voting',
-                'kingdomOfNamesState.timerEndsAt': tsFromNowS(state.settings.votingTime),
-            });
-        } else { // Not the first, just update my own answers
-             tx.update(gameRef, {
-                [`kingdomOfNamesState.playerAnswers.${playerId}`]: answers,
-            });
-        }
+        tx.update(gameRef, {
+            'kingdomOfNamesState.playerAnswers': finalAnswers,
+            'kingdomOfNamesState.phase': 'voting',
+            'kingdomOfNamesState.timerEndsAt': tsFromNowS(state.settings.votingTime),
+        });
     });
 }
 
@@ -147,13 +143,14 @@ export async function nextRound(gameId: string, hostId: string) {
                 'kingdomOfNamesState.letter': LETTERS[Math.floor(Math.random() * LETTERS.length)],
                 'kingdomOfNamesState.categories': shuffle([...CATEGORIES]).slice(0, 6),
                 'kingdomOfNamesState.playerAnswers': {},
+                'kingdomOfNamesState.playerProgress': {},
                 'kingdomOfNamesState.votes': {},
                 'kingdomOfNamesState.results': {},
                 'kingdomOfNamesState.timerEndsAt': tsFromNowS(state.settings.roundTime),
             });
         }
     });
-
+    
     if (isGameOver) {
         await distributeEndOfGameAwards(gameId);
     }
@@ -182,8 +179,20 @@ export async function handleTimeout(gameId: string, hostId: string) {
 
         if (game.gameState === 'voting') {
             _calculateAndEnterResults(tx, gameRef, game);
+        } else if (game.gameState === 'playing') {
+             const state = game.kingdomOfNamesState!;
+             const finalAnswers = { ...(state.playerAnswers || {}) };
+             getActivePlayers(game).forEach(p => {
+                if (!finalAnswers[p.id]) {
+                    finalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
+                }
+            });
+             tx.update(gameRef, {
+                'kingdomOfNamesState.playerAnswers': finalAnswers,
+                'kingdomOfNamesState.phase': 'voting',
+                'kingdomOfNamesState.timerEndsAt': tsFromNowS(state.settings.votingTime),
+            });
         }
-        // Handle other timeouts if necessary
     });
 }
 
@@ -205,13 +214,11 @@ function calculateResults(game: Game) {
         for (const category in submissions[playerId]) {
             const answer = submissions[playerId][category]!;
             
-            // Auto-disqualify if it doesn't start with the correct letter
             if (!answer || !answer.trim().startsWith(letter)) {
                 answerScores[`${playerId}-${category}`] = { points: 0, reason: "حرف خاطئ أو إجابة فارغة" };
                 continue;
             }
 
-            // Check votes
             let incorrectVotes = 0;
             for (const voterId in votes) {
                 if (voterId === playerId) continue;

@@ -1,12 +1,12 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Game, Player } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { submitAnswers } from '@/lib/actions/kingdom-of-names';
+import { submitAnswers, updatePlayerProgress } from '@/lib/actions/kingdom-of-names';
 import { useToast } from '@/hooks/use-toast';
 import { Send, Loader2 } from 'lucide-react';
 
@@ -18,20 +18,34 @@ interface PlayingPhaseProps {
 export default function PlayingPhase({ game, self }: PlayingPhaseProps) {
     const { toast } = useToast();
     const state = game.kingdomOfNamesState;
-    const initialAnswers = state?.playerAnswers?.[self.id] || {};
+    const initialAnswers = state?.playerProgress?.[self.id]?.answers || {};
     const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const progressUpdateTimer = useRef<NodeJS.Timeout | null>(null);
 
     const categories = state?.categories || [];
     const letter = state?.letter || '';
     
-    // This player has already submitted their final answers for this round.
     const hasSubmitted = !!state?.playerAnswers?.[self.id];
     
     const canSubmit = useMemo(() => {
         return categories.every(cat => answers[cat] && answers[cat].trim() !== '');
     }, [categories, answers]);
     
+    // Auto-save progress
+    useEffect(() => {
+        if (progressUpdateTimer.current) clearTimeout(progressUpdateTimer.current);
+        progressUpdateTimer.current = setTimeout(() => {
+            if (!hasSubmitted) {
+                updatePlayerProgress(game.id, self.id, answers);
+            }
+        }, 1500); // Save every 1.5 seconds
+
+        return () => {
+            if (progressUpdateTimer.current) clearTimeout(progressUpdateTimer.current);
+        };
+    }, [answers, game.id, self.id, hasSubmitted]);
+
     const handleAnswerChange = (category: string, value: string) => {
         setAnswers(prev => ({ ...prev, [category]: value }));
     };
@@ -45,7 +59,6 @@ export default function PlayingPhase({ game, self }: PlayingPhaseProps) {
         try {
             await submitAnswers(game.id, self.id, answers);
             toast({ title: "تم إرسال إجاباتك!" });
-            // The UI will switch to the "waiting" view automatically when `hasSubmitted` becomes true.
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
@@ -89,7 +102,7 @@ export default function PlayingPhase({ game, self }: PlayingPhaseProps) {
             <CardFooter>
                 <Button className="w-full" onClick={handleSubmit} disabled={!canSubmit || isSubmitting}>
                     <Send className="mr-2" />
-                    {isSubmitting ? 'جاري الإرسال...' : 'إرسال الإجابات'}
+                    {isSubmitting ? 'جاري الإرسال...' : 'رفع القلم!'}
                 </Button>
             </CardFooter>
         </Card>

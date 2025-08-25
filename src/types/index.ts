@@ -464,7 +464,7 @@ export interface PlayerProgress {
   points?: number;
   revealedByHint?: GridPosition[];
   attempts?: { guess: string[], feedback: ('correct' | 'misplaced' | 'incorrect')[] }[];
-  answers?: Record<string, string> | string[]; 
+  answers?: Record<string, string>;
 }
 
 export type SmartGridColumn = {
@@ -611,6 +611,7 @@ export interface KingdomOfNamesState {
     turnOrder: string[];
     letter: string | null;
     categories: string[];
+    playerProgress?: Record<string, { answers: Record<string, string> }>;
     playerAnswers: Record<string, Record<string, string>>; // { playerId: { category: answer } }
     votes: Record<string, Record<string, 'correct' | 'incorrect'>>; // { voterId: { 'targetId-category': vote } }
     results: {
