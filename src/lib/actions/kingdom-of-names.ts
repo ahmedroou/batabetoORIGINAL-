@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -44,6 +45,7 @@ export async function startGame(gameId: string, hostId: string) {
             'kingdomOfNamesState.letter': LETTERS[Math.floor(Math.random() * LETTERS.length)],
             'kingdomOfNamesState.categories': shuffle([...CATEGORIES]).slice(0, 6),
             'kingdomOfNamesState.playerAnswers': {},
+            'kingdomOfNamesState.playerProgress': {},
             'kingdomOfNamesState.votes': {},
             'kingdomOfNamesState.results': {},
             'kingdomOfNamesState.timerEndsAt': tsFromNowS(settings.roundTime),
@@ -62,48 +64,30 @@ export async function submitAnswers(gameId: string, playerId: string, answers: R
         
         ensure(state.phase === 'playing', "ليست مرحلة اللعب.");
 
-        // Check if this player has already submitted
+        // Check if this player has already submitted their final answers
         if (state.playerAnswers && state.playerAnswers[playerId]) {
-            // Player might be resubmitting, which is fine, we just update their answers.
-            // But we don't trigger the "end of round" logic again if they were the first.
-        } else {
-             // This is a new submission. Check if they are the first to finish.
-            const categoriesForRound = state.categories || [];
-            const isSubmissionComplete = categoriesForRound.every(cat => answers[cat] && answers[cat].trim() !== '');
-
-            ensure(isSubmissionComplete, "يجب تعبئة جميع الحقول قبل الإرسال.");
-            
-            // Check if ANYONE has submitted a final answer yet.
-            const someoneHasFinished = Object.values(state.playerAnswers || {}).some(ans => ans !== null);
-
-            if (!someoneHasFinished) {
-                // This is the first player to submit a complete set of answers.
-                // This is the "Pen Up" moment.
-                const allFinalAnswers = { ...state.playerAnswers, [playerId]: answers };
-                
-                // Lock in answers for all other active players.
-                getActivePlayers(game).forEach(p => {
-                    if (p.id !== playerId) {
-                         // If they haven't submitted, their progress is considered their final answer.
-                        allFinalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
-                    }
-                });
-                
-                // Move to voting phase for everyone.
-                tx.update(gameRef, {
-                    'kingdomOfNamesState.playerAnswers': allFinalAnswers,
-                    'kingdomOfNamesState.phase': 'voting',
-                    'kingdomOfNamesState.timerEndsAt': tsFromNowS(state.settings.votingTime),
-                });
-                return; // Exit after triggering phase change
-            }
+            return; // Already submitted, do nothing.
         }
 
-        // If not the first finisher, or just updating, save progress.
-        // Note: if the round has already ended, this write might be ignored if the phase has changed.
-        // This is okay.
+        const categoriesForRound = state.categories || [];
+        const isSubmissionComplete = categoriesForRound.every(cat => answers[cat] && answers[cat].trim() !== '');
+
+        ensure(isSubmissionComplete, "يجب تعبئة جميع الحقول قبل الإرسال.");
+
+        const allFinalAnswers = { ...(state.playerAnswers || {}), [playerId]: answers };
+        
+        // Lock in answers for all other active players.
+        getActivePlayers(game).forEach(p => {
+            if (!allFinalAnswers[p.id]) { // If they haven't submitted a final answer yet
+                allFinalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
+            }
+        });
+        
+        // Move to voting phase for everyone.
         tx.update(gameRef, {
-            [`kingdomOfNamesState.playerAnswers.${playerId}`]: answers,
+            'kingdomOfNamesState.playerAnswers': allFinalAnswers,
+            'kingdomOfNamesState.phase': 'voting',
+            'kingdomOfNamesState.timerEndsAt': tsFromNowS(state.settings.votingTime),
         });
     });
 }
@@ -127,17 +111,7 @@ export async function submitVotes(gameId: string, playerId: string, votes: Recor
         });
 
         if (allVoted) {
-            const results = calculateResults(game, playerVotes);
-            const newPlayerScores = { ...(game.playerScores || {}) };
-            Object.entries(results.scores).forEach(([pId, scoreData]) => {
-                newPlayerScores[pId] = (newPlayerScores[pId] || 0) + scoreData.points;
-            });
-            tx.update(gameRef, {
-                'kingdomOfNamesState.phase': 'results',
-                'kingdomOfNamesState.results': results,
-                'kingdomOfNamesState.timerEndsAt': tsFromNowS(state.settings.resultsTime),
-                playerScores: newPlayerScores,
-            });
+            _calculateAndEnterResults(tx, gameRef, game);
         }
     });
 }
@@ -182,9 +156,39 @@ export async function nextRound(gameId: string, hostId: string) {
     }
 }
 
-function calculateResults(game: Game, votes: Record<string, Record<string, 'correct' | 'incorrect'>>) {
+function _calculateAndEnterResults(tx: Transaction, gameRef: FirebaseFirestore.DocumentReference<DocumentData>, game: Game) {
+    const results = calculateResults(game);
+    const newPlayerScores = { ...(game.playerScores || {}) };
+    Object.entries(results.scores).forEach(([pId, scoreData]) => {
+        newPlayerScores[pId] = (newPlayerScores[pId] || 0) + scoreData.points;
+    });
+    tx.update(gameRef, {
+        'kingdomOfNamesState.phase': 'results',
+        'kingdomOfNamesState.results': results,
+        'kingdomOfNamesState.timerEndsAt': tsFromNowS(game.kingdomOfNamesState!.settings.resultsTime),
+        playerScores: newPlayerScores,
+    });
+}
+
+export async function handleTimeout(gameId: string, hostId: string) {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (tx) => {
+        const snap = await tx.get(gameRef);
+        ensure(snap.exists(), "اللعبة غير موجودة.");
+        const game = snap.data() as Game;
+
+        if (game.gameState === 'voting') {
+            _calculateAndEnterResults(tx, gameRef, game);
+        }
+        // Handle other timeouts if necessary
+    });
+}
+
+
+function calculateResults(game: Game) {
     const state = game.kingdomOfNamesState!;
     const submissions = state.playerAnswers || {};
+    const votes = state.votes || {};
     const letter = state.letter!;
     
     const results: { scores: Record<string, { points: number, breakdown: { reason: string, points: number }[] }>, answers: { category: string; answer: string; points: number; reason: string }[] } = { scores: {}, answers: [] };
@@ -207,13 +211,13 @@ function calculateResults(game: Game, votes: Record<string, Record<string, 'corr
             // Check votes
             let incorrectVotes = 0;
             for (const voterId in votes) {
-                if (voterId === playerId) continue; // Don't count self-votes for rejection
+                if (voterId === playerId) continue;
                 if (votes[voterId]?.[`${playerId}-${category}`] === 'incorrect') {
                     incorrectVotes++;
                 }
             }
              if (votes[playerId]?.[`${playerId}-${category}`] === 'incorrect') {
-                incorrectVotes = 2; // Self-rejection is an instant disqualification
+                incorrectVotes = 2; 
             }
             
             if (incorrectVotes < 2) {

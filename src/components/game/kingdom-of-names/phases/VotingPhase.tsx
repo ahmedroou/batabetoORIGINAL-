@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { Game, Player } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,9 @@ import { submitVotes } from '@/lib/actions/kingdom-of-names';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../../PlayerAvatar';
-import { ThumbsUp, ThumbsDown, Send, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { ThumbsUp, ThumbsDown, Send, Loader2, Timer } from 'lucide-react';
+import { CountdownTimer } from '../../CountdownTimer';
+import { handleTimeout } from '@/lib/actions/kingdom-of-names';
 
 interface VotingPhaseProps {
   game: Game;
@@ -26,6 +27,7 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
     
     const myVotes = state?.votes?.[self.id] || {};
     const hasVoted = Object.keys(myVotes).length > 0;
+    const isHost = game.hostId === self.id;
 
     const handleVote = (playerId: string, category: string, vote: 'correct' | 'incorrect') => {
         setVotes(prev => ({
@@ -63,8 +65,19 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
     }
 
     return (
-        <Card className="w-full max-w-4xl">
-            <CardHeader className="text-center">
+        <Card className="w-full max-w-4xl relative">
+             {state?.timerEndsAt && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                    <CountdownTimer 
+                        gameId={game.id}
+                        gameType="kingdom-of-names"
+                        expiryTimestamp={state.timerEndsAt.toMillis()}
+                        selfId={self.id}
+                        isHost={isHost}
+                    />
+                </div>
+            )}
+            <CardHeader className="text-center pt-20">
                 <CardTitle className="text-3xl">مرحلة التصويت</CardTitle>
                 <CardDescription>
                     صوّت على صحة إجابات اللاعبين الآخرين. الإجابات التي تبدأ بحرف خاطئ تم استبعادها تلقائيًا.
@@ -87,7 +100,7 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {Object.entries(playerAnswers).map(([category, answer]) => (
                                         <div key={category} className="p-3 bg-background rounded-md space-y-2">
-                                            <p><span className="font-semibold">{category}:</span> <span className="font-mono">{answer}</span></p>
+                                            <p><span className="font-semibold">{category}:</span> <span className="font-mono">{answer || "(فارغ)"}</span></p>
                                             <div className="flex gap-2">
                                                 <Button 
                                                     size="sm"
