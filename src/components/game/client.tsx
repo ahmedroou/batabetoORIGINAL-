@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -6,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
-import type { Game, Player } from '@/types';
+import type { Game, Player, GameState } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, LogOut, Users, Crown, Gamepad2, Timer } from 'lucide-react';
@@ -46,12 +45,6 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
     ring: 'ring-fuchsia-500/40',
     chip: 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-400/30',
     title: 'text-fuchsia-200',
-  },
-   'quiz-swap': {
-    bg: 'from-teal-900/60 via-cyan-900/40 to-slate-900/70',
-    ring: 'ring-teal-500/40',
-    chip: 'bg-teal-500/15 text-teal-200 border-teal-400/30',
-    title: 'text-teal-200',
   },
   'behind-the-mask': {
     bg: 'from-rose-900/60 via-indigo-900/40 to-slate-900/70',
@@ -98,7 +91,7 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
 };
 
 // شارات حالة اللعبة بالعربية
-const stateLabel: Record<NonNullable<Game['gameState']>, string> = {
+const stateLabel: Record<GameState, string> = {
   lobby: 'الانتظار',
   active: 'جارية',
   final_results: 'النتائج',
@@ -142,6 +135,15 @@ const stateLabel: Record<NonNullable<Game['gameState']>, string> = {
   trapping: 'وضع الفخاخ',
   // `guessing` is shared
   // `results` is shared
+  // Kingdom of Names
+  playing: 'اللعب',
+  // `voting` is shared
+  // `results` is shared
+  // `final_results` is shared
+  // This is a placeholder for the compiler, it won't be used at runtime.
+  'final-results': 'النتائج النهائية',
+  'quiz-swap': 'تبديل الأسئلة',
+  kick_vote: 'تصويت الطرد',
 };
 
 

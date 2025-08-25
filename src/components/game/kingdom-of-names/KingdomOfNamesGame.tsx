@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -6,6 +5,7 @@ import type { Game, Player } from '@/types';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
+import { LobbyPhase } from './phases/LobbyPhase';
 
 /* --------------------------------- Skeleton -------------------------------- */
 const PhaseSkeleton = () => (
@@ -23,7 +23,6 @@ const PhaseSkeleton = () => (
 );
 
 /* ------------------------------- Phase Imports ------------------------------ */
-const LobbyPhase = dynamic(() => import('./phases/LobbyPhase'), { ssr: false, loading: () => <PhaseSkeleton /> });
 const PlayingPhase = dynamic(() => import('./phases/PlayingPhase'), { ssr: false, loading: () => <PhaseSkeleton /> });
 const VotingPhase = dynamic(() => import('./phases/VotingPhase'), { ssr: false, loading: () => <PhaseSkeleton /> });
 const ResultsPhase = dynamic(() => import('./phases/ResultsPhase'), { ssr: false, loading: () => <PhaseSkeleton /> });

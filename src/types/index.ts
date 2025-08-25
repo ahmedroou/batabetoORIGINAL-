@@ -1,10 +1,8 @@
-
-
 import type { Timestamp } from 'firebase/firestore';
 import { z } from 'zod';
 import { ALL_PERMISSIONS_RAW } from '../data/permissions';
 import type { DEFAULT_SOCIAL_RANKS, DEFAULT_TRAP_ANSWER_CATEGORIES, DEFAULT_EDUCATED_MERCHANT_CATEGORIES } from '../data/social-ranks';
-
+import type { GameState, KingOfGeniusGameState, TrapAnswerGameState, MafiaGameState, WordWarGameState, PrisonGameState, EducatedMerchantGameState, DrawAndDeceivePhase, KingdomOfNamesPhase } from './game';
 
 // -------------------------------------------------------------
 // Zod Schemas for AI Flows
@@ -439,16 +437,7 @@ export interface GameKing {
 // -------------------------------------------------------------
 // Game States (per game)
 // -------------------------------------------------------------
-export type KingOfGeniusGameState = "lobby" | "team_selection" | "challenge_intro" | "challenge_active" | "challenge_results" | "final_results";
-export type TrapAnswerGameState = "lobby" | "category-selection" | "answer-submission" | "guessing" | "round-results" | "final-results";
-export type MafiaGameState = "lobby" | "role_reveal" | "night" | "day" | "voting" | "execution" | "final_results";
-export type WordWarGameState = "lobby" | "preparation" | "guide_turn" | "guesser_turn" | "board_reveal" | "final_results";
-export type PrisonGameState = "lobby" | "instructions" | "open_auction" | "closed_auction_bidding" | "closed_auction_answering" | "judging" | "rejudging" | "results" | "final_results";
-export type EducatedMerchantGameState = "lobby" | "rolling" | "movement" | "property_action" | "question" | "turn_end" | "final_results";
-export type DrawAndDeceivePhase = 'lobby' | 'drawing' | 'writing' | 'trapping' | 'guessing' | 'results' | 'final_results' | 'kick_vote';
-export type KingdomOfNamesPhase = 'lobby' | 'playing' | 'voting' | 'results' | 'final_results';
-
-export type GameState = KingOfGeniusGameState | TrapAnswerGameState | MafiaGameState | WordWarGameState | PrisonGameState | EducatedMerchantGameState | DrawAndDeceivePhase | KingdomOfNamesPhase;
+export { type GameState, type KingOfGeniusGameState, type TrapAnswerGameState, type MafiaGameState, type WordWarGameState, type PrisonGameState, type EducatedMerchantGameState, type DrawAndDeceivePhase, type KingdomOfNamesPhase };
 
 export type ScoreMatrix = Record<string, Record<string, number>>; 
 
