@@ -22,7 +22,7 @@ type LoadingState =
   | 'create-prison'
   | 'create-educated-merchant'
   | 'create-draw-and-deceive'
-  | 'create-quiz-swap'
+  | 'create-kingdom-of-names'
   | null;
 
 const gameCardsData: Array<{
@@ -104,6 +104,17 @@ const gameCardsData: Array<{
         { rank: 'المركز الأول', points: 4, coins: 3 },
         { rank: 'المركز الثاني', points: 2, coins: 1 },
         { rank: 'المركز الثالث', points: 1, coins: 1 },
+    ]
+  },
+  {
+    type: 'kingdom-of-names',
+    title: 'مملكة الأسماء',
+    description: 'لعبة اسم، حيوان، جماد الكلاسيكية بسرعة وذكاء.',
+    accent: { from: 'from-blue-500/25', to: 'to-indigo-500/25' },
+    prizes: [
+        { rank: 'المركز الأول', points: 3, coins: 2 },
+        { rank: 'المركز الثاني', points: 2, coins: 1 },
+        { rank: 'المركز الثالث', points: 1, coins: 0 },
     ]
   }
 ];
