@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
-import type { Game, Player } from '@/types';
+import type { Game, Player, GameState } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, LogOut, Users, Crown, Gamepad2, Timer } from 'lucide-react';
@@ -16,8 +16,8 @@ import WordWarGame from '@/components/game/word-war/WordWarGame';
 import { BehindTheMaskGame } from '@/components/game/behind-the-mask/BehindTheMaskGame';
 import { PrisonGame } from '@/components/game/prison/PrisonGame';
 import { EducatedMerchantGame } from '@/components/game/educated-merchant/EducatedMerchantGame';
-
 import { DrawAndDeceiveGame } from '@/components/game/draw-and-deceive/DrawAndDeceiveGame';
+import { KingdomOfNamesGame } from '@/components/game/kingdom-of-names/KingdomOfNamesGame';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { leaveGame } from '@/lib/actions/room';
@@ -46,12 +46,6 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
     ring: 'ring-fuchsia-500/40',
     chip: 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-400/30',
     title: 'text-fuchsia-200',
-  },
-   'quiz-swap': {
-    bg: 'from-teal-900/60 via-cyan-900/40 to-slate-900/70',
-    ring: 'ring-teal-500/40',
-    chip: 'bg-teal-500/15 text-teal-200 border-teal-400/30',
-    title: 'text-teal-200',
   },
   'behind-the-mask': {
     bg: 'from-rose-900/60 via-indigo-900/40 to-slate-900/70',
@@ -83,6 +77,12 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
     chip: 'bg-cyan-500/15 text-cyan-200 border-cyan-400/30',
     title: 'text-cyan-200',
   },
+    'kingdom-of-names': {
+    bg: 'from-blue-900/60 via-indigo-900/40 to-slate-900/70',
+    ring: 'ring-blue-500/40',
+    chip: 'bg-blue-500/15 text-blue-200 border-blue-400/30',
+    title: 'text-blue-200',
+  },
   default: {
     bg: 'from-violet-900/60 via-slate-900/50 to-black',
     ring: 'ring-violet-500/40',
@@ -92,7 +92,7 @@ const THEME: Record<NonNullable<Game['gameType']> | 'default', {
 };
 
 // شارات حالة اللعبة بالعربية
-const stateLabel: Record<NonNullable<Game['gameState']>, string> = {
+const stateLabel: Record<GameState, string> = {
   lobby: 'الانتظار',
   active: 'جارية',
   final_results: 'النتائج',
@@ -131,16 +131,20 @@ const stateLabel: Record<NonNullable<Game['gameState']>, string> = {
   property_action: 'قرار الملكية',
   question: 'سؤال',
   turn_end: 'نهاية الدور',
-  // QuizSwap
-  peek: 'نظرة خاطفة',
-  playing: 'اللعب',
-  answering: 'الإجابة',
-  ended: 'انتهت',
   // Draw and Deceive
   drawing: 'الرسم',
   trapping: 'وضع الفخاخ',
   // `guessing` is shared
   // `results` is shared
+  // Kingdom of Names
+  playing: 'اللعب',
+  // `voting` is shared
+  // `results` is shared
+  // `final_results` is shared
+  // This is a placeholder for the compiler, it won't be used at runtime.
+  'final-results': 'النتائج النهائية',
+  'quiz-swap': 'تبديل الأسئلة',
+  kick_vote: 'تصويت الطرد',
 };
 
 
@@ -384,15 +388,16 @@ export default function GameClient() {
         return <PrisonGame game={game} self={self} />;
       case 'educated-merchant':
         return <EducatedMerchantGame game={game} self={self} />;
-      
       case 'draw-and-deceive':
         return <DrawAndDeceiveGame game={game} self={self} />;
+    case 'kingdom-of-names':
+        return <KingdomOfNamesGame game={game} self={self} />;
       default:
         return <p>حالة غير معروفة للعبة "{game.gameType}"</p>;
     }
   };
 
-  const tone = (game.gameType && game.gameType in THEME) ? game.gameType : 'default';
+  const tone = (game.gameType && game.gameType in THEME) ? game.gameType as keyof typeof THEME : 'default';
 
   return (
     <main className={cn('relative flex min-h-screen flex-col items-center justify-center p-2 md:p-4')}> 
@@ -405,7 +410,7 @@ export default function GameClient() {
       <div className="mt-20 mb-6 w-[min(1200px,98vw)]">
         <AnimatePresence mode="wait">
           <motion.div
-            key={game.id + game.gameState}
+            key={game.id}
             initial={{ opacity: 0, y: 14, scale: 0.995 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10 }}
