@@ -2,7 +2,7 @@
 'use server';
 
 import { db } from '@/lib/firebase';
-import { doc, runTransaction, Timestamp, type Transaction } from 'firebase/firestore';
+import { doc, runTransaction, Timestamp, type Transaction, deleteField } from 'firebase/firestore';
 import type { Game, Player, KingdomOfNamesState } from '@/types';
 import { shuffle, safeCompareStrings } from './helpers';
 import { CATEGORIES, LETTERS } from '@/data/kingdom-of-names';
@@ -62,44 +62,51 @@ export async function submitAnswers(gameId: string, playerId: string, answers: R
         
         ensure(state.phase === 'playing', "ليست مرحلة اللعب.");
 
-        // First, record the current player's answers.
-        const playerAnswers = { ...(state.playerAnswers || {}), [playerId]: answers };
-        
-        const categoriesForRound = state.categories || [];
-        const didPlayerFinishAll = categoriesForRound.every(cat => answers[cat] && answers[cat].trim() !== '');
-
-        const activePlayers = getActivePlayers(game);
-        
-        // The "Pen Up" logic: The first player to submit a FULL sheet ends the round for everyone.
-        const isFirstToSubmit = !Object.keys(state.playerAnswers || {}).length;
-
-        if (didPlayerFinishAll) {
-            // This player has finished. End the round for everyone.
-            // We lock in everyone else's current answers.
-            const allFinalAnswers = { ...playerAnswers };
-            activePlayers.forEach(p => {
-                if (!allFinalAnswers[p.id]) {
-                    // If a player hasn't submitted anything, their answers are what's in progress (likely empty)
-                    allFinalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
-                }
-            });
-
-            tx.update(gameRef, {
-                'kingdomOfNamesState.playerAnswers': allFinalAnswers,
-                'kingdomOfNamesState.phase': 'voting',
-                'kingdomOfNamesState.timerEndsAt': tsFromNowS(state.settings.votingTime),
-            });
-
+        // Check if this player has already submitted
+        if (state.playerAnswers && state.playerAnswers[playerId]) {
+            // Player might be resubmitting, which is fine, we just update their answers.
+            // But we don't trigger the "end of round" logic again if they were the first.
         } else {
-            // This player has not finished all fields, just save their progress.
-            // This case also handles players who submit after the first finisher (their answers are already locked in).
-            tx.update(gameRef, {
-                [`kingdomOfNamesState.playerAnswers.${playerId}`]: answers,
-            });
+             // This is a new submission. Check if they are the first to finish.
+            const categoriesForRound = state.categories || [];
+            const isSubmissionComplete = categoriesForRound.every(cat => answers[cat] && answers[cat].trim() !== '');
+
+            ensure(isSubmissionComplete, "يجب تعبئة جميع الحقول قبل الإرسال.");
+            
+            // Check if ANYONE has submitted a final answer yet.
+            const someoneHasFinished = Object.values(state.playerAnswers || {}).some(ans => ans !== null);
+
+            if (!someoneHasFinished) {
+                // This is the first player to submit a complete set of answers.
+                // This is the "Pen Up" moment.
+                const allFinalAnswers = { ...state.playerAnswers, [playerId]: answers };
+                
+                // Lock in answers for all other active players.
+                getActivePlayers(game).forEach(p => {
+                    if (p.id !== playerId) {
+                         // If they haven't submitted, their progress is considered their final answer.
+                        allFinalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
+                    }
+                });
+                
+                // Move to voting phase for everyone.
+                tx.update(gameRef, {
+                    'kingdomOfNamesState.playerAnswers': allFinalAnswers,
+                    'kingdomOfNamesState.phase': 'voting',
+                    'kingdomOfNamesState.timerEndsAt': tsFromNowS(state.settings.votingTime),
+                });
+                return; // Exit after triggering phase change
+            }
         }
+
+        // If not the first finisher, or just updating, save progress.
+        // Note: if the round has already ended, this write might be ignored if the phase has changed.
+        // This is okay.
+        tx.update(gameRef, {
+            [`kingdomOfNamesState.playerAnswers.${playerId}`]: answers,
+        });
     });
 }
-
 
 export async function submitVotes(gameId: string, playerId: string, votes: Record<string, 'correct' | 'incorrect'>) {
     const gameRef = doc(db, 'games', gameId);

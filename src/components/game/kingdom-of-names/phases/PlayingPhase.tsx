@@ -1,9 +1,9 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { Game, Player } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { submitAnswers } from '@/lib/actions/kingdom-of-names';
@@ -25,6 +25,9 @@ export default function PlayingPhase({ game, self }: PlayingPhaseProps) {
     const categories = state?.categories || [];
     const letter = state?.letter || '';
     
+    // This player has already submitted their final answers for this round.
+    const hasSubmitted = !!state?.playerAnswers?.[self.id];
+    
     const canSubmit = useMemo(() => {
         return categories.every(cat => answers[cat] && answers[cat].trim() !== '');
     }, [categories, answers]);
@@ -42,14 +45,13 @@ export default function PlayingPhase({ game, self }: PlayingPhaseProps) {
         try {
             await submitAnswers(game.id, self.id, answers);
             toast({ title: "تم إرسال إجاباتك!" });
+            // The UI will switch to the "waiting" view automatically when `hasSubmitted` becomes true.
         } catch (error: any) {
             toast({ title: "خطأ", description: error.message, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
     };
-    
-    const hasSubmitted = !!state?.playerAnswers?.[self.id];
 
     if (hasSubmitted) {
         return (
