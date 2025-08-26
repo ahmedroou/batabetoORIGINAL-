@@ -35,7 +35,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
         return Math.max(0, Math.round((game.challengeState.challengeEndsAt.toMillis() - Date.now()) / 1000));
     });
 
-    const inputRef = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLInputElement | null>([]);
     const hasSubmittedRef = useRef(false);
 
     const myProgress = game.challengeState?.playerProgress?.[self.id];
@@ -68,7 +68,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
             setHasSubmitted(true);
             setIsGameOver(true);
         } else if (problems) {
-             inputRef.current?.focus();
+             (inputRef.current as any)[0]?.focus();
         }
     }, [game.challengeState?.results, self.id, problems]);
 
@@ -133,7 +133,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
             toast({ title: "إجابة خاطئة!", description: "حاول مرة أخرى.", variant: "destructive" });
             setAnswer('');
         }
-        inputRef.current?.focus();
+        (inputRef.current as any)?.focus();
     };
 
     const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
@@ -197,7 +197,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
                 </div>
                 <div className="w-full flex gap-2">
                     <Input
-                        ref={inputRef}
+                        ref={inputRef as any}
                         type="text"
                         inputMode="numeric"
                         placeholder="أدخل إجابتك هنا..."

@@ -1,4 +1,5 @@
 
+
 'use server';
 
 /**
@@ -23,9 +24,9 @@ import {
     updateLeagueScoresForGameEnd
 } from './leagues';
 import { giveReward, applyPunishment, humiliatePlayer, issueDecree, begForMercy, demandTaxes, respondToTaxDemand, requestAlliance, respondToAlliance, issueDuelChallenge, respondToDuelChallenge, forceAvatarChange, payPunishmentTax, liftPunishment } from './social';
-import { requestAllegiance, respondToAllegianceRequest } from './allegiance';
+import { requestAllegiance, respondToAllegianceRequest, deleteAllegianceRequest } from './allegiance';
 import { joinChallenge, finalizeChallenge } from '../challenges';
-import { distributeEndOfGameAwards } from '../admin/users';
+import { distributeEndOfGameAwards } from '@/lib/actions/admin/users';
 
 
 export {
@@ -75,6 +76,7 @@ export {
     joinChallenge,
     requestAllegiance, 
     respondToAllegianceRequest,
+    deleteAllegianceRequest,
     liftPunishment,
     getKingsPageData,
     recordMatchHistory,
@@ -82,3 +84,5 @@ export {
     updateLeagueScoresForGameEnd,
     finalizeChallenge,
 };
+
+

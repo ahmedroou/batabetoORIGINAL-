@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -14,7 +15,7 @@ import {
 import type { Game, Player, KingdomOfNamesState } from '@/types';
 import { shuffle } from './helpers';
 import { CATEGORIES, LETTERS } from '@/data/kingdom-of-names';
-import { distributeEndOfGameAwards } from '@/lib/actions/user';
+import { distributeEndOfGameAwards } from '../admin/users';
 
 /**
  * ===============================
@@ -114,7 +115,7 @@ function similarityRatio(a: string, b: string): number {
 }
 
 // Cluster answers by >= threshold similarity (greedy, good enough for this use-case)
-function clusterBySimilarity(items: { playerId: string; answer: string }[], threshold = 0.95) {
+function clusterBySimilarity(items: { playerId: string; answer: string }[], threshold = 0.92) {
   const groups: { rep: string; members: { playerId: string; answer: string }[] }[] = [];
   for (const item of items) {
     const idx = groups.findIndex((g) => similarityRatio(g.rep, item.answer) >= threshold);
@@ -271,9 +272,12 @@ export async function nextRound(gameId: string, hostId: string) {
 
     const state = game.kingdomOfNamesState!;
     const settings = mergeSettings(state.settings);
-    const nextRoundNum = (state.currentRound || 0) + 1;
+    const currentRound = state.currentRound || 0;
+    
+    // تأكد من أننا في مرحلة عرض النتائج
+    ensure(state.phase === 'results', 'لا يمكن بدء جولة جديدة الآن.');
 
-    if (nextRoundNum > settings.rounds) {
+    if (currentRound >= settings.rounds) {
       isGameOver = true;
       // Winner id (first max wins, ties keep first found — UI can show full ranking)
       const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) =>
@@ -289,7 +293,7 @@ export async function nextRound(gameId: string, hostId: string) {
       tx.update(gameRef, {
         'kingdomOfNamesState.phase': 'playing',
         'kingdomOfNamesState.settings': settings, // keep persisted
-        'kingdomOfNamesState.currentRound': nextRoundNum,
+        'kingdomOfNamesState.currentRound': currentRound + 1,
         'kingdomOfNamesState.letter': LETTERS[Math.floor(Math.random() * LETTERS.length)],
         'kingdomOfNamesState.categories': pickCategoriesForRound(6),
         'kingdomOfNamesState.playerAnswers': {},
@@ -307,6 +311,7 @@ export async function nextRound(gameId: string, hostId: string) {
     await distributeEndOfGameAwards(gameId);
   }
 }
+
 
 export async function handleTimeout(gameId: string, hostId: string) {
   const gameRef = doc(db, 'games', gameId);
@@ -408,8 +413,9 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
         if (voterId === playerId) continue;
         if (votes[voterId]?.[`${playerId}-${category}`] === 'incorrect') incorrectVotes++;
       }
+      // If a player votes their own answer as incorrect, it's immediately rejected.
       if (votes[playerId]?.[`${playerId}-${category}`] === 'incorrect') {
-        incorrectVotes = 2;
+        incorrectVotes = 2; // Treat as 2 votes to instantly reject
       }
       
       const isInvalid = !answer || !startsWithLetter(answer, letter) || incorrectVotes >= 2;
@@ -425,7 +431,7 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
     }
   }
 
-  const THRESHOLD = 0.95;
+  const THRESHOLD = 0.92;
   for (const category in validByCategory) {
     const list = validByCategory[category]!;
     const groups = clusterBySimilarity(list, THRESHOLD);
@@ -433,7 +439,7 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
     for (const g of groups) {
       const isUnique = g.members.length === 1;
       const points = isUnique ? 10 : 5;
-      const reason = isUnique ? 'إجابة فريدة' : 'إجابة مكررة (≥95% تشابه)';
+      const reason = isUnique ? 'إجابة فريدة' : 'إجابة مكررة (≥92% تشابه)';
       for (const m of g.members) {
         answerScores[`${m.playerId}-${category}`] = { points, reason };
       }
