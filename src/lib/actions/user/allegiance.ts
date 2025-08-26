@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -164,8 +163,8 @@ export async function deleteAllegianceRequest(actorId: string, requestToDelete: 
         );
 
         if (updatedRequests.length === requests.length) {
-            // This case can be treated as a success if the goal is to ensure it's gone
-            return { success: true };
+            // This is the key change: if we didn't find it, it's an error.
+            throw new Error("لم يتم العثور على الطلب المحدد. قد يكون قد حُذِفَ بالفعل.");
         }
 
         tx.update(actorRef, { allegianceRequests: updatedRequests });
