@@ -17,7 +17,7 @@ interface LobbyPhaseProps {
   self: Player;
 }
 
-export default function LobbyPhase({ game, self }: LobbyPhaseProps) {
+export function LobbyPhase({ game, self }: LobbyPhaseProps) {
   const { toast } = useToast();
   const router = useRouter();
   const isHost = game.hostId === self.id;

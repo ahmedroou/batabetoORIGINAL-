@@ -23,7 +23,7 @@ const PhaseSkeleton: React.FC<{ message?: string }> = ({ message = 'يجري ا�
 
 /* ------------------------------- Phase Imports ------------------------------ */
 /** مهم: ssr=false لتثبيت الهوية كعميل ومنع تبديل الحدود مع كل re-render */
-const LobbyPhase        = dynamic(() => import('./phases/LobbyPhase').then(m => m.default),              { ssr: false, loading: () => <PhaseSkeleton message="جاري تحميل اللوبي…" /> });
+const LobbyPhase        = dynamic(() => import('./phases/LobbyPhase').then(m => m.LobbyPhase),              { ssr: false, loading: () => <PhaseSkeleton message="جاري تحميل اللوبي…" /> });
 const PlayingPhase      = dynamic(() => import('./phases/PlayingPhase').then(m => m.default),          { ssr: false, loading: () => <PhaseSkeleton message="جاري تحميل مرحلة اللعب…" /> });
 const VotingPhase     = dynamic(() => import('./phases/VotingPhase').then(m => m.default),        { ssr: false, loading: () => <PhaseSkeleton message="جاري تحميل مرحلة التصويت…" /> });
 const ResultsPhase      = dynamic(() => import('./phases/ResultsPhase').then(m => m.default),          { ssr: false, loading: () => <PhaseSkeleton message="جاري تحميل النتائج…" /> });
