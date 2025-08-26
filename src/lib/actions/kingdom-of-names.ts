@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -15,7 +14,7 @@ import {
 import type { Game, Player, KingdomOfNamesState } from '@/types';
 import { shuffle } from './helpers';
 import { CATEGORIES, LETTERS } from '@/data/kingdom-of-names';
-import { distributeEndOfGameAwards } from './admin/users';
+import { distributeEndOfGameAwards } from '@/lib/actions/user';
 
 /**
  * ===============================
@@ -59,7 +58,7 @@ const mergeSettings = (partial?: KingdomOfNamesState['settings']) => ({
 const pickCategoriesForRound = (count = 6) => shuffle([...CATEGORIES]).slice(0, count);
 
 // Arabic normalization helpers
-const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670\u06D6-\u06ED]/g; // tanwīn + tashkīl + Qur'anic marks
+const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670-\u06ED]/g; // tanwīn + tashkīl + Qur'anic marks
 const TATWEEL = /\u0640/g;
 function normalizeArabic(text: string): string {
   if (!text) return '';
@@ -74,7 +73,7 @@ function normalizeArabic(text: string): string {
     .toLowerCase();
 }
 
-function startsWithLetter(word: string | undefined, letter: string): boolean {
+function startsWithLetter(word?: string, letter?: string): boolean {
   if (!word) return false;
   const w = normalizeArabic(word);
   const l = normalizeArabic(letter);
@@ -268,7 +267,7 @@ export async function nextRound(gameId: string, hostId: string) {
     const snap = await tx.get(gameRef);
     ensure(snap.exists(), 'اللعبة غير موجودة.');
     const game = snap.data() as Game;
-    ensure(game.hostId === hostId, 'فقط المضيف يمكنه بدء الجولة التالية.');
+    ensure(game.hostId === hostId, 'فقط المضيف يستطيع بدء الجولة التالية.');
 
     const state = game.kingdomOfNamesState!;
     const settings = mergeSettings(state.settings);
@@ -278,7 +277,7 @@ export async function nextRound(gameId: string, hostId: string) {
       isGameOver = true;
       // Winner id (first max wins, ties keep first found — UI can show full ranking)
       const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) =>
-        (game.playerScores![a] || 0) >= (game.playerScores![b] || 0) ? a : b
+        (game.playerScores![a] || 0) >= (game.playerScores![b] || 0) ? a : b, ''
       );
 
       tx.update(gameRef, {
@@ -302,7 +301,8 @@ export async function nextRound(gameId: string, hostId: string) {
       });
     }
   });
-
+  
+  // Distribute awards after the transaction is successfully committed.
   if (isGameOver) {
     await distributeEndOfGameAwards(gameId);
   }
@@ -401,14 +401,15 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
     for (const category in entry) {
       const answer = (entry as Record<string, string>)[category];
 
-      // **FIX:** A player voting their own answer "incorrect" should make it invalid.
+      // A vote against is counted. 2 votes make it incorrect.
+      // A player voting their own answer incorrect is an instant rejection.
       let incorrectVotes = 0;
       for (const voterId in votes) {
         if (voterId === playerId) continue;
         if (votes[voterId]?.[`${playerId}-${category}`] === 'incorrect') incorrectVotes++;
       }
       if (votes[playerId]?.[`${playerId}-${category}`] === 'incorrect') {
-        incorrectVotes = 2; // Instant rejection if self-voted incorrect.
+        incorrectVotes = 2;
       }
       
       const isInvalid = !answer || !startsWithLetter(answer, letter) || incorrectVotes >= 2;
@@ -452,8 +453,14 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
               if (!results.scores[playerId]) results.scores[playerId] = { points: 0, breakdown: [] };
               results.scores[playerId]!.points += result.points;
               results.scores[playerId]!.breakdown.push({ reason: result.reason, points: result.points });
-              results.answers.push({ playerId: playerId!, category: category, answer: answerText, points: result.points, reason: result.reason });
-              addedPoints[playerId!] = (addedPoints[playerId!] || 0) + result.points;
+              results.answers.push({ playerId: playerId, category: category, answer: answerText, points: result.points, reason: result.reason });
+              addedPoints[playerId] = (addedPoints[playerId] || 0) + result.points;
+          } else {
+              // Handle answers that were not in validByCategory (i.e., initially invalid)
+              const invalidResult = answerScores[key];
+              if (invalidResult) {
+                results.answers.push({ playerId: playerId, category: category, answer: entry[category] || '', points: 0, reason: invalidResult.reason });
+              }
           }
       }
   }

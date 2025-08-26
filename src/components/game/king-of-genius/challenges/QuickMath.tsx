@@ -58,9 +58,9 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
             }
         } catch(e: any) {
             toast({ title: "خطأ", description: `فشل إرسال النتيجة: ${e.message}`, variant: "destructive" });
-            hasSubmittedRef.current = false; // Allow retry on error
+            hasSubmittedRef.current = false; // allow retry on error
         }
-    }, [game.id, self.id, toast, effectiveNumProblems]);
+    }, [hasSubmittedRef, game.id, self.id, toast, effectiveNumProblems]);
     
     useEffect(() => {
         const myResult = game.challengeState?.results?.find(r => r.playerId === self.id);
@@ -184,7 +184,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
             </CardHeader>
 
             <CardContent className="flex flex-col items-center space-y-4">
-                <div className="w-full flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg" role="status">
+                 <div className="w-full flex justify-between items-center bg-muted p-2 rounded-lg text-center font-mono text-lg">
                     <span>المسألة: <span className="font-bold">{currentProblemIndex + 1} / {effectiveNumProblems}</span></span>
                     <div className="flex items-center gap-2">
                         <Timer className="h-6 w-6"/>

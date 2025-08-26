@@ -24,10 +24,10 @@ const PhaseSkeleton = () => (
 );
 
 /* ------------------------------- Phase Imports ------------------------------ */
-const PlayingPhase = dynamic(() => import('./phases/PlayingPhase').then(m => m.default), { ssr: false, loading: () => <PhaseSkeleton /> });
-const VotingPhase = dynamic(() => import('./phases/VotingPhase').then(m => m.default), { ssr: false, loading: () => <PhaseSkeleton /> });
-const ResultsPhase = dynamic(() => import('./phases/ResultsPhase').then(m => m.default), { ssr: false, loading: () => <PhaseSkeleton /> });
-const FinalResultsPhase = dynamic(() => import('./phases/FinalResultsPhase').then(m => m.default), { ssr: false, loading: () => <PhaseSkeleton /> });
+const PlayingPhase = dynamic(() => import('./phases/PlayingPhase'), { ssr: false, loading: () => <PhaseSkeleton /> });
+const VotingPhase = dynamic(() => import('./phases/VotingPhase'), { ssr: false, loading: () => <PhaseSkeleton /> });
+const ResultsPhase = dynamic(() => import('./phases/ResultsPhase'), { ssr: false, loading: () => <PhaseSkeleton /> });
+const FinalResultsPhase = dynamic(() => import('./phases/FinalResultsPhase'), { ssr: false, loading: () => <PhaseSkeleton /> });
 
 /* ---------------------------------- Types ---------------------------------- */
 type PhaseKey = 'lobby' | 'playing' | 'voting' | 'results' | 'final_results';
