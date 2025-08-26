@@ -61,13 +61,12 @@ const pickCategoriesForRound = (count = 6) => shuffle([...CATEGORIES]).slice(0, 
 // Arabic normalization helpers
 const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670\u06D6-\u06ED]/g; // tanwīn + tashkīl + Qur'anic marks
 const TATWEEL = /\u0640/g;
-
 function normalizeArabic(text: string): string {
   return text
     .replace(TATWEEL, '')
     .replace(ARABIC_DIACRITICS, '')
     .replace(/[أإآٱ]/g, 'ا')
-    .replace(/ى/g, 'ي')
+    .replace(/[يى]/g, 'ي')
     .replace(/ؤ/g, 'و')
     .replace(/ئ/g, 'ي')
     .trim()
@@ -384,21 +383,19 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
   const votes = state.votes || {};
   const letter = state.letter!;
 
-  // Output payload retains the original shape for UI compatibility
   const results: {
     scores: Record<string, { points: number; breakdown: { reason: string; points: number }[] }>
-    answers: { category: string; answer: string; points: number; reason: string }[]
+    answers: { playerId: string; category: string; answer: string; points: number; reason: string }[]
   } = { scores: {}, answers: [] };
 
   const activeIds = new Set(players.filter((p) => p.status !== 'left').map((p) => p.id));
   for (const p of players) results.scores[p.id] = { points: 0, breakdown: [] };
 
-  // 1) Validate by letter & votes
   const validByCategory: Record<string, { playerId: string; answer: string }[]> = {};
   const answerScores: Record<string, { points: number; reason: string }> = {};
 
   for (const playerId in submissions) {
-    if (!activeIds.has(playerId)) continue; // ignore non-active
+    if (!activeIds.has(playerId)) continue;
     const entry = submissions[playerId] || {};
     for (const category in entry) {
       const answer = (entry as Record<string, string>)[category];
@@ -408,14 +405,12 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
         continue;
       }
 
-      // إجابة تعتبر مرفوضة إذا صوت ضدها 2 أو أكثر من الخصوم
-      // أو إذا صوت صاحبها بنفسه ضدها
       let incorrectVotes = 0;
       for (const voterId in votes) {
-        if (voterId === playerId) continue; // do not vote on yourself
+        if (voterId === playerId) continue;
         if (votes[voterId]?.[`${playerId}-${category}`] === 'incorrect') incorrectVotes++;
       }
-      if (votes[playerId]?.[`${playerId}-${category}`] === 'incorrect') incorrectVotes = 2; // self-vote is an auto-reject
+      if (votes[playerId]?.[`${playerId}-${category}`] === 'incorrect') incorrectVotes = 2;
 
       if (incorrectVotes >= 2) {
         answerScores[`${playerId}-${category}`] = { points: 0, reason: 'رفض اللاعبون' };
@@ -427,7 +422,6 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
     }
   }
 
-  // 2) Score uniqueness per category using 95% similarity grouping
   const THRESHOLD = 0.95;
   for (const category in validByCategory) {
     const list = validByCategory[category]!;
@@ -443,7 +437,6 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
     }
   }
 
-  // 3) Aggregate to per-player totals and results list (UI-friendly)
   const addedPoints: Record<string, number> = {};
 
   for (const key in answerScores) {
@@ -454,7 +447,7 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
     if (!results.scores[playerId!]) results.scores[playerId!] = { points: 0, breakdown: [] };
     results.scores[playerId!]!.points += points;
     results.scores[playerId!]!.breakdown.push({ reason, points });
-    results.answers.push({ category: category!, answer: answerText, points, reason });
+    results.answers.push({ playerId: playerId!, category: category!, answer: answerText, points, reason });
 
     addedPoints[playerId!] = (addedPoints[playerId!] || 0) + points;
   }

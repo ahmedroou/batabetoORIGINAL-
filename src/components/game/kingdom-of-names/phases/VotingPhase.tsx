@@ -52,8 +52,11 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
   // Initialize local votes from server snapshot when available
   useEffect(() => {
     const serverVotes = state?.votes?.[self.id] || {};
-    setVotes({ ...serverVotes });
-    setSubmittedLocally(Boolean(Object.keys(serverVotes).length));
+    // Merge server votes with local votes, giving precedence to server state
+    // but preserving any new local votes not yet on the server.
+    setVotes(prev => ({ ...prev, ...serverVotes }));
+    const serverHasVote = !!state?.votes?.[self.id] && Object.keys(state.votes[self.id]).length > 0;
+    setSubmittedLocally(serverHasVote);
   }, [state?.votes, self.id]);
 
   const activePlayers = useMemo(() => game.players.filter((p) => p.status !== 'left'), [game.players]);
@@ -92,7 +95,7 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
       }
     }
     return items;
-  }, [allSubmissions, game.players, state?.letter]);
+  }, [allSubmissions, game.players, state?.letter, self.id]);
 
   const totalToVote = votableItems.filter((i) => !i.autoExcluded).length;
   const votedCount = Object.keys(votes).filter((k) => {

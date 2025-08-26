@@ -45,28 +45,20 @@ export default function ResultsPhase({ game, self }: ResultsPhaseProps) {
       .sort((a, b) => (b.scoreData.points || 0) - (a.scoreData.points || 0));
   }, [roundScores, game.players]);
   
-  // Create a detailed map of answers per player
   const playerAnswerDetails = useMemo(() => {
     const map: Record<string, { category: string; answer: string; points: number; reason: string }[]> = {};
-    const submissions = state?.playerAnswers || {};
-    
-    // Initialize for all players
     game.players.forEach(p => { map[p.id] = []; });
     
-    // Populate with actual data
+    // The results.answers array should now contain the playerId for each answer.
     results.answers?.forEach(item => {
-        // Find which player submitted this answer for this category
-        for(const [playerId, playerSubmissions] of Object.entries(submissions)) {
-            if(playerSubmissions[item.category] === item.answer) {
-                 if (!map[playerId]) map[playerId] = [];
-                 map[playerId]!.push(item);
-                 break; // Assume one player per answer for this structure
-            }
+        const playerId = (item as any).playerId; // We expect playerId to be here now
+        if (playerId && map[playerId]) {
+           map[playerId]!.push(item);
         }
     });
 
     return map;
-  }, [results.answers, state?.playerAnswers, game.players]);
+  }, [results.answers, game.players]);
 
 
   const handleNextRound = useCallback(async () => {
@@ -176,4 +168,3 @@ export default function ResultsPhase({ game, self }: ResultsPhaseProps) {
     </motion.div>
   );
 }
-
