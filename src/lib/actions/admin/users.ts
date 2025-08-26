@@ -103,6 +103,7 @@ function docToUserProfile(docSnap: DocumentData, uid: string): UserProfile {
         originalAvatarToRevert,
         unlockedPunishmentAvatars: data.unlockedPunishmentAvatars || [],
         isPunished: !!data.isPunished,
+        punishmentsIssued: data.punishmentsIssued || 0,
     } as UserProfile;
 }
 
@@ -346,7 +347,7 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
             return { success: false, error: 'فشل حساب الجوائز.' };
         }
         
-        const { updates, winUpdate, specialAwards } = awardsData;
+        const { updates, winUpdates, specialAwards } = awardsData;
         const batch = writeBatch(db);
 
         Object.entries(updates).forEach(([playerId, playerUpdates]) => {
@@ -355,16 +356,11 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
 
             const pointsDelta = playerUpdates.leaderboardPoints ?? 0;
             const coinsDelta = playerUpdates.coins ?? 0;
-            const winsDelta = playerUpdates.winCounts?.[game.gameType] ?? 0;
-
-
+            
             if (pointsDelta !== 0) firestoreUpdates.leaderboardPoints = increment(pointsDelta);
             if (coinsDelta !== 0) firestoreUpdates.coins = increment(coinsDelta);
             if (playerUpdates.gamesPlayed && game.gameType) {
               firestoreUpdates[`gamesPlayed.${game.gameType}`] = increment(1);
-            }
-            if(winsDelta > 0) {
-                 firestoreUpdates[`winCounts.${game.gameType}`] = increment(winsDelta);
             }
             if (playerUpdates.permissions) {
                 firestoreUpdates.permissions = playerUpdates.permissions;
@@ -375,9 +371,17 @@ export async function distributeEndOfGameAwards(gameId: string): Promise<Service
             }
         });
         
+        // Handle win counts for both individual and team winners
+        if (winUpdates && winUpdates.length > 0) {
+            winUpdates.forEach(win => {
+                const userRef = doc(db, 'users', win.userId);
+                batch.update(userRef, { [`winCounts.${win.gameType}`]: increment(1) });
+            });
+        }
+        
         // Finalize the game document
         const finalUpdate: any = {
-            'gameResult.winner': winUpdate?.userId || game.gameResult?.winner || 'none',
+            'gameResult.winner': game.gameResult?.winner || 'none',
         };
         finalUpdate['gameResult.finalAwards'] = specialAwards || {};
         
@@ -443,3 +447,4 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
         return { success: false, error: e.message || 'فشل تحديث ملوك الألعاب.' };
     }
 }
+

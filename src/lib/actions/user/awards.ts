@@ -11,19 +11,18 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
     const finalScores = game.playerScores || {};
     const playerIdsInGame = game.players.map(p => p.id);
 
-    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<string, number>, winCounts?: Record<string, number>, challengePoints?: number, permissions?: PermissionId[] }> = {};
+    const updates: Record<string, { leaderboardPoints: number, coins: number, gamesPlayed: Record<string, number>, challengePoints?: number, permissions?: PermissionId[] }> = {};
     
     playerIdsInGame.forEach(pid => {
         updates[pid] = {
             leaderboardPoints: 0,
             coins: 0,
             gamesPlayed: { [game.gameType]: 1 },
-            winCounts: {},
             challengePoints: 0,
         };
     });
 
-    let winUpdate: { userId: string; gameType: Game['gameType']; } | null = null;
+    let winUpdates: { userId: string; gameType: Game['gameType']; }[] = [];
     let specialAwards: Game['trapAnswerState']['finalAwards'] | Game['drawAndDeceiveState']['lastRoundResults'] = {};
     
     const isTeamGame = ['red', 'blue', 'good', 'mafia'].includes(game.gameResult?.winner || '');
@@ -57,7 +56,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             updates[player.id].coins = isWinner ? 2 : 0;
             updates[player.id].challengePoints = points;
             if (isWinner) {
-              updates[player.id].winCounts = { [game.gameType]: 1 };
+              winUpdates.push({ userId: player.id, gameType: game.gameType });
             }
         });
     } else if (!isShortTrapAnswerGame) { 
@@ -97,10 +96,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             const firstPlaceScore = finalScores[playerRanks[0].id] || 0;
             const winners = sortedPlayerIds.filter(pid => (finalScores[pid] || 0) === firstPlaceScore);
             if (winners.length === 1) {
-                winUpdate = { userId: playerRanks[0].id, gameType: game.gameType };
-                if (updates[winUpdate.userId]) {
-                    updates[winUpdate.userId].winCounts = { [game.gameType]: 1 };
-                }
+                winUpdates.push({ userId: playerRanks[0].id, gameType: game.gameType });
             }
         }
     }
@@ -157,10 +153,7 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
             const winningScore = finalScores[winnerId];
             const winners = sortedPlayerIds.filter(pid => (finalScores[pid] || 0) === winningScore);
             if (winners.length === 1) {
-                 winUpdate = { userId: winnerId, gameType: 'draw-and-deceive' };
-                 if (updates[winnerId]) {
-                    updates[winnerId].winCounts = { 'draw-and-deceive': 1 };
-                 }
+                 winUpdates.push({ userId: winnerId, gameType: 'draw-and-deceive' });
             }
         }
     }
@@ -197,5 +190,5 @@ export function calculateEndOfGameAwards(game: Game, allRanks: SocialRank[]) {
         } 
     });
 
-    return { success: true, data: { updates, winUpdate, specialAwards }};
+    return { success: true, data: { updates, winUpdates, specialAwards }};
 }
