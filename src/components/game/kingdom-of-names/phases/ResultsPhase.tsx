@@ -1,16 +1,17 @@
-
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
 import type { Game, Player } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { nextRound } from '@/lib/actions/kingdom-of-names';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowRight, Award, Share2 } from 'lucide-react';
+import { Loader2, ArrowRight, Award, Share2, CheckCircle2, XCircle } from 'lucide-react';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 
 interface ResultsPhaseProps {
   game: Game;
@@ -21,44 +22,52 @@ export default function ResultsPhase({ game, self }: ResultsPhaseProps) {
   const { toast } = useToast();
   const isHost = game.hostId === self.id;
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const router = useRouter();
 
   const state = game.kingdomOfNamesState;
   const results = state?.results || { scores: {}, answers: [] };
   const roundScores = results.scores || {};
-  const answersBreakdown = results.answers || [];
-
+  
   const settings = state?.settings || { rounds: 7 };
   const currentRound = state?.currentRound || 1;
+  const isFinalRound = currentRound >= settings.rounds;
 
-  // sorted players by this round points desc
   const playersThisRound = useMemo(() => {
     return Object.keys(roundScores)
-      .map((id) => ({ id, ...(roundScores as any)[id] }))
-      .sort((a, b) => (b.points || 0) - (a.points || 0));
-  }, [roundScores]);
+      .map((id) => {
+        const player = game.players.find(p => p.id === id);
+        return {
+          player,
+          scoreData: (roundScores as any)[id] || { points: 0, breakdown: [] },
+        };
+      })
+      .filter(item => item.player) // Filter out any cases where player might not be found
+      .sort((a, b) => (b.scoreData.points || 0) - (a.scoreData.points || 0));
+  }, [roundScores, game.players]);
+  
+  // Create a detailed map of answers per player
+  const playerAnswerDetails = useMemo(() => {
+    const map: Record<string, { category: string; answer: string; points: number; reason: string }[]> = {};
+    const submissions = state?.playerAnswers || {};
+    
+    // Initialize for all players
+    game.players.forEach(p => { map[p.id] = []; });
+    
+    // Populate with actual data
+    results.answers?.forEach(item => {
+        // Find which player submitted this answer for this category
+        for(const [playerId, playerSubmissions] of Object.entries(submissions)) {
+            if(playerSubmissions[item.category] === item.answer) {
+                 if (!map[playerId]) map[playerId] = [];
+                 map[playerId]!.push(item);
+                 break; // Assume one player per answer for this structure
+            }
+        }
+    });
 
-  // sorted players by cumulative score (game.playerScores)
-  const playersOverall = useMemo(() => {
-    return [...(game.players || [])]
-      .map((p) => ({ ...p, total: game.playerScores?.[p.id] ?? 0 }))
-      .sort((a, b) => b.total - a.total);
-  }, [game.players, game.playerScores]);
-
-  const groupedByCategory = useMemo(() => {
-    const map: Record<string, { answer: string; points: number; reason: string; playerId?: string }[]> = {};
-    for (const item of answersBreakdown) {
-      if (!map[item.category]) map[item.category] = [];
-      map[item.category]!.push({ answer: item.answer, points: item.points, reason: item.reason, playerId: undefined });
-    }
-    // try to annotate playerId when possible by matching answer text in roundScores breakdowns
-    for (const pId in roundScores) {
-      const br = (roundScores as any)[pId].breakdown || [];
-      for (const b of br) {
-        // b.reason & b.points only — cannot reliably map the exact answer text here, so skip strict mapping
-      }
-    }
     return map;
-  }, [answersBreakdown, roundScores]);
+  }, [results.answers, state?.playerAnswers, game.players]);
+
 
   const handleNextRound = useCallback(async () => {
     if (!isHost) return;
@@ -67,14 +76,13 @@ export default function ResultsPhase({ game, self }: ResultsPhaseProps) {
       await nextRound(game.id, self.id);
     } catch (error: any) {
       toast({ title: 'خطأ', description: error?.message || 'فشل الانتقال للجولة التالية', variant: 'destructive' });
-    } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false); // Allow retry
     }
   }, [game.id, self.id, isHost, toast]);
 
   const handleShare = useCallback(async () => {
     try {
-      const summary = playersOverall.map((p) => `${p.name}: ${p.total} نقطة`).join('\n');
+      const summary = playersThisRound.map((p, idx) => `#${idx + 1}: ${p.player!.name} (+${p.scoreData.points} نقطة)`).join('\n');
       const text = `نتائج الجولة ${currentRound} — مملكة الأسماء\n\n${summary}`;
       if ((navigator as any).share) {
         await (navigator as any).share({ title: 'مملكة الأسماء — نتائج الجولة', text });
@@ -85,7 +93,7 @@ export default function ResultsPhase({ game, self }: ResultsPhaseProps) {
     } catch {
       toast({ title: 'فشل المشاركة', variant: 'destructive' });
     }
-  }, [playersOverall, currentRound, toast]);
+  }, [playersThisRound, currentRound, toast]);
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
@@ -95,96 +103,77 @@ export default function ResultsPhase({ game, self }: ResultsPhaseProps) {
             <Award className="w-8 h-8 text-yellow-500" />
             <CardTitle className="text-3xl">نتائج الجولة {currentRound} / {settings.rounds}</CardTitle>
           </div>
-          <CardDescription>إليك نقاط هذه الجولة وتفصيل الإجابات. الترتيب العام مذكور أيضاً.</CardDescription>
+          <CardDescription>هنا تفاصيل نقاط هذه الجولة لكل لاعب.</CardDescription>
         </CardHeader>
 
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* This round leaderboard */}
-            <div className="md:col-span-1">
-              <h4 className="font-bold text-center mb-3">ترتيب هذه الجولة</h4>
-              <ScrollArea className="h-80">
-                <div className="space-y-3 pr-3">
-                  {playersThisRound.length === 0 && <div className="text-center text-zinc-500">لا توجد نقاط في هذه الجولة.</div>}
-                  {playersThisRound.map((p, idx) => {
-                    const player = game.players.find((pl) => pl.id === p.id);
-                    return (
-                      <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-muted">
-                        <div className="flex items-center gap-3">
-                          <PlayerAvatar avatarId={player?.avatarId} className="w-10 h-10" />
-                          <div>
-                            <div className="font-semibold">{player?.name}</div>
-                            <div className="text-xs text-zinc-500"># {idx + 1}</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {playersThisRound.map(({ player, scoreData }, index) => {
+              if (!player) return null;
+              const playerAnswers = playerAnswerDetails[player.id] || [];
+              const rank = index + 1;
+              const rankColor =
+                rank === 1 ? 'border-yellow-400' :
+                rank === 2 ? 'border-slate-400' :
+                rank === 3 ? 'border-orange-400' : 'border-slate-300 dark:border-slate-700';
+
+              return (
+                <motion.div
+                  key={player.id}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 + index * 0.05 }}
+                  className={cn("bg-muted/40 rounded-lg p-3 border-t-4", rankColor)}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10" />
+                        <span className="font-bold">{player.name}</span>
+                    </div>
+                    <div className="text-lg font-bold text-primary">+{scoreData.points}</div>
+                  </div>
+                  
+                  <ScrollArea className="h-48 pr-2">
+                    <div className="space-y-1 text-sm">
+                      {playerAnswers.length > 0 ? playerAnswers.map((ans, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs p-1 rounded bg-background/50">
+                          <div className="flex-1">
+                            <span className="text-muted-foreground">{ans.category}:</span>
+                            <span className="font-semibold ml-2">{ans.answer}</span>
+                          </div>
+                          <div className={cn("font-bold text-xs flex items-center gap-1", ans.points > 0 ? "text-green-600" : "text-red-500")}>
+                             {ans.points > 0 ? <CheckCircle2 size={12} /> : <XCircle size={12}/>}
+                             {ans.points > 0 ? `+${ans.points}` : ans.points}
                           </div>
                         </div>
-                        <div className="font-bold text-primary">+{p.points}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </ScrollArea>
-            </div>
-
-            {/* Overall leaderboard */}
-            <div className="md:col-span-1">
-              <h4 className="font-bold text-center mb-3">الترتيب العام</h4>
-              <ScrollArea className="h-80">
-                <div className="space-y-3 pr-3">
-                  {playersOverall.map((p, idx) => (
-                    <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-muted">
-                      <div className="flex items-center gap-3">
-                        <PlayerAvatar avatarId={p.avatarId} className="w-10 h-10" />
-                        <div>
-                          <div className="font-semibold">{p.name}</div>
-                          <div className="text-xs text-zinc-500">{p.total} نقطة</div>
-                        </div>
-                      </div>
-                      <div className="text-sm text-zinc-600">#{idx + 1}</div>
+                      )) : <p className="text-center text-xs text-muted-foreground pt-4">لم يقدم إجابات</p>}
                     </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </div>
-
-            {/* Answers breakdown */}
-            <div className="md:col-span-1">
-              <h4 className="font-bold text-center mb-3">تفصيل الإجابات</h4>
-              <ScrollArea className="h-80">
-                <div className="space-y-3 pr-3">
-                  {answersBreakdown.length === 0 && <div className="text-center text-zinc-500">لا توجد إجابات مفصّلة.</div>}
-
-                  {answersBreakdown.map((item, i) => (
-                    <div key={i} className="p-3 rounded-lg bg-muted text-sm">
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold">{item.category}</div>
-                        <div className={item.points > 0 ? 'text-green-600 font-bold' : 'text-red-500 font-semibold'}>{item.points > 0 ? `+${item.points}` : item.points}</div>
-                      </div>
-                      <div className="mt-1 font-mono truncate">{item.answer || '(فارغ)'}</div>
-                      <div className="mt-1 text-xs text-zinc-500">{item.reason}</div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </div>
+                  </ScrollArea>
+                </motion.div>
+              );
+            })}
           </div>
         </CardContent>
 
-        <CardFooter className="flex flex-col gap-3">
+        <CardFooter className="flex flex-col gap-3 pt-4">
           <div className="flex gap-3 w-full">
             {isHost && (
               <Button onClick={handleNextRound} disabled={isSubmitting} className="flex-1">
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2" />} الجولة التالية
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2" />}
+                {isFinalRound ? 'النتائج النهائية' : 'الجولة التالية'}
               </Button>
             )}
-
-            <Button onClick={handleShare} variant="outline">
-              <Share2 className="mr-2" /> مشاركة الملخص
+            <Button onClick={handleShare} variant="outline" className="flex-none">
+              <Share2 className="mr-2" /> مشاركة ملخص الجولة
+            </Button>
+             <Button onClick={() => router.push('/')} variant="ghost" className="flex-none">
+              الخروج للرئيسية
             </Button>
           </div>
-
           {!isHost && <div className="text-center text-muted-foreground">في انتظار المضيف لبدء الجولة التالية...</div>}
         </CardFooter>
       </Card>
     </motion.div>
   );
 }
+
