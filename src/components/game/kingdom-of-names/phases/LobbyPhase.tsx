@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -84,7 +85,7 @@ export default function LobbyPhase({ game, self }: LobbyPhaseProps) {
       // keep check icon for short moment so user sees success
       setTimeout(() => setIsCopying(false), 1400);
     }
-  }, [game.id, setIsCopying, toast]);
+  }, [game.id, isCopying, toast]);
 
   return (
     <Card className="w-full max-w-lg" role="region" aria-label="لوبي مملكة الأسماء">

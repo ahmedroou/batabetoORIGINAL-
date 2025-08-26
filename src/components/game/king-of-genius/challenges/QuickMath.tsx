@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
 import { Check, Loader2, Timer, Calculator } from 'lucide-react';
-import { submitChallengeResult, updateKingOfGeniusProgress } from '@/lib/actions/king-of-genius';
+import { submitChallengeResult, updateChallengeProgress } from '@/lib/actions/king-of-genius';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 
@@ -31,7 +31,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const [timeLeft, setTimeLeft] = useState(() => {
-        if (!game.challengeState?.challengeEndsAt) return timeLimit;
+        if (!game.challengeState?.challengeEndsAt) return challenge.timeLimit;
         return Math.max(0, Math.round((game.challengeState.challengeEndsAt.toMillis() - Date.now()) / 1000));
     });
 
@@ -53,10 +53,10 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
                 time: timeTaken, 
                 score: finalScore 
             });
-            if (isVictory) {
-                 toast({ title: "تحدي مكتمل!", description: `أحسنت! أكملت ${effectiveNumProblems}/${effectiveNumProblems} في ${timeTaken} ثانية.`, className: "bg-green-100 border-green-500 text-green-700" });
+            if(isVictory) {
+                 toast({ title: "نجاح!", description: `أحسنت! أكملت ${effectiveNumProblems}/${effectiveNumProblems} في ${timeTaken} ثانية.`, className: "bg-green-100 border-green-500 text-green-700" });
             }
-        } catch (e: any) {
+        } catch(e: any) {
             toast({ title: "خطأ", description: `فشل إرسال النتيجة: ${e.message}`, variant: "destructive" });
             hasSubmittedRef.current = false; // Allow retry on error
         }
@@ -67,31 +67,32 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
         if (myResult) {
             setHasSubmitted(true);
             setIsGameOver(true);
-            hasSubmittedRef.current = true;
         } else if (problems) {
-            inputRef.current?.focus();
+             inputRef.current?.focus();
         }
     }, [game.challengeState?.results, self.id, problems]);
 
     useEffect(() => {
         if (isGameOver || !game.challengeState?.challengeEndsAt) return;
         const endTime = game.challengeState.challengeEndsAt.toMillis();
-        const timer = setInterval(() => {
+        const updateTimer = () => {
             const remaining = Math.round((endTime - Date.now()) / 1000);
             if (remaining <= 0) {
                 setTimeLeft(0);
                 if (!hasSubmittedRef.current) {
-                    toast({ title: "انتهى الوقت!", description: `للأسف، لم تكمل في الوقت المحدد.`, variant: "destructive" });
-                    handleSubmission(false, timeLimit, 0);
+                    toast({ title: "انتهى الوقت!", description: "للأسف، لم تكمل في الوقت المحدد.", variant: "destructive" });
+                    handleSubmission(false, challenge.timeLimit, 0);
                 }
                 clearInterval(timer);
             } else {
                 setTimeLeft(remaining);
             }
-        }, 1000);
+        };
 
+        const timer = setInterval(updateTimer, 1000);
+        updateTimer();
         return () => clearInterval(timer);
-    }, [isGameOver, game.challengeState?.challengeEndsAt, handleSubmission, timeLimit, toast]);
+    }, [isGameOver, hasSubmitted, game.challengeState?.challengeEndsAt, toast, handleSubmission, challenge.timeLimit]);
 
     const handleAnswerSubmit = async () => {
         if (isGameOver || isSubmitting || !problems) return;
@@ -114,7 +115,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
             } else {
                 setIsSubmitting(true);
                 try {
-                    await updateKingOfGeniusProgress(game.id, self.id, { currentProblemIndex: currentProblemIndex + 1 });
+                    await updateChallengeProgress(game.id, self.id, { currentProblemIndex: currentProblemIndex + 1 });
                     setAnswer('');
                     toast({
                         title: "إجابة صحيحة!",
