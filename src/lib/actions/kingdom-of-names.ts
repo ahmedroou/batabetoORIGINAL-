@@ -62,6 +62,7 @@ const pickCategoriesForRound = (count = 6) => shuffle([...CATEGORIES]).slice(0, 
 const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670\u06D6-\u06ED]/g; // tanwīn + tashkīl + Qur'anic marks
 const TATWEEL = /\u0640/g;
 function normalizeArabic(text: string): string {
+  if (!text) return '';
   return text
     .replace(TATWEEL, '')
     .replace(ARABIC_DIACRITICS, '')
@@ -400,20 +401,21 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
     for (const category in entry) {
       const answer = (entry as Record<string, string>)[category];
 
-      if (!answer || !startsWithLetter(answer, letter)) {
-        answerScores[`${playerId}-${category}`] = { points: 0, reason: 'حرف خاطئ أو إجابة فارغة' };
-        continue;
-      }
-
+      // **FIX:** A player voting their own answer "incorrect" should make it invalid.
       let incorrectVotes = 0;
       for (const voterId in votes) {
         if (voterId === playerId) continue;
         if (votes[voterId]?.[`${playerId}-${category}`] === 'incorrect') incorrectVotes++;
       }
-      if (votes[playerId]?.[`${playerId}-${category}`] === 'incorrect') incorrectVotes = 2;
-
-      if (incorrectVotes >= 2) {
-        answerScores[`${playerId}-${category}`] = { points: 0, reason: 'رفض اللاعبون' };
+      if (votes[playerId]?.[`${playerId}-${category}`] === 'incorrect') {
+        incorrectVotes = 2; // Instant rejection if self-voted incorrect.
+      }
+      
+      const isInvalid = !answer || !startsWithLetter(answer, letter) || incorrectVotes >= 2;
+      
+      if (isInvalid) {
+        const reason = !answer ? 'فارغة' : !startsWithLetter(answer, letter) ? 'حرف خاطئ' : 'رفض اللاعبون';
+        answerScores[`${playerId}-${category}`] = { points: 0, reason };
         continue;
       }
 
@@ -439,18 +441,22 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
 
   const addedPoints: Record<string, number> = {};
 
-  for (const key in answerScores) {
-    const [playerId, category] = key.split('-');
-    const { points, reason } = answerScores[key]!;
-    const answerText = submissions[playerId!]?.[category!] || '';
-
-    if (!results.scores[playerId!]) results.scores[playerId!] = { points: 0, breakdown: [] };
-    results.scores[playerId!]!.points += points;
-    results.scores[playerId!]!.breakdown.push({ reason, points });
-    results.answers.push({ playerId: playerId!, category: category!, answer: answerText, points, reason });
-
-    addedPoints[playerId!] = (addedPoints[playerId!] || 0) + points;
+  for (const playerId in submissions) {
+      if (!activeIds.has(playerId)) continue;
+      const entry = submissions[playerId] || {};
+      for (const category in entry) {
+          const key = `${playerId}-${category}`;
+          const result = answerScores[key];
+          if(result) {
+              const answerText = entry[category] || '';
+              if (!results.scores[playerId]) results.scores[playerId] = { points: 0, breakdown: [] };
+              results.scores[playerId]!.points += result.points;
+              results.scores[playerId]!.breakdown.push({ reason: result.reason, points: result.points });
+              results.answers.push({ playerId: playerId!, category: category, answer: answerText, points: result.points, reason: result.reason });
+              addedPoints[playerId!] = (addedPoints[playerId!] || 0) + result.points;
+          }
+      }
   }
-
+  
   return { results, addedPoints };
 }
