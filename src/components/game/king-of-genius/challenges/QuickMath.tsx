@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -12,11 +13,12 @@ import { submitChallengeResult, updateChallengeProgress } from '@/lib/actions/ki
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 
-const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
-const parseIntSafe = (val: string) => {
-    const cleaned = (val || '').trim();
-    if (!/^-?\d+$/.test(cleaned)) return NaN;
-    return parseInt(cleaned, 10);
+const CODE_LENGTH = 5;
+const MAX_ATTEMPTS = 6;
+
+type Attempt = {
+  guess: string[];
+  feedback: ('correct' | 'misplaced' | 'incorrect')[];
 };
 
 export function QuickMath({ game, player, self, challenge }: { game: Game, player: Player, self: Player, challenge: GeniusChallenge }) {
@@ -35,7 +37,7 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
         return Math.max(0, Math.round((game.challengeState.challengeEndsAt.toMillis() - Date.now()) / 1000));
     });
 
-    const inputRef = useRef<HTMLInputElement | null>([]);
+    const inputRef = useRef<(HTMLInputElement | null)[]>([]);
     const hasSubmittedRef = useRef(false);
 
     const myProgress = game.challengeState?.playerProgress?.[self.id];
@@ -222,3 +224,11 @@ export function QuickMath({ game, player, self, challenge }: { game: Game, playe
         </Card>
     );
 }
+
+// Helpers
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+const parseIntSafe = (val: string) => {
+    const cleaned = (val || '').trim();
+    if (!/^-?\d+$/.test(cleaned)) return NaN;
+    return parseInt(cleaned, 10);
+};

@@ -15,7 +15,7 @@ import {
 import type { Game, Player, KingdomOfNamesState } from '@/types';
 import { shuffle } from './helpers';
 import { CATEGORIES, LETTERS } from '@/data/kingdom-of-names';
-import { distributeEndOfGameAwards } from '../admin/users';
+import { distributeEndOfGameAwards } from '@/lib/actions/admin/users';
 
 /**
  * ===============================
@@ -43,7 +43,7 @@ const GAME_DEFAULTS = {
   resultsTime: 20,
 };
 
-const ensure: (condition: any, message: string) => asserts condition = (condition, message) => {
+const ensure: (condition: any, msg: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
@@ -306,7 +306,6 @@ export async function nextRound(gameId: string, hostId: string) {
     }
   });
   
-  // Distribute awards after the transaction is successfully committed.
   if (isGameOver) {
     await distributeEndOfGameAwards(gameId);
   }

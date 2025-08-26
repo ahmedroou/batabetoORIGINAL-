@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React from 'react';
@@ -26,7 +27,7 @@ const PhaseSkeleton = () => (
 );
 
 // استيراد ديناميكي لمكونات المراحل مع عرض هيكل التحميل
-const LobbyPhase = dynamic(() => import('./phases/LobbyPhase').then(m => m.default), { ssr: false, loading: PhaseSkeleton });
+const LobbyPhase = dynamic(() => import('./phases/LobbyPhase'), { ssr: false, loading: PhaseSkeleton });
 const PlayingPhase = dynamic(() => import('./phases/PlayingPhase'), { ssr: false, loading: PhaseSkeleton });
 const VotingPhase = dynamic(() => import('./phases/VotingPhase'), { ssr: false, loading: PhaseSkeleton });
 const ResultsPhase = dynamic(() => import('./phases/ResultsPhase'), { ssr: false, loading: PhaseSkeleton });
