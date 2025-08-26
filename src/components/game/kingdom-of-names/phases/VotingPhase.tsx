@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -49,14 +50,22 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
   // All answers are correct by default. We only store incorrect votes.
   const [incorrectVotes, setIncorrectVotes] = useState<Record<string, 'incorrect'>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submittedLocally, setSubmittedLocally] = useState(false);
+  
+  const hasSubmitted = useMemo(() => {
+      return !!state?.votes?.[self.id] && Object.keys(state.votes[self.id]).length > 0;
+  }, [state?.votes, self.id]);
+
+  const [submittedLocally, setSubmittedLocally] = useState(hasSubmitted);
+
   const isHost = game.hostId === self.id;
 
   useEffect(() => {
-    const serverVotes = state?.votes?.[self.id] || {};
-    setIncorrectVotes(serverVotes);
-    const serverHasVote = !!state?.votes?.[self.id] && Object.keys(state.votes[self.id]).length > 0;
-    setSubmittedLocally(serverHasVote);
+      const serverVotes = state?.votes?.[self.id] || {};
+      setIncorrectVotes(serverVotes);
+      const serverHasVote = !!state?.votes?.[self.id] && Object.keys(state.votes[self.id]).length > 0;
+      if (serverHasVote) {
+          setSubmittedLocally(true);
+      }
   }, [state?.votes, self.id]);
 
   const activePlayers = useMemo(() => game.players.filter((p) => p.status !== 'left'), [game.players]);
@@ -89,7 +98,7 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
     }
   }, [game.id, self.id, incorrectVotes, toast, isSubmitting]);
 
-  const userHasSubmitted = Boolean(submittedLocally || (state?.votes && Boolean(state.votes[self.id])));
+  const userHasSubmitted = submittedLocally;
 
   if (userHasSubmitted) {
     return (

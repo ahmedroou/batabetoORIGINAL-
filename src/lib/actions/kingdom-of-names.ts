@@ -15,7 +15,7 @@ import {
 import type { Game, Player, KingdomOfNamesState } from '@/types';
 import { shuffle } from './helpers';
 import { CATEGORIES, LETTERS } from '@/data/kingdom-of-names';
-import { distributeEndOfGameAwards } from '@/lib/actions/admin/users';
+import { distributeEndOfGameAwards } from './admin/users';
 
 /**
  * ===============================
@@ -202,31 +202,37 @@ export async function submitAnswers(
 
     ensure(state.phase === 'playing', 'ليست مرحلة اللعب.');
 
-    const categoriesForRound = state.categories || [];
-    const isSubmissionComplete = categoriesForRound.every((cat) => answers[cat] && answers[cat].trim() !== '');
-    ensure(isSubmissionComplete, 'يجب تعبئة جميع الحقول قبل الإرسال.');
-
-    // Build the final answers snapshot at the moment of first submit
     const finalAnswers: Record<string, Record<string, string>> = {
       ...(state.playerAnswers || {}),
       [playerId]: answers,
     };
-
+    
+    // Check if everyone has submitted, including the current player
     const activePlayers = getActivePlayers(game);
-    for (const p of activePlayers) {
-      if (p.id !== playerId && !finalAnswers[p.id]) {
-        finalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
-      }
+    const allSubmitted = activePlayers.every(p => finalAnswers[p.id]);
+
+    const updates: Partial<Game> & { [key: string]: any } = {
+        [`kingdomOfNamesState.playerAnswers`]: finalAnswers,
+    };
+
+    if (allSubmitted || game.hostId === playerId) {
+        // Collect progress from any players who haven't submitted yet
+        for (const p of activePlayers) {
+            if (!finalAnswers[p.id]) {
+                finalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
+            }
+        }
+        
+        const settings = mergeSettings(state.settings);
+        Object.assign(updates, {
+            gameState: 'voting',
+            'kingdomOfNamesState.phase': 'voting',
+            'kingdomOfNamesState.playerAnswers': finalAnswers, // Send all collected answers
+            'kingdomOfNamesState.timerEndsAt': tsFromNowS(settings.votingTime),
+        });
     }
 
-    const settings = mergeSettings(state.settings);
-
-    tx.update(gameRef, {
-      'kingdomOfNamesState.playerAnswers': finalAnswers,
-      'kingdomOfNamesState.phase': 'voting',
-      'kingdomOfNamesState.timerEndsAt': tsFromNowS(settings.votingTime),
-      gameState: 'voting', // keep legacy in sync
-    });
+    tx.update(gameRef, updates);
   });
 }
 
@@ -243,19 +249,17 @@ export async function submitVotes(
     const state = game.kingdomOfNamesState!;
     ensure(state.phase === 'voting', 'ليست مرحلة التصويت.');
 
-    const playerVotes = { ...(state.votes || {}), [playerId]: votes } as KingdomOfNamesState['votes'];
+    const fieldPath = `kingdomOfNamesState.votes.${playerId}`;
+    tx.update(gameRef, { [fieldPath]: votes });
+
+    // Read the current votes from the game state in the transaction to get the most up-to-date view
+    const currentVotes = { ...(state.votes || {}), [playerId]: votes };
 
     const activePlayers = getActivePlayers(game);
-    const allVoted = activePlayers.every((p) => !!playerVotes[p.id]);
-
-    // Persist the new votes first
-    tx.update(gameRef, {
-      'kingdomOfNamesState.votes': playerVotes,
-    });
+    const allVoted = activePlayers.every((p) => !!currentVotes[p.id]);
 
     if (allVoted) {
-      // Calculate results using the in-memory votes snapshot to avoid stale reads
-      _calculateAndEnterResults(tx, gameRef, game, { votes: playerVotes });
+      _calculateAndEnterResults(tx, gameRef, game, { votes: currentVotes });
     }
   });
 }
@@ -307,7 +311,9 @@ export async function nextRound(gameId: string, hostId: string) {
   });
   
   if (isGameOver) {
-    await distributeEndOfGameAwards(gameId);
+    // This is a fire-and-forget call; it doesn't need to block the response.
+    // Ensure this function is robust against being called multiple times if the client retries.
+    distributeEndOfGameAwards(gameId);
   }
 }
 

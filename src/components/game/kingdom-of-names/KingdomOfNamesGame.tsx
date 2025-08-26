@@ -78,7 +78,7 @@ const useGamePhase = (game: Game): [string, React.ComponentType<any>] => {
   // استخدام useMemo لتجنب إعادة الحساب في كل مرة يتم فيها العرض
   const [phaseKey, PhaseComponent] = React.useMemo(() => {
     if (game.gameState === 'lobby') {
-      return ['lobby', PHASE_COMPONENTS.lobby];
+      return ['lobby', LobbyPhase];
     }
 
     const currentPhase = game.kingdomOfNamesState?.phase;
