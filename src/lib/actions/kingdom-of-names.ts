@@ -1,3 +1,5 @@
+
+
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -406,13 +408,14 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
         continue;
       }
 
-      // Count incorrect votes from others; self-flag counts as auto-reject (>=2)
+      // إجابة تعتبر مرفوضة إذا صوت ضدها 2 أو أكثر من الخصوم
+      // أو إذا صوت صاحبها بنفسه ضدها
       let incorrectVotes = 0;
       for (const voterId in votes) {
-        if (voterId === playerId) continue;
+        if (voterId === playerId) continue; // do not vote on yourself
         if (votes[voterId]?.[`${playerId}-${category}`] === 'incorrect') incorrectVotes++;
       }
-      if (votes[playerId]?.[`${playerId}-${category}`] === 'incorrect') incorrectVotes = 2;
+      if (votes[playerId]?.[`${playerId}-${category}`] === 'incorrect') incorrectVotes = 2; // self-vote is an auto-reject
 
       if (incorrectVotes >= 2) {
         answerScores[`${playerId}-${category}`] = { points: 0, reason: 'رفض اللاعبون' };
