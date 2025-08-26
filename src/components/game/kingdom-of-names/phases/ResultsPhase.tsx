@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
@@ -61,7 +62,6 @@ export default function ResultsPhase({ game, self }: ResultsPhaseProps) {
 
   const handleNextRound = useCallback(async () => {
     if (!isHost) return;
-    if (!confirm('هل أنت متأكد أنك تريد الانتقال إلى الجولة التالية؟')) return;
     setIsSubmitting(true);
     try {
       await nextRound(game.id, self.id);

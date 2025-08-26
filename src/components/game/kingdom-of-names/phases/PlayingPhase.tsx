@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -7,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { submitAnswers, updatePlayerProgress } from '@/lib/actions/kingdom-of-names';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Loader2, Check, X } from 'lucide-react';
+import { Send, Loader2 } from 'lucide-react';
 import { CountdownTimer } from '../../CountdownTimer';
 import { motion } from 'framer-motion';
 
@@ -16,7 +17,7 @@ interface PlayingPhaseProps {
   self: Player;
 }
 
-// Lightweight Arabic normalization to match server checks (ignores tashkeel/tatweel and normalizes alef/yaa)
+// Arabic normalization (kept lightweight to match server checks)
 const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670\u06D6-\u06ED]/g;
 const TATWEEL = /\u0640/g;
 function normalizeArabic(text?: string) {
@@ -85,7 +86,7 @@ export default function PlayingPhase({ game, self }: PlayingPhaseProps) {
   // cleanup on unmount
   useEffect(() => () => { if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current); }, []);
 
-  // keyboard helpers: Enter moves to next field, Ctrl/Cmd+Enter submits
+  // keyboard helpers: Enter moves to next field, Ctrl/Cmd+Enter submits (kept, but without UI hints)
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -94,30 +95,28 @@ export default function PlayingPhase({ game, self }: PlayingPhaseProps) {
     }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'enter') {
       e.preventDefault();
-      // submit if possible
       (document.getElementById('kon-submit-button') as HTMLButtonElement | null)?.click();
     }
   }, [categories]);
 
   const handleChange = useCallback((category: string, value: string) => {
-    // simple sanitization: collapse multiple spaces
     const sanitized = value.replace(/\s+/g, ' ');
     setAnswers((prev) => ({ ...prev, [category]: sanitized }));
   }, []);
 
   const filledCount = useMemo(() => categories.filter(c => (answers[c] || '').trim() !== '').length, [categories, answers]);
-
   const canSubmit = useMemo(() => {
     return categories.length > 0 && categories.every(cat => (answers[cat] || '').trim() !== '' && startsWithLetter(answers[cat], letter));
   }, [categories, answers, letter]);
+  const progressPct = useMemo(() => (
+    categories.length ? Math.round((filledCount * 100) / categories.length) : 0
+  ), [filledCount, categories.length]);
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return;
-    // client-side validation
     const missingOrInvalid = categories.filter(cat => !(answers[cat] || '').trim() || !startsWithLetter(answers[cat], letter));
     if (missingOrInvalid.length) {
-      toast({ title: 'الرجاء تصحيح الخانات', description: `تأكد من أن كل الإجابات تبدأ بالحرف: ${letter}` , variant: 'destructive' });
-      // focus first invalid
+      toast({ title: 'الرجاء تصحيح الخانات', description: `تأكد أن كل الإجابات تبدأ بالحرف: ${letter}`, variant: 'destructive' });
       const first = missingOrInvalid[0];
       setTimeout(() => inputRefs.current[first]?.focus(), 80);
       return;
@@ -160,17 +159,37 @@ export default function PlayingPhase({ game, self }: PlayingPhaseProps) {
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
-      <Card className="w-full max-w-2xl">
-        {state?.timerEndsAt && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-            <CountdownTimer gameId={game.id} gameType="kingdom-of-names" expiryTimestamp={state.timerEndsAt.toMillis()} selfId={self.id} isHost={game.hostId === self.id} />
+      <Card className="w-full max-w-2xl overflow-hidden">
+        <CardHeader className="text-center space-y-3">
+          <div className="flex items-center justify-center gap-3">
+            <div className="h-12 w-12 grid place-items-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 font-mono text-2xl">
+              {letter}
+            </div>
+            {state?.timerEndsAt && (
+              <div className="text-sm text-muted-foreground">
+                <CountdownTimer
+                  gameId={game.id}
+                  gameType="kingdom-of-names"
+                  expiryTimestamp={state.timerEndsAt.toMillis()}
+                  selfId={self.id}
+                  isHost={game.hostId === self.id}
+                />
+              </div>
+            )}
           </div>
-        )}
 
-        <CardHeader className="text-center">
-          <CardTitle className="text-5xl font-bold font-mono select-none">{letter}</CardTitle>
-          <CardDescription>أكمل الجدول بكلمات تبدأ بالحرف الظاهر — اكتب بسرعة، يمكن الرجوع لاحقًا.</CardDescription>
-          <div className="mt-3 text-sm text-zinc-600">مُعبأة: <strong>{filledCount}</strong> / <strong>{categories.length}</strong></div>
+          <CardTitle className="text-xl">أكمل الحقول بكلمات تبدأ بالحرف الظاهر</CardTitle>
+          <CardDescription>
+            تقدّمك: <strong>{filledCount}</strong> / <strong>{categories.length}</strong> — {progressPct}%
+          </CardDescription>
+
+          {/* Progress bar */}
+          <div className="h-2 w-full rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
         </CardHeader>
 
         <CardContent className="space-y-4">
@@ -181,8 +200,16 @@ export default function PlayingPhase({ game, self }: PlayingPhaseProps) {
             const invalid = !empty && !startsWithLetter(val, letter);
 
             return (
-              <div key={category} className="grid md:grid-cols-[140px_1fr] items-center gap-3">
-                <label htmlFor={`cat-${category}`} className="text-right font-semibold">{category}</label>
+              <motion.div
+                key={category}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: idx * 0.015 }}
+                className="rounded-2xl border p-3 md:p-4 hover:shadow-sm transition"
+              >
+                <label htmlFor={`cat-${category}`} className="mb-2 block font-medium text-sm md:text-base">
+                  {category}
+                </label>
 
                 <div className="relative">
                   <Input
@@ -193,41 +220,47 @@ export default function PlayingPhase({ game, self }: PlayingPhaseProps) {
                     onKeyDown={(e) => handleKeyDown(e, idx)}
                     disabled={isSubmitting}
                     aria-invalid={invalid}
-                    aria-describedby={`hint-${category}`}
-                    placeholder={`اكتب ${category} يبدأ بـ ${letter}`}
-                    className={invalid ? 'border-red-400' : ''}
+                    placeholder={`ابدأ بـ ${letter}`}
+                    className={[
+                      'pr-10',
+                      invalid ? 'border-red-400 focus-visible:ring-red-400' : '',
+                      valid ? 'border-green-500/60 focus-visible:ring-green-500/50' : '',
+                    ].join(' ')}
                     maxLength={60}
                   />
 
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                    {valid && <Check className="w-4 h-4 text-green-600" />}
-                    {invalid && <X className="w-4 h-4 text-red-600" />}
-                  </div>
+                  {/* Minimal status dot (no text hints) */}
+                  <span
+                    className={[
+                      'absolute right-3 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full',
+                      valid ? 'bg-green-500' : '',
+                      invalid ? 'bg-red-500' : '',
+                      empty ? 'bg-zinc-300' : '',
+                    ].join(' ')}
+                  />
                 </div>
-
-                <div className="md:col-span-2 text-xs text-zinc-500" id={`hint-${category}`}>
-                  {invalid ? (
-                    <span className="text-red-600">يجب أن تبدأ الكلمة بالحرف <strong className="font-mono">{letter}</strong></span>
-                  ) : (
-                    <span>اضغط Enter للانتقال للحقل التالي — Ctrl/Cmd+Enter للإرسال السريع.</span>
-                  )}
-                </div>
-              </div>
+              </motion.div>
             );
           })}
         </CardContent>
 
-        <CardFooter>
+        <CardFooter className="sticky bottom-0 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t mt-2">
           <div className="flex gap-3 w-full">
             <Button id="kon-submit-button" className="flex-1" onClick={handleSubmit} disabled={!canSubmit || isSubmitting}>
               {isSubmitting ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> جاري الإرسال...</>
               ) : (
-                <><Send className="mr-2" /> {canSubmit ? 'رفع القلم!' : `تأكد من جميع الخانات`}</>
+                <><Send className="mr-2" /> {canSubmit ? 'إرسال' : 'أكمل الإجابات'}</>
               )}
             </Button>
 
-            <Button variant="outline" onClick={() => { setAnswers(categories.reduce((a, c) => (a[c] = '', a), {} as Record<string,string>)); }}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setAnswers(categories.reduce((a, c) => (a[c] = '', a), {} as Record<string, string>));
+              }}
+            >
               مسح
             </Button>
           </div>
