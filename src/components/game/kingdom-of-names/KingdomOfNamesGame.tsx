@@ -5,7 +5,6 @@ import type { Game, Player } from '@/types';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
-import { LobbyPhase } from './phases/LobbyPhase';
 
 /* --------------------------------- Skeleton -------------------------------- */
 const PhaseSkeleton: React.FC<{ message?: string }> = ({ message = 'يجري التحميل…' }) => (
@@ -23,22 +22,12 @@ const PhaseSkeleton: React.FC<{ message?: string }> = ({ message = 'يجري ا�
 );
 
 /* ------------------------------- Phase Imports ------------------------------ */
-const PlayingPhase = dynamic(() => import('./phases/PlayingPhase'), {
-  ssr: false,
-  loading: () => <PhaseSkeleton message="جاري تحميل مرحلة اللعب…" />,
-});
-const VotingPhase = dynamic(() => import('./phases/VotingPhase'), {
-  ssr: false,
-  loading: () => <PhaseSkeleton message="جاري تحميل مرحلة التصويت…" />,
-});
-const ResultsPhase = dynamic(() => import('./phases/ResultsPhase'), {
-  ssr: false,
-  loading: () => <PhaseSkeleton message="جاري تحميل النتائج…" />,
-});
-const FinalResultsPhase = dynamic(() => import('./phases/FinalResultsPhase'), {
-  ssr: false,
-  loading: () => <PhaseSkeleton message="جاري تحميل نتائج النهاية…" />,
-});
+/** مهم: ssr=false لتثبيت الهوية كعميل ومنع تبديل الحدود مع كل re-render */
+const LobbyPhase        = dynamic(() => import('./phases/LobbyPhase').then(m => m.default),              { ssr: false, loading: () => <PhaseSkeleton message="جاري تحميل اللوبي…" /> });
+const PlayingPhase      = dynamic(() => import('./phases/PlayingPhase').then(m => m.default),          { ssr: false, loading: () => <PhaseSkeleton message="جاري تحميل مرحلة اللعب…" /> });
+const VotingPhase     = dynamic(() => import('./phases/VotingPhase').then(m => m.default),        { ssr: false, loading: () => <PhaseSkeleton message="جاري تحميل مرحلة التصويت…" /> });
+const ResultsPhase      = dynamic(() => import('./phases/ResultsPhase').then(m => m.default),          { ssr: false, loading: () => <PhaseSkeleton message="جاري تحميل النتائج…" /> });
+const FinalResultsPhase = dynamic(() => import('./phases/FinalResultsPhase').then(m => m.default),{ ssr: false, loading: () => <PhaseSkeleton message="جاري تحميل نتائج النهاية…" /> });
 
 /* ---------------------------------- Types ---------------------------------- */
 type PhaseKey = 'lobby' | 'playing' | 'voting' | 'results' | 'final_results';
