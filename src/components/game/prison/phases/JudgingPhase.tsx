@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -76,6 +77,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
 
   const judgedResults = prison.aiJudgeResults ?? [];
   const openAuctionSubmissions = prison.openAuctionSubmissions ?? {} as Record<string, string[]>;
+  const noSubmissions = Object.keys(openAuctionSubmissions).length === 0;
 
   // O(1) access to results by playerId
   const resultsByPlayerId = useMemo(() => {
@@ -116,12 +118,14 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
     | undefined;
 
   // Host can proceed when: all results are in AND (not rejudging OR (timer exists and expired))
+  // OR there were no submissions to begin with.
   const canHostProceed = useMemo(() => {
+    if (noSubmissions && !judgingStarted) return true;
     if (!allResultsIn) return false;
     if (!isRejudging) return true;
     if (!timerEndsAtMs) return false;
     return Date.now() > timerEndsAtMs;
-  }, [allResultsIn, isRejudging, timerEndsAtMs]);
+  }, [noSubmissions, allResultsIn, isRejudging, timerEndsAtMs, judgingStarted]);
 
   // UX niceties: close dialog if an active request appears; announce status
   useEffect(() => {
@@ -131,10 +135,15 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
   // --- Actions -----------------------------------------------------------------
 
   const handleCallJudge = async () => {
-    if (!isHost || judgingStarted || isSubmitting) return;
+    if (!isHost || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await prisonActions.judgeAnswersAndProceed(game.id, isRejudging);
+        if(noSubmissions){
+             // If no submissions, go straight to results.
+            await prisonActions.proceedToResults(game.id, self.id);
+        } else {
+            await prisonActions.judgeAnswersAndProceed(game.id, isRejudging);
+        }
     } catch (e: any) {
       toast({ title: 'خطأ', description: e?.message ?? 'تعذر استدعاء القاضي.', variant: 'destructive' });
     } finally {
@@ -324,9 +333,9 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
         <CardFooter className="flex-col gap-2 pt-4" aria-live="polite">
           <div className="flex w-full flex-wrap gap-2 justify-center">
             {isHost && !judgingStarted && (
-              <Button onClick={handleCallJudge} disabled={isSubmitting || contestantsWithSubmissions.length === 0}>
+              <Button onClick={handleCallJudge} disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Scale className="mr-2" />}
-                استدعاء القاضي
+                {noSubmissions ? 'لا توجد إجابات، متابعة للنتائج' : 'استدعاء القاضي'}
               </Button>
             )}
 

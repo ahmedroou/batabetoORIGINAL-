@@ -261,6 +261,17 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
 
     const allSubs = game.prisonState?.openAuctionSubmissions || {};
     const expected = Object.keys(allSubs).length;
+    
+    // If no submissions, go straight to results instead of judging
+    if (expected === 0) {
+      tx.update(gameRef, { 
+        gameState: 'results', 
+        'prisonState.lastRoundResult': { message: 'لا توجد إجابات لتقييمها. انتهت الجولة.', points: {} },
+        stateVersion: increment(1)
+      });
+      return;
+    }
+
     const runId = randId();
     const ps = ensurePrisonState(game);
 
@@ -286,6 +297,7 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
   });
 
   if (playerSubs.length === 0) {
+    // This case is now handled in the transaction, but kept as a defensive measure.
     await updateDoc(gameRef, { gameState: 'results' });
     return;
   }
@@ -320,7 +332,9 @@ export async function proceedToResults(gameId: string, hostId: string) {
     if (!snap.exists()) throw new Error('Game not found.');
     const game = snap.data() as Game;
     if (game.hostId !== hostId) throw new Error('Only host can proceed to results.');
-    if (!game.prisonState?.aiJudgeResults || game.prisonState.aiJudgeResults.length === 0) return;
+    
+    // Allow proceeding if results are empty, to handle the no-submissions case.
+    if (!game.prisonState?.aiJudgeResults) return;
 
     const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, tx);
     tx.update(ref, updatedGame);
