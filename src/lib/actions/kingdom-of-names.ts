@@ -202,25 +202,25 @@ export async function submitAnswers(
 
     ensure(state.phase === 'playing', 'ليست مرحلة اللعب.');
 
-    // The first player to submit ends the round for everyone.
-    // Collect progress from any players who haven't submitted yet.
     const activePlayers = getActivePlayers(game);
     const finalAnswers: Record<string, Record<string, string>> = {
       ...(state.playerAnswers || {}),
-      [playerId]: answers,
     };
-    
+
+    // Capture progress of other players who haven't submitted
     for (const p of activePlayers) {
-      if (!finalAnswers[p.id]) { // If a player hasn't submitted yet
+      if (!finalAnswers[p.id]) {
         finalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
       }
     }
-
+    // Set the current player's final answers
+    finalAnswers[playerId] = answers;
+    
     const settings = mergeSettings(state.settings);
     const updates = {
       gameState: 'voting',
       'kingdomOfNamesState.phase': 'voting',
-      'kingdomOfNamesState.playerAnswers': finalAnswers, // Send all collected answers
+      'kingdomOfNamesState.playerAnswers': finalAnswers,
       'kingdomOfNamesState.timerEndsAt': tsFromNowS(settings.votingTime),
     };
     
@@ -270,12 +270,10 @@ export async function nextRound(gameId: string, hostId: string) {
     const settings = mergeSettings(state.settings);
     const currentRound = state.currentRound || 0;
     
-    // تأكد من أننا في مرحلة عرض النتائج
     ensure(state.phase === 'results', 'لا يمكن بدء جولة جديدة الآن.');
 
     if (currentRound >= settings.rounds) {
       isGameOver = true;
-      // Winner id (first max wins, ties keep first found — UI can show full ranking)
       const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) =>
         (game.playerScores![a] || 0) >= (game.playerScores![b] || 0) ? a : b, ''
       );
@@ -288,7 +286,7 @@ export async function nextRound(gameId: string, hostId: string) {
     } else {
       tx.update(gameRef, {
         'kingdomOfNamesState.phase': 'playing',
-        'kingdomOfNamesState.settings': settings, // keep persisted
+        'kingdomOfNamesState.settings': settings,
         'kingdomOfNamesState.currentRound': currentRound + 1,
         'kingdomOfNamesState.letter': LETTERS[Math.floor(Math.random() * LETTERS.length)],
         'kingdomOfNamesState.categories': pickCategoriesForRound(6),
@@ -303,8 +301,6 @@ export async function nextRound(gameId: string, hostId: string) {
   });
   
   if (isGameOver) {
-    // This is a fire-and-forget call; it doesn't need to block the response.
-    // Ensure this function is robust against being called multiple times if the client retries.
     distributeEndOfGameAwards(gameId);
   }
 }
@@ -342,8 +338,6 @@ export async function handleTimeout(gameId: string, hostId: string) {
       });
       return;
     }
-
-    // If already in results/final_results, do nothing.
   });
 }
 
@@ -403,22 +397,20 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
     for (const category in entry) {
       const answer = (entry as Record<string, string>)[category];
 
-      // A vote against is counted. 2 votes make it incorrect.
-      // A player voting their own answer incorrect is an instant rejection.
       let incorrectVotes = 0;
       for (const voterId in votes) {
         if (voterId === playerId) continue;
         if (votes[voterId]?.[`${playerId}-${category}`] === 'incorrect') incorrectVotes++;
       }
-      // If a player votes their own answer as incorrect, it's immediately rejected.
       if (votes[playerId]?.[`${playerId}-${category}`] === 'incorrect') {
-        incorrectVotes = 2; // Treat as 2 votes to instantly reject
+        incorrectVotes = 2;
       }
       
-      const isInvalid = !answer || !startsWithLetter(answer, letter) || incorrectVotes >= 2;
+      const isSingleChar = (answer || '').trim().length <= 1;
+      const isInvalid = !answer || !startsWithLetter(answer, letter) || incorrectVotes >= 2 || isSingleChar;
       
       if (isInvalid) {
-        const reason = !answer ? 'فارغة' : !startsWithLetter(answer, letter) ? 'حرف خاطئ' : 'رفض اللاعبون';
+        const reason = !answer ? 'فارغة' : !startsWithLetter(answer, letter) ? 'حرف خاطئ' : isSingleChar ? 'حرف واحد' : 'رفض اللاعبون';
         answerScores[`${playerId}-${category}`] = { points: 0, reason };
         continue;
       }
@@ -459,7 +451,6 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
               results.answers.push({ playerId: playerId, category: category, answer: answerText, points: result.points, reason: result.reason });
               addedPoints[playerId] = (addedPoints[playerId] || 0) + result.points;
           } else {
-              // Handle answers that were not in validByCategory (i.e., initially invalid)
               const invalidResult = answerScores[key];
               if (invalidResult) {
                 results.answers.push({ playerId: playerId, category: category, answer: entry[category] || '', points: 0, reason: invalidResult.reason });
@@ -470,4 +461,3 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
   
   return { results, addedPoints };
 }
-
