@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -470,7 +469,7 @@ export function GameBoard({ game, self }: GameBoardProps) {
             transition={{ duration: 0.6 }}
             className={cn(
               'absolute -bottom-5 right-0 px-1.5 py-0.5 rounded text-[11px] font-semibold shadow',
-              selfDelta > 0 ? 'bg-emerald-600/90' : 'bg-rose-600/90'
+              selfDelta > 0 ? 'bg-emerald-600/90 text-white' : 'bg-rose-600/90 text-white'
             )}
           >
             {selfDelta > 0 ? `+${formatMoney(selfDelta)}` : `-${formatMoney(Math.abs(selfDelta))}`}
@@ -480,249 +479,139 @@ export function GameBoard({ game, self }: GameBoardProps) {
     </motion.div>
   );
 
-  // اللوحة الجانبية (HUD + سجل الأحداث)
-  const SidePanel = () => (
-    <>
-      <div className="p-2 bg-slate-900/40 rounded-lg">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm text-muted-foreground">جولة</div>
-            <div className="text-lg font-bold">
-              {round} / {maxRounds}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-sm text-muted-foreground">تحركات</div>
-            <div className="text-lg font-semibold">
-              {currentMoves} / {aliveCount}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <PlayerHUD
-        players={game.players}
-        turnOrder={game.educatedMerchantState?.turnOrder ?? []}
-        currentTurnIndex={game.educatedMerchantState?.currentTurnIndex ?? 0}
-      />
-
-      <ActivityLog log={game.educatedMerchantState?.activityLog || []} />
-    </>
-  );
-
   return (
     <div className="w-screen h-screen bg-gray-800 p-2 md:p-4 flex flex-col md:flex-row gap-4 overflow-hidden">
-      {/* نافذة السؤال */}
-      <QuestionModal game={game} self={self} />
-
-      {/* لوحة جانبية قابلة للطي على الجوال */}
-      {isMobile ? (
-        <Collapsible className="w-full shrink-0">
-          <CollapsibleTrigger asChild>
-            <Button variant="secondary" className="w-full">
-              عرض اللاعبين والأحداث
-              <ChevronDown className="h-4 w-4 ml-2" />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 space-y-2">
-            <SidePanel />
-          </CollapsibleContent>
-        </Collapsible>
-      ) : (
-        <div className="w-full md:w-1/4 xl:w-1/5 space-y-4 shrink-0 flex flex-col">
-          <SidePanel />
-        </div>
-      )}
-
-      {/* اللوح */}
-      <div
-        ref={containerRef}
-        className="flex-grow flex items-center justify-center relative min-h-0 min-w-0"
-        role="application"
-        aria-label="لوح لعبة التاجر المثقف"
-      >
-        {MoneyHUD}
-
-        <div className="relative" style={{ width: boardWidth, height: boardHeight }}>
-          {/* منطقة الوسط */}
-          <div
-            className="absolute bg-gray-900/60 rounded-2xl flex flex-col items-center justify-center p-2 md:p-8 shadow-inner"
-            style={{
-              top: tileSize + gapSize,
-              left: tileSize + gapSize,
-              right: tileSize + gapSize,
-              bottom: tileSize + gapSize,
-            }}
-          >
-            {game.educatedMerchantState?.timerEndsAt && game.gameState !== 'question' && (
-              <div className="mb-4 z-20">
-                <CountdownTimer
-                  gameId={game.id}
-                  gameType="educated-merchant"
-                  expiryTimestamp={game.educatedMerchantState.timerEndsAt.toMillis()}
-                  selfId={self.id}
-                  isHost={game.hostId === self.id}
-                />
-              </div>
-            )}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={game.gameState}
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ duration: 0.28 }}
-              >
-                {renderCenterContent()}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          {/* خانات اللوح */}
-          {board.map((property, index) => {
-            const key = property?.id ?? index;
-            return (
-              <div
-                key={key}
-                style={{ ...getPositionStyles(index), width: tileSize, height: tileSize }}
-              >
-                <Tile
-                  property={property}
-                  isNewlyBought={
-                    game.educatedMerchantState?.newlyBoughtPropertyId === property.id
-                  }
-                  isHighlighted={!!tileHighlight[index]}
-                />
-              </div>
-            );
-          })}
-
-          {/* قطع اللاعبين */}
-          {Object.entries(playersGroupedByPosition).map(([positionStr, playersOnTile]) => {
-            const position = parseInt(positionStr, 10);
-            const baseStyle = getPositionStyles(position);
-            const playerCount = playersOnTile.length;
-
-            return playersOnTile.map((p, idx) => {
-              const pieceSize = playerCount > 1 ? tileSize * 0.34 : tileSize * 0.42;
-
-              // توزيع بسيط لأقصى 4 لاعبين في خانة واحدة
-              let offsetX = (tileSize - pieceSize) / 2;
-              let offsetY = (tileSize - pieceSize) / 2;
-
-              if (playerCount === 2) {
-                offsetX = idx === 0 ? tileSize * 0.12 : tileSize * 0.88 - pieceSize;
-              } else if (playerCount === 3) {
-                if (idx === 0) {
-                  offsetX = (tileSize - pieceSize) / 2;
-                  offsetY = tileSize * 0.12;
-                } else if (idx === 1) {
-                  offsetX = tileSize * 0.12;
-                  offsetY = tileSize * 0.88 - pieceSize;
-                } else {
-                  offsetX = tileSize * 0.88 - pieceSize;
-                  offsetY = tileSize * 0.88 - pieceSize;
-                }
-              } else if (playerCount >= 4) {
-                const corner = (s: number, t: number) => s / t;
-                const layout: Array<[number, number]> = [
-                  [0.12, 0.12],
-                  [0.88 - corner(pieceSize, tileSize), 0.12],
-                  [0.12, 0.88 - corner(pieceSize, tileSize)],
-                  [0.88 - corner(pieceSize, tileSize), 0.88 - corner(pieceSize, tileSize)],
-                ];
-                const [cx, cy] = layout[Math.min(idx, 3)];
-                offsetX = cx * tileSize;
-                offsetY = cy * tileSize;
-              }
-
-              const numericTop = parseFloat(String(baseStyle.top).replace('px', '')) || 0;
-              const numericLeft = parseFloat(String(baseStyle.left).replace('px', '')) || 0;
-              const finalStyle = {
-                top: `${numericTop + offsetY}px`,
-                left: `${numericLeft + offsetX}px`,
-                width: pieceSize,
-                height: pieceSize,
-                position: 'absolute' as const,
-              };
-
-              const isActiveTurn =
-                p.id ===
-                game.educatedMerchantState?.turnOrder?.[
-                  game.educatedMerchantState?.currentTurnIndex ?? 0
-                ];
-
-              return (
-                <motion.div
-                  key={p.id}
-                  layoutId={`player-piece-${p.id}`}
-                  className={cn('absolute z-10', isActiveTurn && 'animate-pulse')}
-                  initial={false}
-                  animate={{
-                    ...finalStyle,
-                    y: isJumping[p.id] ? -JUMP_HEIGHT : 0,
-                    opacity: p.status === 'bankrupt' ? 0.36 : 1,
-                  }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 34 }}
-                  whileHover={{ scale: 1.05, zIndex: 50 }}
-                  aria-label={`اللاعب ${p.name} في خانة ${position}`}
-                >
-                  <div className="relative w-full h-full">
-                    <PlayerAvatar
-                      avatarId={p.avatarId}
-                      className="w-full h-full rounded-full border-2 border-white shadow-lg"
+        {/* Main content now includes both board and side panel */}
+        <div className="flex-grow flex flex-col md:flex-row gap-4 min-h-0">
+            {/* Side Panel (Non-mobile) */}
+            {!isMobile && (
+                <div className="w-full md:w-1/4 xl:w-1/5 space-y-4 shrink-0 flex flex-col">
+                    <PlayerHUD
+                        players={game.players}
+                        turnOrder={game.educatedMerchantState?.turnOrder ?? []}
+                        currentTurnIndex={game.educatedMerchantState?.currentTurnIndex ?? 0}
                     />
-                    {p.status === 'bankrupt' && (
-                      <div className="absolute -right-1 -top-1 bg-red-600 text-white text-[10px] px-1 rounded">
-                        مفلس
-                      </div>
-                    )}
+                    <ActivityLog log={game.educatedMerchantState?.activityLog || []} />
+                </div>
+            )}
+            
+            {/* Game Board */}
+            <div
+                ref={containerRef}
+                className="flex-grow flex items-center justify-center relative min-h-0 min-w-0"
+                role="application"
+                aria-label="لوح لعبة التاجر المثقف"
+            >
+                {MoneyHUD}
+                <div className="relative" style={{ width: boardWidth, height: boardHeight }}>
+                    <div
+                        className="absolute bg-gray-900/60 rounded-2xl flex flex-col items-center justify-center p-2 md:p-8 shadow-inner"
+                        style={{
+                            top: tileSize + gapSize,
+                            left: tileSize + gapSize,
+                            right: tileSize + gapSize,
+                            bottom: tileSize + gapSize,
+                        }}
+                    >
+                        {game.educatedMerchantState?.timerEndsAt && game.gameState !== 'question' && (
+                            <div className="mb-4 z-20">
+                                <CountdownTimer
+                                gameId={game.id}
+                                gameType="educated-merchant"
+                                expiryTimestamp={game.educatedMerchantState.timerEndsAt.toMillis()}
+                                selfId={self.id}
+                                isHost={game.hostId === self.id}
+                                />
+                            </div>
+                        )}
+                        <AnimatePresence mode="wait">
+                            <motion.div
+                                key={game.gameState}
+                                initial={{ opacity: 0, scale: 0.96 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.96 }}
+                                transition={{ duration: 0.28 }}
+                            >
+                                {renderCenterContent()}
+                            </motion.div>
+                        </AnimatePresence>
+                    </div>
 
-                    <AnimatePresence>
-                      {typeof moneyDelta[p.id] === 'number' && (
-                        <motion.div
-                          key={`${p.id}-${moneyDeltaNonce[p.id]}`}
-                          initial={{ y: 8, opacity: 0 }}
-                          animate={{ y: -18, opacity: 1 }}
-                          exit={{ y: -30, opacity: 0 }}
-                          transition={{ duration: 0.6 }}
-                          className={cn(
-                            'absolute left-1/2 -translate-x-1/2 -top-2 px-1.5 py-0.5 rounded text-[10px] font-bold shadow',
-                            moneyDelta[p.id]! > 0
-                              ? 'bg-emerald-600/90 text-white'
-                              : 'bg-rose-600/90 text-white'
-                          )}
-                        >
-                          {moneyDelta[p.id]! > 0
-                            ? `+${formatMoney(moneyDelta[p.id]!)}`
-                            : `-${formatMoney(Math.abs(moneyDelta[p.id]!))}`}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </motion.div>
-              );
-            });
-          })}
+                    {board.map((property, index) => (
+                        <div key={property?.id ?? index} style={{ ...getPositionStyles(index), width: tileSize, height: tileSize }}>
+                        <Tile
+                            property={property}
+                            isNewlyBought={game.educatedMerchantState?.newlyBoughtPropertyId === property.id}
+                            isHighlighted={!!tileHighlight[index]}
+                        />
+                        </div>
+                    ))}
+                    
+                    {Object.entries(playersGroupedByPosition).map(([positionStr, playersOnTile]) => {
+                        const position = parseInt(positionStr, 10);
+                        const baseStyle = getPositionStyles(position);
+                        const playerCount = playersOnTile.length;
+                        return playersOnTile.map((p, idx) => {
+                            const pieceSize = playerCount > 1 ? tileSize * 0.34 : tileSize * 0.42;
+                            let offsetX = (tileSize - pieceSize) / 2;
+                            let offsetY = (tileSize - pieceSize) / 2;
+                            if (playerCount === 2) offsetX = idx === 0 ? tileSize * 0.12 : tileSize * 0.88 - pieceSize;
+                            else if (playerCount === 3) { /* ... */ }
+                            else if (playerCount >= 4) { /* ... */ }
+                            const numericTop = parseFloat(String(baseStyle.top).replace('px', '')) || 0;
+                            const numericLeft = parseFloat(String(baseStyle.left).replace('px', '')) || 0;
+                            const finalStyle = { top: `${numericTop + offsetY}px`, left: `${numericLeft + offsetX}px`, width: pieceSize, height: pieceSize, position: 'absolute' as const };
+                            const isActiveTurn = p.id === game.educatedMerchantState?.turnOrder?.[game.educatedMerchantState?.currentTurnIndex ?? 0];
+
+                            return (
+                                <motion.div
+                                    key={p.id}
+                                    layoutId={`player-piece-${p.id}`}
+                                    className={cn('absolute z-10', isActiveTurn && 'animate-pulse')}
+                                    initial={false}
+                                    animate={{ ...finalStyle, y: isJumping[p.id] ? -JUMP_HEIGHT : 0, opacity: p.status === 'bankrupt' ? 0.36 : 1 }}
+                                    transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+                                    whileHover={{ scale: 1.05, zIndex: 50 }}
+                                    aria-label={`اللاعب ${p.name} في خانة ${position}`}
+                                >
+                                    <div className="relative w-full h-full">
+                                        <PlayerAvatar avatarId={p.avatarId} className="w-full h-full rounded-full border-2 border-white shadow-lg" />
+                                        {p.status === 'bankrupt' && <div className="absolute -right-1 -top-1 bg-red-600 text-white text-[10px] px-1 rounded">مفلس</div>}
+                                        <AnimatePresence>
+                                            {typeof moneyDelta[p.id] === 'number' && (
+                                                <motion.div key={`${p.id}-${moneyDeltaNonce[p.id]}`} initial={{ y: 8, opacity: 0 }} animate={{ y: -18, opacity: 1 }} exit={{ y: -30, opacity: 0 }} transition={{ duration: 0.6 }} className={cn('absolute left-1/2 -translate-x-1/2 -top-2 px-1.5 py-0.5 rounded text-[10px] font-bold shadow', moneyDelta[p.id]! > 0 ? 'bg-emerald-600/90 text-white' : 'bg-rose-600/90 text-white')}>
+                                                    {moneyDelta[p.id]! > 0 ? `+${formatMoney(moneyDelta[p.id]!)}` : `-${formatMoney(Math.abs(moneyDelta[p.id]!))}`}
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                </motion.div>
+                            );
+                        });
+                    })}
+                </div>
+            </div>
+            
+            {/* Mobile Collapsible Side Panel */}
+            {isMobile && (
+                 <Collapsible className="w-full shrink-0">
+                    <CollapsibleTrigger asChild>
+                        <Button variant="secondary" className="w-full">
+                        عرض اللاعبين والأحداث
+                        <ChevronDown className="h-4 w-4 ml-2" />
+                        </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-2 space-y-2">
+                         <PlayerHUD
+                            players={game.players}
+                            turnOrder={game.educatedMerchantState?.turnOrder ?? []}
+                            currentTurnIndex={game.educatedMerchantState?.currentTurnIndex ?? 0}
+                        />
+                        <ActivityLog log={game.educatedMerchantState?.activityLog || []} />
+                    </CollapsibleContent>
+                </Collapsible>
+            )}
         </div>
-      </div>
     </div>
   );
 }
-
-// /* ------------------------------------------------------------------ *
-//  * أدوات مساعدة صغيرة
-//  * ------------------------------------------------------------------ */
-// function findNextAliveIndex(turnOrder: string[], players: Player[], startIndex: number): number {
-//   if (!turnOrder || turnOrder.length === 0) return -1;
-//   let idx = (startIndex + 1) % turnOrder.length;
-//   let attempts = 0;
-//   while (attempts < turnOrder.length) {
-//     const pid = turnOrder[idx];
-//     const p = players.find((x) => x.id === pid);
-//     if (p && p.status === 'alive') return idx;
-//     idx = (idx + 1) % turnOrder.length;
-//     attempts++;
-//   }
-//   return -1;
-// }

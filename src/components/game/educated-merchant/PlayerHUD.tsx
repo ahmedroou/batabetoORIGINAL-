@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -6,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { PlayerAvatar } from '../PlayerAvatar';
-import { HandCoins, Crown, Home, Building } from 'lucide-react';
+import { HandCoins, Crown, Building } from 'lucide-react';
 import type { Player } from '@/types';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -17,9 +16,6 @@ interface PlayerHUDProps {
   currentTurnIndex: number;
 }
 
-/**
- * دالة مساعدة لتنسيق الأرقام مع فاصل الآلاف.
- */
 const formatMoney = (n: number) => {
   try {
     return new Intl.NumberFormat('ar-EG').format(n);
@@ -28,10 +24,6 @@ const formatMoney = (n: number) => {
   }
 };
 
-
-/* -------------------------------------------------------------------------------------------------
- * صف لاعب منفصل ومُمَيَّز لتقليل إعادة التصيير (Memoized)
- * ------------------------------------------------------------------------------------------------- */
 const PlayerRow = React.memo(function PlayerRow({
   player,
   isCurrent,
@@ -60,7 +52,6 @@ const PlayerRow = React.memo(function PlayerRow({
       role="listitem"
       aria-label={`اللاعب ${player.name}`}
     >
-      {/* اليسار: صورة + تفاصيل أساسية */}
       <div className="flex items-center gap-3 min-w-0">
         <div className="relative w-10 h-10 flex-shrink-0">
           <PlayerAvatar avatarId={player.avatarId} className="w-10 h-10" />
@@ -89,7 +80,6 @@ const PlayerRow = React.memo(function PlayerRow({
               <div className="text-[11px] px-2 py-0.5 rounded bg-red-600 text-white">مفلس</div>
             )}
           </div>
-
           <div className="text-xs text-yellow-300 font-semibold flex items-center gap-1.5 mt-1">
              <HandCoins className="w-3 h-3" />
              <span className="font-mono">{formatMoney(player.money ?? 0)}</span>
@@ -97,7 +87,6 @@ const PlayerRow = React.memo(function PlayerRow({
         </div>
       </div>
 
-      {/* اليمين: الترتيب + العقارات */}
       <div className="flex flex-col items-end shrink-0">
           <div className="text-sm font-bold">
               {rank ? `#${rank}` : '—'}
@@ -111,21 +100,16 @@ const PlayerRow = React.memo(function PlayerRow({
   );
 });
 
-/* -------------------------------------------------------------------------------------------------
- * PlayerHUD
- * ------------------------------------------------------------------------------------------------- */
 export function PlayerHUD({ players, turnOrder, currentTurnIndex }: PlayerHUDProps) {
   const currentPlayerId = turnOrder[currentTurnIndex];
   const isMobile = useIsMobile();
 
-  // المتصدر
   const leaderId = useMemo(() => {
     const alive = players.filter((p) => p.status === 'alive');
     if (alive.length === 0) return null;
     return alive.reduce((a, b) => ((a.money ?? 0) > (b.money ?? 0) ? a : b)).id;
   }, [players]);
 
-  // ترتيب اللاعبين (أحياء فقط)
   const ranking = useMemo(() => {
     const sorted = [...players]
       .filter((p) => p.status === 'alive')

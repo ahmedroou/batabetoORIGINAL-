@@ -9,7 +9,7 @@ import { getEducatedMerchantCategories } from '../../actions/admin/settings';
  * الثوابت (حافظ على الأسماء المطلوبة)
  * ------------------------------------------------------------------ */
 const BOARD_SIZE = 28;
-const START_MONEY = 1000;
+const START_MONEY = 1200; // تم التعديل
 const PASS_GO_REWARD = 200;
 const ACTION_TIME_SECONDS = 35;
 const QUESTION_TIME_SECONDS = 20;
@@ -60,7 +60,6 @@ const addActionTimer = (seconds: number): Timestamp => Timestamp.fromMillis(Date
 const randomDiceRoll = (diceMax?: number): number => {
   const max = Math.max(DICE_MIN, diceMax ?? DICE_MAX);
   const span = max - DICE_MIN + 1;
-  // Math.random كافٍ هنا للحفاظ على نفس السلوك
   return Math.floor(Math.random() * span) + DICE_MIN;
 };
 
@@ -88,13 +87,11 @@ const findNextAliveIndex = (turnOrder: string[], players: Player[], startIndex: 
   return -1;
 };
 
-// دمج عدة أسطر لوج في رسالة واحدة عند الحاجة (سلوك رسالة واحدة في نهاية الدور)
 const composeLog = (parts: string[]): string | null => {
   const txt = parts.filter(Boolean).join(' ');
   return txt.length ? txt : null;
 };
 
-// مفيد لتجنّب arrayUnion() بدون عناصر
 const withLogUnion = (
   base: Record<string, any>,
   logs: Array<{ message: string; timestamp: Timestamp }>
@@ -112,7 +109,6 @@ const withLogUnion = (
 export function _generateBoard(categories: string[]): Property[] {
   const board: (Property | null)[] = new Array(BOARD_SIZE).fill(null);
 
-  // خانة البداية
   board[0] = {
     id: 0,
     type: 'start',
@@ -123,10 +119,9 @@ export function _generateBoard(categories: string[]): Property[] {
     ownerId: null,
   } as Property;
 
-  // اختيار خانات غرامة (مواقع فريدة ليست 0)
   const finePositions = new Set<number>();
   while (finePositions.size < Math.min(MAX_FINES, BOARD_SIZE - 1)) {
-    const pos = Math.floor(Math.random() * (BOARD_SIZE - 2)) + 1; // 1..BOARD_SIZE-2
+    const pos = Math.floor(Math.random() * (BOARD_SIZE - 2)) + 1;
     finePositions.add(pos);
   }
 
@@ -172,17 +167,14 @@ export function _generateBoard(categories: string[]): Property[] {
 }
 
 export async function _getInitialGameState(players: Player[]) {
-  // جلب التصنيفات من الإعدادات الإدارية إن توفرت
   let categories: string[] = ['علوم', 'رياضيات', 'برمجة', 'أحياء', 'كيمياء', 'قسم الغرامات'];
   try {
     const categoriesResult = await getEducatedMerchantCategories();
     if (Array.isArray(categoriesResult?.categories) && categoriesResult.categories.length) {
       categories = categoriesResult.categories;
-      if (!categories.includes('قسم الغرامات')) categories.push('قسم الغرامات'); // ضمان وجود قسم الغرامات
+      if (!categories.includes('قسم الغرامات')) categories.push('قسم الغرامات');
     }
-  } catch {
-    // تجاهل الخطأ واستخدم الافتراضي للمحافظة على منطق اللعبة
-  }
+  } catch {}
 
   const board = _generateBoard(categories);
   const turnOrder = shuffle(players.map((p) => p.id));
@@ -251,7 +243,6 @@ export function _rollDice(game: Game, playerId: string): RollDiceResult {
 
   let needsQuestion: QuestionRequest | null = null;
 
-  // --- معالجة نوع الخانة ---
   if (landing.type === 'property') {
     if (landing.ownerId && landing.ownerId !== playerId) {
       const ownerIndex = getPlayerIndexById(players, landing.ownerId);
@@ -265,14 +256,24 @@ export function _rollDice(game: Game, playerId: string): RollDiceResult {
           player.money = 0;
           player.status = 'bankrupt';
           player.bankruptAt = ts;
-          logs.push({ message: `${player.name} أفلس لأنه لم يستطع دفع الإيجار لـ ${owner.name}.`, timestamp: ts });
+          
+          // Transfer properties
+          board.forEach((prop, i) => {
+              if (prop.ownerId === player.id) {
+                  board[i] = { ...prop, ownerId: owner.id, color: owner.color };
+              }
+          });
+          owner.propertiesCount = board.filter(p => p.ownerId === owner.id).length;
+          player.propertiesCount = 0;
+
+          logs.push({ message: `${player.name} أفلس لأنه لم يستطع دفع الإيجار لـ ${owner.name}. وانتقلت ممتلكاته إليه.`, timestamp: ts });
+
         } else {
           player.money = (player.money || 0) - rent;
           owner.money = (owner.money || 0) + rent;
           logs.push({ message: `${player.name} دفع ${rent} دينار إيجار لـ ${owner.name}.`, timestamp: ts });
         }
       } else {
-        // حالة نادرة: معرّف مالك غير موجود في قائمة اللاعبين
         logs.push({ message: `ملاحظة: المالك غير موجود في قائمة اللاعبين لـ "${landing.name}".`, timestamp: ts });
       }
 
@@ -302,7 +303,6 @@ export function _rollDice(game: Game, playerId: string): RollDiceResult {
       return { updates: { ...baseUpdates, ...endUpdates }, needsQuestion: null, isGameOver, finalGame };
     }
 
-    // غير مملوك: السماح بقرار الشراء
     const updates = withLogUnion(
       {
         ...baseUpdates,
@@ -348,7 +348,6 @@ export function _rollDice(game: Game, playerId: string): RollDiceResult {
     };
   }
 
-  // أي نوع آخر (احتياطي)
   const msg = composeLog(logs.map((l) => l.message));
   const { updates: endUpdates, isGameOver, finalGame } = _endTurnInternal(game, playerId, msg, { players, board });
   return { updates: { ...baseUpdates, ...endUpdates }, needsQuestion: null, isGameOver, finalGame };
@@ -482,12 +481,10 @@ export function _handleTimeout(game: Game): RollDiceResult {
   const currentPlayerId = turnOrder[currentTurnIndex];
 
   if (state === 'rolling') {
-    // يعود RollDiceResult مباشرةً
     return _rollDice(game, currentPlayerId);
   }
 
   if (state === 'property_action') {
-    // حوّل EndTurnResult إلى RollDiceResult
     const endRes = _endTurn(game, currentPlayerId);
     return {
       updates: endRes.updates,
@@ -498,7 +495,6 @@ export function _handleTimeout(game: Game): RollDiceResult {
   }
 
   if (state === 'question') {
-    // حوّل AnswerQuestionResult إلى RollDiceResult
     const ansRes = _answerQuestion(game, currentPlayerId, '__TIMEOUT__');
     return {
       updates: ansRes.updates,
@@ -508,7 +504,6 @@ export function _handleTimeout(game: Game): RollDiceResult {
     };
   }
 
-  // احتياطي أمان: تخطي الدور برسالة منطقية
   const end = _endTurnInternal(
     game,
     currentPlayerId,
@@ -576,15 +571,24 @@ function _endTurnInternal(
   }
 
   if (isGameOver) {
-    const winner =
-      activePlayers.length > 0
-        ? activePlayers.reduce((a, b) => ((a.money || 0) > (b.money || 0) ? a : b))
-        : null;
+      // Calculate final scores including half of property values
+      const finalScores = players.map(p => {
+          const propertyValue = board.filter(prop => prop.ownerId === p.id && prop.type === 'property')
+                                    .reduce((sum, prop) => sum + (prop.price / 2), 0);
+          return {
+              ...p,
+              finalScore: (p.money ?? 0) + propertyValue
+          };
+      });
 
-    const message =
-      activePlayers.length <= 1
-        ? `اللاعب ${winner?.name || ''} هو الناجي الأخير!`
-        : `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى رصيد.`;
+      const winner = finalScores.length > 0
+          ? finalScores.reduce((a, b) => (a.finalScore > b.finalScore ? a : b))
+          : null;
+      
+      const message =
+        activePlayers.length <= 1
+          ? `اللاعب ${winner?.name || ''} هو الناجي الأخير!`
+          : `انتهت الجولات! الفائز هو ${winner?.name || ''} بأعلى ثروة.`;
 
     const finalGameData: Game = {
       ...game,
@@ -592,6 +596,7 @@ function _endTurnInternal(
       educatedMerchantState: { ...game.educatedMerchantState, board },
       gameState: 'final_results',
       gameResult: { winner: winner?.id || 'none', message },
+      playerScores: Object.fromEntries(finalScores.map(p => [p.id, p.finalScore])), // Store final scores
     } as Game;
 
     const updates: Record<string, any> = {
@@ -600,6 +605,7 @@ function _endTurnInternal(
       players,
       [`${EM}.board`]: board,
       [`${EM}.timerEndsAt`]: deleteField(),
+      playerScores: finalGameData.playerScores,
     };
 
     const withLogs = withLogUnion(updates, logEvents);
@@ -607,7 +613,6 @@ function _endTurnInternal(
   }
 
   if (nextTurnIndex === -1) {
-    // لا ينبغي أن يحدث مع فحص نهاية اللعبة، ولكن احتياطي
     return { isGameOver: true, updates: {}, finalGame: null };
   }
 
