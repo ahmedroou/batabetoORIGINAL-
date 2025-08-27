@@ -31,7 +31,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, JudgePrisonAnswersInput, JudgeSingleSubmissionOutput, GameState } from '@/types';
-import { getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
+import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
 import { updateLeagueScoresForGameEnd } from './user';
 import { distributeEndOfGameAwards } from './admin/users';
 import { normalizeForSignature } from './helpers';
@@ -77,11 +77,22 @@ async function fetchRandomQuestion(): Promise<PrisonQuestion> {
     orderBy('randomKey'),
     limit(1)
   );
-  const snap = await getDocs(q);
+  let snap = await getDocs(q);
 
   if (snap.empty) {
-     return { id: 'fallback', text: 'اذكر أسماء أولاد تبدأ بحرف الباء' } as PrisonQuestion;
+    const fallbackQuery = query(
+        questionsCol,
+        where('randomKey', '<', randomKey),
+        orderBy('randomKey', 'desc'),
+        limit(1)
+    );
+    snap = await getDocs(fallbackQuery);
   }
+
+  if (snap.empty) {
+      return { id: 'fallback', text: 'اذكر أسماء أولاد تبدأ بحرف الباء' } as PrisonQuestion;
+  }
+
   const docSnap = snap.docs[0];
   return { id: docSnap.id, ...(docSnap.data() as Omit<PrisonQuestion, 'id'>) };
 }
@@ -585,7 +596,7 @@ export async function nextRound(gameId: string, hostId: string) {
   }
 }
 
-export async function tickGame(gameId: string): Promise<void> {
+export async function tickGame(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
   let finalGameData: Game | null = null;
   let shouldStartNextRound = false;
@@ -594,25 +605,26 @@ export async function tickGame(gameId: string): Promise<void> {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
     const game = snap.data() as Game;
-    
+
     if (game.gameState === 'final_results') return;
     if (!game.prisonState?.timerEndsAt || !isExpired(game.prisonState.timerEndsAt)) return;
+    if (game.hostId !== hostId) return; // Allow only host to tick forward
 
     tx.update(gameRef, { 'prisonState.timerEndsAt': deleteField() });
-    
-    switch(game.gameState) {
+
+    switch (game.gameState) {
       case 'open_auction': {
         const submissions: Record<string, string[]> = { ...(game.prisonState?.openAuctionSubmissions || {}) };
         const activePlayers = game.players.filter(aliveOrInPrison);
-        activePlayers.forEach(p => {
-            if (!submissions[p.id]) {
-                submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
-            }
+        activePlayers.forEach((p) => {
+          if (!submissions[p.id]) {
+            submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
+          }
         });
         tx.update(gameRef, {
-            'prisonState.openAuctionSubmissions': submissions,
-            gameState: 'judging',
-            stateVersion: increment(1),
+          'prisonState.openAuctionSubmissions': submissions,
+          gameState: 'judging',
+          stateVersion: increment(1),
         });
         break;
       }
@@ -656,14 +668,14 @@ export async function tickGame(gameId: string): Promise<void> {
       }
       case 'judging':
       case 'rejudging': {
-          const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, tx);
-          tx.update(gameRef, updatedGame);
-          if (gameDataForLeague) finalGameData = gameDataForLeague;
-          break;
+        const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, tx);
+        tx.update(gameRef, updatedGame);
+        if (gameDataForLeague) finalGameData = gameDataForLeague;
+        break;
       }
       case 'results': {
-          shouldStartNextRound = true;
-          break;
+        shouldStartNextRound = true;
+        break;
       }
       case 'instructions': {
         const q = await fetchRandomQuestion();
@@ -679,11 +691,15 @@ export async function tickGame(gameId: string): Promise<void> {
   });
 
   if (shouldStartNextRound) {
-      await nextRound(gameId, game.hostId);
+    await nextRound(gameId, game.hostId);
   } else if (finalGameData) {
-      await updateLeagueScoresForGameEnd(finalGameData);
-  } else if (game.gameState === 'open_auction' || game.gameState === 'closed_auction_answering') {
-      await judgeAnswersAndProceed(gameId, false);
+    await updateLeagueScoresForGameEnd(finalGameData);
+    await distributeEndOfGameAwards(gameId);
+  } else {
+    const snap = await getDoc(gameRef);
+    if(snap.exists() && (snap.data() as Game).gameState === 'judging') {
+        await judgeAnswersAndProceed(gameId, false);
+    }
   }
 }
 
