@@ -41,7 +41,7 @@ import { normalizeForSignature } from './helpers';
 const DEFAULTS = {
   answeringTime: 45, // seconds
   biddingTime: 30, // seconds
-  judgingTimeout: 25, // seconds to wait before proceeding with partial results
+  judgingTimeout: 25, // seconds to wait before partial results
   maxRounds: 10,
 };
 
@@ -290,7 +290,6 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
   const playerSubs = Object.entries(allSubmissions).map(([playerId, answers]) => {
     const p = game.players.find((x) => x.id === playerId);
     
-    // This is the corrected logic: Keep only the first occurrence of each unique answer
     const seen = new Set<string>();
     const uniqueAnswers = answers.filter(answer => {
         const normalized = normalizeForSignature(answer);
