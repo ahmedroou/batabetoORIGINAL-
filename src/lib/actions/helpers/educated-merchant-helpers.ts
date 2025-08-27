@@ -390,75 +390,75 @@ export function _purchaseProperty(game: Game, playerId: string): PurchasePropert
 }
 
 export function _answerQuestion(game: Game, playerId: string, answer: string): AnswerQuestionResult {
-  const em = ensure(game.educatedMerchantState, 'Missing educatedMerchantState');
-  const { pendingPurchase, pendingFine, currentQuestion } = em;
+    const em = ensure(game.educatedMerchantState, 'Missing educatedMerchantState');
+    const { pendingPurchase, pendingFine, currentQuestion } = em;
 
-  if (
-    game.gameState !== 'question' ||
-    (!pendingPurchase && !pendingFine) ||
-    (pendingPurchase?.playerId !== playerId && pendingFine?.playerId !== playerId)
-  ) {
-    throw new Error('Not valid to answer question.');
-  }
-
-  const question = ensure(currentQuestion as EducatedMerchantQuestion, 'Missing current question');
-  const isCorrect = answer === question.answer; // حافظ على المنطق الأصلي (مقارنة صارمة)
-
-  const ts = nowTimestamp();
-  const players = clonePlayers(game.players);
-  const board = cloneBoard(ensure(em.board, 'Missing board'));
-  const playerIndex = getPlayerIndexById(players, playerId);
-  const player = ensure(players[playerIndex], 'Player not found');
-
-  let activityMessage = '';
-  let extraUpdates: Record<string, any> = {};
-
-  if (pendingPurchase) {
-    const propertyName = pendingPurchase.propertyName || 'عقار';
-
-    if (isCorrect) {
-      const propIndex = board.findIndex((p) => p.id === pendingPurchase.propertyId);
-      if (propIndex !== -1) {
-        board[propIndex].ownerId = playerId;
-        board[propIndex].color = player.color;
-      }
-      player.propertiesCount = (player.propertiesCount || 0) + 1;
-      activityMessage = `${player.name} أجاب بشكل صحيح وامتلك "${propertyName}"!`;
-      extraUpdates = { [`${EM}.newlyBoughtPropertyId`]: pendingPurchase.propertyId };
-    } else {
-      const refund = Math.round((pendingPurchase.price || 0) / 4);
-      player.money = (player.money || 0) + refund;
-      activityMessage = `${player.name} أجاب بشكل خاطئ على سؤال "${propertyName}" واسترد ${refund} دينار.`;
+    if (
+      game.gameState !== 'question' ||
+      (!pendingPurchase && !pendingFine) ||
+      (pendingPurchase?.playerId !== playerId && pendingFine?.playerId !== playerId)
+    ) {
+      throw new Error('Not valid to answer question.');
     }
-  } else if (pendingFine) {
-    if (isCorrect) {
-      activityMessage = `${player.name} أجاب بشكل صحيح ونجا من الغرامة!`;
-    } else {
-      const fine = pendingFine.fineAmount ?? DEFAULT_FINE;
-      if ((player.money || 0) < fine) {
-        player.money = 0;
-        player.status = 'bankrupt';
-        player.bankruptAt = ts;
-        activityMessage = `${player.name} أجاب خطأ وأفلس لأنه لم يستطع دفع الغرامة.`;
+
+    const question = ensure(currentQuestion as EducatedMerchantQuestion, 'Missing current question');
+    const isCorrect = answer === question.answer;
+
+    const ts = nowTimestamp();
+    const players = clonePlayers(game.players);
+    const board = cloneBoard(ensure(em.board, 'Missing board'));
+    const playerIndex = getPlayerIndexById(players, playerId);
+    const player = ensure(players[playerIndex], 'Player not found');
+
+    let activityMessage = '';
+    let extraUpdates: Record<string, any> = {};
+
+    if (pendingPurchase) {
+      const propertyName = pendingPurchase.propertyName || 'عقار';
+      if (isCorrect) {
+        const propIndex = board.findIndex((p) => p.id === pendingPurchase.propertyId);
+        if (propIndex !== -1) {
+          board[propIndex].ownerId = playerId;
+          board[propIndex].color = player.color;
+        }
+        player.propertiesCount = (player.propertiesCount || 0) + 1;
+        activityMessage = `${player.name} أجاب بشكل صحيح وامتلك "${propertyName}"!`;
+        extraUpdates = { [`${EM}.newlyBoughtPropertyId`]: pendingPurchase.propertyId };
       } else {
-        player.money = (player.money || 0) - fine;
-        activityMessage = `${player.name} أجاب خطأ ودفع غرامة ${fine} دينار.`;
+        const refund = Math.round((pendingPurchase.price || 0) / 4);
+        player.money = (player.money || 0) + refund;
+        activityMessage = `${player.name} أجاب بشكل خاطئ على سؤال "${propertyName}" واسترد ${refund} دينار.`;
       }
+    } else if (pendingFine) {
+        if (isCorrect) {
+            activityMessage = `${player.name} أجاب بشكل صحيح ونجا من الغرامة!`;
+        } else {
+            const fine = pendingFine.fineAmount ?? DEFAULT_FINE;
+            if ((player.money || 0) < fine) {
+                player.money = 0;
+                player.status = 'bankrupt';
+                player.bankruptAt = ts;
+                activityMessage = `${player.name} أجاب خطأ وأفلس لأنه لم يستطع دفع الغرامة.`;
+            } else {
+                player.money = (player.money || 0) - fine;
+                activityMessage = `${player.name} أجاب خطأ ودفع غرامة ${fine} دينار.`;
+            }
+        }
     }
-  }
 
-  const { updates, isGameOver, finalGame } = _endTurnInternal(game, playerId, activityMessage, { players, board });
+    const { updates, isGameOver, finalGame } = _endTurnInternal(game, playerId, activityMessage, { players, board });
+    
+    Object.assign(updates, {
+        ...extraUpdates,
+        [`${EM}.pendingPurchase`]: deleteField(),
+        [`${EM}.pendingFine`]: deleteField(),
+        [`${EM}.currentQuestion`]: deleteField(),
+        [`${EM}.questionToken`]: deleteField(),
+    });
 
-  Object.assign(updates, {
-    ...extraUpdates,
-    [`${EM}.pendingPurchase`]: deleteField(),
-    [`${EM}.pendingFine`]: deleteField(),
-    [`${EM}.currentQuestion`]: deleteField(),
-    [`${EM}.questionToken`]: deleteField(),
-  });
-
-  return { updates, isGameOver, finalGame };
+    return { updates, isGameOver, finalGame };
 }
+
 
 export function _endTurn(game: Game, playerId: string): EndTurnResult {
   if (game.gameState !== 'property_action') throw new Error('Not in property action state.');
