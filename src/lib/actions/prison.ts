@@ -713,7 +713,7 @@ export async function tickGame(gameId: string): Promise<void> {
       const submissions = { ...(game.prisonState?.openAuctionSubmissions || {}) } as Record<string, string[]>;
       const actives = game.players.filter((p) => p.status === 'alive');
       actives.forEach((p) => {
-        if (!submissions[p.id]) submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
+        submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
       });
 
       tx.update(gameRef, {
