@@ -20,7 +20,7 @@ interface VotingPhaseProps {
 }
 
 // Arabic normalization helpers (lightweight client version)
-const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670\u06D6-\u06ED]/g;
+const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670-\u06ED]/g;
 const TATWEEL = /\u0640/g;
 function normalizeArabic(text?: string) {
   if (!text) return '';
@@ -47,31 +47,34 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
   const state = game.kingdomOfNamesState;
   const allSubmissions = state?.playerAnswers || {};
 
-  // All answers are correct by default. We only store incorrect votes.
-  const [incorrectVotes, setIncorrectVotes] = useState<Record<string, 'incorrect'>>({});
+  // FIX: State now derives from the server truth `state.votes`.
+  // The local state only tracks the user's *current* selections before they are submitted.
+  const [incorrectVotes, setIncorrectVotes] = useState<Record<string, 'incorrect'>>(() => state?.votes?.[self.id] || {});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  const hasSubmitted = useMemo(() => {
+
+  // FIX: The source of truth for "has submitted" is now directly from the game object.
+  // We also use a local "optimistic" state to immediately lock the UI after submission.
+  const hasSubmittedOnServer = useMemo(() => {
       return !!state?.votes?.[self.id] && Object.keys(state.votes[self.id]).length > 0;
   }, [state?.votes, self.id]);
-
-  const [submittedLocally, setSubmittedLocally] = useState(hasSubmitted);
+  const [submittedLocally, setSubmittedLocally] = useState(hasSubmittedOnServer);
 
   const isHost = game.hostId === self.id;
 
+  // Sync local state if server state changes (e.g., rejoining a game).
   useEffect(() => {
-      const serverVotes = state?.votes?.[self.id] || {};
-      setIncorrectVotes(serverVotes);
-      const serverHasVote = !!state?.votes?.[self.id] && Object.keys(state.votes[self.id]).length > 0;
-      if (serverHasVote) {
-          setSubmittedLocally(true);
-      }
+    const serverVotes = state?.votes?.[self.id] || {};
+    setIncorrectVotes(serverVotes);
+    if (!!state?.votes?.[self.id] && Object.keys(serverVotes).length > 0) {
+      setSubmittedLocally(true);
+    }
   }, [state?.votes, self.id]);
 
   const activePlayers = useMemo(() => game.players.filter((p) => p.status !== 'left'), [game.players]);
   const otherPlayers = useMemo(() => activePlayers.filter(p => p.id !== self.id), [activePlayers, self.id]);
 
   const toggleVote = useCallback((key: string) => {
+    if (submittedLocally) return; // Don't allow changes after submission
     setIncorrectVotes((prev) => {
       const next = { ...prev };
       if (next[key]) {
@@ -81,26 +84,24 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
       }
       return next;
     });
-  }, []);
+  }, [submittedLocally]);
 
   const handleSubmit = useCallback(async () => {
-    if (isSubmitting) return;
+    if (isSubmitting || submittedLocally) return;
     setIsSubmitting(true);
     try {
       // Only send the items marked as incorrect
       await submitVotes(game.id, self.id, incorrectVotes);
       toast({ title: 'تم تسجيل تصويتك!' });
-      setSubmittedLocally(true);
+      setSubmittedLocally(true); // Lock UI immediately
     } catch (err: any) {
       toast({ title: 'خطأ', description: err?.message || 'فشل إرسال التصويت', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
-  }, [game.id, self.id, incorrectVotes, toast, isSubmitting]);
+  }, [game.id, self.id, incorrectVotes, toast, isSubmitting, submittedLocally]);
 
-  const userHasSubmitted = submittedLocally;
-
-  if (userHasSubmitted) {
+  if (submittedLocally) {
     return (
       <Card className="w-full max-w-lg text-center">
         <CardHeader>
