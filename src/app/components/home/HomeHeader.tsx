@@ -238,6 +238,11 @@ const MailboxDialog = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread' | 'rewards'>('all');
+  const [clientReady, setClientReady] = useState(false);
+
+  useEffect(() => {
+    setClientReady(true);
+  }, []);
 
   const handleOpen = async () => {
     if (!user) return;
@@ -313,7 +318,7 @@ const MailboxDialog = () => {
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" onClick={handleOpen} className="relative" aria-label="فتح صندوق البريد">
                 <MailIcon className="h-6 w-6 text-primary" />
-                {unreadCount > 0 && (
+                {clientReady && unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
                     {unreadCount}
                   </span>
@@ -386,9 +391,11 @@ const MailboxDialog = () => {
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(mail.createdAt, { addSuffix: true, locale: ar })}
-                      </p>
+                      {clientReady && (
+                        <p className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(mail.createdAt, { addSuffix: true, locale: ar })}
+                        </p>
+                      )}
                       <div className="flex items-center gap-2">
                         {!mail.isRead && <span className="inline-flex h-2 w-2 rounded-full bg-primary" />}
                         <p className={cn('font-semibold', !mail.isRead && 'text-primary')}>{mail.subject}</p>

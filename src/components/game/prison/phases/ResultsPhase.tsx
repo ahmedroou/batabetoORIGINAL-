@@ -44,7 +44,7 @@ export function ResultsPhase({ game, self }: ResultsPhaseProps) {
     
     const sortedPlayers = [...game.players].sort((a,b) => (game.playerScores?.[b.id] || 0) - (game.playerScores?.[a.id] || 0));
     const playersInPrison = game.players.filter(p => p.status === 'in_prison');
-    const freedPlayerId = game.players.find(p => p.name === result?.freedPlayerName)?.id;
+    const freedPlayerId = sortedPlayers.find(p => p.name === result?.freedPlayerName)?.id;
 
     return (
         <Card className="w-full max-w-5xl animate-pop-in">

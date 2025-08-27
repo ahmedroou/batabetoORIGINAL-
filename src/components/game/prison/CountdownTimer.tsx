@@ -23,10 +23,12 @@ interface CountdownTimerProps {
 export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: CountdownTimerProps) => {
     const calculateTimeLeft = useCallback(() => expiryTimestamp ? Math.round(Math.max(0, expiryTimestamp - Date.now()) / 1000) : 0, [expiryTimestamp]);
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+    const [clientReady, setClientReady] = useState(false);
     
     const timeoutProcessed = useRef(false);
 
     useEffect(() => {
+        setClientReady(true);
         if (!expiryTimestamp) return;
 
         const timer = setInterval(() => {
@@ -42,7 +44,7 @@ export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: Coun
         return () => clearInterval(timer);
     }, [expiryTimestamp, calculateTimeLeft, isHost, gameId, selfId]);
 
-    if (!expiryTimestamp || timeLeft <= 0) return null;
+    if (!clientReady || !expiryTimestamp || timeLeft <= 0) return null;
 
     const isLowTime = timeLeft <= 10;
 

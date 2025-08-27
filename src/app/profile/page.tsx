@@ -69,8 +69,10 @@ function toDate(input?: unknown): Date | null {
 // Component to safely render time-sensitive information on the client
 function TimeRemaining({ until }: { until?: any }) {
     const [renderedTime, setRenderedTime] = useState<string>('');
+    const [clientReady, setClientReady] = useState(false);
 
     useEffect(() => {
+        setClientReady(true);
         const dt = toDate(until);
         if (!dt) {
             setRenderedTime('');
@@ -89,6 +91,8 @@ function TimeRemaining({ until }: { until?: any }) {
         const timer = setInterval(update, 60000); // Update every minute
         return () => clearInterval(timer);
     }, [until]);
+
+    if (!clientReady) return null;
 
     return <>{renderedTime}</>;
 }
@@ -156,7 +160,7 @@ export default function ProfilePage() {
     if (!next) return { label: currentRank?.name ?? "", pct: 100, toNext: 0, nextName: null as string | null };
     const rangeStart = sorted[currentIndex]?.threshold ?? 0;
     const rangeEnd = next.threshold;
-    const pct = Math.max(0, Math.min(100, ((points - rangeStart) / (rangeEnd - rangeStart)) * 100));
+    const pct = Math.max(0, Math.min(100, ((points - rangeStart) / (rangeEnd - start)) * 100));
     const toNext = Math.max(0, rangeEnd - points);
     return { label: currentRank?.name ?? "", pct, toNext, nextName: next.name };
   }, [userProfile?.leaderboardPoints, socialRanks, currentRank?.name]);

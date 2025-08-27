@@ -23,14 +23,7 @@ export function CompactChallengeList({
 }) {
   const { userProfile } = useAuth();
   const [joiningId, setJoiningId] = React.useState<string | null>(null);
-  const [now, setNow] = React.useState<number>(Date.now());
-
-  // نبقي العداد الزمني حيًا لتحديث الوقت المتبقي
-  React.useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
+  
   // فرز التحديات بحسب اقتراب الانتهاء
   const sorted = React.useMemo(() => {
     return [...(challenges || [])].sort((a, b) => {
@@ -64,7 +57,6 @@ export function CompactChallengeList({
             challenge={challenge}
             index={index}
             userId={userProfile?.uid}
-            now={now}
             joiningId={joiningId}
             onJoin={onJoin ? () => handleJoin(challenge) : undefined}
           />
@@ -82,20 +74,27 @@ function ChallengeRow({
   challenge,
   index,
   userId,
-  now,
   joiningId,
   onJoin,
 }: {
   challenge: Challenge;
   index: number;
   userId?: string;
-  now: number;
   joiningId: string | null;
   onJoin?: () => void;
 }) {
   const isParticipant = Boolean(userId && (challenge as any).participantIds?.includes(userId));
   const endsAt = toDate((challenge as any).endsAt);
   const startsAt = toDate((challenge as any).startsAt) || toDate((challenge as any).createdAt);
+  const [now, setNow] = React.useState<number>(Date.now());
+  const [clientReady, setClientReady] = React.useState(false);
+
+  React.useEffect(() => {
+    setClientReady(true);
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   const ended = endsAt ? now >= endsAt.getTime() : false;
 
   const endsInLabel = endsAt
@@ -152,7 +151,7 @@ function ChallengeRow({
                 {maxParticipants ? <span className="tabular-nums">/{maxParticipants}</span> : null}
               </span>
 
-              {endsAt && (
+              {clientReady && endsAt && (
                 <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${ended ? 'bg-destructive/10 text-destructive' : urgent ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-muted/60'}`}>
                   <Clock className="h-3.5 w-3.5" />
                   {ended ? 'انتهى' : `تنتهي ${endsInLabel}`}
@@ -174,7 +173,7 @@ function ChallengeRow({
 
         <div className="flex shrink-0 items-center gap-3">
           {/* مؤشّر دائري صغير لتقدم الوقت */}
-          {endsAt && (
+          {clientReady && endsAt && (
             <TimeDonut progress={progressRatio} urgent={urgent || ended} />
           )}
 

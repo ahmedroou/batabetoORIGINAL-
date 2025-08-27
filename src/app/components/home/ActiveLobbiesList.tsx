@@ -95,7 +95,7 @@ export default function ActiveLobbiesList({ onJoin, onLobbiesUpdate }: ActiveLob
         ))}
       </AnimatePresence>
     );
-  }, [activeLobbies, isLoadingLobbies, joiningLobbyId]);
+  }, [activeLobbies, isLoadingLobbies, joiningLobbyId, handleJoinClick]);
 
   return (
     <Card className="relative overflow-hidden" dir="rtl" lang="ar">
@@ -133,8 +133,9 @@ function LobbyRow({
   onJoin: () => void;
 }) {
   const [now, setNow] = useState<number>(() => Date.now());
-
+  const [clientReady, setClientReady] = useState(false);
   useEffect(() => {
+    setClientReady(true);
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
@@ -179,7 +180,7 @@ function LobbyRow({
                 <Users className="h-3.5 w-3.5" />
                 <b className="tabular-nums">{count}</b>/<span className="tabular-nums">{maxPlayers}</span>
               </span>
-              {expiresAt && (
+              {clientReady && expiresAt && (
                 <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${isUrgent ? 'bg-destructive/10 text-destructive' : 'bg-muted/60'}`}>
                   <Clock className="h-3.5 w-3.5" />
                   {timeLeftLabel}
@@ -200,7 +201,7 @@ function LobbyRow({
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
-          {expiresAt && (
+          {clientReady && expiresAt && (
             <div className="relative hidden sm:block h-9 w-9">
               <svg viewBox="0 0 36 36" className="absolute inset-0 -rotate-90">
                 <circle cx="18" cy="18" r="16" fill="none" stroke="hsl(var(--muted-foreground)/.15)" strokeWidth="3" />

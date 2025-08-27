@@ -132,14 +132,14 @@ const ScoreboardDialog = ({
   const { myRank } = getUserRankInMatch(match, currentUserId);
 
   const share = async () => {
-    const url = typeof window !== "undefined" ? window.location.href + `#match-${match.id}` : "";
+    const url = typeof window !== 'undefined' ? window.location.href + `#match-${match.id}` : '';
     const title = `نتائج ${GAME_TYPE_NAMES[match.gameType]} — ${fmtDate(safeToDate(match.createdAt))}`;
     try {
       if (navigator.share) {
         await navigator.share({ title, url });
       } else {
         await navigator.clipboard.writeText(url);
-        alert("تم نسخ رابط المباراة");
+        alert('تم نسخ رابط المباراة');
       }
     } catch { /* ignore */ }
   };
@@ -147,7 +147,7 @@ const ScoreboardDialog = ({
   const copyId = async () => {
     try {
       await navigator.clipboard.writeText(match.id);
-      alert("تم نسخ معرف المباراة");
+      alert('تم نسخ معرف المباراة');
     } catch {}
   };
 
@@ -331,7 +331,7 @@ export default function MatchHistoryPage() {
       ["id", "gameType", "date", "playerCount", "myScore", "myRank", "topPlayer", "topScore"],
       ...filtered.map((m) => {
         const { myScore, myRank, top } = getUserRankInMatch(m, user?.uid);
-        const topName = m.players.find((p) => p.id === top?.playerId)?.name || "";
+        const topName = m.players?.find((p) => p.id === top?.playerId)?.name || "";
         return [
           m.id,
           GAME_TYPE_NAMES[m.gameType] || m.gameType,
@@ -441,10 +441,12 @@ export default function MatchHistoryPage() {
                       <strong><RankChip rank={summary.bestRank} /></strong>
                     </li>
                   )}
-                  <li>
-                    <span className="text-slate-500 dark:text-violet-200/70">آخر مباراة: </span>
-                    <strong>{summary.lastPlayed ? fmtDate(summary.lastPlayed) : '—'}</strong>
-                  </li>
+                  {summary.lastPlayed && (
+                    <li>
+                      <span className="text-slate-500 dark:text-violet-200/70">آخر مباراة: </span>
+                      <strong>{fmtDate(summary.lastPlayed)}</strong>
+                    </li>
+                  )}
                 </ul>
               ) : (
                 <p className="text-sm text-slate-500 dark:text-violet-200/70">لا بيانات كافية بعد.</p>

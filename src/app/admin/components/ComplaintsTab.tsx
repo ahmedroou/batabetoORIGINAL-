@@ -68,6 +68,9 @@ export default function ComplaintsTab() {
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "resolved" | "rejected">("pending");
   const [typeFilter, setTypeFilter] = useState<"all" | "missing_currency" | "bug_report">("all");
   const [sortDir, setSortDir] = useState<"newest" | "oldest">("newest");
+  const [clientReady, setClientReady] = useState(false);
+  useEffect(() => setClientReady(true), []);
+
 
   // Selection (for bulk approve/reject in missing_currency)
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -387,6 +390,8 @@ export default function ComplaintsTab() {
       if (typeof coins === "number") setModifiedCoins((p) => ({ ...p, [c.id]: String(coins) }));
       if (typeof points === "number") setModifiedPoints((p) => ({ ...p, [c.id]: String(points) }));
     };
+    const [clientReady, setClientReady] = useState(false);
+    useEffect(() => setClientReady(true), []);
 
     return (
       <AccordionItem value={c.id} className="rounded-md border bg-card">
@@ -396,9 +401,9 @@ export default function ComplaintsTab() {
             <PlayerAvatar avatarId={c.userAvatar} className="w-8 h-8" />
             <div className="text-right">
               <div className="font-bold leading-tight">{c.userName}</div>
-              <div className="text-[11px] text-muted-foreground" title={format(c._createdAt, "d MMM, h:mm a", { locale: ar })}>
+              {clientReady && <div className="text-[11px] text-muted-foreground" title={format(c._createdAt, "d MMM, h:mm a", { locale: ar })}>
                 {formatDistanceToNow(c._createdAt, { addSuffix: true, locale: ar })}
-              </div>
+              </div>}
             </div>
             <div className="flex items-center gap-2 mr-auto">
               <Badge className={`border ${statusColor[c.status] || "bg-muted"}`}>{c.status === "pending" ? "قيد المراجعة" : c.status === "approved" ? "مقبولة" : c.status === "rejected" ? "مرفوضة" : "مقروء"}</Badge>
@@ -458,34 +463,38 @@ export default function ComplaintsTab() {
     );
   };
 
-  const BugItem = ({ c }: { c: Complaint & { _createdAt: Date } }) => (
-    <AccordionItem value={c.id} className="rounded-md border bg-card">
-      <AccordionTrigger className="px-3">
-        <div className="flex items-center gap-3 w-full">
-          <PlayerAvatar avatarId={c.userAvatar} className="w-8 h-8" />
-          <div className="text-right">
-            <div className="font-bold leading-tight">{c.userName}</div>
-            <div className="text-[11px] text-muted-foreground" title={format(c._createdAt, "d MMM, h:mm a", { locale: ar })}>
-              {formatDistanceToNow(c._createdAt, { addSuffix: true, locale: ar })}
+  const BugItem = ({ c }: { c: Complaint & { _createdAt: Date } }) => {
+    const [clientReady, setClientReady] = useState(false);
+    useEffect(() => setClientReady(true), []);
+    return (
+      <AccordionItem value={c.id} className="rounded-md border bg-card">
+        <AccordionTrigger className="px-3">
+          <div className="flex items-center gap-3 w-full">
+            <PlayerAvatar avatarId={c.userAvatar} className="w-8 h-8" />
+            <div className="text-right">
+              <div className="font-bold leading-tight">{c.userName}</div>
+              {clientReady && <div className="text-[11px] text-muted-foreground" title={format(c._createdAt, "d MMM, h:mm a", { locale: ar })}>
+                {formatDistanceToNow(c._createdAt, { addSuffix: true, locale: ar })}
+              </div>}
+            </div>
+            <div className="flex items-center gap-2 mr-auto">
+              <Badge className={`border ${statusColor[c.status] || "bg-muted"}`}>{c.status === "pending" ? "قيد المراجعة" : c.status === "approved" ? "مقبولة" : c.status === "rejected" ? "مرفوضة" : "مقروء"}</Badge>
+              <Badge className={`border ${typeColor[c.type] || "bg-muted"}`}>تقرير خطأ</Badge>
             </div>
           </div>
-          <div className="flex items-center gap-2 mr-auto">
-            <Badge className={`border ${statusColor[c.status] || "bg-muted"}`}>{c.status === "pending" ? "قيد المراجعة" : c.status === "approved" ? "مقبولة" : c.status === "rejected" ? "مرفوضة" : "مقروء"}</Badge>
-            <Badge className={`border ${typeColor[c.type] || "bg-muted"}`}>تقرير خطأ</Badge>
+        </AccordionTrigger>
+        <AccordionContent className="p-3 space-y-3 bg-muted/40 rounded-b-md">
+          <div className="grid sm:grid-cols-2 gap-2 text-sm">
+            <div><span className="font-semibold">اللعبة:</span> {GAME_TYPE_NAMES[c.details?.game as keyof typeof GAME_TYPE_NAMES] || c.details?.game || "—"}</div>
+            <div className="sm:col-span-2"><span className="font-semibold">الوصف:</span> {c.details?.description || "—"}</div>
           </div>
-        </div>
-      </AccordionTrigger>
-      <AccordionContent className="p-3 space-y-3 bg-muted/40 rounded-b-md">
-        <div className="grid sm:grid-cols-2 gap-2 text-sm">
-          <div><span className="font-semibold">اللعبة:</span> {GAME_TYPE_NAMES[c.details?.game as keyof typeof GAME_TYPE_NAMES] || c.details?.game || "—"}</div>
-          <div className="sm:col-span-2"><span className="font-semibold">الوصف:</span> {c.details?.description || "—"}</div>
-        </div>
-        <Button className="w-full" variant="secondary" onClick={() => handleResolveSingle(c, "resolved")} disabled={busy === c.id}>
-          {busy === c.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />} وضع علامة كمقروء
-        </Button>
-      </AccordionContent>
-    </AccordionItem>
-  );
+          <Button className="w-full" variant="secondary" onClick={() => handleResolveSingle(c, "resolved")} disabled={busy === c.id}>
+            {busy === c.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />} وضع علامة كمقروء
+          </Button>
+        </AccordionContent>
+      </AccordionItem>
+    );
+  };
 
   const EmptyState = ({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) => (
     <div className="h-96 w-full flex flex-col items-center justify-center text-center gap-2 bg-muted/30 rounded-md border">

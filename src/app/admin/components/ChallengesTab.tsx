@@ -222,6 +222,8 @@ const ChallengeForm = ({
   const [thirdPlacePrizes, setThirdPlacePrizes] = useState<ChallengePrize[]>(
     initialData?.thirdPlacePrize ?? DEFAULT_FORM.thirdPlacePrize
   );
+  const [clientReady, setClientReady] = useState(false);
+  useEffect(() => setClientReady(true), []);
 
   useEffect(() => {
     setTitle(initialData?.title ?? DEFAULT_FORM.title);
@@ -354,13 +356,15 @@ const ChallengeForm = ({
             onChange={(e) => setDurationHours(numberOnly(e.target.value))}
             placeholder="168"
           />
-          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-            <CalendarClock className="w-3.5 h-3.5" /> ينتهي تقريبًا: {format(
-              endsAtPreview,
-              "d MMM yyyy, h:mm a",
-              { locale: ar }
-            )} — {formatDistanceToNowStrict(endsAtPreview, { locale: ar })}
-          </p>
+          {clientReady && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+              <CalendarClock className="w-3.5 h-3.5" /> ينتهي تقريبًا: {format(
+                endsAtPreview,
+                "d MMM yyyy, h:mm a",
+                { locale: ar }
+              )} — {formatDistanceToNowStrict(endsAtPreview, { locale: ar })}
+            </p>
+          )}
         </div>
       </div>
 
@@ -491,6 +495,8 @@ export default function ChallengesTab() {
   >("all");
   const [sortKey, setSortKey] = useState<"endsAt" | "createdAt">("endsAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [clientReady, setClientReady] = useState(false);
+  useEffect(() => setClientReady(true), []);
 
   const fetchChallenges = useCallback(async () => {
     setIsFetching(true);
@@ -689,6 +695,8 @@ export default function ChallengesTab() {
     const createdAtDate = toDate(c.createdAt);
     const isEnded = isBefore(endsAtDate, new Date());
     const isFinalized = !!c.winners;
+    const [clientReady, setClientReady] = useState(false);
+    useEffect(() => setClientReady(true), []);
 
     const totalDurationHrs = Math.max(
       1,
@@ -717,11 +725,13 @@ export default function ChallengesTab() {
             </span>
             <p className="font-bold text-sm sm:text-base">{c.title}</p>
           </div>
-          <p className="text-[12px] text-muted-foreground">
-            تنتهي: {format(endsAtDate, "d MMMM, h:mm a", { locale: ar })} —
-            {" "}
-            {formatDistanceToNowStrict(endsAtDate, { locale: ar })}
-          </p>
+          {clientReady && (
+            <p className="text-[12px] text-muted-foreground">
+              تنتهي: {format(endsAtDate, "d MMMM, h:mm a", { locale: ar })} —
+              {" "}
+              {formatDistanceToNowStrict(endsAtDate, { locale: ar })}
+            </p>
+          )}
           <div className="h-1.5 bg-background/60 rounded-full overflow-hidden">
             <div className="h-full bg-primary/70" style={{ width: `${progress}%` }} />
           </div>

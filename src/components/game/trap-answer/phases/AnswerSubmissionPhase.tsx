@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PlayerAvatar } from '@/components/game/PlayerAvatar';
 import { submitTrapAnswer } from '@/lib/actions/trap-answer';
 import { Loader2, EyeOff, Send, Image as ImageIcon } from 'lucide-react';
@@ -166,7 +167,7 @@ export function AnswerSubmissionPhase({ game, self }: { game: Game, self: Player
             // Client-side similarity check
             if (currentQuestion?.answer) {
                  const similarity = safeCompareStrings(trapAnswer, currentQuestion.answer);
-                 if (similarity >= SIMILARITY_THRESHOLD) {
+                 if (similarity >= SIMILARITY_BLOCK) {
                      toast({ title: 'إجابة قريبة جداً!', description: 'إجابتك المفخخة شديدة الشبه بالإجابة الصحيحة. الرجاء إدخال إجابة مختلفة.', variant: 'destructive' });
                      return;
                  }
