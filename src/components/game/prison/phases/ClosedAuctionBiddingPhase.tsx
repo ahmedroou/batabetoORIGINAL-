@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useCallback } from 'react';
@@ -10,7 +11,8 @@ import { Input } from '@/components/ui/input';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { CountdownTimer } from '../CountdownTimer';
 import { submitBid } from '@/lib/actions/prison';
-import { Gavel, RefreshCw } from 'lucide-react';
+import { Gavel, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface ClosedAuctionBiddingPhaseProps {
     game: Game;
@@ -28,6 +30,7 @@ export function ClosedAuctionBiddingPhase({ game, self }: ClosedAuctionBiddingPh
     const hasUsedQuestionChange = (game.prisonState?.questionChangersUsedBy || []).includes(self.id);
     const playersInPrison = game.players.filter(p => p.status === 'in_prison');
     const highestBid = game.prisonState?.highestBid || 0;
+    const questionChangerName = game.prisonState?.questionChanger;
     
     const isTimeUp = !game.prisonState?.timerEndsAt || Date.now() > game.prisonState.timerEndsAt.toMillis();
 
@@ -65,7 +68,7 @@ export function ClosedAuctionBiddingPhase({ game, self }: ClosedAuctionBiddingPh
 
     return (
         <Card className="w-full max-w-lg relative animate-pop-in">
-            {game.prisonState?.timerEndsAt && (
+             {game.prisonState?.timerEndsAt && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                     <CountdownTimer 
                         gameId={game.id}
@@ -91,6 +94,15 @@ export function ClosedAuctionBiddingPhase({ game, self }: ClosedAuctionBiddingPh
                 </div>
             </CardHeader>
             <CardContent className="space-y-4">
+                 {questionChangerName && (
+                    <Alert variant="default" className="bg-blue-100/80 border-blue-300 text-blue-900">
+                        <RefreshCw className="h-4 w-4 !text-blue-700" />
+                        <AlertTitle className="font-bold">تم تغيير السؤال!</AlertTitle>
+                        <AlertDescription>
+                            قام اللاعب {questionChangerName} باستخدام صلاحيته لتغيير السؤال. تم إعادة تعيين المزاد.
+                        </AlertDescription>
+                    </Alert>
+                 )}
                  <div className="text-center p-3 rounded-lg bg-primary/10">
                     <p className="text-sm text-primary">أعلى مزايدة حاليًا</p>
                     <p className="text-3xl font-bold text-primary">{highestBid}</p>

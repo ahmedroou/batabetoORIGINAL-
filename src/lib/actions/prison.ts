@@ -1,4 +1,5 @@
 
+
 /**
  * @fileoverview Actions for "The Prison" game — GPT‑5 revamped.
  *
@@ -591,13 +592,16 @@ export async function submitBid(gameId: string, playerId: string, amount: number
     const snap = await tx.get(gameRef);
     if (!snap.exists()) throw new Error('Game not found.');
     const game = snap.data() as Game;
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) throw new Error("Player not found");
 
     if (game.gameState !== 'closed_auction_bidding') return { success: false, error: 'انتهى وقت المزايدة.' };
 
     if (changeQuestion) {
       if ((game.prisonState?.questionChangersUsedBy || []).includes(playerId)) throw new Error('لقد استخدمت قدرتك على تغيير السؤال بالفعل.');
-      const qs = query(collection(db, 'prison_questions'));
-      const s = await getDocs(qs);
+      
+      const questionsCol = collection(db, 'prison_questions');
+      const s = await getDocs(query(questionsCol)); // Fetching outside transaction is better if possible
       if (s.empty) throw new Error('لا توجد أسئلة كافية لتغيير السؤال.');
       const list = s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
       const newQ = list[Math.floor(Math.random() * list.length)];
@@ -605,13 +609,21 @@ export async function submitBid(gameId: string, playerId: string, amount: number
       tx.update(gameRef, {
         'prisonState.closedAuctionQuestion': newQ,
         'prisonState.questionChangersUsedBy': arrayUnion(playerId),
+        // Reset auction state
+        'prisonState.bids': {},
+        'prisonState.highestBid': 0,
+        'prisonState.questionChanger': player.name,
+        // Reset timer
+        'prisonState.timerEndsAt': tsIn(ensurePrisonState(game).settings.biddingTime || DEFAULTS.biddingTime),
         stateVersion: increment(1),
       });
       return { success: true };
     }
 
-    const currentHighest = game.prisonState?.highestBid || 0;
-    if (!Number.isFinite(amount) || amount <= currentHighest) throw new Error(`يجب أن تكون مزايدتك أعلى من ${currentHighest}.`);
+    const currentHighestBid = game.prisonState?.highestBid || 0;
+    if (!Number.isFinite(amount) || amount <= currentHighestBid) {
+      throw new Error(`يجب أن تكون مزايدتك أعلى من ${currentHighestBid}.`);
+    }
 
     tx.update(gameRef, {
       [`prisonState.bids.${playerId}`]: amount,
