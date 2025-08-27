@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Actions for "The Prison" game — GPT‑5 revamped.
  *
@@ -126,20 +127,18 @@ export async function startPrisonGame(gameId: string, hostId: string) {
       round: 1,
       stateVersion: increment(1),
       playerScores: updatedPlayers.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {} as Record<string, number>),
-      prisonState: {
-        ...ps,
-        prisonHistory: updatedPlayers.reduce(
-          (a, p) => ({ ...a, [p.id]: { inPrison: 0, roundsWithoutWinningAuction: 0 } }),
-          {}
-        ),
-        rejudgeRequestsUsedBy: [],
-        judgingLock: false,
-        judgeRunId: deleteField(),
-        aiJudgeResults: [],
-        playerProgress: {},
-        openAuctionSubmissions: {},
-        timerEndsAt: tsIn(20), // تعليمات قصيرة؛ الواجهة تعرض العداد
-      },
+      'prisonState.settings': ps.settings,
+      'prisonState.prisonHistory': updatedPlayers.reduce(
+        (a, p) => ({ ...a, [p.id]: { inPrison: 0, roundsWithoutWinningAuction: 0 } }),
+        {}
+      ),
+      'prisonState.rejudgeRequestsUsedBy': [],
+      'prisonState.judgingLock': false,
+      'prisonState.judgeRunId': deleteField(),
+      'prisonState.aiJudgeResults': [],
+      'prisonState.playerProgress': {},
+      'prisonState.openAuctionSubmissions': {},
+      'prisonState.timerEndsAt': tsIn(20), // تعليمات قصيرة؛ الواجهة تعرض العداد
     });
   });
 }
