@@ -89,15 +89,7 @@ async function fetchRandomQuestion(): Promise<PrisonQuestion> {
     snap = await getDocs(q);
   }
   
-  if (snap.empty) {
-      const allDocsSnap = await getDocs(query(questionsCol, limit(1000))); 
-      if (allDocsSnap.empty) {
-         return { id: 'fallback', text: 'ما هي أركان الإسلام الخمسة؟', similaritySignature: 'اركان الاسلام الخمسة' };
-      }
-      const randomDoc = allDocsSnap.docs[Math.floor(Math.random() * allDocsSnap.docs.length)];
-      return { id: randomDoc.id, ...(randomDoc.data() as Omit<PrisonQuestion, 'id'>) };
-  }
-
+  if (snap.empty) throw new Error('لا توجد أسئلة للعبة السجن.');
   const docSnap = snap.docs[0];
   return { id: docSnap.id, ...(docSnap.data() as Omit<PrisonQuestion, 'id'>) };
 }
@@ -198,7 +190,7 @@ export async function updateOpenAuctionProgress(gameId: string, playerId: string
   const gameRef = doc(db, 'games', gameId);
   try {
     const fieldPath = new FieldPath('prisonState', 'playerProgress', playerId, 'answers');
-    await updateDoc(gameRef, fieldPath, answers);
+    await updateDoc(gameRef, { [fieldPath as any]: answers });
   } catch (e) {
     console.error('Error updating open auction progress:', e);
   }
@@ -248,7 +240,7 @@ async function judgeSinglePlayerAndUpdate(gameId: string, one: JudgePrisonAnswer
         evaluation: 'لم يقدم اللاعب أي إجابات.',
       };
       const fieldPath = new FieldPath('prisonState', 'aiJudgeResults', zero.playerId);
-      await updateDoc(doc(db, 'games', gameId), fieldPath, zero);
+      await updateDoc(doc(db, 'games', gameId), { [fieldPath as any]: zero });
       return;
     }
 
@@ -256,17 +248,19 @@ async function judgeSinglePlayerAndUpdate(gameId: string, one: JudgePrisonAnswer
     if (out && out.results.length > 0) {
       const single = out.results[0]!;
       const fieldPath = new FieldPath('prisonState', 'aiJudgeResults', single.playerId);
-      await updateDoc(doc(db, 'games', gameId), fieldPath, single);
+      await updateDoc(doc(db, 'games', gameId), { [fieldPath as any]: single });
     }
   } catch (e) {
     console.error(`AI Judging failed for player ${one.submissions[0]?.playerId} in game ${gameId}:`, e);
     const fieldPath = new FieldPath('prisonState', 'aiJudgeResults', one.submissions[0]!.playerId);
-    await updateDoc(doc(db, 'games', gameId), fieldPath, {
-      playerId: one.submissions[0]!.playerId,
-      name: one.submissions[0]!.name,
-      score: 0,
-      correctAnswers: [],
-      evaluation: "خطأ في الاتصال بحكم الذكاء الاصطناعي.",
+    await updateDoc(doc(db, 'games', gameId), {
+      [fieldPath as any]: {
+        playerId: one.submissions[0]!.playerId,
+        name: one.submissions[0]!.name,
+        score: 0,
+        correctAnswers: [],
+        evaluation: "خطأ في الاتصال بحكم الذكاء الاصطناعي.",
+      }
     });
   }
 }
@@ -449,18 +443,18 @@ export async function proceedToResultsInternal(
     const finalScores = Object.values(aiResults).map((r) => ({ playerId: r.playerId, finalScore: r.score }));
 
     if (finalScores.length > 0) {
-        finalScores.forEach(({ playerId }) => {
-            const res = aiResults[playerId]!;
-            const totalSubmitted = (submissions?.[playerId] || []).length;
-            const incorrect = Math.max(0, totalSubmitted - (res?.score || 0));
-            if (incorrect > 0) {
-                const penalty = -Math.floor(incorrect / 2);
-                if (penalty < 0 && roundScores[playerId]) {
-                    roundScores[playerId]!.points += penalty;
-                    (roundScores[playerId]!.breakdown as any[]).push({ reason: 'إجابات خاطئة', points: penalty });
-                }
-            }
-        });
+      finalScores.forEach(({ playerId }) => {
+          const res = aiResults[playerId]!;
+          const totalSubmitted = (submissions?.[playerId] || []).length;
+          const incorrect = Math.max(0, totalSubmitted - (res?.score || 0));
+          if (incorrect > 0) {
+              const penalty = -Math.floor(incorrect / 2);
+              if (penalty < 0 && roundScores[playerId]) {
+                  roundScores[playerId]!.points += penalty;
+                  (roundScores[playerId]!.breakdown as any[]).push({ reason: 'إجابات خاطئة', points: penalty });
+              }
+          }
+      });
       
       const scoreValues = finalScores.map((c) => c.finalScore);
       if (scoreValues.length > 0) {
@@ -474,22 +468,20 @@ export async function proceedToResultsInternal(
 
         if (winners.length > 0 && (scoreValues.length === 1 || max > min)) {
             winners.forEach((w) => {
-            const idx = updatedPlayers.findIndex((p) => p.id === w.playerId);
-            const wp = updatedPlayers[idx];
-            if (wp && roundScores[wp.id]) {
-                winnerMsg = `الفائز بالجولة هو ${wp.name}!`;
-                if (wp.status === 'in_prison') {
-                updatedPlayers[idx] = {...wp, status: 'alive'};
-                lastResultData.freedPlayerName = wp.name;
-                lastResultData.freedPlayerAvatarId = wp.avatarId;
-                winnerMsg += ' وتم تحريره!';
-                roundScores[w.playerId]!.points += 2;
-                (roundScores[w.playerId]!.breakdown as any[]).push({ reason: 'فوز وتحرير', points: 2 });
-                } else {
-                roundScores[w.playerId]!.points += 3;
-                (roundScores[w.playerId]!.breakdown as any[]).push({ reason: 'فوز بالمزاد', points: 3 });
-                }
-            }
+              const idx = updatedPlayers.findIndex((p) => p.id === w.playerId);
+              const wp = updatedPlayers[idx];
+              if (wp && roundScores[wp.id]) {
+                  winnerMsg = `الفائز بالجولة هو ${wp.name}!`;
+                  roundScores[w.playerId]!.points += 2;
+                  (roundScores[w.playerId]!.breakdown as any[]).push({ reason: 'أعلى إجابات', points: 2 });
+                  
+                  if (wp.status === 'in_prison') {
+                      updatedPlayers[idx] = {...wp, status: 'alive'};
+                      lastResultData.freedPlayerName = wp.name;
+                      lastResultData.freedPlayerAvatarId = wp.avatarId;
+                      winnerMsg += ' وتم تحريره!';
+                  }
+              }
             });
         }
 
@@ -497,8 +489,8 @@ export async function proceedToResultsInternal(
             const lId = losers[0].playerId;
             const idx = updatedPlayers.findIndex((p) => p.id === lId);
             if (idx !== -1 && updatedPlayers[idx].status === 'alive') {
-            updatedPlayers[idx] = {...updatedPlayers[idx], status: 'in_prison'};
-            loserMsg = `الخاسر هو ${updatedPlayers[idx].name} وسيدخل السجن.`;
+              updatedPlayers[idx] = {...updatedPlayers[idx], status: 'in_prison'};
+              loserMsg = `الخاسر هو ${updatedPlayers[idx].name} وسيدخل السجن.`;
             }
         }
 
@@ -509,7 +501,7 @@ export async function proceedToResultsInternal(
             const isW = winners.some((w) => w.playerId === playerId) && max > min;
             const isL = losers.length === 1 && losers[0].playerId === playerId && max > min;
             if (!isW && !isL && updatedPlayers.find((p) => p.id === playerId)?.status === 'alive') {
-            if (roundScores[playerId]) {
+              if (roundScores[playerId]) {
                     roundScores[playerId]!.points += 1;
                     (roundScores[playerId]!.breakdown as any[]).push({ reason: 'نجاة', points: 1 });
                 }
@@ -621,6 +613,7 @@ export async function tickGame(gameId: string): Promise<void> {
     const timerEndsAt = game.prisonState?.timerEndsAt;
     if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
 
+
     tx.update(gameRef, { 'prisonState.timerEndsAt': deleteField() });
     
     switch(game.gameState) {
@@ -721,7 +714,7 @@ export async function tickGame(gameId: string): Promise<void> {
 }
 
 
-async function _startNextRound(tx: Transaction, gameRef: DocumentData, game: Game): Promise<{isGameOver: boolean, finalGame: Game | null}> {
+async function _startNextRound(tx: Transaction, gameRef: any, game: Game): Promise<{isGameOver: boolean, finalGame: Game | null}> {
      let isGameOver = false;
      let finalGame: Game | null = null;
      
@@ -806,7 +799,9 @@ async function _startNextRound(tx: Transaction, gameRef: DocumentData, game: Gam
              'prisonState.timerEndsAt': deleteField(),
          };
          tx.update(gameRef, finalUpdate);
-         finalGame = JSON.parse(JSON.stringify({...game, ...finalUpdate}));
+         const gameData = { ...game, ...finalUpdate };
+         delete (gameData as any).prisonState.timerEndsAt; // Ensure it's not a FieldValue
+         finalGame = gameData as Game;
      }
 
      return { isGameOver, finalGame };
@@ -900,3 +895,4 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
 
   return { success: true };
 }
+
