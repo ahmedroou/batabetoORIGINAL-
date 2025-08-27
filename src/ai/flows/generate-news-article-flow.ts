@@ -52,6 +52,19 @@ Write a comprehensive news article based on the provided JSON data. The article 
 You must provide your response in a valid JSON object with a "headline" and a "body".
 `;
 
+// Helper to clean up the model's response before parsing.
+function cleanAndParseJson(rawText: string): { headline: string; body: string } {
+    let cleanText = rawText.trim();
+    // Remove markdown code block fences if they exist
+    if (cleanText.startsWith('```json')) {
+        cleanText = cleanText.substring(7, cleanText.length - 3).trim();
+    } else if (cleanText.startsWith('```')) {
+         cleanText = cleanText.substring(3, cleanText.length - 3).trim();
+    }
+    return JSON.parse(cleanText) as { headline: string; body: string };
+}
+
+
 const generateArticleFlow = ai.defineFlow(
   {
     name: 'generateArticleFlow',
@@ -74,8 +87,10 @@ const generateArticleFlow = ai.defineFlow(
         },
       ],
     });
+    
+    // Use the new helper function for safer parsing
+    const { headline, body } = cleanAndParseJson(articleTextResponse.text);
 
-    const { headline, body } = JSON.parse(articleTextResponse.text) as { headline: string, body: string };
 
     // Step 2: Generate a unique image for the article based on its content
     const imagePrompt = `Generate a satirical, political-cartoon-style image that visually represents this headline: "${headline}". The style should be like a newspaper's editorial cartoon, using symbolism and caricature. For example, if the headline is about a falling king, show a king with a crooked crown tripping over a game piece.`;
