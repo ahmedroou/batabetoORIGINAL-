@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -15,6 +16,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import * as prisonActions from '@/lib/actions/prison';
 import { CountdownTimer } from '../CountdownTimer';
+import { cn } from '@/lib/utils';
+import { normalizeForSignature } from '@/lib/actions/helpers';
 
 /**
  * JudgingPhase (refactored)
@@ -34,17 +37,6 @@ interface JudgingPhaseProps {
 }
 
 // --- Helpers -----------------------------------------------------------------
-
-/** Normalize text for robust comparisons (Arabic-friendly). */
-function normalizeAnswer(value: string): string {
-  return (value ?? '')
-    .normalize('NFKC')
-    .replace(/\u0640/g, '') // tatweel
-    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g, '') // diacritics range
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
 
 /** Firestore Timestamp or number -> milliseconds number (or undefined). */
 function getMillis(ts: any | undefined): number | undefined {
@@ -242,7 +234,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                 contestantsWithSubmissions.map((player) => {
                   const playerResult = resultsByPlayerId.get(player.id);
                   const submittedAnswers: string[] = openAuctionSubmissions[player.id] ?? [];
-                  const correctAnswersSet = new Set(playerResult?.correctAnswers?.map(normalizeAnswer) || []);
+                  const correctAnswersSet = new Set(playerResult?.correctAnswers?.map(normalizeForSignature) || []);
 
                   return (
                     <motion.div
@@ -272,7 +264,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                       <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
                         {submittedAnswers.length > 0 ? (
                           submittedAnswers.map((answer, i) => {
-                            const isCorrect = correctAnswersSet.has(normalizeAnswer(answer));
+                            const isCorrect = correctAnswersSet.has(normalizeForSignature(answer));
 
                             return (
                               <div key={`${player.id}-${i}`} className="flex items-center gap-2 p-2 bg-slate-900/50 rounded-md text-sm">
@@ -296,7 +288,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                                     )
                                   )}
                                 </AnimatePresence>
-                                <span className="break-words leading-relaxed">{answer}</span>
+                                <span className={cn("break-words leading-relaxed", !isCorrect && playerResult && "line-through opacity-70")}>{answer}</span>
                               </div>
                             );
                           })

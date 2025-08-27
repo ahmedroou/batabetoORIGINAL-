@@ -39,6 +39,7 @@ import type {
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
 import { updateLeagueScoresForGameEnd } from './user';
 import { distributeEndOfGameAwards } from './admin/users';
+import { normalizeForSignature } from './helpers';
 
 // ————————————————————————————————————————————
 // Utilities
@@ -261,13 +262,13 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
 
     const allSubs = game.prisonState?.openAuctionSubmissions || {};
     const expected = Object.keys(allSubs).length;
-    
+
     // If no submissions, go straight to results instead of judging
     if (expected === 0) {
-      tx.update(gameRef, { 
-        gameState: 'results', 
+      tx.update(gameRef, {
+        gameState: 'results',
         'prisonState.lastRoundResult': { message: 'لا توجد إجابات لتقييمها. انتهت الجولة.', points: {} },
-        stateVersion: increment(1)
+        stateVersion: increment(1),
       });
       return;
     }
@@ -291,10 +292,17 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
   const game = snap.data() as Game;
 
   const allSubmissions = game.prisonState?.openAuctionSubmissions || {};
+
+  // Pre-process submissions to remove duplicates before sending to AI
   const playerSubs = Object.entries(allSubmissions).map(([playerId, answers]) => {
     const p = game.players.find((x) => x.id === playerId);
-    return { playerId, name: p?.name || 'Unknown', answers: answers || [] };
+    const uniqueAnswers = Array.from(new Set(answers.map(normalizeForSignature))).map(originalAnswer => {
+        return answers.find(ans => normalizeForSignature(ans) === originalAnswer)!;
+    });
+
+    return { playerId, name: p?.name || 'Unknown', answers: uniqueAnswers };
   });
+
 
   if (playerSubs.length === 0) {
     // This case is now handled in the transaction, but kept as a defensive measure.
@@ -332,7 +340,7 @@ export async function proceedToResults(gameId: string, hostId: string) {
     if (!snap.exists()) throw new Error('Game not found.');
     const game = snap.data() as Game;
     if (game.hostId !== hostId) throw new Error('Only host can proceed to results.');
-    
+
     // Allow proceeding if results are empty, to handle the no-submissions case.
     if (!game.prisonState?.aiJudgeResults) return;
 
@@ -381,32 +389,30 @@ export async function proceedToResultsInternal(
     const winnerPlayer = updatedPlayers.find((p) => p.id === winnerId)!;
 
     if (winnerResult && winnerResult.score >= bidAmount) {
-      // --- Closed Auction WIN ---
-      roundScores[winnerId]!.points += 2; // Base win
-      (roundScores[winnerId]!.breakdown as any[]).push({ reason: 'فوز بالمزاد المغلق', points: 2 });
-      lastResultData.message = `نجح ${winnerResult.name} في المزاد المغلق!`;
-      
-      if(winnerPlayer.status === 'in_prison') {
-          updatedPlayers = updatedPlayers.map(p => p.id === winnerId ? {...p, status: 'alive'} : p);
-          lastResultData.freedPlayerName = winnerPlayer.name;
-          lastResultData.freedPlayerAvatarId = winnerPlayer.avatarId;
-      } else {
-          // If they weren't in prison, they get an extra survival point.
-          roundScores[winnerId]!.points += 1;
-          (roundScores[winnerId]!.breakdown as any[]).push({ reason: 'بقاء حراً', points: 1 });
-      }
-
+        // --- Closed Auction WIN ---
+        roundScores[winnerId]!.points += 2; // Base win
+        (roundScores[winnerId]!.breakdown as any[]).push({ reason: 'فوز بالمزاد المغلق', points: 2 });
+        lastResultData.message = `نجح ${winnerResult.name} في المزاد المغلق!`;
+        
+        if(winnerPlayer.status === 'in_prison') {
+            updatedPlayers = updatedPlayers.map(p => p.id === winnerId ? {...p, status: 'alive'} : p);
+            lastResultData.freedPlayerName = winnerPlayer.name;
+            lastResultData.freedPlayerAvatarId = winnerPlayer.avatarId;
+        } else {
+            // If they weren't in prison, they get an extra survival point.
+            roundScores[winnerId]!.points += 1;
+            (roundScores[winnerId]!.breakdown as any[]).push({ reason: 'بقاء حراً', points: 1 });
+        }
     } else {
-      // --- Closed Auction FAIL ---
-      const answersMissed = Math.max(0, bidAmount - (winnerResult?.score || 0));
-      const penalty = -answersMissed;
-      if (penalty < 0) {
-        roundScores[winnerId]!.points += penalty;
-        (roundScores[winnerId]!.breakdown as any[]).push({ reason: 'فشل في المزاد', points: penalty });
-      }
-
-      updatedPlayers = updatedPlayers.map(p => p.id === winnerId ? {...p, status: 'in_prison'} : p);
-      lastResultData.message = `فشل ${winnerResult?.name || 'الفائز'} في المزاد ودخل السجن!`;
+        // --- Closed Auction FAIL ---
+        const answersMissed = Math.max(0, bidAmount - (winnerResult?.score || 0));
+        const penalty = -answersMissed;
+        if (penalty < 0) {
+            roundScores[winnerId]!.points += penalty;
+            (roundScores[winnerId]!.breakdown as any[]).push({ reason: 'فشل في المزاد', points: penalty });
+        }
+        updatedPlayers = updatedPlayers.map(p => p.id === winnerId ? {...p, status: 'in_prison'} : p);
+        lastResultData.message = `فشل ${winnerResult?.name || 'الفائز'} في المزاد ودخل السجن!`;
     }
 
     // Award survival points to everyone else who was not involved
@@ -586,7 +592,7 @@ export async function nextRound(gameId: string, hostId: string) {
       nextState = 'open_auction';
       timerSec = ps.settings.answeringTime || DEFAULTS.answeringTime;
     }
-    
+
     const isGameOver = alivePlayers.length < 2 || (game.round || 0) >= (game.prisonState?.settings.rounds || DEFAULTS.maxRounds);
     if(isGameOver) {
         const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) => ((game.playerScores![a] || 0) > (game.playerScores![b] || 0) ? a : b), Object.keys(game.playerScores || {})[0] || '');
@@ -647,9 +653,9 @@ export async function submitBid(gameId: string, playerId: string, amount: number
 
     if (changeQuestion) {
       if ((game.prisonState?.questionChangersUsedBy || []).includes(playerId)) throw new Error('لقد استخدمت قدرتك على تغيير السؤال بالفعل.');
-      
+
       const questionsCol = collection(db, 'prison_questions');
-      const s = await getDocs(query(questionsCol)); 
+      const s = await getDocs(query(questionsCol));
       if (s.empty) throw new Error('لا توجد أسئلة كافية لتغيير السؤال.');
       const list = s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
       const newQ = list[Math.floor(Math.random() * list.length)];
