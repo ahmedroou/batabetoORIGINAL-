@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { TimerIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { handleTimeout } from '@/lib/actions/prison';
+import { tickGame } from '@/lib/actions/prison';
 
 interface CountdownTimerProps {
     gameId: string;
@@ -15,7 +15,7 @@ interface CountdownTimerProps {
 
 /**
  * A shared component to display a countdown and trigger a callback when time expires.
- * The onExpire logic is now handled server-side via the handleTimeout action,
+ * The onExpire logic is now handled server-side via the tickGame action,
  * triggered only by the host to prevent duplicate calls.
  * @param {object} props - Component props.
  * @param {number} props.expiryTimestamp - The timestamp (in milliseconds) when the timer should expire.
@@ -36,7 +36,7 @@ export const CountdownTimer = ({ gameId, expiryTimestamp, selfId, isHost }: Coun
             setTimeLeft(remaining);
             if (remaining <= 0 && isHost && !timeoutProcessed.current) {
                 timeoutProcessed.current = true;
-                handleTimeout(gameId, selfId);
+                tickGame(gameId, selfId); // Use tickGame instead of handleTimeout
                 clearInterval(timer);
             }
         }, 1000);

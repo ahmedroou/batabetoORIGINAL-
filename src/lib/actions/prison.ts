@@ -31,7 +31,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, JudgePrisonAnswersInput, JudgeSingleSubmissionOutput, GameState } from '@/types';
-import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
+import { getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
 import { updateLeagueScoresForGameEnd } from './user';
 import { distributeEndOfGameAwards } from './admin/users';
 import { normalizeForSignature } from './helpers';
@@ -68,35 +68,38 @@ function ensurePrisonState(game: Game) {
 }
 
 async function fetchRandomQuestion(): Promise<PrisonQuestion> {
-  const questionsCol = collection(db, 'prison_questions');
-  const randomKey = Math.random().toString(36).substring(2);
+    const questionsCol = collection(db, 'prison_questions');
+    const randomKey = Math.random().toString(36).substring(2);
 
-  const q = query(
-    questionsCol,
-    where('randomKey', '>=', randomKey),
-    orderBy('randomKey'),
-    limit(1)
-  );
-  let snap = await getDocs(q);
-
-  if (snap.empty) {
-    const fallbackQuery = query(
+    const q = query(
         questionsCol,
-        where('randomKey', '<', randomKey),
-        orderBy('randomKey', 'desc'),
+        where('randomKey', '>=', randomKey),
+        orderBy('randomKey'),
         limit(1)
     );
-    snap = await getDocs(fallbackQuery);
-  }
+    const snap = await getDocs(q);
 
-  if (snap.empty) {
-      return { id: 'fallback', text: 'اذكر أسماء أولاد تبدأ بحرف الباء' } as PrisonQuestion;
-  }
+    if (snap.empty) {
+        // Fallback in case random key is past the last document
+        const fallbackQuery = query(
+            questionsCol,
+            where('randomKey', '<', randomKey),
+            orderBy('randomKey', 'desc'),
+            limit(1)
+        );
+        const fallbackSnap = await getDocs(fallbackQuery);
+        if (!fallbackSnap.empty) {
+            const docSnap = fallbackSnap.docs[0];
+            return { id: docSnap.id, ...(docSnap.data() as Omit<PrisonQuestion, 'id'>) };
+        }
+    } else {
+        const docSnap = snap.docs[0];
+        return { id: docSnap.id, ...(docSnap.data() as Omit<PrisonQuestion, 'id'>) };
+    }
 
-  const docSnap = snap.docs[0];
-  return { id: docSnap.id, ...(docSnap.data() as Omit<PrisonQuestion, 'id'>) };
+    // Absolute fallback if collection is empty or has no randomKey
+    return { id: 'fallback', text: 'اذكر أسماء أولاد تبدأ بحرف الباء' } as PrisonQuestion;
 }
-
 
 const aliveOrInPrison = (p: Player) => ['alive', 'in_prison'].includes(p.status);
 
@@ -256,14 +259,12 @@ async function judgeSinglePlayerAndUpdate(gameId: string, one: JudgePrisonAnswer
   } catch (e) {
     console.error(`AI Judging failed for player ${one.submissions[0]?.playerId} in game ${gameId}:`, e);
     const fieldPath = new FieldPath('prisonState', 'aiJudgeResults', one.submissions[0]!.playerId);
-    await updateDoc(doc(db, 'games', gameId), {
-      [fieldPath as any]: {
-        playerId: one.submissions[0]!.playerId,
-        name: one.submissions[0]!.name,
-        score: 0,
-        correctAnswers: [],
-        evaluation: "خطأ في الاتصال بحكم الذكاء الاصطناعي.",
-      }
+    await updateDoc(doc(db, 'games', gameId), fieldPath, {
+      playerId: one.submissions[0]!.playerId,
+      name: one.submissions[0]!.name,
+      score: 0,
+      correctAnswers: [],
+      evaluation: "خطأ في الاتصال بحكم الذكاء الاصطناعي.",
     });
   }
 }
@@ -591,28 +592,31 @@ export async function nextRound(gameId: string, hostId: string) {
   });
 
   if (gameDataForLeagueUpdate) {
-    await distributeEndOfGameAwards(gameId);
     await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
+    await distributeEndOfGameAwards(gameId);
   }
 }
 
 export async function tickGame(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
-  let finalGameData: Game | null = null;
-  let shouldStartNextRound = false;
-
+  let shouldJudge = false;
+  let isGameOver = false;
+  let gameDataForLeague: Game | null = null;
+  
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
     if (!snap.exists()) return;
     const game = snap.data() as Game;
-
+    
     if (game.gameState === 'final_results') return;
-    if (!game.prisonState?.timerEndsAt || !isExpired(game.prisonState.timerEndsAt)) return;
-    if (game.hostId !== hostId) return; // Allow only host to tick forward
+    const timerEndsAt = game.prisonState?.timerEndsAt as Timestamp | undefined;
+    if (!timerEndsAt || !isExpired(timerEndsAt)) return;
+
+    if (game.hostId !== hostId) return;
 
     tx.update(gameRef, { 'prisonState.timerEndsAt': deleteField() });
 
-    switch (game.gameState) {
+    switch(game.gameState) {
       case 'open_auction': {
         const submissions: Record<string, string[]> = { ...(game.prisonState?.openAuctionSubmissions || {}) };
         const activePlayers = game.players.filter(aliveOrInPrison);
@@ -626,6 +630,7 @@ export async function tickGame(gameId: string, hostId: string): Promise<void> {
           gameState: 'judging',
           stateVersion: increment(1),
         });
+        shouldJudge = true;
         break;
       }
       case 'closed_auction_bidding': {
@@ -664,17 +669,21 @@ export async function tickGame(gameId: string, hostId: string): Promise<void> {
           gameState: 'judging',
           stateVersion: increment(1),
         });
+        shouldJudge = true;
         break;
       }
       case 'judging':
       case 'rejudging': {
         const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, tx);
         tx.update(gameRef, updatedGame);
-        if (gameDataForLeague) finalGameData = gameDataForLeague;
+        if (gameDataForLeague) gameDataForLeague = gameDataForLeague;
         break;
       }
       case 'results': {
-        shouldStartNextRound = true;
+        const result = await _startNextRound(tx, gameRef, game);
+        if (result.isGameOver) {
+            gameDataForLeague = result.finalGame;
+        }
         break;
       }
       case 'instructions': {
@@ -690,16 +699,12 @@ export async function tickGame(gameId: string, hostId: string): Promise<void> {
     }
   });
 
-  if (shouldStartNextRound) {
-    await nextRound(gameId, game.hostId);
-  } else if (finalGameData) {
-    await updateLeagueScoresForGameEnd(finalGameData);
+  if (shouldJudge) {
+    await judgeAnswersAndProceed(gameId, false);
+  }
+  if (gameDataForLeague) {
     await distributeEndOfGameAwards(gameId);
-  } else {
-    const snap = await getDoc(gameRef);
-    if(snap.exists() && (snap.data() as Game).gameState === 'judging') {
-        await judgeAnswersAndProceed(gameId, false);
-    }
+    await updateLeagueScoresForGameEnd(gameDataForLeague);
   }
 }
 
