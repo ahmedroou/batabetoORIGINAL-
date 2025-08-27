@@ -1,11 +1,10 @@
-
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import type { Game, Player } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { submitVotes, handleTimeout } from '@/lib/actions/kingdom-of-names';
+import { submitVotes } from '@/lib/actions/kingdom-of-names';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../../PlayerAvatar';
@@ -47,34 +46,32 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
   const state = game.kingdomOfNamesState;
   const allSubmissions = state?.playerAnswers || {};
 
-  // FIX: State now derives from the server truth `state.votes`.
-  // The local state only tracks the user's *current* selections before they are submitted.
-  const [incorrectVotes, setIncorrectVotes] = useState<Record<string, 'incorrect'>>(() => state?.votes?.[self.id] || {});
+  const serverVotesForSelf = useMemo(() => state?.votes?.[self.id] || {}, [state?.votes, self.id]);
+
+  // This state now *only* tracks the user's intended selections before submitting.
+  // It is initialized ONCE and then only mutated by the user's actions.
+  const [incorrectVotes, setIncorrectVotes] = useState<Record<string, 'incorrect'>>(serverVotesForSelf);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // FIX: The source of truth for "has submitted" is now directly from the game object.
-  // We also use a local "optimistic" state to immediately lock the UI after submission.
-  const hasSubmittedOnServer = useMemo(() => {
-      return !!state?.votes?.[self.id] && Object.keys(state.votes[self.id]).length > 0;
+  // This state tracks if the *current* user has submitted in this round.
+  // It's derived from the server state but memoized for stability.
+  const hasSubmitted = useMemo(() => {
+    return !!state?.votes?.[self.id] && Object.keys(state.votes[self.id]).length > 0;
   }, [state?.votes, self.id]);
-  const [submittedLocally, setSubmittedLocally] = useState(hasSubmittedOnServer);
+  
+  // This ref is used to prevent race conditions on submission.
+  const submittedRef = useRef(hasSubmitted);
+  useEffect(() => {
+    submittedRef.current = hasSubmitted;
+  }, [hasSubmitted]);
 
   const isHost = game.hostId === self.id;
-
-  // Sync local state if server state changes (e.g., rejoining a game).
-  useEffect(() => {
-    const serverVotes = state?.votes?.[self.id] || {};
-    setIncorrectVotes(serverVotes);
-    if (!!state?.votes?.[self.id] && Object.keys(serverVotes).length > 0) {
-      setSubmittedLocally(true);
-    }
-  }, [state?.votes, self.id]);
 
   const activePlayers = useMemo(() => game.players.filter((p) => p.status !== 'left'), [game.players]);
   const otherPlayers = useMemo(() => activePlayers.filter(p => p.id !== self.id), [activePlayers, self.id]);
 
   const toggleVote = useCallback((key: string) => {
-    if (submittedLocally) return; // Don't allow changes after submission
+    if (submittedRef.current) return;
     setIncorrectVotes((prev) => {
       const next = { ...prev };
       if (next[key]) {
@@ -84,24 +81,25 @@ export default function VotingPhase({ game, self }: VotingPhaseProps) {
       }
       return next;
     });
-  }, [submittedLocally]);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (isSubmitting || submittedLocally) return;
+    if (isSubmitting || submittedRef.current) return;
     setIsSubmitting(true);
+    submittedRef.current = true; // prevent re-submission immediately
+
     try {
-      // Only send the items marked as incorrect
       await submitVotes(game.id, self.id, incorrectVotes);
       toast({ title: 'تم تسجيل تصويتك!' });
-      setSubmittedLocally(true); // Lock UI immediately
     } catch (err: any) {
       toast({ title: 'خطأ', description: err?.message || 'فشل إرسال التصويت', variant: 'destructive' });
+      submittedRef.current = false; // allow retry on failure
     } finally {
       setIsSubmitting(false);
     }
-  }, [game.id, self.id, incorrectVotes, toast, isSubmitting, submittedLocally]);
+  }, [game.id, self.id, incorrectVotes, toast, isSubmitting]);
 
-  if (submittedLocally) {
+  if (hasSubmitted) {
     return (
       <Card className="w-full max-w-lg text-center">
         <CardHeader>
