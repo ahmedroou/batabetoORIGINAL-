@@ -479,7 +479,7 @@ export async function proceedToResultsInternal(
             if (wp && roundScores[wp.id]) {
                 winnerMsg = `الفائز بالجولة هو ${wp.name}!`;
                 if (wp.status === 'in_prison') {
-                updatedPlayers[idx].status = 'alive';
+                updatedPlayers[idx] = {...wp, status: 'alive'};
                 lastResultData.freedPlayerName = wp.name;
                 lastResultData.freedPlayerAvatarId = wp.avatarId;
                 winnerMsg += ' وتم تحريره!';
@@ -497,7 +497,7 @@ export async function proceedToResultsInternal(
             const lId = losers[0].playerId;
             const idx = updatedPlayers.findIndex((p) => p.id === lId);
             if (idx !== -1 && updatedPlayers[idx].status === 'alive') {
-            updatedPlayers[idx].status = 'in_prison';
+            updatedPlayers[idx] = {...updatedPlayers[idx], status: 'in_prison'};
             loserMsg = `الخاسر هو ${updatedPlayers[idx].name} وسيدخل السجن.`;
             }
         }
@@ -562,9 +562,8 @@ export async function proceedToResultsInternal(
     const winnerId = Object.keys(newTotals).reduce((a, b) => (newTotals[a]! > newTotals[b]! ? a : b), Object.keys(newTotals)[0] || '');
     updatedGamePartial.gameResult = { winner: winnerId, message: 'انتهت اللعبة' };
     
-    // Build a sanitized game object for league updates
     const stateForLeague = { ...game.prisonState, lastRoundResult: finalLastRound };
-    delete (stateForLeague as any).timerEndsAt; // remove sentinels
+    delete (stateForLeague as any).timerEndsAt;
     delete (stateForLeague as any).judgingLock;
 
     gameDataForLeague = {
@@ -611,6 +610,7 @@ export async function tickGame(gameId: string): Promise<void> {
   let finalGameData: Game | null = null;
   let shouldJudge = false;
   let rejudge = false;
+  let shouldProceedToResults = false;
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -683,17 +683,13 @@ export async function tickGame(gameId: string): Promise<void> {
       }
       case 'judging':
       case 'rejudging': {
-          const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, tx);
-          tx.update(gameRef, updatedGame);
-          if (gameDataForLeague) {
-              finalGameData = gameDataForLeague;
-          }
+          shouldProceedToResults = true;
           break;
       }
       case 'results': {
-          const { finalGame } = await _startNextRound(tx, gameRef, game);
-          if(finalGame) {
-              finalGameData = finalGame;
+          const result = await _startNextRound(tx, gameRef, game);
+          if(result.isGameOver) {
+              finalGameData = result.finalGame;
           }
           break;
       }
@@ -712,6 +708,10 @@ export async function tickGame(gameId: string): Promise<void> {
 
   if (shouldJudge) {
     await judgeAnswersAndProceed(gameId, rejudge);
+  }
+
+  if (shouldProceedToResults) {
+    await proceedToResults(gameId, game.hostId);
   }
 
   if (finalGameData) {
