@@ -15,7 +15,7 @@ import {
 import type { Game, Player, KingdomOfNamesState } from '@/types';
 import { shuffle } from './helpers';
 import { CATEGORIES, LETTERS } from '@/data/kingdom-of-names';
-import { distributeEndOfGameAwards } from './admin/users';
+import { distributeEndOfGameAwards } from '@/lib/actions/admin/users';
 
 /**
  * ===============================
@@ -202,36 +202,28 @@ export async function submitAnswers(
 
     ensure(state.phase === 'playing', 'ليست مرحلة اللعب.');
 
+    // The first player to submit ends the round for everyone.
+    // Collect progress from any players who haven't submitted yet.
+    const activePlayers = getActivePlayers(game);
     const finalAnswers: Record<string, Record<string, string>> = {
       ...(state.playerAnswers || {}),
       [playerId]: answers,
     };
     
-    // Check if everyone has submitted, including the current player
-    const activePlayers = getActivePlayers(game);
-    const allSubmitted = activePlayers.every(p => finalAnswers[p.id]);
-
-    const updates: Partial<Game> & { [key: string]: any } = {
-        [`kingdomOfNamesState.playerAnswers`]: finalAnswers,
-    };
-
-    if (allSubmitted || game.hostId === playerId) {
-        // Collect progress from any players who haven't submitted yet
-        for (const p of activePlayers) {
-            if (!finalAnswers[p.id]) {
-                finalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
-            }
-        }
-        
-        const settings = mergeSettings(state.settings);
-        Object.assign(updates, {
-            gameState: 'voting',
-            'kingdomOfNamesState.phase': 'voting',
-            'kingdomOfNamesState.playerAnswers': finalAnswers, // Send all collected answers
-            'kingdomOfNamesState.timerEndsAt': tsFromNowS(settings.votingTime),
-        });
+    for (const p of activePlayers) {
+      if (!finalAnswers[p.id]) { // If a player hasn't submitted yet
+        finalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
+      }
     }
 
+    const settings = mergeSettings(state.settings);
+    const updates = {
+      gameState: 'voting',
+      'kingdomOfNamesState.phase': 'voting',
+      'kingdomOfNamesState.playerAnswers': finalAnswers, // Send all collected answers
+      'kingdomOfNamesState.timerEndsAt': tsFromNowS(settings.votingTime),
+    };
+    
     tx.update(gameRef, updates);
   });
 }
@@ -478,3 +470,4 @@ function calculateResults(players: Player[], state: KingdomOfNamesState) {
   
   return { results, addedPoints };
 }
+
