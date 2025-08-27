@@ -160,7 +160,7 @@ export default function ProfilePage() {
     if (!next) return { label: currentRank?.name ?? "", pct: 100, toNext: 0, nextName: null as string | null };
     const rangeStart = sorted[currentIndex]?.threshold ?? 0;
     const rangeEnd = next.threshold;
-    const pct = Math.max(0, Math.min(100, ((points - rangeStart) / (rangeEnd - start)) * 100));
+    const pct = Math.max(0, Math.min(100, ((points - rangeStart) / (rangeEnd - rangeStart)) * 100));
     const toNext = Math.max(0, rangeEnd - points);
     return { label: currentRank?.name ?? "", pct, toNext, nextName: next.name };
   }, [userProfile?.leaderboardPoints, socialRanks, currentRank?.name]);
