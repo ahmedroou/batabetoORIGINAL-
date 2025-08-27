@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../../PlayerAvatar';
 import { Loader2, CheckCircle2, MessageCircleOff, RefreshCw, Scale, Bot, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -67,18 +67,9 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
 
   // --- Derived data ------------------------------------------------------------
 
-  const judgedResults = prison.aiJudgeResults ?? [];
+  const judgedResults = prison.aiJudgeResults ?? {};
   const openAuctionSubmissions = prison.openAuctionSubmissions ?? {} as Record<string, string[]>;
   const noSubmissions = Object.keys(openAuctionSubmissions).length === 0;
-
-  // O(1) access to results by playerId
-  const resultsByPlayerId = useMemo(() => {
-    const map = new Map<string, any>();
-    for (const r of judgedResults) {
-      if (r?.playerId) map.set(r.playerId, r);
-    }
-    return map;
-  }, [judgedResults]);
 
   // Compute which contestants should be displayed (winner-only OR all with submissions)
   const contestantsWithSubmissions: Player[] = useMemo(() => {
@@ -98,8 +89,8 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
   // All results ready when each rendered contestant has an entry
   const allResultsIn = useMemo(() => {
     if (contestantsWithSubmissions.length === 0) return false;
-    return contestantsWithSubmissions.every((p) => resultsByPlayerId.has(p.id));
-  }, [contestantsWithSubmissions, resultsByPlayerId]);
+    return contestantsWithSubmissions.every((p) => judgedResults[p.id]);
+  }, [contestantsWithSubmissions, judgedResults]);
 
   const hasPlayerUsedRejudge = Array.isArray(prison.rejudgeRequestsUsedBy)
     ? prison.rejudgeRequestsUsedBy.includes(self.id)
@@ -232,7 +223,7 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
               {contestantsWithSubmissions.length > 0 ? (
                 contestantsWithSubmissions.map((player) => {
-                  const playerResult = resultsByPlayerId.get(player.id);
+                  const playerResult = judgedResults[player.id];
                   const submittedAnswers: string[] = openAuctionSubmissions[player.id] ?? [];
                   const correctAnswersSet = new Set(playerResult?.correctAnswers?.map(normalizeForSignature) || []);
 

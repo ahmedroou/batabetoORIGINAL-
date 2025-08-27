@@ -1,3 +1,4 @@
+
 import type { Timestamp } from 'firebase/firestore';
 import { z } from 'zod';
 import { ALL_PERMISSIONS_RAW } from '../data/permissions';
@@ -781,7 +782,7 @@ export interface Game {
       bids?: Record<string, number>; // { playerId: amount }
       highestBid?: number;
       auctionWinnerId?: string;
-      aiJudgeResults?: JudgeSingleSubmissionOutput[];
+      aiJudgeResults?: Record<string, JudgeSingleSubmissionOutput>;
       lastRoundResult?: {
           message: string;
           points: Record<string, {
@@ -801,6 +802,7 @@ export interface Game {
       isRejectionJustified?: boolean;
       judgeRunId?: string;
       judgingExpected?: number;
+      questionChanger?: string;
   };
 
   // "Educated Merchant" specific state
