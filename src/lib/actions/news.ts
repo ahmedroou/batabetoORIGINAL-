@@ -298,27 +298,34 @@ export async function getPublishedArticles(
 /**
  * Get single article by id. Optionally increment views atomically.
  */
-export async function getArticleById(articleId: string, incrementViews = false): Promise<Article | null> {
+export async function getArticleById(articleId: string, incrementViews = false): Promise<ServiceResult<{data: Article}>> {
   try {
     const ref = doc(db, ARTICLES_COLLECTION, articleId);
+    let data: Article | null = null;
+
     if (incrementViews) {
       // transactionally read + increment
       const res = await runTransaction(db, async (tx) => {
         const snap = await tx.get(ref);
         if (!snap.exists()) return null;
-        const data = toArticleDoc(snap as any);
+        const articleData = toArticleDoc(snap as any);
         tx.update(ref, { views: increment(1) });
-        return data;
+        return articleData;
       });
-      return res;
+      data = res;
     } else {
       const snap = await getDoc(ref);
-      if (!snap.exists()) return null;
-      return toArticleDoc(snap as any);
+      if (snap.exists()) {
+        data = toArticleDoc(snap as any);
+      }
     }
+
+    if (!data) {
+        return { success: false, error: 'المقال غير موجود.' };
+    }
+    return { success: true, data };
   } catch (err) {
-    handleError(err, 'فشل جلب المقالة');
-    return null;
+    return { success: false, error: handleError(err, 'فشل جلب المقالة') };
   }
 }
 
@@ -475,7 +482,7 @@ export async function deleteOldArticles(days = 7): Promise<ServiceResult<{ delet
  * Gathers all necessary data for the AI, generates an article, and saves it as a draft.
  * Admin-only action.
  */
-export async function generateAndSaveArticle(): Promise<ServiceResult> {
+export async function generateAndSaveArticle({ directive }: { directive?: string } = {}): Promise<ServiceResult> {
   try {
     const now = new Date();
     const oneDayAgo = Timestamp.fromMillis(now.getTime() - 24 * 60 * 60 * 1000);
@@ -510,6 +517,7 @@ export async function generateAndSaveArticle(): Promise<ServiceResult> {
       active_challenges: activeChallenges,
       recent_games: recentGamesSnap.docs.map(d => ({id: d.id, ...d.data()})),
       date: now.toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+      directive: directive || undefined,
     };
 
     // Generate the article using the AI flow

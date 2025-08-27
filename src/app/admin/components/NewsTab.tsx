@@ -25,7 +25,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 
 // Icons
-import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown, RotateCcw, Image as ImageIcon, Filter, SortAsc, SortDesc, Eye, EyeOff, CheckCircle2, XCircle, RefreshCw, Megaphone, UploadCloud, CheckCheck, Search, Wand2 } from "lucide-react";
+import { PlusCircle, Loader2, Edit, Trash2, Newspaper, Users, ChevronsUpDown, RotateCcw, Image as ImageIcon, Filter, SortAsc, SortDesc, Eye, EyeOff, CheckCircle2, XCircle, RefreshCw, Megaphone, UploadCloud, CheckCheck, Search, Wand2, Info } from "lucide-react";
 
 // Types & helpers
 import type { Article, AudienceGroup, UserProfile } from "@/types";
@@ -256,6 +256,7 @@ export default function NewsTab() {
   const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
+  const [directive, setDirective] = useState("");
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -369,10 +370,11 @@ export default function NewsTab() {
 
   const handleGenerateArticle = async () => {
     setIsGenerating(true);
-    const result = await generateAndSaveArticle();
+    const result = await generateAndSaveArticle({ directive: directive.trim() });
     if (result.success) {
-      toast({ title: "تم إنشاء المقال بنجاح", description: "المقال الجديد جاهز للمراجعة." });
+      toast({ title: "تم إنشاء المقال بنجاح", description: "المقال الجديد جاهز للمراجعة في المسودات." });
       await fetchAllData();
+      setDirective(""); // Clear directive after use
     } else {
       toast({ title: "فشل التوليد", description: result.error, variant: "destructive" });
     }
@@ -505,20 +507,55 @@ export default function NewsTab() {
               </CardTitle>
               <CardDescription>إنشاء وتعديل المقالات، وإدارة مجموعات الجمهور.</CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <Button onClick={handleGenerateArticle} disabled={isGenerating}>
-                  {isGenerating ? <Loader2 className="animate-spin ml-2" /> : <Wand2 className="ml-2" />}
-                  توليد مقال بالذكاء الاصطناعي
-              </Button>
-              <Button variant="secondary" onClick={fetchAllData}>
-                <RefreshCw className="ml-2" /> تحديث
-              </Button>
-              <Button onClick={() => handleOpenDialog(null)}>
-                <PlusCircle className="ml-2" /> مقال جديد
-              </Button>
+             <div className="flex items-center gap-2">
+                 <Button variant="secondary" onClick={fetchAllData}>
+                    <RefreshCw className="ml-2" /> تحديث
+                 </Button>
+                <Button onClick={() => handleOpenDialog(null)}>
+                    <PlusCircle className="ml-2" /> مقال جديد
+                </Button>
             </div>
           </div>
         </CardHeader>
+      </Card>
+      
+      {/* AI Generation Card */}
+      <Card className="bg-gradient-to-br from-background to-muted/40 border-primary/20">
+          <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                  <Wand2 className="text-primary"/> المراسل الذكي
+              </CardTitle>
+              <CardDescription>
+                  ولّد مقالاً صحفياً تلقائياً بناءً على آخر الأحداث في عالم اللعبة. يمكنك إضافة توجيهات خاصة.
+              </CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                  <Label htmlFor="ai-directive">توجيهات للمراسل الذكي (اختياري)</Label>
+                  <Textarea 
+                      id="ai-directive"
+                      value={directive}
+                      onChange={(e) => setDirective(e.target.value)}
+                      placeholder="مثال: ركز على فوز اللاعب فلان في بطولة الأمس..."
+                      rows={4}
+                  />
+                  <Button onClick={handleGenerateArticle} disabled={isGenerating}>
+                      {isGenerating ? <Loader2 className="animate-spin ml-2" /> : <Wand2 className="ml-2" />}
+                      {isGenerating ? 'جاري التوليد...' : 'ولّد مقالاً الآن'}
+                  </Button>
+              </div>
+              <div className="p-3 border rounded-lg bg-background/50 text-xs text-muted-foreground space-y-2">
+                    <p className="font-bold flex items-center gap-1"><Info className="w-4 h-4 text-primary" /> يمكن للمراسل أن يكتب عن:</p>
+                    <ul className="list-disc pr-4 space-y-1">
+                        <li>التغيرات في لوحة الصدارة.</li>
+                        <li>اللاعبين المعاقبين حالياً.</li>
+                        <li>نتائج آخر 10 مباريات.</li>
+                        <li>البطولات النشطة حالياً.</li>
+                        <li>الأحداث الاجتماعية (مثل التحالفات والعقوبات).</li>
+                        <li>اللاعب الأكثر فرضاً للعقوبات.</li>
+                    </ul>
+              </div>
+          </CardContent>
       </Card>
 
       {/* Stats */}
