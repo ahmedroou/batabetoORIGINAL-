@@ -438,6 +438,16 @@ export function _answerQuestion(game: Game, playerId: string, answer: string): A
                 player.status = 'bankrupt';
                 player.bankruptAt = ts;
                 activityMessage = `${player.name} أجاب خطأ وأفلس لأنه لم يستطع دفع الغرامة.`;
+
+                // If player goes bankrupt, we must end their turn here and check for game over.
+                const { updates, isGameOver, finalGame } = _endTurnInternal(game, playerId, activityMessage, { players, board });
+                 Object.assign(updates, {
+                    [`${EM}.pendingPurchase`]: deleteField(),
+                    [`${EM}.pendingFine`]: deleteField(),
+                    [`${EM}.currentQuestion`]: deleteField(),
+                    [`${EM}.questionToken`]: deleteField(),
+                });
+                return { updates, isGameOver, finalGame };
             } else {
                 player.money = (player.money || 0) - fine;
                 activityMessage = `${player.name} أجاب خطأ ودفع غرامة ${fine} دينار.`;
