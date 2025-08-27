@@ -135,21 +135,9 @@ export async function adminSearchUsers(searchTerm: string): Promise<UserProfile[
     return Array.from(usersMap.values()).slice(0, 50);
 
   } catch (error) {
-    console.warn('Falling back to client-side filtering for user search due to error:', error);
-    try {
-        const fullSnapshot = await getDocs(usersRef);
-        const lowerCaseSearchTerm = term.toLowerCase();
-        return fullSnapshot.docs
-            .map((docSnap) => docToUserProfile(docSnap, docSnap.id))
-            .filter((user) => 
-                user.name?.toLowerCase().includes(lowerCaseSearchTerm) || 
-                user.email?.toLowerCase().includes(lowerCaseSearchTerm)
-            )
-            .slice(0, 50);
-    } catch(fallbackError) {
-        console.error('Fallback user search also failed:', fallbackError);
-        return [];
-    }
+    console.error('Admin user search failed due to Firestore query error (index might be missing):', error);
+    // Do NOT fall back to a full collection scan, as it's too expensive.
+    return [];
   }
 }
 
@@ -447,4 +435,3 @@ export async function recalculateGameKings(): Promise<{ success: boolean; update
         return { success: false, error: e.message || 'فشل تحديث ملوك الألعاب.' };
     }
 }
-
