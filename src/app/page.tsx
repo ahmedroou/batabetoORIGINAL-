@@ -1,17 +1,16 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, useTransition } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Megaphone, Swords, X, Trophy, Gamepad2, Rocket, Sparkles } from 'lucide-react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, DocumentData } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 import { useAuth } from '@/hooks/useAuth';
 import HomeHeader from './components/home/HomeHeader';
 import UserProfileCard from './components/home/UserProfileCard';
-import GameGrid from './components/home/GameGrid';
-import LobbySection from './components/home/LobbySection';
 import HomeDialogs from './components/home/Dialogs';
 import WelcomeGuest from './components/home/WelcomeGuest';
 import MainLoadingSkeleton from './components/home/MainLoadingSkeleton';
@@ -20,100 +19,98 @@ import { Button } from '@/components/ui/button';
 import { CompactChallengeList } from './components/home/CompactChallengeList';
 import ComplaintBubble from './components/home/ComplaintBubble';
 import type { Game } from '@/types';
-// ⛔️ أزلنا: import { getGamePopularityStats } from '@/lib/actions/user/queries';
+
+// ✅ Lazy-load blocks that are visually heavy
+const GameGrid = dynamic(() => import('./components/home/GameGrid'), { ssr: false });
+const LobbySection = dynamic(() => import('./components/home/LobbySection'), { ssr: false });
+
+// =============================
+// Utilities & Hooks
+// =============================
+function useRealtimeDoc<T = DocumentData>(path: [string, ...string[]], onError?: (e: unknown) => void) {
+  const [data, setData] = useState<T | null>(null);
+  const unsubRef = useRef<() => void>();
+
+  useEffect(() => {
+    const ref = doc(db, ...path);
+    const unsub = onSnapshot(
+      ref,
+      (snap) => setData((snap.exists() ? (snap.data() as T) : null)),
+      (err) => onError?.(err)
+    );
+    unsubRef.current = unsub;
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, path);
+
+  return data;
+}
+
+function usePopularity() {
+  // وثيقة مقترحة: game_settings/popularity
+  const raw = useRealtimeDoc<Record<string, unknown>>(['game_settings', 'popularity']);
+  const popularityStats = useMemo(() => {
+    if (!raw) return {} as Record<string, number>;
+    const stats = (typeof raw.stats === 'object' && raw.stats) ? (raw.stats as Record<string, unknown>) : raw;
+    const cleaned: Record<string, number> = {};
+    for (const [k, v] of Object.entries(stats)) cleaned[k] = Number(v ?? 0) || 0;
+    return cleaned;
+  }, [raw]);
+  return popularityStats;
+}
+
+function useAnnouncement() {
+  const data = useRealtimeDoc<{ text?: string }>(['game_settings', 'announcement']);
+  return data?.text?.trim() || null;
+}
 
 export default function Home() {
+  const prefersReducedMotion = useReducedMotion();
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
   const {
     user,
     userProfile,
     loading,
     socialRanks,
     getSocialRankForUser,
-    activeChallenges = [], // منع undefined
+    activeChallenges = [],
     newChallengeAvailable,
     markChallengeAsSeen,
   } = useAuth();
 
-  const [announcement, setAnnouncement] = useState<string | null>(null);
-  const [showAnnouncement, setShowAnnouncement] = useState<boolean>(true);
+  const [showAnnouncement, setShowAnnouncement] = useState(true);
   const [activeLobbies, setActiveLobbies] = useState<Game[]>([]);
-  const [popularityStats, setPopularityStats] = useState<Record<string, number>>({});
 
-  // --- Popularity: استبدال الاستدعاء الخادمي باشتراك Firestore مباشر
+  const popularityStats = usePopularity();
+  const announcement = useAnnouncement();
+
   useEffect(() => {
-    const popularityRef = doc(db, 'game_settings', 'popularity'); // وثيقة مقترحة: game_settings/popularity
-    const unsub = onSnapshot(
-      popularityRef,
-      (snap) => {
-        if (!snap.exists()) {
-          setPopularityStats({});
-          return;
-        }
-        const data = snap.data() as Record<string, unknown>;
-        // ندعم شكلين: إما doc = { stats: {...} } أو doc = {...} مباشرة
-        const stats =
-          (data?.stats && typeof data.stats === 'object'
-            ? (data.stats as Record<string, number>)
-            : (data as Record<string, number>)) ?? {};
-        setPopularityStats(stats);
-      },
-      () => {
-        // لا نكسر الصفحة في حال الفشل
-        setPopularityStats({});
-      }
-    );
-    return () => unsub();
-  }, []);
+    if (announcement) setShowAnnouncement(true);
+  }, [announcement]);
 
-  const handleLobbiesUpdate = useCallback((lobbies: Game[]) => {
-    setActiveLobbies(lobbies);
-  }, []);
+  const handleLobbiesUpdate = useCallback((lobbies: Game[]) => setActiveLobbies(lobbies), []);
 
   const { favoriteGame, popularGame } = useMemo(() => {
-    // لعبة المستخدم المفضلة (حسب عدد مرات الفوز)
     const winCounts = (userProfile?.winCounts ?? {}) as Record<string, number>;
+
     let favGame: string | null = null;
-    let maxWins = 0;
+    let maxWins = -1;
     for (const [gameType, wins] of Object.entries(winCounts)) {
-      const numWins = Number(wins ?? 0);
-      if (numWins > maxWins) {
-        maxWins = numWins;
-        favGame = gameType;
-      }
+      const n = Number(wins ?? 0) || 0;
+      if (n > maxWins) { maxWins = n; favGame = gameType; }
     }
 
-    // اللعبة الشعبية (حسب إحصائيات الجميع من Firestore)
     let popGame: string | null = null;
     let maxCount = -1;
     for (const [gameType, count] of Object.entries(popularityStats)) {
-      const num = Number(count ?? 0);
-      if (num > maxCount) {
-        maxCount = num;
-        popGame = gameType;
-      }
+      const n = Number(count ?? 0) || 0;
+      if (n > maxCount) { maxCount = n; popGame = gameType; }
     }
 
     return { favoriteGame: favGame, popularGame: popGame };
   }, [userProfile?.winCounts, popularityStats]);
-
-  // --- إعلان مباشر من Firestore
-  useEffect(() => {
-    const unsubAnnouncement = onSnapshot(
-      doc(db, 'game_settings', 'announcement'),
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const text = (docSnap.data() as { text?: string }).text ?? null;
-          setAnnouncement(text);
-          if (text) setShowAnnouncement(true);
-        }
-      },
-      () => {
-        // تجاهل الأخطاء الصامتة
-      }
-    );
-    return () => unsubAnnouncement();
-  }, []);
 
   const currentRank = useMemo(() => {
     if (!userProfile) return null;
@@ -121,16 +118,14 @@ export default function Home() {
   }, [userProfile, getSocialRankForUser]);
 
   // =============================
-  // حراسة التوثيق (Auth Guard)
+  // Auth Guard
   // =============================
-  if (loading || (user && !userProfile)) {
-    return <MainLoadingSkeleton />;
-  }
+  if (loading || (user && !userProfile)) return <MainLoadingSkeleton />;
+  if (!user) return <WelcomeGuest />;
 
-  if (!user) {
-    return <WelcomeGuest />;
-  }
-
+  // =============================
+  // Render
+  // =============================
   return (
     <div className="relative min-h-screen overflow-hidden bg-background" dir="rtl" lang="ar">
       <AmbientBackground />
@@ -139,24 +134,24 @@ export default function Home() {
 
       <main className="flex flex-col items-center justify-center p-4 md:p-8 pt-2 w-full">
         <motion.div
-          className="w-full max-w-7xl space-y-6 animate-bounce-in"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-7xl space-y-6"
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
+          animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
           <AnimatePresence>
             {announcement && showAnnouncement && (
               <motion.div
                 key="announcement"
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
+                initial={prefersReducedMotion ? false : { opacity: 0, y: -20 }}
+                animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? undefined : { opacity: 0, y: -10 }}
                 className="relative w-full max-w-5xl mx-auto"
                 aria-live="polite"
               >
                 <div className="group rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4 backdrop-blur-md text-primary shadow-[0_0_0_1px_hsl(var(--primary)/.15)_inset,0_10px_30px_-10px_hsl(var(--primary)/.25)]">
                   <div className="flex items-center justify-center gap-3 text-center">
-                    <Megaphone className="h-5 w-5 shrink-0" />
+                    <Megaphone className="h-5 w-5 shrink-0" aria-hidden />
                     <p className="font-semibold leading-relaxed">{announcement}</p>
                   </div>
                   <button
@@ -164,7 +159,7 @@ export default function Home() {
                     className="absolute top-2.5 start-2.5 rounded-full p-1.5 hover:bg-primary/10 transition"
                     aria-label="إغلاق الإعلان"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-4 w-4" aria-hidden />
                   </button>
                 </div>
               </motion.div>
@@ -173,28 +168,46 @@ export default function Home() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="space-y-6">
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+              <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }} animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}>
                 <UserProfileCard userProfile={userProfile!} currentRank={currentRank} socialRanks={socialRanks} />
               </motion.div>
 
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }} animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}>
                 <Card className="relative overflow-hidden">
                   <CardHeader className="pb-2">
                     <CardTitle className="flex items-center gap-2">
-                      <Sparkles className="h-5 w-5" />
+                      <Sparkles className="h-5 w-5" aria-hidden />
                       إجراءات سريعة
                     </CardTitle>
                     <CardDescription>ابدأ مغامرتك فورًا ✨</CardDescription>
                   </CardHeader>
                   <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <Button variant="default" className="rounded-2xl shadow-sm" onClick={() => router.push('/games')}>
-                      <Gamepad2 className="ms-1 h-4 w-4" /> العب الآن
+                    <Button
+                      variant="default"
+                      className="rounded-2xl shadow-sm"
+                      onClick={() => startTransition(() => router.push('/games'))}
+                      aria-label="اذهب إلى صفحة الألعاب"
+                      disabled={isPending}
+                    >
+                      <Gamepad2 className="ms-1 h-4 w-4" aria-hidden /> العب الآن
                     </Button>
-                    <Button variant="secondary" className="rounded-2xl" onClick={() => router.push('/leaderboard')}>
-                      <Trophy className="ms-1 h-4 w-4" /> لوحة الصدارة
+                    <Button
+                      variant="secondary"
+                      className="rounded-2xl"
+                      onClick={() => startTransition(() => router.push('/leaderboard'))}
+                      aria-label="اذهب إلى لوحة الصدارة"
+                      disabled={isPending}
+                    >
+                      <Trophy className="ms-1 h-4 w-4" aria-hidden /> لوحة الصدارة
                     </Button>
-                    <Button variant="outline" className="rounded-2xl" onClick={() => router.push('/challenges')}>
-                      <Swords className="ms-1 h-4 w-4" /> التحديات
+                    <Button
+                      variant="outline"
+                      className="rounded-2xl"
+                      onClick={() => startTransition(() => router.push('/challenges'))}
+                      aria-label="اذهب إلى التحديات"
+                      disabled={isPending}
+                    >
+                      <Swords className="ms-1 h-4 w-4" aria-hidden /> التحديات
                     </Button>
                   </CardContent>
                   <AuroraShine />
@@ -205,12 +218,12 @@ export default function Home() {
             <div className="lg:col-span-2 space-y-6">
               <AnimatePresence>
                 {(activeChallenges?.length ?? 0) > 0 && (
-                  <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                  <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }} animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }} exit={prefersReducedMotion ? undefined : { opacity: 0 }}>
                     <Card className="relative overflow-hidden border-0 shadow-md shadow-primary/10 ring-1 ring-primary/20">
                       <GradientBorder />
                       <CardHeader className="pb-2">
                         <CardTitle className="flex items-center gap-2">
-                          <Swords className="h-5 w-5" />
+                          <Swords className="h-5 w-5" aria-hidden />
                           التحديات النشطة
                           {newChallengeAvailable && (
                             <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse mt-1" aria-label="تحدٍ جديد" />
@@ -226,15 +239,15 @@ export default function Home() {
                 )}
               </AnimatePresence>
 
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-                <SectionHeader title="اكتشف الألعاب" icon={<Rocket className="h-5 w-5" />} subtitle="مجموعة مختارة بعناية لتناسب كل الأذواق" />
+              <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }} animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}>
+                <SectionHeader title="اكتشف الألعاب" icon={<Rocket className="h-5 w-5" aria-hidden />} subtitle="مجموعة مختارة بعناية لتناسب كل الأذواق" />
                 <div className="mt-3 rounded-2xl border border-border/60 bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/40">
                   <GameGrid favoriteGame={favoriteGame} popularGame={popularGame} />
                 </div>
               </motion.div>
 
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
-                <SectionHeader title="اللوبي" icon={<Gamepad2 className="h-5 w-5" />} subtitle="تواصل بسرعة مع اللاعبين والغرف المفتوحة" />
+              <motion.div initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }} animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}>
+                <SectionHeader title="اللوبي" icon={<Gamepad2 className="h-5 w-5" aria-hidden />} subtitle="تواصل بسرعة مع اللاعبين والغرف المفتوحة" />
                 <div className="mt-3 rounded-2xl border border-border/60 bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/40">
                   <LobbySection onLobbiesUpdate={handleLobbiesUpdate} />
                 </div>
