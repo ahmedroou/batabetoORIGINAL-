@@ -40,7 +40,7 @@ const nextConfig = {
 
   experimental: {
     // The new correct way to handle server packages
-    serverComponentsExternalPackages: ['@opentelemetry/instrumentation', '@genkit-ai/core', 'dotprompt', 'firebase', '@firebase/app'],
+    serverComponentsExternalPackages: ['@opentelemetry/instrumentation', '@genkit-ai/core', 'dotprompt', 'firebase'],
   },
 };
 
