@@ -289,8 +289,17 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
   // Pre-process submissions to remove duplicates before sending to AI
   const playerSubs = Object.entries(allSubmissions).map(([playerId, answers]) => {
     const p = game.players.find((x) => x.id === playerId);
-    const uniqueAnswers = Array.from(new Set(answers.map(normalizeForSignature))).map(originalAnswer => {
-        return answers.find(ans => normalizeForSignature(ans) === originalAnswer)!;
+    
+    // This is the corrected logic: Keep only the first occurrence of each unique answer
+    const seen = new Set<string>();
+    const uniqueAnswers = answers.filter(answer => {
+        const normalized = normalizeForSignature(answer);
+        if (seen.has(normalized)) {
+            return false;
+        } else {
+            seen.add(normalized);
+            return true;
+        }
     });
 
     return { playerId, name: p?.name || 'Unknown', answers: uniqueAnswers };
