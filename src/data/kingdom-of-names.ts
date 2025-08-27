@@ -1,4 +1,3 @@
-
 export const CATEGORIES = [
     "نبات",
     "جماد",

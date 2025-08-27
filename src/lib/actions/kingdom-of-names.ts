@@ -1,5 +1,3 @@
-
-
 'use server';
 
 import { db } from '@/lib/firebase';
@@ -15,7 +13,7 @@ import {
 import type { Game, Player, KingdomOfNamesState } from '@/types';
 import { shuffle } from './helpers';
 import { CATEGORIES, LETTERS } from '@/data/kingdom-of-names';
-import { distributeEndOfGameAwards } from '@/lib/actions/admin/users';
+import { distributeEndOfGameAwards } from './admin/users';
 
 /**
  * ===============================
@@ -61,7 +59,7 @@ const pickCategoriesForRound = (count = 6) => shuffle([...CATEGORIES]).slice(0, 
 // Arabic normalization helpers
 const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670-\u06ED]/g; // tanwīn + tashkīl + Qur'anic marks
 const TATWEEL = /\u0640/g;
-function normalizeArabic(text: string): string {
+function normalizeArabic(text?: string) {
   if (!text) return '';
   return text
     .replace(TATWEEL, '')
@@ -75,7 +73,7 @@ function normalizeArabic(text: string): string {
 }
 
 function startsWithLetter(word?: string, letter?: string): boolean {
-  if (!word) return false;
+  if (!word || !letter) return false;
   const w = normalizeArabic(word);
   const l = normalizeArabic(letter);
   if (!w.length || !l.length) return false;
@@ -203,19 +201,18 @@ export async function submitAnswers(
     ensure(state.phase === 'playing', 'ليست مرحلة اللعب.');
 
     const activePlayers = getActivePlayers(game);
-    const finalAnswers: Record<string, Record<string, string>> = {
-      ...(state.playerAnswers || {}),
-    };
-
-    // Capture progress of other players who haven't submitted
-    for (const p of activePlayers) {
-      if (!finalAnswers[p.id]) {
-        finalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
-      }
-    }
+    const finalAnswers: Record<string, Record<string, string>> = {};
+    
     // Set the current player's final answers
     finalAnswers[playerId] = answers;
-    
+
+    // Capture progress of other players who haven't submitted yet
+    for (const p of activePlayers) {
+        if (p.id !== playerId) {
+          finalAnswers[p.id] = state.playerProgress?.[p.id]?.answers || {};
+        }
+    }
+
     const settings = mergeSettings(state.settings);
     const updates = {
       gameState: 'voting',
@@ -242,6 +239,7 @@ export async function submitVotes(
     ensure(state.phase === 'voting', 'ليست مرحلة التصويت.');
 
     const fieldPath = `kingdomOfNamesState.votes.${playerId}`;
+    // This atomic update prevents overwriting other players' votes.
     tx.update(gameRef, { [fieldPath]: votes });
 
     // Read the current votes from the game state in the transaction to get the most up-to-date view
