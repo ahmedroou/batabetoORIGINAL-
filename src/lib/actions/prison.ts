@@ -28,14 +28,7 @@ import {
   updateDoc,
   setDoc,
 } from 'firebase/firestore';
-import type {
-  Game,
-  Player,
-  PrisonQuestion,
-  JudgePrisonAnswersInput,
-  JudgeSingleSubmissionOutput,
-  GameState,
-} from '@/types';
+import type { Game, Player, PrisonQuestion, JudgePrisonAnswersInput, JudgeSingleSubmissionOutput, GameState } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
 import { updateLeagueScoresForGameEnd } from './user';
 import { distributeEndOfGameAwards } from './admin/users';
@@ -716,19 +709,22 @@ export async function tickGame(gameId: string): Promise<void> {
     const expired = isExpired(game.prisonState?.timerEndsAt);
 
     if (game.gameState === 'open_auction' && expired) {
-      const submissions = { ...(game.prisonState?.openAuctionSubmissions || {}) } as Record<string, string[]>;
-      const actives = game.players.filter((p) => p.status === 'alive');
-      actives.forEach((p) => {
-        submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
-      });
+        const submissions: Record<string, string[]> = { ...(game.prisonState?.openAuctionSubmissions || {}) };
+        const activePlayers = game.players.filter(p => p.status === 'alive');
+        activePlayers.forEach(p => {
+            // Only add if not already submitted
+            if (!submissions[p.id]) {
+                submissions[p.id] = game.prisonState?.playerProgress?.[p.id]?.answers || [];
+            }
+        });
 
-      tx.update(gameRef, {
-        'prisonState.openAuctionSubmissions': submissions,
-        gameState: 'judging',
-        'prisonState.timerEndsAt': deleteField(),
-        stateVersion: increment(1),
-      });
-      return;
+        tx.update(gameRef, {
+            'prisonState.openAuctionSubmissions': submissions,
+            gameState: 'judging',
+            'prisonState.timerEndsAt': deleteField(),
+            stateVersion: increment(1),
+        });
+        return;
     }
 
     if (game.gameState === 'closed_auction_bidding' && expired) {
