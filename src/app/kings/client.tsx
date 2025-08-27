@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { recalculateGameKings } from '@/lib/actions/admin/users';
 import { useToast } from '@/hooks/use-toast';
+import { useIsMobile } from '@/hooks/use-mobile'; // Import the hook
 
 // =====================
 // Utilities
@@ -46,13 +47,12 @@ function getAnchors(now = new Date()) {
   const prev = getPrevThursday10UTC(now);
   const total = next.getTime() - prev.getTime();
   const elapsed = now.getTime() - prev.getTime();
-  const remaining = next.getTime() - prev.getTime();
-  return { prev, next, total, elapsed, remaining };
+  return { prev, next, total, elapsed };
 }
 
 function getCountdown(now = new Date()) {
-  const { next, remaining } = getAnchors(now);
-  const d = Math.max(0, remaining);
+  const { next } = getAnchors(now);
+  const d = Math.max(0, next.getTime() - now.getTime());
   return {
     days: Math.floor(d / (1000 * 60 * 60 * 24)),
     hours: Math.floor((d / (1000 * 60 * 60)) % 24),
@@ -82,8 +82,10 @@ function usePrefersReducedMotion() {
 function Tilt({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [style, setStyle] = useState<React.CSSProperties>({});
+  const isMobile = useIsMobile(); // Check if mobile
 
   const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isMobile) return; // Disable on mobile
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -93,7 +95,14 @@ function Tilt({ children }: { children: React.ReactNode }) {
     const ry = (px - 0.5) * 10;
     setStyle({ transform: `perspective(800px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(0)`, transition: 'transform 120ms ease' });
   };
-  const onLeave = () => setStyle({ transform: 'perspective(800px) rotateX(0deg) rotateY(0deg) translateZ(0)', transition: 'transform 180ms ease' });
+  const onLeave = () => {
+    if (isMobile) return; // Disable on mobile
+    setStyle({ transform: 'perspective(800px) rotateX(0deg) rotateY(0deg) translateZ(0)', transition: 'transform 180ms ease' });
+  };
+  
+  if (isMobile) {
+    return <div ref={ref}>{children}</div>;
+  }
 
   return (
     <div ref={ref} onMouseMove={onMove} onMouseLeave={onLeave} className="will-change-transform">
