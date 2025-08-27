@@ -80,7 +80,6 @@ async function fetchRandomQuestion(): Promise<PrisonQuestion> {
     const snap = await getDocs(q);
 
     if (snap.empty) {
-        // Fallback in case random key is past the last document
         const fallbackQuery = query(
             questionsCol,
             where('randomKey', '<', randomKey),
@@ -96,9 +95,9 @@ async function fetchRandomQuestion(): Promise<PrisonQuestion> {
         const docSnap = snap.docs[0];
         return { id: docSnap.id, ...(docSnap.data() as Omit<PrisonQuestion, 'id'>) };
     }
-
+    
     // Absolute fallback if collection is empty or has no randomKey
-    return { id: 'fallback', text: 'اذكر أسماء أولاد تبدأ بحرف الباء' } as PrisonQuestion;
+    return { id: 'fallback', text: 'اذكر أسماء أولاد تبدأ بحرف الباء', randomKey: Math.random() } as PrisonQuestion;
 }
 
 const aliveOrInPrison = (p: Player) => ['alive', 'in_prison'].includes(p.status);
@@ -336,6 +335,7 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
     return;
   }
 
+  // Sequentially call AI to avoid rate limits
   for (const s of playerSubs) {
     await judgeSinglePlayerAndUpdate(
       gameId,
@@ -470,12 +470,12 @@ export async function proceedToResultsInternal(
         let winnerMsg = '';
         let loserMsg = '';
 
-        if (winners.length > 0 && (scoreValues.length === 1 || max > min)) {
+        if (winners.length > 0 && winners.length < finalScores.length && max > min) {
+            winnerMsg = `الفائز بالجولة هو ${winners.map(w => game.players.find(p => p.id === w.playerId)?.name).join(', ')}!`;
             winners.forEach((w) => {
               const idx = updatedPlayers.findIndex((p) => p.id === w.playerId);
               const wp = updatedPlayers[idx];
               if (wp && roundScores[wp.id]) {
-                  winnerMsg = `الفائز بالجولة هو ${wp.name}!`;
                   roundScores[w.playerId]!.points += 2;
                   (roundScores[w.playerId]!.breakdown as any[]).push({ reason: 'أعلى إجابات', points: 2 });
                   
@@ -483,7 +483,7 @@ export async function proceedToResultsInternal(
                       updatedPlayers[idx] = {...wp, status: 'alive'};
                       lastResultData.freedPlayerName = wp.name;
                       lastResultData.freedPlayerAvatarId = wp.avatarId;
-                      winnerMsg += ' وتم تحريره!';
+                      winnerMsg += ` وتم تحرير ${wp.name}!`;
                   }
               }
             });
@@ -601,7 +601,7 @@ export async function tickGame(gameId: string, hostId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
   let shouldJudge = false;
   let isGameOver = false;
-  let gameDataForLeague: Game | null = null;
+  let gameDataForLeagueUpdate: Game | null = null;
   
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -609,8 +609,10 @@ export async function tickGame(gameId: string, hostId: string): Promise<void> {
     const game = snap.data() as Game;
     
     if (game.gameState === 'final_results') return;
-    const timerEndsAt = game.prisonState?.timerEndsAt as Timestamp | undefined;
-    if (!timerEndsAt || !isExpired(timerEndsAt)) return;
+    if (!game.prisonState?.timerEndsAt) return;
+    
+    const expired = isExpired(game.prisonState.timerEndsAt);
+    if (!expired) return;
 
     if (game.hostId !== hostId) return;
 
@@ -676,13 +678,13 @@ export async function tickGame(gameId: string, hostId: string): Promise<void> {
       case 'rejudging': {
         const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, tx);
         tx.update(gameRef, updatedGame);
-        if (gameDataForLeague) gameDataForLeague = gameDataForLeague;
+        if (gameDataForLeague) gameDataForLeagueUpdate = gameDataForLeague;
         break;
       }
       case 'results': {
         const result = await _startNextRound(tx, gameRef, game);
         if (result.isGameOver) {
-            gameDataForLeague = result.finalGame;
+            gameDataForLeagueUpdate = result.finalGame;
         }
         break;
       }
@@ -702,9 +704,9 @@ export async function tickGame(gameId: string, hostId: string): Promise<void> {
   if (shouldJudge) {
     await judgeAnswersAndProceed(gameId, false);
   }
-  if (gameDataForLeague) {
+  if (gameDataForLeagueUpdate) {
     await distributeEndOfGameAwards(gameId);
-    await updateLeagueScoresForGameEnd(gameDataForLeague);
+    await updateLeagueScoresForGameEnd(gameDataForLeagueUpdate);
   }
 }
 
