@@ -4,7 +4,7 @@
  * @fileoverview Actions for "The Prison" game — GPT‑5 revamped.
  *
  * أهداف النسخة:
- * - منع توقف اللعبة بغياب اللاعبين: نظام مؤقتات شامل + server tick idempotent يمكن لأي عميل استدعاؤه.
+ * - منع توقف اللعبة بغياب اللاعبين: نظام مؤقتات شامل + server tick idempotent يمكن لأي عميل استدعائه.
  * - صلابة أعلى للمعاملات وتجنب التضارب عبر أقفال خفيفة (judgingLock) ونسخة حالة stateVersion.
  * - تحققات ودمج إعدادات مع حدود منطقية + قيم افتراضية.
  * - تحكم كامل بدورة الحياة: instructions → open_auction | closed_auction_bidding → closed_auction_answering → judging → results → nextRound | final_results.
@@ -358,7 +358,7 @@ export async function proceedToResults(gameId: string, hostId: string) {
 
     if (!game.prisonState?.aiJudgeResults) return;
 
-    const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game);
+    const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, tx);
     tx.update(ref, updatedGame);
     finalGameForLeagueUpdate = gameDataForLeague;
   });
@@ -369,7 +369,8 @@ export async function proceedToResults(gameId: string, hostId: string) {
 }
 
 export async function proceedToResultsInternal(
-  game: Game
+  game: Game,
+  tx: Transaction
 ): Promise<{ updatedGame: object; gameDataForLeague: Game | null }> {
   let updatedPlayers = [...game.players];
   const roundScores: Game['prisonState']['lastRoundResult']['points'] = {} as any;
@@ -426,8 +427,10 @@ export async function proceedToResultsInternal(
 
     game.players.forEach(p => {
         if (p.id !== winnerId && p.status === 'alive') {
-             roundScores[p.id]!.points += 1;
-             (roundScores[p.id]!.breakdown as any[]).push({ reason: 'نجاة', points: 1 });
+             if (roundScores[p.id]) {
+                roundScores[p.id]!.points += 1;
+                (roundScores[p.id]!.breakdown as any[]).push({ reason: 'نجاة', points: 1 });
+             }
         }
     });
 
@@ -546,7 +549,8 @@ export async function proceedToResultsInternal(
     const winnerId = Object.keys(newTotals).reduce((a, b) => (newTotals[a] > newTotals[b] ? a : b), Object.keys(newTotals)[0] || '');
     updatedGamePartial.gameResult = { winner: winnerId, message: 'انتهت اللعبة' };
     
-    gameDataForLeague = {
+    // Construct a sanitized, serializable game object for league updates
+    gameDataForLeague = JSON.parse(JSON.stringify({
       ...game,
       players: updatedPlayers,
       playerScores: newTotals,
@@ -555,9 +559,9 @@ export async function proceedToResultsInternal(
       prisonState: {
           ...game.prisonState,
           lastRoundResult: finalLastRound,
-          timerEndsAt: null,
-      } as any,
-    };
+          timerEndsAt: null, // Replace FieldValue with null
+      },
+    }));
   }
 
   return { updatedGame: updatedGamePartial, gameDataForLeague };
@@ -622,7 +626,7 @@ export async function nextRound(gameId: string, hostId: string) {
              stateVersion: increment(1),
         };
         tx.update(gameRef, finalUpdate);
-        gameDataForLeagueUpdate = {...game, gameState: 'final_results', gameResult: finalUpdate.gameResult };
+        gameDataForLeagueUpdate = JSON.parse(JSON.stringify({...game, gameState: 'final_results', gameResult: finalUpdate.gameResult }));
         return;
     }
 
@@ -781,7 +785,7 @@ export async function tickGame(gameId: string): Promise<void> {
     if ((game.gameState === 'judging' || game.gameState === 'rejudging')) {
       const lock = game.prisonState?.judgingLock;
       if (lock) {
-          const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game);
+          const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, tx);
           tx.update(gameRef, updatedGame);
           proceedToLeagueUpdate = gameDataForLeague;
       } else {
@@ -862,5 +866,3 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
 
   return { success: true };
 }
-
-

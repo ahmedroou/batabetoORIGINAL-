@@ -1,4 +1,3 @@
-
 /**
  * Import function triggers from their respective submodules:
  *
@@ -14,8 +13,6 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import type { GameKing, UserProfile } from "../../src/types";
 import { FieldValue } from "firebase-admin/firestore";
-import { onRequest } from 'firebase-functions/v2/https';
-import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
@@ -81,10 +78,12 @@ export const updateGameKings = onSchedule(
 
       await batch.commit();
       logger.log(`Successfully updated ${updatedCount} game kings.`);
+      return;
     } catch (error) {
       logger.error("Error recalculating game kings:", error);
-      // Re-throw the error to have the function execution marked as a failure
+      // Optionally, re-throw the error to have the function execution
+      // marked as a failure
       throw new Error("Failed to update game kings.");
     }
-  }
+  },
 );
