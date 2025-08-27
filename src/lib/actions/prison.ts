@@ -71,25 +71,17 @@ async function fetchRandomQuestion(): Promise<PrisonQuestion> {
   const questionsCol = collection(db, 'prison_questions');
   const randomKey = Math.random().toString(36).substring(2);
 
-  let q = query(
+  const q = query(
     questionsCol,
     where('randomKey', '>=', randomKey),
     orderBy('randomKey'),
     limit(1)
   );
-  let snap = await getDocs(q);
+  const snap = await getDocs(q);
 
   if (snap.empty) {
-    q = query(
-      questionsCol,
-      where('randomKey', '<', randomKey),
-      orderBy('randomKey', 'desc'),
-      limit(1)
-    );
-    snap = await getDocs(q);
+     return { id: 'fallback', text: 'اذكر أسماء أولاد تبدأ بحرف الباء' } as PrisonQuestion;
   }
-  
-  if (snap.empty) throw new Error('لا توجد أسئلة للعبة السجن.');
   const docSnap = snap.docs[0];
   return { id: docSnap.id, ...(docSnap.data() as Omit<PrisonQuestion, 'id'>) };
 }
@@ -190,7 +182,7 @@ export async function updateOpenAuctionProgress(gameId: string, playerId: string
   const gameRef = doc(db, 'games', gameId);
   try {
     const fieldPath = new FieldPath('prisonState', 'playerProgress', playerId, 'answers');
-    await updateDoc(gameRef, { [fieldPath as any]: answers });
+    await updateDoc(gameRef, fieldPath, answers);
   } catch (e) {
     console.error('Error updating open auction progress:', e);
   }
@@ -240,7 +232,7 @@ async function judgeSinglePlayerAndUpdate(gameId: string, one: JudgePrisonAnswer
         evaluation: 'لم يقدم اللاعب أي إجابات.',
       };
       const fieldPath = new FieldPath('prisonState', 'aiJudgeResults', zero.playerId);
-      await updateDoc(doc(db, 'games', gameId), { [fieldPath as any]: zero });
+      await updateDoc(doc(db, 'games', gameId), fieldPath, zero);
       return;
     }
 
@@ -248,7 +240,7 @@ async function judgeSinglePlayerAndUpdate(gameId: string, one: JudgePrisonAnswer
     if (out && out.results.length > 0) {
       const single = out.results[0]!;
       const fieldPath = new FieldPath('prisonState', 'aiJudgeResults', single.playerId);
-      await updateDoc(doc(db, 'games', gameId), { [fieldPath as any]: single });
+      await updateDoc(doc(db, 'games', gameId), fieldPath, single);
     }
   } catch (e) {
     console.error(`AI Judging failed for player ${one.submissions[0]?.playerId} in game ${gameId}:`, e);
@@ -593,16 +585,10 @@ export async function nextRound(gameId: string, hostId: string) {
   }
 }
 
-export async function handleTimeout(gameId: string, _callerId: string) {
-  await tickGame(gameId);
-}
-
 export async function tickGame(gameId: string): Promise<void> {
   const gameRef = doc(db, 'games', gameId);
   let finalGameData: Game | null = null;
-  let shouldJudge = false;
-  let rejudge = false;
-  let shouldProceedToResults = false;
+  let shouldStartNextRound = false;
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(gameRef);
@@ -610,9 +596,7 @@ export async function tickGame(gameId: string): Promise<void> {
     const game = snap.data() as Game;
     
     if (game.gameState === 'final_results') return;
-    const timerEndsAt = game.prisonState?.timerEndsAt;
-    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
-
+    if (!game.prisonState?.timerEndsAt || !isExpired(game.prisonState.timerEndsAt)) return;
 
     tx.update(gameRef, { 'prisonState.timerEndsAt': deleteField() });
     
@@ -630,8 +614,6 @@ export async function tickGame(gameId: string): Promise<void> {
             gameState: 'judging',
             stateVersion: increment(1),
         });
-        shouldJudge = true;
-        rejudge = false;
         break;
       }
       case 'closed_auction_bidding': {
@@ -670,20 +652,17 @@ export async function tickGame(gameId: string): Promise<void> {
           gameState: 'judging',
           stateVersion: increment(1),
         });
-        shouldJudge = true;
-        rejudge = false;
         break;
       }
       case 'judging':
       case 'rejudging': {
-          shouldProceedToResults = true;
+          const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, tx);
+          tx.update(gameRef, updatedGame);
+          if (gameDataForLeague) finalGameData = gameDataForLeague;
           break;
       }
       case 'results': {
-          const result = await _startNextRound(tx, gameRef, game);
-          if(result.isGameOver) {
-              finalGameData = result.finalGame;
-          }
+          shouldStartNextRound = true;
           break;
       }
       case 'instructions': {
@@ -699,17 +678,12 @@ export async function tickGame(gameId: string): Promise<void> {
     }
   });
 
-  if (shouldJudge) {
-    await judgeAnswersAndProceed(gameId, rejudge);
-  }
-
-  if (shouldProceedToResults) {
-    await proceedToResults(gameId, game.hostId);
-  }
-
-  if (finalGameData) {
-      await distributeEndOfGameAwards(gameId);
+  if (shouldStartNextRound) {
+      await nextRound(gameId, game.hostId);
+  } else if (finalGameData) {
       await updateLeagueScoresForGameEnd(finalGameData);
+  } else if (game.gameState === 'open_auction' || game.gameState === 'closed_auction_answering') {
+      await judgeAnswersAndProceed(gameId, false);
   }
 }
 
@@ -867,7 +841,9 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
     const game = snap.data() as Game;
     const player = game.players.find((p) => p.id === playerId);
 
-    if (game.gameState !== 'results') throw new Error('لا يمكن طلب إعادة التقييم إلا بعد ظهور النتائج النهائية للجولة.');
+    if (!['judging', 'rejudging', 'results'].includes(game.gameState)) {
+      throw new Error('لا يمكن طلب إعادة التقييم إلا بعد ظهور النتائج النهائية للجولة.');
+    }
     if ((game.prisonState?.rejudgeRequestsUsedBy || []).includes(playerId)) throw new Error('لقد استخدمت فرصتك لإعادة التقييم بالفعل.');
     if (game.prisonState?.activeRejudgeRequest) throw new Error('هناك طلب إعادة تقييم قيد التنفيذ بالفعل.');
 
@@ -895,4 +871,3 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
 
   return { success: true };
 }
-
