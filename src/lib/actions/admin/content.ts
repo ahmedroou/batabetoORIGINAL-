@@ -145,6 +145,7 @@ export async function uploadPrisonQuestionsFromJson(questions: PrisonJson[]) {
             const docRef = doc(questionsCol);
             ops.push(b => b.set(docRef, { 
                 text: normalize(q.text), 
+                randomKey: Math.random().toString(36).substring(2),
                 similaritySignature: getSimilaritySignature(normalize(q.text)),
                 createdAt: serverTimestamp(),
             }));

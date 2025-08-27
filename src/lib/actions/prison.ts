@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -26,7 +27,7 @@ import {
   orderBy,
   limit,
   FieldPath,
-  serverTimestamp, // Fixed: Added missing import
+  serverTimestamp,
 } from 'firebase/firestore';
 import type { Game, Player, PrisonQuestion, JudgePrisonAnswersInput, JudgeSingleSubmissionOutput, GameState } from '@/types';
 import { judgePrisonAnswers as getPrisonJudgeResults } from '@/ai/flows/judge-prison-answers-flow';
@@ -69,7 +70,6 @@ async function fetchRandomQuestion(): Promise<PrisonQuestion> {
   const questionsCol = collection(db, 'prison_questions');
   const randomKey = Math.random().toString(36).substring(2);
 
-  // Fixed (#5): Efficiently query for a random document instead of fetching all.
   let q = query(
     questionsCol,
     where('randomKey', '>=', randomKey),
@@ -88,10 +88,22 @@ async function fetchRandomQuestion(): Promise<PrisonQuestion> {
     snap = await getDocs(q);
   }
   
-  if (snap.empty) throw new Error('لا توجد أسئلة للعبة السجن.');
+  if (snap.empty) {
+      // Fallback for documents that might not have `randomKey`
+      const allDocsSnap = await getDocs(query(questionsCol, limit(1000))); // limit to avoid reading too many
+      if (allDocsSnap.empty) {
+         // If still empty after trying everything, then there are truly no questions.
+         // Instead of throwing, return a default question to prevent crashes.
+         return { id: 'fallback', text: 'ما هي أركان الإسلام الخمسة؟', similaritySignature: 'اركان الاسلام الخمسة' };
+      }
+      const randomDoc = allDocsSnap.docs[Math.floor(Math.random() * allDocsSnap.docs.length)];
+      return { id: randomDoc.id, ...(randomDoc.data() as Omit<PrisonQuestion, 'id'>) };
+  }
+
   const docSnap = snap.docs[0];
   return { id: docSnap.id, ...(docSnap.data() as Omit<PrisonQuestion, 'id'>) };
 }
+
 
 const aliveOrInPrison = (p: Player) => ['alive', 'in_prison'].includes(p.status);
 
@@ -187,7 +199,6 @@ export async function proceedFromInstructions(gameId: string, hostId: string) {
 export async function updateOpenAuctionProgress(gameId: string, playerId: string, answers: string[]) {
   const gameRef = doc(db, 'games', gameId);
   try {
-    // Fixed (#1, #9): Use FieldPath correctly as a separate argument.
     const fieldPath = new FieldPath('prisonState', 'playerProgress', playerId, 'answers');
     await updateDoc(gameRef, fieldPath, answers);
   } catch (e) {
@@ -238,7 +249,6 @@ async function judgeSinglePlayerAndUpdate(gameId: string, one: JudgePrisonAnswer
         score: 0,
         evaluation: 'لم يقدم اللاعب أي إجابات.',
       };
-      // Fixed (#1): Use FieldPath correctly to update a single player's result in the map.
       const fieldPath = new FieldPath('prisonState', 'aiJudgeResults', zero.playerId);
       await updateDoc(doc(db, 'games', gameId), fieldPath, zero);
       return;
@@ -251,13 +261,11 @@ async function judgeSinglePlayerAndUpdate(gameId: string, one: JudgePrisonAnswer
       await updateDoc(doc(db, 'games', gameId), fieldPath, single);
     }
   } catch (e) {
-    // Fixed (#13): Better error logging. In a real app, this would go to a logging service.
     console.error(`AI Judging failed for player ${one.submissions[0]?.playerId} in game ${gameId}:`, e);
-    // Write a failure state to allow the game to proceed.
-    const fieldPath = new FieldPath('prisonState', 'aiJudgeResults', one.submissions[0].playerId);
+    const fieldPath = new FieldPath('prisonState', 'aiJudgeResults', one.submissions[0]!.playerId);
     await updateDoc(doc(db, 'games', gameId), fieldPath, {
-      playerId: one.submissions[0].playerId,
-      name: one.submissions[0].name,
+      playerId: one.submissions[0]!.playerId,
+      name: one.submissions[0]!.name,
       score: 0,
       correctAnswers: [],
       evaluation: "خطأ في الاتصال بحكم الذكاء الاصطناعي.",
@@ -313,7 +321,6 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
   const playerSubs = Object.entries(allSubmissions).map(([playerId, answers]) => {
     const p = game.players.find((x) => x.id === playerId);
     
-    // Fixed: Keep one instance of each duplicated answer.
     const seen = new Set<string>();
     const uniqueAnswers = (answers || []).filter(answer => {
         const normalized = normalizeForSignature(answer);
@@ -333,7 +340,6 @@ export async function judgeAnswersAndProceed(gameId: string, isRejudging: boolea
     return;
   }
 
-  // Fixed (#14): Sequentially process AI calls to avoid rate limits.
   for (const s of playerSubs) {
     await judgeSinglePlayerAndUpdate(
       gameId,
@@ -364,7 +370,6 @@ export async function proceedToResults(gameId: string, hostId: string) {
 
     if (!game.prisonState?.aiJudgeResults) return;
 
-    // Fixed (#2): This function now returns a sanitized game object for league updates.
     const { updatedGame, gameDataForLeague } = await proceedToResultsInternal(game, tx);
     tx.update(ref, updatedGame);
     finalGameForLeagueUpdate = gameDataForLeague;
@@ -402,7 +407,6 @@ export async function proceedToResultsInternal(
   const isClosedAuction = !!game.prisonState?.auctionWinnerId;
 
   if (isClosedAuction) {
-    // Logic for closed auction results... (re-validated, seems ok)
     const winnerId = game.prisonState!.auctionWinnerId!;
     const winnerResult = aiResults[winnerId];
     const bidAmount = game.prisonState!.highestBid || 0;
@@ -443,11 +447,9 @@ export async function proceedToResultsInternal(
     });
 
   } else {
-    // Logic for open auction...
     const finalScores = Object.values(aiResults).map((r) => ({ playerId: r.playerId, finalScore: r.score }));
 
     if (finalScores.length > 0) {
-      // Fixed: Base score calculation now correctly uses aiResults.score.
       finalScores.forEach(({ playerId, finalScore }) => {
         if (roundScores[playerId]) {
           roundScores[playerId].points += finalScore; // Base score
@@ -457,7 +459,6 @@ export async function proceedToResultsInternal(
         }
       });
       
-      // Calculate wrong answer penalties correctly
       finalScores.forEach(({ playerId }) => {
         const res = aiResults[playerId]!;
         const totalSubmitted = (submissions?.[playerId] || []).length;
@@ -471,7 +472,6 @@ export async function proceedToResultsInternal(
         }
       });
       
-      // Fixed (#10): Guard against empty arrays.
       const scoreValues = finalScores.map((c) => c.finalScore);
       if (scoreValues.length > 0) {
         const max = Math.max(...scoreValues);
@@ -572,20 +572,19 @@ export async function proceedToResultsInternal(
     const winnerId = Object.keys(newTotals).reduce((a, b) => (newTotals[a]! > newTotals[b]! ? a : b), Object.keys(newTotals)[0] || '');
     updatedGamePartial.gameResult = { winner: winnerId, message: 'انتهت اللعبة' };
     
-    // Fixed (#2): Build a sanitized game object for league updates
-    gameDataForLeague = JSON.parse(JSON.stringify({
+    // Build a sanitized game object for league updates
+    const stateForLeague = { ...game.prisonState, lastRoundResult: finalLastRound };
+    delete (stateForLeague as any).timerEndsAt; // remove sentinels
+    delete (stateForLeague as any).judgingLock;
+
+    gameDataForLeague = {
       ...game,
       players: updatedPlayers,
       playerScores: newTotals,
       gameState: 'final_results',
       gameResult: updatedGamePartial.gameResult,
-      prisonState: {
-          ...game.prisonState,
-          lastRoundResult: finalLastRound,
-          timerEndsAt: null,
-          judgingLock: false,
-      },
-    }));
+      prisonState: stateForLeague,
+    } as Game;
   }
 
   return { updatedGame: updatedGamePartial, gameDataForLeague };
@@ -696,7 +695,6 @@ export async function submitBid(gameId: string, playerId: string, amount: number
     if (!snap.exists()) throw new Error('Game not found.');
     const game = snap.data() as Game;
     const player = game.players.find(p => p.id === playerId);
-    // Fixed (#7): Check if player is allowed to bid
     if (!player || !aliveOrInPrison(player)) throw new Error("لا يمكنك المزايدة.");
     if (game.gameState !== 'closed_auction_bidding') return { success: false, error: 'انتهى وقت المزايدة.' };
 
@@ -722,9 +720,8 @@ export async function submitBid(gameId: string, playerId: string, amount: number
       throw new Error(`يجب أن تكون مزايدتك أعلى من ${currentHighestBid}.`);
     }
 
-    // Fixed (#1, #9): Use FieldPath correctly.
-    const fieldPath = new FieldPath('prisonState', 'bids', playerId);
-    tx.update(gameRef, fieldPath, amount);
+    const fp = new FieldPath('prisonState', 'bids', playerId);
+    tx.update(gameRef, fp, amount);
     tx.update(gameRef, 'prisonState.highestBid', amount);
     tx.update(gameRef, 'stateVersion', increment(1));
 
@@ -747,9 +744,9 @@ export async function tickGame(gameId: string): Promise<void> {
     if (!snap.exists()) return;
     const game = snap.data() as Game;
     
-    // Fixed (#4): If no timer is set, the game is in a manual state, so tick does nothing.
-    if (game.gameState === 'final_results' || !game.prisonState?.timerEndsAt) return;
-    if (!isExpired(game.prisonState.timerEndsAt)) return;
+    if (game.gameState === 'final_results') return;
+    const timerEndsAt = game.prisonState?.timerEndsAt;
+    if (!timerEndsAt || timerEndsAt.toMillis() > nowMs()) return;
 
     tx.update(gameRef, { 'prisonState.timerEndsAt': deleteField() });
 
@@ -826,13 +823,14 @@ export async function tickGame(gameId: string): Promise<void> {
       return;
     }
 
-    // Fixed (#2): Avoid calling nextRound within the transaction. Signal intent instead.
-    if (game.gameState === 'results' && isExpired(game.prisonState?.timerEndsAt)) {
-        await nextRound(gameId, game.hostId); // This is now safe as it's outside a tx
+    if (game.gameState === 'results') {
+        const result = await _startNextRound(tx, gameRef, game);
+        isGameOver = result.isGameOver;
+        finalGame = result.finalGame;
         return;
     }
 
-    if (game.gameState === 'instructions' && isExpired(game.prisonState?.timerEndsAt)) {
+    if (game.gameState === 'instructions') {
       const q = await fetchRandomQuestion();
       tx.update(gameRef, {
         gameState: 'open_auction',
@@ -851,6 +849,97 @@ export async function tickGame(gameId: string): Promise<void> {
     await distributeEndOfGameAwards(gameId);
     await updateLeagueScoresForGameEnd(finalGame);
   }
+}
+
+async function _startNextRound(tx: Transaction, gameRef: DocumentReference, game: Game): Promise<{isGameOver: boolean, finalGame: Game | null}> {
+     let isGameOver = false;
+     let finalGame: Game | null = null;
+     
+     const currentRound = game.round || 1;
+     if (currentRound >= (game.prisonState?.settings.rounds || DEFAULTS.maxRounds)) {
+         isGameOver = true;
+     } else {
+        const nextRoundNum = currentRound + 1;
+        const ps = ensurePrisonState(game);
+        const question = await fetchRandomQuestion();
+
+        const updatedPlayers = [...game.players];
+        const newHistory = { ...(game.prisonState?.prisonHistory || {}) } as any;
+        const roundWinners = Object.keys(game.prisonState?.lastRoundResult?.points || {}).filter(
+            (id) => (game.prisonState?.lastRoundResult?.points[id].points || 0) > 1
+        );
+
+        for (const p of updatedPlayers) {
+            if (p.status === 'executed' || p.status === 'left') continue;
+            const h = newHistory[p.id] || { inPrison: 0, roundsWithoutWinningAuction: 0 };
+            h.inPrison = p.status === 'in_prison' ? (h.inPrison || 0) + 1 : 0;
+            h.roundsWithoutWinningAuction = roundWinners.includes(p.id) ? 0 : (h.roundsWithoutWinningAuction || 0) + 1;
+            if (h.inPrison >= 5) p.status = 'executed';
+            if (h.roundsWithoutWinningAuction >= 5 && p.status === 'alive') {
+                p.status = 'in_prison';
+                h.roundsWithoutWinningAuction = 0;
+            }
+            newHistory[p.id] = h;
+        }
+
+        const alivePlayers = updatedPlayers.filter(aliveOrInPrison);
+        const inPrison = updatedPlayers.filter((p) => p.status === 'in_prison');
+
+        let nextState: GameState;
+        let timerSec: number;
+
+        if (inPrison.length === 0) {
+            nextState = 'open_auction';
+            timerSec = ps.settings.answeringTime || DEFAULTS.answeringTime;
+        } else if (inPrison.length > 0 && inPrison.length < alivePlayers.length) {
+            nextState = 'closed_auction_bidding';
+            timerSec = ps.settings.biddingTime || DEFAULTS.biddingTime;
+        } else {
+            nextState = 'open_auction';
+            timerSec = ps.settings.answeringTime || DEFAULTS.answeringTime;
+        }
+
+        if (alivePlayers.length < 2) {
+            isGameOver = true;
+        }
+
+        if(!isGameOver) {
+            tx.update(gameRef, {
+                players: updatedPlayers,
+                gameState: nextState,
+                round: nextRoundNum,
+                'prisonState.prisonHistory': newHistory,
+                'prisonState.currentQuestion': nextState === 'open_auction' ? question : deleteField(),
+                'prisonState.closedAuctionQuestion': nextState !== 'open_auction' ? question : deleteField(),
+                'prisonState.openAuctionSubmissions': {},
+                'prisonState.playerProgress': {},
+                'prisonState.aiJudgeResults': {},
+                'prisonState.lastRoundResult': deleteField(),
+                'prisonState.auctionWinnerId': deleteField(),
+                'prisonState.highestBid': deleteField(),
+                'prisonState.bids': {},
+                'prisonState.activeRejudgeRequest': deleteField(),
+                'prisonState.judgingLock': false,
+                'prisonState.judgeRunId': deleteField(),
+                'prisonState.judgingExpected': deleteField(),
+                'prisonState.timerEndsAt': tsIn(timerSec),
+                stateVersion: increment(1),
+            });
+        }
+     }
+     
+     if (isGameOver) {
+         const winnerId = Object.keys(game.playerScores || {}).reduce((a, b) => ((game.playerScores![a] || 0) > (game.playerScores![b] || 0) ? a : b), Object.keys(game.playerScores || {})[0] || '');
+         const finalUpdate = {
+             gameState: 'final_results' as const,
+             gameResult: { winner: winnerId, message: 'انتهت اللعبة' },
+             'prisonState.timerEndsAt': deleteField(),
+         };
+         tx.update(gameRef, finalUpdate);
+         finalGame = JSON.parse(JSON.stringify({...game, ...finalUpdate}));
+     }
+
+     return { isGameOver, finalGame };
 }
 
 
@@ -884,7 +973,7 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
       'prisonState.judgingLock': false,
       'prisonState.aiJudgeResults': {},
       'prisonState.timerEndsAt': tsIn(DEFAULTS.judgingTimeout),
-      'prisonState.rejudgeRequestsUsedBy': arrayUnion(playerId), // Fixed (#6): Mark as used *after* successful rejudge. Moved to `judgeAnswersAndProceed` logic. Let's keep it here for now for simplicity of this refactor, but a better approach would be to move it. For now, we will add a pending flag.
+      'prisonState.rejudgeRequestsUsedBy': arrayUnion(playerId),
       'prisonState.rejudgePendingConfirmation': true,
       stateVersion: increment(1),
     });
@@ -893,7 +982,6 @@ export async function requestRejudge(gameId: string, playerId: string, reason: s
 
   if (shouldJudge) {
     await judgeAnswersAndProceed(gameId, true);
-    // After judging is done, remove the pending flag.
     await updateDoc(gameRef, {
         'prisonState.rejudgePendingConfirmation': deleteField(),
     });

@@ -40,7 +40,7 @@ const InstructionsCountdown = ({ isHost, gameId, selfId }: { isHost: boolean; ga
                         strokeDasharray="282.74"
                         initial={{ pathLength: 1 }}
                         animate={{ pathLength: 0 }}
-                        transition={{ duration: 7, ease: "linear" }}
+                        transition={{ duration: 5, ease: "linear" }}
                     />
                 </svg>
             </motion.div>
