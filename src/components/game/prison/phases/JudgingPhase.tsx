@@ -241,7 +241,8 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
               {contestantsWithSubmissions.length > 0 ? (
                 contestantsWithSubmissions.map((player) => {
                   const playerResult = resultsByPlayerId.get(player.id);
-                  const answers: string[] = openAuctionSubmissions[player.id] ?? [];
+                  const submittedAnswers: string[] = openAuctionSubmissions[player.id] ?? [];
+                  const correctAnswersSet = new Set(playerResult?.correctAnswers?.map(normalizeAnswer) || []);
 
                   return (
                     <motion.div
@@ -269,20 +270,14 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
                       </h3>
 
                       <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-                        {answers.length > 0 ? (
-                          answers.map((answer, i) => {
-                            const isCorrect = (() => {
-                              if (!playerResult?.correctAnswers) return undefined;
-                              const norm = normalizeAnswer(answer);
-                              return playerResult.correctAnswers.some(
-                                (c: string) => normalizeAnswer(c) === norm
-                              );
-                            })();
+                        {submittedAnswers.length > 0 ? (
+                          submittedAnswers.map((answer, i) => {
+                            const isCorrect = correctAnswersSet.has(normalizeAnswer(answer));
 
                             return (
                               <div key={`${player.id}-${i}`} className="flex items-center gap-2 p-2 bg-slate-900/50 rounded-md text-sm">
                                 <AnimatePresence initial={false}>
-                                  {playerResult && typeof isCorrect === 'boolean' ? (
+                                  {playerResult ? (
                                     <motion.div
                                       initial={{ scale: 0 }}
                                       animate={{ scale: 1 }}
