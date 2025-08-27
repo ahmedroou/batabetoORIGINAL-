@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from 'firebase/firestore';
 import { z } from 'zod';
 import { ALL_PERMISSIONS_RAW } from '../data/permissions';
@@ -617,7 +618,7 @@ export interface KingdomOfNamesState {
     votes: Record<string, Record<string, 'correct' | 'incorrect'>>; // { voterId: { 'targetId-category': vote } }
     results: {
         scores?: Record<string, { points: number, breakdown: { reason: string, points: number }[] }>;
-        answers?: { category: string; answer: string; points: number; reason: string }[];
+        answers?: { playerId: string; category: string; answer: string; points: number; reason: string }[];
     };
     timerEndsAt?: Timestamp;
 }
@@ -797,7 +798,8 @@ export interface Game {
       judgingStarted?: boolean;
       questionChangersUsedBy?: string[];
       rejudgeRequestsUsedBy?: string[];
-      activeRejudgeRequest?: { playerId: string; name: string; reason: string };
+      activeRejudgeRequest?: { playerId: string; name: string; reason: string; createdAt: Timestamp };
+      rejudgePendingConfirmation?: boolean;
       judgeExplanation?: string;
       isRejectionJustified?: boolean;
       judgeRunId?: string;

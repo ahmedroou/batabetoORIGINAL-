@@ -3,7 +3,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import type { Game, Player } from '@/types';
+import type { Game, Player, JudgeSingleSubmissionOutput } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlayerAvatar } from '../../PlayerAvatar';
@@ -19,18 +19,6 @@ import { CountdownTimer } from '../CountdownTimer';
 import { cn } from '@/lib/utils';
 import { normalizeForSignature } from '@/lib/actions/helpers';
 
-/**
- * JudgingPhase (refactored)
- *
- * Goals of this refactor:
- * - Keep the SAME external API and logic, while making UI/UX more resilient and responsive.
- * - Stronger null-safety around nested prisonState fields.
- * - Faster lookups using maps and memoization.
- * - Smarter answer comparison for Arabic text (normalize + remove diacritics & tatweel).
- * - Prevent double-actions while requests are in-flight.
- * - Clearer, more maintainable structure with small internal components.
- */
-
 interface JudgingPhaseProps {
   game: Game;
   self: Player;
@@ -38,12 +26,10 @@ interface JudgingPhaseProps {
 
 // --- Helpers -----------------------------------------------------------------
 
-/** Firestore Timestamp or number -> milliseconds number (or undefined). */
 function getMillis(ts: any | undefined): number | undefined {
   if (!ts) return undefined;
   if (typeof ts === 'number') return ts;
   if (typeof ts?.toMillis === 'function') return ts.toMillis();
-  // Try common shapes
   if (typeof ts?.seconds === 'number') return ts.seconds * 1000 + (ts.nanoseconds ? Math.floor(ts.nanoseconds / 1e6) : 0);
   return undefined;
 }
@@ -56,7 +42,6 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
   const isHost = game.hostId === self.id;
   const prison = game.prisonState ?? ({} as NonNullable<Game['prisonState']>);
 
-  // Local UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRejudgeDialogOpen, setIsRejudgeDialogOpen] = useState(false);
   const [rejudgeReason, setRejudgeReason] = useState('');
@@ -65,43 +50,26 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
   const isRejudging = game.gameState === 'rejudging';
   const timerEndsAtMs = getMillis(prison.timerEndsAt);
 
-  // --- Derived data ------------------------------------------------------------
-
   const judgedResults = prison.aiJudgeResults ?? {};
-  const openAuctionSubmissions = prison.openAuctionSubmissions ?? {} as Record<string, string[]>;
+  const openAuctionSubmissions = prison.openAuctionSubmissions ?? {};
   const noSubmissions = Object.keys(openAuctionSubmissions).length === 0;
 
-  // Compute which contestants should be displayed (winner-only OR all with submissions)
   const contestantsWithSubmissions: Player[] = useMemo(() => {
     const playerIds = Object.keys(openAuctionSubmissions);
     if (playerIds.length === 0) return [];
-
-    const winnerId = prison.auctionWinnerId;
-    const idsToRender = winnerId && openAuctionSubmissions[winnerId]
-      ? [winnerId]
-      : playerIds;
-
-    return idsToRender
+    return playerIds
       .map((id) => game.players.find((p) => p.id === id))
       .filter((p): p is Player => Boolean(p && p.role === 'contestant'));
-  }, [openAuctionSubmissions, prison.auctionWinnerId, game.players]);
-
-  // All results ready when each rendered contestant has an entry
+  }, [openAuctionSubmissions, game.players]);
+  
   const allResultsIn = useMemo(() => {
     if (contestantsWithSubmissions.length === 0) return false;
     return contestantsWithSubmissions.every((p) => judgedResults[p.id]);
   }, [contestantsWithSubmissions, judgedResults]);
 
-  const hasPlayerUsedRejudge = Array.isArray(prison.rejudgeRequestsUsedBy)
-    ? prison.rejudgeRequestsUsedBy.includes(self.id)
-    : false;
+  const hasPlayerUsedRejudge = (prison.rejudgeRequestsUsedBy || []).includes(self.id);
+  const activeRejudgeRequest = prison.activeRejudgeRequest;
 
-  const activeRejudgeRequest = prison.activeRejudgeRequest as
-    | { playerId: string; name?: string | null }
-    | undefined;
-
-  // Host can proceed when: all results are in AND (not rejudging OR (timer exists and expired))
-  // OR there were no submissions to begin with.
   const canHostProceed = useMemo(() => {
     if (noSubmissions && !judgingStarted) return true;
     if (!allResultsIn) return false;
@@ -110,23 +78,19 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
     return Date.now() > timerEndsAtMs;
   }, [noSubmissions, allResultsIn, isRejudging, timerEndsAtMs, judgingStarted]);
 
-  // UX niceties: close dialog if an active request appears; announce status
   useEffect(() => {
     if (isRejudgeDialogOpen && activeRejudgeRequest) setIsRejudgeDialogOpen(false);
   }, [isRejudgeDialogOpen, activeRejudgeRequest]);
-
-  // --- Actions -----------------------------------------------------------------
 
   const handleCallJudge = async () => {
     if (!isHost || isSubmitting) return;
     setIsSubmitting(true);
     try {
-        if(noSubmissions){
-             // If no submissions, go straight to results.
-            await prisonActions.proceedToResults(game.id, self.id);
-        } else {
-            await prisonActions.judgeAnswersAndProceed(game.id, isRejudging);
-        }
+      if (noSubmissions) {
+        await prisonActions.proceedToResults(game.id, self.id);
+      } else {
+        await prisonActions.judgeAnswersAndProceed(game.id, isRejudging);
+      }
     } catch (e: any) {
       toast({ title: 'خطأ', description: e?.message ?? 'تعذر استدعاء القاضي.', variant: 'destructive' });
     } finally {
@@ -171,8 +135,6 @@ export function JudgingPhase({ game, self }: JudgingPhaseProps) {
       setIsSubmitting(false);
     }
   };
-
-  // --- Render ------------------------------------------------------------------
 
   return (
     <>

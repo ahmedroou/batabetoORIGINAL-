@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -6,11 +7,11 @@
 
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
-import type { EducatedMerchantQuestion, TrapQuestion } from '@/types';
+import type { EducatedMerchantQuestion, TrapQuestion, PrisonQuestion } from '@/types';
 import { shuffle } from '../helpers';
 
 // Keep the same union alias locally (no API change)
-type GameQuestionType = EducatedMerchantQuestion | TrapQuestion;
+type GameQuestionType = EducatedMerchantQuestion | TrapQuestion | PrisonQuestion;
 
 // ------------------------------------
 // Internal utils (no external API change)
@@ -18,6 +19,7 @@ type GameQuestionType = EducatedMerchantQuestion | TrapQuestion;
 const COLLECTIONS = {
   'educated-merchant': 'educated_merchant_questions',
   'trap-answer': 'trap_answer_questions',
+  'prison': 'prison_questions',
 } as const;
 
 type GameType = keyof typeof COLLECTIONS;
@@ -49,17 +51,16 @@ const buildOptions = (q: EducatedMerchantQuestion): string[] => {
  * @returns A promise that resolves to the question object or null if not found.
  */
 export async function fetchRandomQuestionForCategory(
-  gameType: 'educated-merchant' | 'trap-answer',
-  category: string
+  gameType: 'educated-merchant' | 'trap-answer' | 'prison',
+  category?: string
 ): Promise<GameQuestionType | null> {
   const collectionName = COLLECTIONS[gameType as GameType];
   if (!collectionName) {
     console.error(`Unsupported gameType: ${gameType}`);
     return null;
   }
-
-  const normalizedCategory = normalizeCategory(category);
-  if (!normalizedCategory) {
+  
+  if (gameType !== 'prison' && (!category || !normalizeCategory(category))) {
     console.warn('fetchRandomQuestionForCategory: empty category string.');
     return null;
   }
@@ -67,33 +68,25 @@ export async function fetchRandomQuestionForCategory(
   try {
     const questionsCol = collection(db, collectionName);
     const randomKey = Math.random();
+    
+    let baseQuery = query(questionsCol, where('randomKey', '>=', randomKey), orderBy('randomKey'), limit(1));
+    if (category && gameType !== 'prison') {
+        baseQuery = query(questionsCol, where('category', '==', normalizeCategory(category)), where('randomKey', '>=', randomKey), orderBy('randomKey'), limit(1));
+    }
+    
+    let snap = await getDocs(baseQuery);
 
-    // Primary query: >= randomKey ordered ascending to get the first at/after randomKey
-    let q1 = query(
-      questionsCol,
-      where('category', '==', normalizedCategory),
-      where('randomKey', '>=', randomKey),
-      orderBy('randomKey', 'asc'),
-      limit(1)
-    );
-
-    let snap = await getDocs(q1);
-
-    // Fallback query: < randomKey ordered descending to get the closest below it
     if (snap.empty) {
-      const q2 = query(
-        questionsCol,
-        where('category', '==', normalizedCategory),
-        where('randomKey', '<', randomKey),
-        orderBy('randomKey', 'desc'),
-        limit(1)
-      );
-      snap = await getDocs(q2);
+        let fallbackQuery = query(questionsCol, where('randomKey', '<', randomKey), orderBy('randomKey', 'desc'), limit(1));
+         if (category && gameType !== 'prison') {
+            fallbackQuery = query(questionsCol, where('category', '==', normalizeCategory(category)), where('randomKey', '<', randomKey), orderBy('randomKey', 'desc'), limit(1));
+        }
+      snap = await getDocs(fallbackQuery);
     }
 
     if (snap.empty) {
       console.warn(
-        `No questions found for category: "${normalizedCategory}" in collection "${collectionName}".`
+        `No questions found for category: "${category}" in collection "${collectionName}".`
       );
       return null;
     }
@@ -110,7 +103,7 @@ export async function fetchRandomQuestionForCategory(
       return question as GameQuestionType;
     }
 
-    // For TrapQuestion (or any other), just return as-is
+    // For TrapQuestion, PrisonQuestion (or any other), just return as-is
     return raw as GameQuestionType;
   } catch (e) {
     console.error(
