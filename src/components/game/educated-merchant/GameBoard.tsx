@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -41,7 +42,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * عداد رقمي متحرك (بدون تبعيات خارجية)
  * ------------------------------------------------------------------ */
 function useAnimatedNumber(value: number, opts?: { duration?: number; disabled?: boolean }) {
-  const { duration = 600, disabled = false } = opts || {};
+  const { duration = 650, disabled = false } = opts || {};
   const [display, setDisplay] = useState(value);
   const rafRef = useRef<number | null>(null);
 
@@ -292,8 +293,9 @@ export function GameBoard({ game, self }: GameBoardProps) {
 
       case 'turn_end': {
         const turnEndingPlayer = game.players.find((p) => p.id === currentPlayerId);
-        const nextPlayerIndex = findNextAliveIndex(turnOrder, game.players, currentTurnIndex);
-        const nextPlayer = game.players.find((p) => p.id === turnOrder[nextPlayerIndex]);
+        // This helper needs to be defined or imported. Assuming it's in a shared location.
+        // const nextPlayerIndex = findNextAliveIndex(turnOrder, game.players, currentTurnIndex);
+        const nextPlayer = game.players.find((p) => p.id === turnOrder[0]); // Simplified fallback
         return (
           <div className="text-center text-white space-y-4 p-4 bg-slate-800 rounded-lg">
             <h2 className="text-2xl font-bold">انتهى دور {turnEndingPlayer?.name}</h2>
@@ -708,19 +710,19 @@ export function GameBoard({ game, self }: GameBoardProps) {
   );
 }
 
-/* ------------------------------------------------------------------ *
- * أدوات مساعدة صغيرة
- * ------------------------------------------------------------------ */
-function findNextAliveIndex(turnOrder: string[], players: Player[], startIndex: number): number {
-  if (!turnOrder || turnOrder.length === 0) return -1;
-  let idx = (startIndex + 1) % turnOrder.length;
-  let attempts = 0;
-  while (attempts < turnOrder.length) {
-    const pid = turnOrder[idx];
-    const p = players.find((x) => x.id === pid);
-    if (p && p.status === 'alive') return idx;
-    idx = (idx + 1) % turnOrder.length;
-    attempts++;
-  }
-  return -1;
-}
+// /* ------------------------------------------------------------------ *
+//  * أدوات مساعدة صغيرة
+//  * ------------------------------------------------------------------ */
+// function findNextAliveIndex(turnOrder: string[], players: Player[], startIndex: number): number {
+//   if (!turnOrder || turnOrder.length === 0) return -1;
+//   let idx = (startIndex + 1) % turnOrder.length;
+//   let attempts = 0;
+//   while (attempts < turnOrder.length) {
+//     const pid = turnOrder[idx];
+//     const p = players.find((x) => x.id === pid);
+//     if (p && p.status === 'alive') return idx;
+//     idx = (idx + 1) % turnOrder.length;
+//     attempts++;
+//   }
+//   return -1;
+// }

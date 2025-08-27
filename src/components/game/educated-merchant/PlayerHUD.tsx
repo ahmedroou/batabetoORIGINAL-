@@ -90,30 +90,22 @@ const PlayerRow = React.memo(function PlayerRow({
             )}
           </div>
 
-          <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-3">
-            <span className="flex items-center gap-1">
-              <Home className="w-3 h-3" />
-              <span className="font-mono">{player.position ?? 0}</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <Building className="w-3 h-3" />
-              <span className="font-mono">{player.propertiesCount ?? 0}</span>
-            </span>
+          <div className="text-xs text-yellow-300 font-semibold flex items-center gap-1.5 mt-1">
+             <HandCoins className="w-3 h-3" />
+             <span className="font-mono">{formatMoney(player.money ?? 0)}</span>
           </div>
         </div>
       </div>
 
-      {/* اليمين: الترتيب + المال */}
+      {/* اليمين: الترتيب + العقارات */}
       <div className="flex flex-col items-end shrink-0">
-          <div className="flex items-center gap-2">
-            <HandCoins className="w-4 h-4 text-yellow-400" />
-            <div className="tabular-nums font-mono font-bold text-sm" title={`${player.name} - رصيد`}>
-              {formatMoney(player.money ?? 0)}
+          <div className="text-sm font-bold">
+              {rank ? `#${rank}` : '—'}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+              <Building className="w-3 h-3" />
+              <span className="font-mono">{player.propertiesCount ?? 0}</span>
             </div>
-          </div>
-          <div className="text-xs text-muted-foreground">
-              {rank ? `الترتيب #${rank}` : '—'}
-          </div>
       </div>
     </motion.div>
   );
