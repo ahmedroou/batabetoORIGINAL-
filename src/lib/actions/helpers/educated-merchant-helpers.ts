@@ -620,6 +620,7 @@ function _endTurnInternal(
     players,
     [`${EM}.movesThisRound`]: newMoves,
     [`${EM}.activeCountAtRoundStart`]: newActiveAtRoundStart,
+    [`${EM}.lastDiceRoll`]: deleteField(),
     [`${EM}.lastRentPayment`]: deleteField(),
     [`${EM}.newlyBoughtPropertyId`]: deleteField(),
   };
@@ -627,4 +628,3 @@ function _endTurnInternal(
   const finalUpdates = withLogUnion(finalUpdatesBase, logEvents);
   return { isGameOver: false, updates: finalUpdates, finalGame: null };
 }
-
