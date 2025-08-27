@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import type { Game, Player } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -32,7 +32,10 @@ export function ClosedAuctionBiddingPhase({ game, self }: ClosedAuctionBiddingPh
     const highestBid = game.prisonState?.highestBid || 0;
     const questionChangerName = game.prisonState?.questionChanger;
     
-    const isTimeUp = !game.prisonState?.timerEndsAt || Date.now() > game.prisonState.timerEndsAt.toMillis();
+    const isTimeUp = useMemo(() => 
+        !game.prisonState?.timerEndsAt || Date.now() > game.prisonState.timerEndsAt.toMillis(),
+        [game.prisonState?.timerEndsAt]
+    );
 
 
     const handleBidSubmit = async (changeQuestion: boolean = false) => {
@@ -116,7 +119,7 @@ export function ClosedAuctionBiddingPhase({ game, self }: ClosedAuctionBiddingPh
                  )}
                  {isTimeUp ? (
                      <div className="text-center p-4 rounded-lg bg-yellow-100 text-yellow-800">
-                        <p className="font-semibold">انتهى الوقت! جاري الانتقال لمرحلة الإجابة...</p>
+                        <p className="font-semibold animate-pulse">انتهى الوقت! جاري الانتقال لمرحلة الإجابة...</p>
                     </div>
                  ) : (
                     <>
